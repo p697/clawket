@@ -3,6 +3,7 @@ import type {
   Capabilities,
   SessionActions,
   SessionDescriptor,
+  SessionActivity,
 } from '@clawket/agent-protocol';
 
 import type { RosterConnectionGroup } from '../../connection';
@@ -35,6 +36,7 @@ export type SessionPanelRow = SessionBoardRow & Readonly<{
   agentName: string;
   channel: string | null;
   hasActiveRun: boolean;
+  activityState?: SessionActivity['state'];
   attention: Exclude<SessionDescriptor['attention'], undefined>;
   source: Exclude<SessionDescriptor['source'], undefined> | null;
   allowedActions: SessionActions;
@@ -113,6 +115,8 @@ export function buildSessionPanelRows(
   options?: Readonly<{
     now?: number;
     recentFirst?: boolean;
+    live?: boolean;
+    runActivities?: ReadonlyArray<{ connectionId: string; sessionKey: string }>;
     pinnedSessionKeys?: Readonly<Record<string, ReadonlyArray<string>>>;
   }>,
 ): ReadonlyArray<SessionPanelRow> {
@@ -138,8 +142,8 @@ export function buildSessionPanelRows(
         agentId: session.agentId,
         agentName: summary.agent.name,
         channel: session.channel?.trim() || null,
-        hasActiveRun: session.hasActiveRun,
-        attention: session.attention ?? null,
+        hasActiveRun: (options?.live ?? group.source === 'live') && (session.hasActiveRun || Boolean(options?.runActivities?.some(activity => activity.connectionId === session.connectionId && activity.sessionKey === session.key))),
+        attention: (options?.live ?? group.source === 'live') ? session.attention ?? null : session.attention === 'error' ? 'error' : null,
         source: session.source ?? null,
         allowedActions: { ...session.allowedActions },
         pinned: pinnedKeys.has(session.key),
@@ -298,4 +302,21 @@ export function resolveSessionPanelPageState(input: Readonly<{
     return input.awaitingSessions && opening ? 'loading' : 'empty';
   }
   return 'ready';
+}
+
+/** Fresh activity overlays never modify the catalog, timestamps or persisted descriptors. */
+export function applySessionPanelActivity(rows: ReadonlyArray<SessionPanelRow>, activity: ReadonlyMap<string, SessionActivity>): ReadonlyArray<SessionPanelRow> {
+  return rows.map(row => {
+    const value = activity.get(row.key);
+    if (!value) return row;
+    return { ...row, activityState: value.state,
+      hasActiveRun: value.state === 'unknown' ? row.hasActiveRun : value.state === 'running' || value.state === 'waiting',
+      attention: value.attention ? value.attention : row.attention === 'error' ? 'error'
+        : value.attention === null || value.state === 'idle' || value.state === 'running' ? null : row.attention };
+  });
+}
+
+export function sessionPanelRowWorking(row: SessionPanelRow): boolean {
+  return row.hasActiveRun && row.activityState !== 'unknown' && row.activityState !== 'waiting'
+    && row.attention !== 'input' && row.attention !== 'approval' && !row.archived;
 }

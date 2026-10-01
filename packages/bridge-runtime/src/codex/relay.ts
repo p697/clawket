@@ -26,7 +26,11 @@ export class CodexRelay {
   private ready = false;
   private readyWaiters = new Set<{ resolve: () => void; reject: (error: Error) => void }>();
   private readonly instanceId = randomUUID();
-  private readonly update = (payload: unknown) => this.send(JSON.stringify({ type: 'event', event: 'codex.update', payload }));
+  private readonly update = (payload: unknown) => {
+    // Relay may switch the active phone to a legacy client. Its RPC response is origin-routed; new events are not.
+    if ((payload as { type?: string } | null)?.type === 'session_activity_update') return;
+    this.send(JSON.stringify({ type: 'event', event: 'codex.update', payload }));
+  };
 
   constructor(private readonly service: CodexService, private readonly config: CodexRelayConfig,
     private readonly persistInvitation: (invitation: CodexInvitation) => void,

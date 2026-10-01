@@ -99,6 +99,13 @@ export interface ProjectDescriptor {
   available: boolean;
 }
 
+/** Fresh presentation evidence; unknown never establishes idle or writer ownership. */
+export interface SessionActivity {
+  key: string;
+  state: 'running' | 'idle' | 'waiting' | 'unknown';
+  attention?: 'input' | 'approval' | null;
+}
+
 export interface SessionDescriptor {
   archived?: boolean;
   project?: ProjectDescriptor;

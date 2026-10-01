@@ -7,6 +7,8 @@ import type {
 
 import type { RosterConnectionGroup } from '../../connection';
 import {
+  applySessionPanelActivity,
+  sessionPanelRowWorking,
   availableSessionActions,
   buildSessionPanelAgents,
   buildSessionPanelChips,
@@ -302,4 +304,25 @@ it('uses one reversible archive action instead of ambiguous delete when native a
   const capability = { sessionRename: false, sessionReset: false, sessionDelete: true, sessionArchive: true };
   expect(availableSessionActions(row, capability)).toEqual(['export', 'copy_id', 'archive']);
   expect(availableSessionActions(row, { ...capability, sessionArchive: false })).toEqual(['export', 'copy_id', 'delete']);
+});
+
+
+it('uses confirmed descriptors and scoped owned runs, but never cached running flags', () => {
+  const source = roster(); const key = source.agents[0].sessions.find(row => row.kind === 'direct')!.key;
+  const rows = buildSessionPanelRows(source, { live: true, runActivities: [{ connectionId: 'other', sessionKey: key }, { connectionId: 'connection', sessionKey: key }] });
+  expect(sessionPanelRowWorking(rows.find(row => row.key === key)!)).toBe(true);
+  const cached = buildSessionPanelRows({ ...source, source: 'cache' });
+  expect(cached.some(sessionPanelRowWorking)).toBe(false);
+  expect(buildSessionPanelRows(source, { live: false }).some(sessionPanelRowWorking)).toBe(false);
+});
+it('unknown clears only the presentation arc; waiting keeps attention and known idle clears stale waiting', () => {
+  const working = buildSessionPanelRows(roster()).find(row => row.hasActiveRun)!;
+  const unknown = applySessionPanelActivity([working], new Map([[working.key, { key: working.key, state: 'unknown' }]]))[0];
+  expect(unknown.hasActiveRun).toBe(true); expect(sessionPanelRowWorking(unknown)).toBe(false);
+  const waiting = applySessionPanelActivity([working], new Map([[working.key, { key: working.key, state: 'waiting', attention: 'approval' }]]))[0];
+  expect(waiting.attention).toBe('approval'); expect(sessionPanelRowWorking(waiting)).toBe(false);
+  const idle = applySessionPanelActivity([waiting], new Map([[working.key, { key: working.key, state: 'idle' }]]))[0];
+  expect(idle.hasActiveRun).toBe(false); expect(idle.attention).toBeNull();
+  const error = { ...working, attention: 'error' as const };
+  expect(applySessionPanelActivity([error], new Map([[working.key, { key: working.key, state: 'idle', attention: null }]]))[0].attention).toBe('error');
 });

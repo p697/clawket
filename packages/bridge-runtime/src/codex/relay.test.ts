@@ -103,3 +103,15 @@ test('owner lease conflicts do not amplify a subsequent transient network failur
   await ready;
   relay.stop(); expect(vi.getTimerCount()).toBe(0);
 });
+
+
+test('keeps list activity on origin-routed RPC responses, never broadcasting a new event to a legacy active phone', () => {
+  const conversation = new EventEmitter();
+  const relay = new CodexRelay({ conversation } as CodexService,
+    { relayUrl: 'wss://example.test/ws', gatewayId: 'test', relaySecret: 'test' }, () => {});
+  relay.start(); const socket = state.sockets[0]; socket.emit('open'); socket.send.mockClear();
+  conversation.emit('update', { type: 'session_activity_update', activity: { key: 'visible', state: 'running' } });
+  expect(socket.send).not.toHaveBeenCalled();
+  conversation.emit('update', { type: 'agent_message_chunk', text: 'legacy-compatible' }); expect(socket.send).toHaveBeenCalledTimes(1);
+  relay.stop();
+});

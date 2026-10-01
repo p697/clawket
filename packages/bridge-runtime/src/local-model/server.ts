@@ -1,3 +1,4 @@
+import { sessionActivityKeys } from '../session-activity.js';
 import { createServer, type Server } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import WebSocket, { WebSocketServer } from 'ws';
@@ -16,7 +17,8 @@ export class LocalModelService {
     const params = frame.params ?? {};
     switch (frame.method) {
       case 'connect':
-      case 'health': return { backend: 'local-model', protocol: 1, ...await this.conversation.health() };
+      case 'health': return { backend: 'local-model', sessionActivity: 1, protocol: 1, ...await this.conversation.health() };
+      case 'sessions.activity': return sessionActivityKeys(params.keys).map(key => ({ key, state: key !== 'main' ? 'unknown' : this.conversation.running ? 'running' : 'idle' }));
       case 'chat.history':
         if (params.cursor !== undefined && typeof params.cursor !== 'string') throw new Error('Invalid history cursor');
         return this.conversation.history(params.cursor as string | undefined);

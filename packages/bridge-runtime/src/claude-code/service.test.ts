@@ -360,3 +360,22 @@ it('serves assistant-delivered native Claude attachments inside their actual pro
   expect(mocks.starts).not.toHaveBeenCalled();
   await expect(request(service, 'clawket.artifacts.read', { sessionKey: 'other', id: file.id, offset: 0 })).rejects.toThrow();
 });
+
+
+it('projects native busy/idle/waiting/unknown without changing ownership or starting an SDK session', async () => {
+  const { service, project } = fixture();
+  const nativeId = randomUUID(); mocks.list.mockResolvedValue([{ sessionId: nativeId, cwd: project, summary: 'Native', lastModified: 1 }]);
+  const rows = await request(service, 'sessions.list') as any[];
+  const key = rows[0].key; mocks.history.mockClear();
+  for (const [status, state] of [['busy', 'running'], ['idle', 'idle'], ['waiting', 'waiting'], ['unknown', 'unknown']]) {
+    mocks.roster.mockResolvedValue({ known: true, owners: [{ sessionId: nativeId, status }] });
+    expect(await request(service, 'sessions.activity', { keys: [key] })).toEqual([{ key, state }]);
+    const listed = await request(service, 'sessions.list') as any[];
+    expect(listed[0].hasActiveRun).toBe(status === 'busy');
+    expect(listed[0].canContinue).toBe(false); // An idle owner still owns the native thread.
+  }
+  mocks.roster.mockResolvedValue({ known: false, owners: [] });
+  expect(await request(service, 'sessions.activity', { keys: [key, 'missing'] })).toEqual([{ key, state: 'unknown' }, { key: 'missing', state: 'unknown' }]);
+  expect(mocks.starts).not.toHaveBeenCalled(); expect(mocks.history).not.toHaveBeenCalled();
+  await expect(request(service, 'sessions.activity', { keys: ['same', 'same'] })).rejects.toThrow('Invalid session activity request');
+});

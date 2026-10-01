@@ -20,7 +20,11 @@ vi.mock('./desktop-ipc.js', async importOriginal => {
   const { EventEmitter } = await import('node:events');
   return { ...actual, DesktopIpc: class extends EventEmitter {
     ready = true; snapshots = new Map(); handler: unknown;
-    async connect() {} follow() {} stop() {} broadcast() {}
+    permanent = new Set<string>(); observed = new Set<string>();
+    async connect() {} follow(id: string) { this.permanent.add(id); } stop() {} broadcast() {}
+    observe(id: string) { this.observed.add(id); return true; }
+    unobserve(id: string) { this.observed.delete(id); }
+    isObservationOnly(id: string) { return this.observed.has(id) && !this.permanent.has(id); }
     async request() { throw new actual.DesktopIpcError('no-owner', 'No owner'); }
   } };
 });
@@ -1463,4 +1467,31 @@ it('serves Codex assistant attachments with the native thread project and reject
   const file = await request('clawket.artifacts.open', { sessionKey: key, artifactId });
   expect(Buffer.from((await request('clawket.artifacts.read', { sessionKey: key, id: file.id, offset: 0 })).data, 'base64').toString()).toBe('Codex attachment');
   await expect(request('clawket.artifacts.read', { sessionKey: 'other', id: file.id, offset: 0 })).rejects.toThrow();
+});
+
+
+it('observes catalog-only desktop tasks without indexing, opening, publishing history or taking a writer', async () => {
+  const desktop = (service as any).desktop;
+  const record = (service as any).records.find((r: any) => r.id === key);
+  record.threadId = threadId;
+  const before = JSON.stringify((service as any).records);
+  const nativeId = randomUUID(), nativeKey = `native:${nativeId}`;
+  (service as any).native.set(nativeKey, { id: nativeId });
+  mock.request.mockClear(); updates.length = 0;
+  vi.spyOn((service as any).sessionActivity, 'query').mockImplementation((bindings: any) => Promise.resolve((service as any).sessionActivity.read(bindings)));
+  expect(await request('sessions.activity', { keys: [key, nativeKey, 'missing'] })).toEqual([
+    { key, state: 'unknown' }, { key: nativeKey, state: 'unknown' }, { key: 'missing', state: 'unknown' },
+  ]);
+  for (const id of [threadId, nativeId]) desktop.emit('snapshot', id, { fresh: true, source: 'owner', state: {
+    latestModel: 'should-not-persist', turns: [{ id: 'live', status: 'inProgress', items: [{ type: 'agentMessage', text: 'private content' }] }], requests: [],
+  } });
+  expect(await request('sessions.activity', { keys: [key, nativeKey] })).toEqual([
+    { key, state: 'running', attention: null }, { key: nativeKey, state: 'running', attention: null },
+  ]);
+  expect(updates).toHaveLength(2); expect(updates.every(update => update.type === 'session_activity_update')).toBe(true);
+  expect(JSON.stringify(updates)).not.toContain('private content');
+  expect(JSON.stringify((service as any).records)).toBe(before);
+  expect((service as any).loaded.size).toBe(0); expect((service as any).runs.size).toBe(0);
+  expect(mock.request).not.toHaveBeenCalled();
+  await expect(request('sessions.activity', { keys: Array(33).fill(key) })).rejects.toThrow('Invalid session activity request');
 });

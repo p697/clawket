@@ -10,6 +10,7 @@ import type {
   FinalMessage,
   PromptInput,
   SessionDescriptor,
+  SessionActivity,
   SessionHistory,
   Usage,
 } from './descriptors';
@@ -71,6 +72,7 @@ export type SessionUpdate =
       kind?: ApprovalRequest['kind'];
       target?: 'device' | 'node';
     }
+  | { type: 'session_activity_update'; activity: SessionActivity }
   | { type: 'session_info_update'; session: Partial<SessionDescriptor> & { key: string } }
   | {
       type: 'usage_update';
@@ -103,6 +105,8 @@ export interface AgentAdapter {
   probe(timeoutMs?: number): Promise<boolean>;
   listAgents(): Promise<AgentDescriptor[]>;
   listSessions(agentId?: string): Promise<SessionDescriptor[]>;
+  /** Optional negotiated, read-only activity for at most 32 visible sessions. */
+  readSessionActivity?(keys: readonly string[]): Promise<SessionActivity[]>;
   loadSession(key: string, options?: { limit?: number; cursor?: string }): Promise<SessionHistory>;
   prompt(key: string, input: PromptInput): Promise<{ runId: string }>;
   /** Read-only receipt lookup. Recorded proves durable Bridge receipt, not native execution. */

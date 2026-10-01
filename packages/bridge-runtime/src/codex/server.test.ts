@@ -53,3 +53,17 @@ it('never accepts lifecycle control without the existing token', async () => {
   s.send(JSON.stringify({ type: 'req', id: 'auth', method: 'connect', params: { token: 'wrong', controlOnly: true } }));
   expect((await closed)[0]).toBe(1008);
 });
+
+
+it('sends activity only to an authenticated client that requested its current window, preserving legacy chat events', async () => {
+  const legacy = await open(), current = await open();
+  for (const socket of [legacy, current]) await call(socket, { type: 'req', id: 'auth', method: 'connect', params: { token } });
+  await call(current, { type: 'req', id: 'activity', method: 'sessions.activity', params: { keys: ['visible'] } });
+  const legacyEvent = once(legacy, 'message'), currentEvent = once(current, 'message');
+  service.emit('update', { type: 'session_activity_update', activity: null });
+  service.emit('update', { type: 'session_activity_update', activity: { key: 'other', state: 'running' } });
+  service.emit('update', { type: 'session_activity_update', activity: { key: 'visible', state: 'running' } });
+  service.emit('update', { type: 'agent_message_chunk', text: 'legacy-compatible' });
+  expect(JSON.parse((await legacyEvent)[0].toString()).payload.type).toBe('agent_message_chunk');
+  expect(JSON.parse((await currentEvent)[0].toString()).payload).toEqual({ type: 'session_activity_update', activity: { key: 'visible', state: 'running' } });
+});

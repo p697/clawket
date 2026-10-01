@@ -51,6 +51,7 @@ export class DesktopIpc extends EventEmitter {
   private retry?: ReturnType<typeof setTimeout>;
   private pending = new Map<string, { method: string; resolve: (v: any) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }>();
   private followed = new Set<string>();
+  private permanentFollows = new Set<string>();
   handler?: { accepts(method: string, params: any): boolean; request(method: string, params: any): Promise<any> };
   broadcast(method: string, params: object): void {
     if (this.ready) this.write({ type: 'broadcast', method, version: versions[method] ?? 1, sourceClientId: this.clientId, params });
@@ -114,7 +115,7 @@ export class DesktopIpc extends EventEmitter {
       const result = await this.call('initialize', { clientType: 'clawket-bridge' }, true);
       if (typeof result?.clientId !== 'string' || !result.clientId) throw new Error('Invalid desktop handshake');
       this.clientId = result.clientId;
-      for (const id of this.followed) this.follow(id);
+      for (const id of this.followed) this.announceFollowing(id, true);
       this.emit('ready');
     } catch (error) { socket.destroy(); throw error; }
   }
@@ -151,13 +152,35 @@ export class DesktopIpc extends EventEmitter {
     }
   }
   follow(id: string): void {
-    if (!this.followed.has(id) && this.followed.size >= 64) throw new Error('Too many open desktop conversations');
+    if (!this.followed.has(id) && this.followed.size >= 64) {
+      const temporary = [...this.followed].find(key => !this.permanentFollows.has(key));
+      if (!temporary) throw new Error('Too many open desktop conversations');
+      this.unobserve(temporary); // Opening a chat takes priority over a disposable catalog observation.
+    }
+    this.permanentFollows.add(id);
     this.followed.add(id);
+    this.announceFollowing(id, true);
+  }
+  /** Bounded catalog observation never acquires an owner or loads complete history. */
+  observe(id: string): boolean {
+    if (!this.followed.has(id) && this.followed.size >= 64) return false;
+    this.followed.add(id);
+    this.announceFollowing(id, true);
+    return true;
+  }
+  isObservationOnly(id: string): boolean { return this.followed.has(id) && !this.permanentFollows.has(id); }
+  unobserve(id: string): void {
+    if (this.permanentFollows.has(id) || !this.followed.delete(id)) return;
+    this.snapshots.delete(id);
+    if (this.ready) this.announceFollowing(id, false);
+    this.emit('observation-released', id);
+  }
+  private announceFollowing(id: string, following: boolean): void {
     if (this.ready) {
       // The owner answers this subscription (including repeated subscriptions)
       // with its current snapshot. Loading complete history here would turn a
       // normal follow or patch repair into an unbounded native history scan.
-      this.write({ type: 'broadcast', method: 'thread-stream-following-changed', version: 1, sourceClientId: this.clientId, params: { hostId: 'local', conversationId: id, following: true } });
+      this.write({ type: 'broadcast', method: 'thread-stream-following-changed', version: 1, sourceClientId: this.clientId, params: { hostId: 'local', conversationId: id, following } });
     }
     else void this.connect().catch(() => {});
   }
@@ -203,12 +226,12 @@ export class DesktopIpc extends EventEmitter {
     let state: any;
     if (change?.type === 'snapshot') state = change.conversationState;
     else if (change?.type === 'patches' && old?.fresh && old.source === frame.sourceClientId && (change.baseRevision === undefined || old.revision === change.baseRevision)) {
-      try { state = applyDesktopPatches(old.state, change.patches); } catch { if (old) old.fresh = false; this.follow(id); return; }
-    } else { if (old) old.fresh = false; this.follow(id); return; }
+      try { state = applyDesktopPatches(old.state, change.patches); } catch { if (old) old.fresh = false; this.announceFollowing(id, true); return; }
+    } else { if (old) old.fresh = false; this.announceFollowing(id, true); return; }
     if (!state || !Array.isArray(state.turns) || !Array.isArray(state.requests)) { if (old) old.fresh = false; this.emit('unsupported', id); return; }
     if (typeof change.revision === 'number' && old?.fresh && old.source === frame.sourceClientId && typeof old.revision === 'number' && change.revision < old.revision) return;
     const next = { state, source: frame.sourceClientId, revision: change.revision, fresh: true };
     this.snapshots.set(id, next); this.emit('snapshot', id, next);
   }
-  stop(): void { this.closed = true; if (this.retry) clearTimeout(this.retry); this.socket?.destroy(); this.snapshots.clear(); this.followed.clear(); }
+  stop(): void { this.closed = true; if (this.retry) clearTimeout(this.retry); this.socket?.destroy(); this.snapshots.clear(); this.followed.clear(); this.permanentFollows.clear(); }
 }

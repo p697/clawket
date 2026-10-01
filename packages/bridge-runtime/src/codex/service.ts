@@ -1,4 +1,6 @@
 import { DeliveredArtifacts } from '../delivered-artifacts.js';
+import { sessionActivityKeys } from '../session-activity.js';
+import { CodexSessionActivity } from './session-activity.js';
 import { SessionCatalogSync } from '../session-catalog.js';
 import { readPromptIdentity, recordedPromptStatus } from '../prompt-status.js';
 import { InteractionAttention } from '../interaction-attention.js';
@@ -38,6 +40,7 @@ export class CodexService extends EventEmitter {
   private readonly project: string;
   private readonly lockPath: string;
   private rpc: CodexRpc;
+  private sessionActivity?: CodexSessionActivity;
   private records: Entry[] = [];
   private metadataState = new WeakMap<Entry, { revision: number; pending: boolean }>();
   private missingActiveRecords = new Set<Entry>();
@@ -99,8 +102,13 @@ export class CodexService extends EventEmitter {
         this.desktop = options.desktop ?? new DesktopIpc();
         this.desktop.on('follow', (id: string, following: boolean) => { if (following && this.records.some(r => r.threadId === id && this.loaded.has(r.id))) { this.desktopFollowers.add(id); void this.publishDesktop(id).catch(() => {}); } else this.desktopFollowers.delete(id); });
         this.desktop.handler = { accepts: (method, p) => this.acceptDesktop(method, p), request: (method, p) => this.desktopRequest(method, p) };
-        this.desktop.on('unsupported', (id: string) => { const r = this.records.find(row => row.threadId === id); if (r) this.update({ type: 'error', sessionKey: r.id, code: 'unsupported', message: 'This Codex Desktop version cannot be followed safely. Continue on your computer.' }); });
-        this.desktop.on('snapshot', (id: string, snapshot: DesktopSnapshot) => this.desktopSnapshot(id, snapshot));
+        this.desktop.on('unsupported', (id: string) => { const r = this.records.find(row => row.threadId === id); if (r && !this.desktop?.isObservationOnly?.(id)) this.update({ type: 'error', sessionKey: r.id, code: 'unsupported', message: 'This Codex Desktop version cannot be followed safely. Continue on your computer.' }); });
+        this.sessionActivity = new CodexSessionActivity(this.desktop, activity => {
+          if (!this.loaded.has(activity.key)) this.emit('update', { type: 'session_activity_update', activity });
+        });
+        this.desktop.on('snapshot', (id: string, snapshot: DesktopSnapshot) => {
+          if (!this.desktop?.isObservationOnly?.(id)) this.desktopSnapshot(id, snapshot);
+        });
         void this.desktop.connect().catch(() => {});
       }
       this.rpc = this.createRpc();
@@ -734,7 +742,7 @@ export class CodexService extends EventEmitter {
     await this.recover();
     const catalog = this.catalog.length ? this.catalog : await this.refreshModels();
     const account = await this.rpc.request('account/read', { refreshToken: false });
-    return { backend: 'codex', sessionCatalogSync: 1, artifacts: true, modelReady: account.requiresOpenaiAuth !== true || !!account.account, model: catalog.find(m => m.isDefault)?.model ?? '', vision: true, project: basename(this.project), projects: !!this.options.device, fastMode: true, sessionPermissions: true, sessionArchive: true, promptStatus: true, desktopConnected: this.desktop?.ready === true };
+    return { backend: 'codex', sessionActivity: 1, sessionCatalogSync: 1, artifacts: true, modelReady: account.requiresOpenaiAuth !== true || !!account.account, model: catalog.find(m => m.isDefault)?.model ?? '', vision: true, project: basename(this.project), projects: !!this.options.device, fastMode: true, sessionPermissions: true, sessionArchive: true, promptStatus: true, desktopConnected: this.desktop?.ready === true };
   }
   async request(frame: CodexRequest): Promise<unknown> {
     const result = await this.dispatch(frame);
@@ -750,6 +758,20 @@ export class CodexService extends EventEmitter {
       case 'projects.list': {
         if (!this.options.device) throw new Error('Project browsing is unavailable');
         await this.discover(); return [...this.projects.values()];
+      }
+      case 'sessions.activity': {
+        const keys = sessionActivityKeys(p.keys);
+        return this.sessionActivity!.query(keys.map(key => {
+          const record = this.records.find(row => row.id === key && !row.archived);
+          const native = this.native.get(key);
+          const attention = record ? this.attention.get(record.id) : null;
+          if (record && !record.threadId) return { key, local: { key, state: 'idle' as const } };
+          if (record && this.loaded.has(record.id)) return { key, local: { key,
+            state: this.disconnected ? 'unknown' as const : attention === 'input' || attention === 'approval' ? 'waiting' as const
+              : this.runs.has(record.id) ? 'running' as const : 'idle' as const,
+            attention: attention === 'input' || attention === 'approval' ? attention : null } };
+          return { key, threadId: record?.threadId ?? native?.id };
+        }));
       }
       case 'sessions.list': return this.listSessions();
       case 'sessions.sync': return this.catalogSync.reply(p);
@@ -1227,7 +1249,7 @@ export class CodexService extends EventEmitter {
     if (this.stopped) return; this.stopped = true; this.artifacts.clear();
     for (const timer of this.publishTimers.values()) clearTimeout(timer); this.publishTimers.clear();
     for (const waiter of this.settingsWaiters.values()) { clearTimeout(waiter.timer); waiter.reject(new Error('Codex Bridge stopped')); }
-    this.settingsWaiters.clear(); this.desktop?.stop();
+    this.settingsWaiters.clear(); this.sessionActivity?.stop(); this.desktop?.stop();
     await this.rpc.stop(); this.artifacts.clear();
     if (existsSync(this.lockPath)) unlinkSync(this.lockPath);
   }

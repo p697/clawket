@@ -27,7 +27,7 @@ import {
 type ApprovalStatus = NonNullable<UiMessage['approval']>['status'];
 
 export type AdapterChatUpdate =
-  | Extract<SessionUpdate, { type: 'question_requested' | 'question_resolved' }>
+  | Extract<SessionUpdate, { type: 'question_requested' | 'question_resolved' | 'session_activity_update' }>
   | {
       type: 'history_reconciled';
       sessionKey: string;
@@ -461,6 +461,7 @@ export function mapAdapterSessionUpdate(
         status: mapApprovalStatus(update.decision),
         messageId: `approval_${update.approvalId}`,
       };
+    case 'session_activity_update':
     case 'session_info_update':
     case 'usage_update':
       return update;
@@ -517,6 +518,8 @@ export function useAdapterChatEvents(options: UseAdapterChatEventsOptions): void
       handlersRef.current.onSessions?.(sessions);
     });
     const offUpdate = adapter.on('update', (update) => {
+      // List evidence is neither chat content nor transport health confirmation.
+      if (update.type === 'session_activity_update') return;
       handlersRef.current.onUpdate?.(mapAdapterSessionUpdate(update, {
         now: nowRef.current,
         cancelledRunNotice: adapter.connection.backendKind === 'codex'

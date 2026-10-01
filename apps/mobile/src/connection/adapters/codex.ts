@@ -1,3 +1,4 @@
+import { sessionActivityUpdate, validateSessionActivity } from './session-activity';
 import { artifactHistoryDisplay, artifactUpdateDisplay } from './artifact-display';
 import type { ArtifactOperations } from '@clawket/agent-protocol';
 import {
@@ -42,6 +43,16 @@ export class CodexAdapter implements AgentAdapter {
     respond: async (key: string, id: string, answer: { value?: string; confirmed?: boolean; cancelled?: boolean; answers?: Record<string, string[]> }) => { await this.rpc('questions.respond', { sessionKey: key, questionId: id, ...answer }); },
   };
   readonly management: ManagementOperations;
+  private activityEnabled = false;
+  private readonly readActivity = async (keys: readonly string[]) => {
+    validateSessionActivity(keys.map(key => ({ key, state: 'unknown' })), keys);
+    if (!this.activityEnabled || this.state !== 'ready') throw new AdapterError('unsupported', 'Session activity is unavailable');
+    const epoch = this.epoch;
+    const value = await this.rpc<unknown>('sessions.activity', { keys }, 10_000);
+    if (epoch !== this.epoch || this.state !== 'ready') throw new AdapterError('network', 'Session activity belongs to a previous connection');
+    return validateSessionActivity(value, keys);
+  };
+  get readSessionActivity() { return this.activityEnabled && this.state === 'ready' ? this.readActivity : undefined; }
   private transport: RelayWsTransport;
   private readonly unencryptedTransport: boolean;
   private currentState: ConnectionState = 'idle';
@@ -97,6 +108,7 @@ export class CodexAdapter implements AgentAdapter {
   get state(): ConnectionState { return this.currentState; }
 
   private setState(state: ConnectionState, reason?: string): void {
+    if (state !== 'ready') this.activityEnabled = false;
     this.currentState = state;
     for (const listener of this.listeners.state) listener(state, reason);
   }
@@ -107,9 +119,10 @@ export class CodexAdapter implements AgentAdapter {
     try {
       // Relay authenticates its socket; only direct connections need connect/token.
       // A Relay connect request starts OpenClaw's challenge lifecycle.
-      const health = await this.rpc<{ artifacts?: boolean; promptStatus?: boolean; sessionCatalogSync?: unknown; backend: string; vision: boolean; model: string; projects?: boolean; fastMode?: boolean; sessionPermissions?: boolean; sessionArchive?: boolean }>(this.record.transportKind === 'relay' ? 'health' : 'connect', { token: this.record.auth?.token });
+      const health = await this.rpc<{ sessionActivity?: unknown; artifacts?: boolean; promptStatus?: boolean; sessionCatalogSync?: unknown; backend: string; vision: boolean; model: string; projects?: boolean; fastMode?: boolean; sessionPermissions?: boolean; sessionArchive?: boolean }>(this.record.transportKind === 'relay' ? 'health' : 'connect', { token: this.record.auth?.token });
       if (epoch !== this.epoch) return;
       if (health.backend !== 'codex') throw new AdapterError('unsupported', 'Endpoint is not a Codex Bridge');
+      this.activityEnabled = health.sessionActivity === 1;
       this.sessionCatalog.configure(health.sessionCatalogSync);
       this.artifactsEnabled = health.artifacts === true;
       this.capabilities.promptStatus = health.promptStatus === true;
@@ -165,8 +178,9 @@ export class CodexAdapter implements AgentAdapter {
   async probe(timeoutMs = 5_000): Promise<boolean> {
     const epoch = this.epoch;
     try {
-      const health = await this.rpc<{ artifacts?: boolean; promptStatus?: boolean; sessionCatalogSync?: unknown; backend: string; vision: boolean; model: string; projects?: boolean; fastMode?: boolean; sessionPermissions?: boolean; sessionArchive?: boolean }>('health', {}, timeoutMs);
+      const health = await this.rpc<{ sessionActivity?: unknown; artifacts?: boolean; promptStatus?: boolean; sessionCatalogSync?: unknown; backend: string; vision: boolean; model: string; projects?: boolean; fastMode?: boolean; sessionPermissions?: boolean; sessionArchive?: boolean }>('health', {}, timeoutMs);
       if (epoch !== this.epoch || health.backend !== 'codex') return false;
+      this.activityEnabled = health.sessionActivity === 1;
       this.sessionCatalog.configure(health.sessionCatalogSync);
       this.artifactsEnabled = health.artifacts === true;
       this.capabilities.promptStatus = health.promptStatus === true;
@@ -248,6 +262,10 @@ export class CodexAdapter implements AgentAdapter {
     } else if (frame.type === 'event' && frame.event === 'codex.update') {
       let update = artifactUpdateDisplay(frame.payload as SessionUpdate);
       if (!update || typeof update.type !== 'string') return;
+      if (update.type === 'session_activity_update') {
+        if (!this.activityEnabled) return;
+        const checked = sessionActivityUpdate(update); if (!checked) return; update = checked;
+      }
       // Older Bridges report failed completion without any displayable content.
       // Explicit failure is evidence; silence or a lost connection is not.
       if (update.type === 'run_finished' && update.stopReason === 'error' && !update.terminalMessage

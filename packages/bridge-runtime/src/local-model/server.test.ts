@@ -30,7 +30,12 @@ it('rejects unauthenticated clients and serves authenticated health without leak
     good.send(JSON.stringify({ type: 'req', id: 'good', method: 'connect', params: { token } }));
     const raw = await response;
     expect(raw).not.toContain(token);
-    expect(JSON.parse(raw)).toMatchObject({ id: 'good', ok: true, payload: { backend: 'local-model', model: 'test', vision: false } });
+    expect(JSON.parse(raw)).toMatchObject({ id: 'good', ok: true, payload: { sessionActivity: 1, backend: 'local-model', model: 'test', vision: false } });
+    const activity = new Promise<string>(resolve => good.once('message', data => resolve(data.toString())));
+    good.send(JSON.stringify({ type: 'req', id: 'activity', method: 'sessions.activity', params: { keys: ['main', 'unknown'] } }));
+    expect(JSON.parse(await activity)).toMatchObject({ ok: true, payload: [{ key: 'main', state: 'idle' }, { key: 'unknown', state: 'unknown' }] });
+    expect(conversation.running).toBe(false);
+
   } finally {
     for (const socket of sockets) socket.terminate();
     await server.stop();

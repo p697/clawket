@@ -157,3 +157,31 @@ describe('Desktop settings protocol versions', () => {
     } finally { ipc.stop(); }
   });
 });
+
+it('temporary catalog observations share the 64-follow bound and cannot release an opened chat', () => {
+  const ipc = new DesktopIpc([]);
+  vi.spyOn(ipc, 'connect').mockResolvedValue(undefined);
+  try {
+    for (let i = 0; i < 64; i++) expect(ipc.observe(`visible-${i}`)).toBe(true);
+    expect(ipc.observe('overflow')).toBe(false);
+    ipc.follow('visible-0'); expect(ipc.isObservationOnly('visible-0')).toBe(false);
+    ipc.unobserve('visible-0'); expect(ipc.observe('overflow')).toBe(false);
+    expect(ipc.isObservationOnly('visible-1')).toBe(true);
+    ipc.snapshots.set('visible-1', { fresh: true, source: 'owner', state: {} });
+    ipc.unobserve('visible-1'); expect(ipc.snapshots.has('visible-1')).toBe(false);
+    expect(ipc.observe('overflow')).toBe(true);
+  } finally { ipc.stop(); }
+});
+
+
+it('opening a chat evicts a disposable observation instead of letting the catalog exhaust chat capacity', () => {
+  const ipc = new DesktopIpc([]); vi.spyOn(ipc, 'connect').mockResolvedValue(undefined);
+  const released = vi.fn(); ipc.on('observation-released', released);
+  try {
+    for (let i = 0; i < 64; i++) ipc.observe(`visible-${i}`);
+    expect(() => ipc.follow('opened')).not.toThrow(); expect(released).toHaveBeenCalledWith('visible-0');
+    ipc.unobserve('opened'); expect(ipc.isObservationOnly('opened')).toBe(false);
+    for (let i = 1; i < 64; i++) ipc.follow(`visible-${i}`);
+    expect(() => ipc.follow('overflow')).toThrow('Too many open desktop conversations');
+  } finally { ipc.stop(); }
+});

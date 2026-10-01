@@ -1837,6 +1837,7 @@ export function useChatController({
   }, [history.setSessions]);
 
   const handleAdapterUpdate = useCallback((update: AdapterChatUpdate) => {
+    if (update.type === 'session_activity_update') return;
     if (consumeSilentCommandUpdate(update)) return;
     if ('runId' in update && update.runId && 'sessionKey' in update && update.sessionKey
       && sessionKeysMatch(update.sessionKey, sessionKeyRef.current)) {

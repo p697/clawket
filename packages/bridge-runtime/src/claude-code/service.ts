@@ -1,4 +1,5 @@
 import { DeliveredArtifacts } from '../delivered-artifacts.js';
+import { sessionActivityKeys } from '../session-activity.js';
 import { SessionCatalogSync } from '../session-catalog.js';
 import { InteractionAttention } from '../interaction-attention.js';
 import { readPromptIdentity, recordedPromptStatus } from '../prompt-status.js';
@@ -76,7 +77,8 @@ export class ClaudeService extends EventEmitter {
   }
   private async descriptor(record: ClaudeRecord, roster?: ClaudeOwnerSnapshot): Promise<SessionDescriptor> {
     const project = await this.catalog.addProject(record.cwd);
-    const continuation = record.imported ? this.continuation(record.nativeId!, project.available, roster ?? await this.owners.snapshot(), record.key) : {};
+    const snapshot = record.imported ? roster ?? await this.owners.snapshot() : roster;
+    const continuation = record.imported ? this.continuation(record.nativeId!, project.available, snapshot!, record.key) : {};
     const livePreview = this.previews.get(record.key);
     const nativePreview = record.nativeId ? this.catalog.cachedPreview(record.nativeId) : undefined;
     const visible = nativePreview && (!livePreview || nativePreview.lastActivityAt > livePreview.lastActivityAt)
@@ -85,7 +87,7 @@ export class ClaudeService extends EventEmitter {
       title: record.title || basename(record.cwd), updatedAt: Math.max(record.lastActivityAt ?? record.createdAt, visible?.lastActivityAt ?? 0),
       lastActivityAt: visible?.lastActivityAt ?? record.lastActivityAt ?? null, preview: visible?.preview, model: record.model,
       project, source: record.imported ? 'native' : 'bridge', ...continuation,
-      hasActiveRun: !!this.sessions.get(record.key)?.activeRun, attention: this.attention.get(record.key),
+      hasActiveRun: !!this.sessions.get(record.key)?.activeRun || !!(record.imported && snapshot?.known && snapshot.owners.some(owner => owner.sessionId === record.nativeId && owner.status === 'busy')), attention: this.attention.get(record.key),
       allowedActions: { rename: !record.imported, reset: !record.imported, delete: !record.imported, pin: true } };
   }
 
@@ -104,7 +106,7 @@ export class ClaudeService extends EventEmitter {
   async health(): Promise<object> {
     if (this.stopped) throw new ClaudeFault('Claude Bridge is stopped');
     // Viewing projects/history remains useful when model authentication needs attention.
-    return { backend: 'claude-code', sessionCatalogSync: 1, artifacts: true, promptStatus: true, projects: true, vision: true,
+    return { backend: 'claude-code', sessionActivity: 1, sessionCatalogSync: 1, artifacts: true, promptStatus: true, projects: true, vision: true,
       capabilities: { steer: false, thinkingLevels: false, skills: false, sessionBranch: true } };
   }
 
@@ -123,6 +125,25 @@ export class ClaudeService extends EventEmitter {
     const p = frame.params ?? {};
     switch (frame.method) {
       case 'health': return this.health();
+      case 'sessions.activity': {
+        const keys = sessionActivityKeys(p.keys);
+        const roster = keys.length ? await this.owners.snapshot() : { known: false as const, owners: [] };
+        if (this.stopped) throw new ClaudeFault('Claude Bridge is stopped');
+        return keys.map(key => {
+          const record = this.store.records.find(row => row.key === key);
+          const attention = this.attention.get(key);
+          if (this.sessions.get(key)?.activeRun) return { key, state: attention === 'input' || attention === 'approval' ? 'waiting' : 'running',
+            attention: attention === 'input' || attention === 'approval' ? attention : null };
+          let nativeId = record?.nativeId;
+          if (!record) { try { nativeId = this.catalog.native(key).sessionId; } catch { return { key, state: 'unknown' }; } }
+          if (record && !nativeId) return { key, state: 'idle' };
+          if (!roster.known) return { key, state: 'unknown' };
+          const owners = roster.owners.filter(owner => owner.sessionId === nativeId);
+          return { key, state: owners.some(owner => owner.status === 'busy') ? 'running'
+            : owners.some(owner => owner.status === 'waiting') ? 'waiting'
+              : owners.some(owner => owner.status === 'unknown') ? 'unknown' : 'idle' };
+        });
+      }
       case 'chat.promptStatus': {
         const identity = hash(readPromptIdentity(p.idempotencyKey));
         const record = this.store.records.find(row => row.key === p.sessionKey);
@@ -287,6 +308,7 @@ export class ClaudeService extends EventEmitter {
       const snapshot = roster ?? await this.owners.snapshot();
       return result.sessions.filter(session => !ownedKeys.has(session.key)).map(session => ({ ...session,
         ...this.continuation(this.catalog.native(session.key).sessionId, session.project?.available === true, snapshot, session.key),
+        hasActiveRun: snapshot.known && snapshot.owners.some(owner => owner.sessionId === this.catalog.native(session.key).sessionId && owner.status === 'busy'),
       }));
     }
     catch {

@@ -670,3 +670,13 @@ describe('useAdapterChatEvents', () => {
     expect(secondOnUpdate).toHaveBeenCalledTimes(1);
   });
 });
+
+
+it('does not pass session-list evidence to chat content or transport confirmation handlers', () => {
+  const adapter = createMockAdapter({ connection, sessions: [session], timeline: [
+    { atMs: 0, update: { type: 'session_activity_update', activity: { key: session.key, state: 'running' } } },
+  ] });
+  const onUpdate = jest.fn();
+  const view = renderHook(() => useAdapterChatEvents({ adapter, onUpdate }));
+  act(() => adapter.replayTimeline()); expect(onUpdate).not.toHaveBeenCalled(); view.unmount();
+});
