@@ -48,6 +48,14 @@ The owner asked for the remaining motion items to land even where they are compl
 - **After:** from the first words to the end of a three-paragraph reply, the rows above rose 404 px over about 750 ms. No frame moved more than 36 px, and none moved back. On send the rows above eased up 192 px in about 320 ms (−14, −40, −40, −32, −24, −16 … −2 px a frame), and the live pill arrived the same way (96 px in about 300 ms). A drag that began about 50 ms after a send followed the finger the whole way. The first build of this change pulled the list up 230 px once in that case; the drag guard removed it.
 - If the UI thread cannot measure the list, Android falls back to the native follow.
 
+## A+ motion, batch 3 — composer growth, 2026-10-01
+
+Part of the owner's request to land every remaining motion item. On Android, when a draft wrapped onto a new line, the editor's first line scrolled out of view for a moment before the capsule grew to show both lines.
+
+- **Cause:** the native editor was exactly as tall as the capsule's visible height. A newly wrapped line had no room inside it, so Android scrolled the editor to keep the caret visible. The capsule grows only after React measures the new line, and only then does the editor scroll back.
+- **Change:** while the draft fits under the five-line cap, the editor's host is one line taller than the capsule shows (`inputFrameHeight`), and the capsule clips it. A new line lands in that spare room, and the capsule then grows to reveal it. Past the cap the editor scrolls inside the capsule as before, and a sent draft keeps its height while the thread holds it (batch 2b).
+- **Device check (SM-A566B QA build):** a draft typed word by word over five lines was recorded, and its first line was tracked frame by frame. Each wrap moved the first line up about 66 px in about 100 ms as the capsule grew. It was never scrolled away and back.
+
 ## A+ motion, batch 2b — 2026-10-01
 
 Batch 2b removes the jolt when a multi-line draft is sent. To measure it, a script tracks a fixed message patch frame by frame in a screen recording, so no screenshots need to be read. The recordings were made on an SM-A566B QA build, sending the same three-line draft in an OpenClaw test session.
