@@ -26,6 +26,24 @@ it('does not advertise native profile operations without an explicit fixture', (
   expect(adapter.management?.profile).toBeUndefined();
 });
 
+it('delegates explicit native profile fixtures only while the capability is enabled', async () => {
+  const defaults = { model: null, thinking: null, version: 'fixture', editable: true, models: [] };
+  const document = { id: 'doc', name: 'AGENTS.md', content: '', version: 'fixture', editable: true, missing: false, size: 0 };
+  const usage = { plan: null, quotas: [], lifetimeTokens: null, daily: [] };
+  const profile: NonNullable<ManagementOperations['profile']> = {
+    projects: async () => [], defaults: async () => defaults, setDefaults: async () => defaults,
+    usage: async () => usage, skills: async () => ({ skills: [], errorCount: 0 }),
+    setSkillEnabled: async () => ({ skills: [], errorCount: 0 }), instructions: async () => [],
+    document: async () => document, saveDocument: async () => document, mcp: async () => [], plugins: async () => [],
+  };
+  const data = { connection: { ...connection, backendKind: 'codex' as const }, management: { profile } };
+  const adapter = createMockAdapter(data);
+  expect(adapter.capabilities.profileManagement).toBe(true);
+  expect(adapter.management?.profile).toBe(profile);
+  expect(await adapter.management?.profile?.usage()).toBe(usage);
+  expect(createMockAdapter({ ...data, capabilities: { profileManagement: false } }).management?.profile).toBeUndefined();
+});
+
 it('exposes receipt lookup only where supported and never invents persistence in generic fixtures', async () => {
   for (const backendKind of ['codex', 'claude-code', 'pi'] as const) {
     const adapter = createMockAdapter({ connection: { ...connection, backendKind } });
