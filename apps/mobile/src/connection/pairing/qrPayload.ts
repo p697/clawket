@@ -3,6 +3,8 @@ import { PairingQrPayload } from '../../services/relay-pairing';
 
 export type QRScanResult = {
   url: string;
+  /** Optional Codex / Claude Code LAN connection label. */
+  displayName?: string;
   token?: string;
   password?: string;
   bootstrap?: {
@@ -226,6 +228,9 @@ export function parseQRPayload(raw: string): QRScanResult | null {
           ...(['pi', 'codex', 'claude-code'].includes(obj.backendKind) ? { backendKind: obj.backendKind as 'pi' | 'codex' | 'claude-code' } : {}),
           ...(hermes ? { backendKind: 'hermes' as const } : {}),
           ...(mode && mode !== 'hermes' ? { transportKind: mode } : {}),
+          ...(mode === 'local' && !hermes && ['codex', 'claude-code'].includes(obj.backendKind)
+            && typeof obj.displayName === 'string' && obj.displayName.trim()
+            ? { displayName: obj.displayName.trim() } : {}),
           ...(typeof obj.token === 'string' ? { token: obj.token } : {}),
           ...(typeof obj.password === 'string' ? { password: obj.password } : {}),
           ...(bootstrap ? { bootstrap } : {}),

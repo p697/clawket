@@ -1,4 +1,7 @@
 import { parseQRPayload } from './qrPayload';
+import { buildPairedConnectionRecord } from './save-paired-connection';
+
+jest.mock('../../services/analytics/events', () => ({ analyticsEvents: { gatewayConnectSaved: jest.fn() } }));
 
 /**
  * Critical backward-compatibility surface: parseQRPayload is what the
@@ -378,5 +381,39 @@ describe('Pi pairing identity', () => {
   it('preserves Pi independently of direct and Relay transports', () => {
     expect(parseQRPayload(JSON.stringify({ backendKind: 'pi', mode: 'local', url: 'ws://192.168.1.2:17881/v1/pi/ws', token: 'private' }))).toMatchObject({ backendKind: 'pi', transportKind: 'local', token: 'private' });
     expect(parseQRPayload(JSON.stringify({ v: 2, k: 'cp', b: 'pi', s: 'https://pi.example', g: 'gw_test', a: 'access' }))).toMatchObject({ backendKind: 'pi', transportKind: 'relay' });
+  });
+});
+
+describe('Codex and Claude Code device labels', () => {
+  it.each([['codex', 'Codex'], ['claude-code', 'Claude Code']] as const)('%s carries the LAN label through scanning and saving', (backendKind, product) => {
+    const displayName = `${product} · 工作室的 Mac mini`;
+    const payload = parseQRPayload(JSON.stringify({ version: 1, backendKind, mode: 'local',
+      url: `ws://192.168.1.2:18001/v1/${backendKind}/ws`, token: 'local-token', displayName: ` ${displayName} ` }));
+    expect(payload).toMatchObject({ backendKind, transportKind: 'local', displayName });
+    expect(buildPairedConnectionRecord({ payload: payload!, debugMode: false, connectionCount: 0 }))
+      .toMatchObject({ backendKind, transportKind: 'local', label: displayName, auth: { token: 'local-token' } });
+  });
+
+  it.each([null, 42, {}, [], '', '   '])('ignores an invalid LAN label %j', displayName => {
+    const payload = parseQRPayload(JSON.stringify({ backendKind: 'codex', mode: 'local',
+      url: 'ws://192.168.1.2:18001/v1/codex/ws', token: 'token', displayName }));
+    expect(payload?.displayName).toBeUndefined();
+    expect(buildPairedConnectionRecord({ payload: payload!, debugMode: false, connectionCount: 0 }).label).toBe('Codex');
+  });
+
+  it.each(['openclaw', 'hermes', 'pi'])('keeps %s direct pairing names unchanged', backendKind => {
+    const payload = parseQRPayload(JSON.stringify({ backendKind, mode: 'local', url: 'ws://192.168.1.2/ws', token: 'token', displayName: 'Native-only label' }));
+    expect(payload).not.toBeNull();
+    expect(payload?.displayName).toBeUndefined();
+  });
+
+  it('retains the same device label in compact Relay QR payloads', () => {
+    for (const backend of ['codex', 'claude-code'] as const) {
+      const displayName = `${backend === 'codex' ? 'Codex' : 'Claude Code'} · 工作室的 Mac mini`;
+      const payload = parseQRPayload(JSON.stringify({ v: 2, k: 'cp', b: backend,
+        s: 'https://registry.example', g: 'gateway', a: 'access', relayUrl: 'wss://relay.example/ws', n: displayName }));
+      expect(buildPairedConnectionRecord({ payload: payload!, debugMode: false, connectionCount: 0 }))
+        .toMatchObject({ backendKind: backend, transportKind: 'relay', label: displayName });
+    }
   });
 });

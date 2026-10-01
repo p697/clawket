@@ -2,10 +2,11 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { mkdtempSync, mkdirSync, readFileSync, realpathSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-const mock = vi.hoisted(() => ({ control: vi.fn(), background: vi.fn(), fetch: vi.fn(), home: '' }));
+const mock = vi.hoisted(() => ({ control: vi.fn(), background: vi.fn(), fetch: vi.fn(), name: vi.fn(), qr: vi.fn(), home: '' }));
 vi.mock('node:os', async (original) => ({ ...await original<typeof import('node:os')>(), homedir: () => mock.home }));
 vi.mock('./codex-lifecycle.js', () => ({ codexControl: mock.control, startCodexBackground: mock.background }));
-vi.mock('qrcode', () => ({ default: { toString: async () => '[test QR]' } }));
+vi.mock('./device-connection-name.js', () => ({ defaultDeviceConnectionName: mock.name }));
+vi.mock('qrcode', () => ({ default: { toString: mock.qr } }));
 vi.mock('@clawket/bridge-runtime', async () => {
   const { EventEmitter } = await import('node:events');
   return {
@@ -20,12 +21,41 @@ let root: string, project: string, path: string;
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'codex-cli-')); mock.home = root; project = join(root, 'project'); mkdirSync(project); path = join(root, 'runtime.json');
   mock.control.mockReset(); mock.background.mockReset(); mock.fetch.mockReset();
+  mock.name.mockReset().mockReturnValue('Codex · 工作室 Mac'); mock.qr.mockReset().mockResolvedValue('[test QR]');
   mock.control.mockRejectedValue(new Error('offline'));
   if (process.send) vi.spyOn(process as unknown as { send: (...args: unknown[]) => boolean }, 'send').mockImplementation(() => true);
   vi.stubGlobal('fetch', mock.fetch); vi.spyOn(console, 'log').mockImplementation(() => {}); vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); rmSync(root, { recursive: true, force: true }); });
 const saved = (relay: object) => writeFileSync(path, JSON.stringify({ project, command: 'codex', token: 'local-test-token', port: 18499, host: '127.0.0.1', relay }));
+it('reuses one device label for Registry, QR and code invitations after a computer rename', async () => {
+  mock.fetch.mockImplementation(async (url: string) => {
+    if (url.endsWith('/register')) return Response.json({ gatewayId: 'new-id', relaySecret: 'new-secret', relayUrl: 'wss://relay.example', accessCode: 'code' });
+    if (url.endsWith('/access-code')) return Response.json({ accessCode: 'refreshed-code' });
+    return Response.json({ sessionId: `ps_${'a'.repeat(64)}`, expiresAt: new Date(Date.now() + 60_000).toISOString(), capabilities: ['pairing.secure-short-code.v2'] });
+  });
+  const args = ['pair', '--foreground', '--device', '--config', path, '--registry', 'https://codex.example'];
+  await handleCodexCommand(args);
+  const initial = JSON.parse(readFileSync(path, 'utf8'));
+  expect(JSON.parse(mock.fetch.mock.calls[0][1].body)).toEqual({ displayName: 'Codex · 工作室 Mac' });
+  expect(initial.displayName).toBe('Codex · 工作室 Mac');
+  expect(JSON.parse(initial.relay.invitation.qrPayload)).toMatchObject({ b: 'codex', n: initial.displayName });
+  expect(JSON.parse(mock.qr.mock.calls[0][0]).n).toBe(initial.displayName);
+  mock.name.mockReturnValue('Codex · Renamed computer');
+  await handleCodexCommand(args);
+  expect(mock.name).toHaveBeenCalledTimes(1);
+  expect(JSON.parse(mock.fetch.mock.calls[2][1].body)).toEqual({ gatewayId: initial.relay.gatewayId, relaySecret: initial.relay.relaySecret });
+  expect(JSON.parse(mock.qr.mock.calls[1][0]).n).toBe(initial.displayName);
+});
+
+it.each([undefined, 'Studio laptop'])('preserves an existing local pairing label %s', async displayName => {
+  saved({});
+  const initial = JSON.parse(readFileSync(path, 'utf8'));
+  writeFileSync(path, JSON.stringify({ ...initial, displayName }));
+  await handleCodexCommand(['pair', '--foreground', '--local', '--address', '127.0.0.1', '--config', path]);
+  expect(JSON.parse(mock.qr.mock.calls[0][0])).toMatchObject({ backendKind: 'codex', mode: 'local', displayName: displayName ?? 'Codex', token: initial.token });
+  expect(mock.name).not.toHaveBeenCalled();
+});
 it('refreshes the same registration without invalidating existing client identity', async () => {
   saved({ registryUrl: 'https://codex.example', gatewayId: 'existing-id', relaySecret: 'existing-secret', relayUrl: 'wss://relay.example' });
   mock.fetch.mockImplementation(async (url: string) => url.endsWith('/access-code') ? Response.json({ accessCode: 'new-code' }) : Response.json({ sessionId: 'legacy' }));
@@ -76,12 +106,15 @@ it.each([false, true])('preserves default device scope on first detached pairing
   const childConfig = childArgs[childArgs.indexOf('--config') + 1];
   await handleCodexCommand([...childArgs, '--foreground']);
   const initial = JSON.parse(readFileSync(childConfig, 'utf8'));
-  expect(initial).toMatchObject({ device: true, project: realpathSync(join(root, 'Documents', 'Clawket', 'Chats')) });
+  expect(initial).toMatchObject({ device: true, displayName: 'Codex · 工作室 Mac', project: realpathSync(join(root, 'Documents', 'Clawket', 'Chats')) });
+  expect(JSON.parse(mock.qr.mock.calls[0][0])).toMatchObject({ backendKind: 'codex', mode: 'local', displayName: initial.displayName });
+  mock.name.mockReturnValue('Codex · Renamed computer');
   await handleCodexCommand(args);
   const repeatedArgs = mock.background.mock.calls[1][0];
   expect(repeatedArgs[repeatedArgs.indexOf('--config') + 1]).toBe(childConfig);
   await handleCodexCommand([...repeatedArgs, '--foreground']);
-  expect(JSON.parse(readFileSync(childConfig, 'utf8'))).toMatchObject({ device: true, token: initial.token, port: initial.port });
+  expect(JSON.parse(readFileSync(childConfig, 'utf8'))).toMatchObject({ device: true, displayName: initial.displayName, token: initial.token, port: initial.port });
+  expect(mock.name).toHaveBeenCalledTimes(1);
 });
 
 it('keeps explicit project scope through a first detached pairing', async () => {

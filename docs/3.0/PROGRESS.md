@@ -15,6 +15,8 @@
   - 没动：安卓英文界面下，空输入框的占位字偏高约 2pt（原生占位文字不吃行高）。这是原有问题，和这次的偏低无关，另行处理。
   - 单测逐文件串行：textCentering 3、cjkText 1、streamTextPacer 18、ThreadPrimitives 61、ThreadView 定向 6。
 
+- 2026-10-01 首次扫码 Preview 误提示排查与扫码框修复（负责人授权修复）：只读证据确认本机 Codex 3.1.8 QR 为 Production；12:29:15 UTC 手机却校验了 OpenClaw/Preview，12:29:27–29 UTC Codex/Production claim、连接成功。原始 QR/相机画面不采集，不能声称已证明现场扫到哪个物理码。确认并修复独立缺陷：取景框原来只是装饰，全屏任意二维码可先被接收。现按真实相机坐标只接收完整框内 QR，缺失/过期布局等待；取消/退出、晚到重试与同批事件均有保护。Android Expo Camera 57.0.5 从仅回传第一个码改为逐码回传，安装补丁与源码编译设置进入 CI gate；iOS 原生已逐码回传。后端/环境校验与 claim 不变。逐文件 in-band Mobile 回归 94 项、原生补丁 5 项、Mobile 类型、设计系统与文档通过；专属 heavy 租约下原生同步和 Android 相机 Kotlin 模块编译通过（52 秒/59 个任务，无 APK/IPA）。Expo 在线兼容目录提示现有基线有 11 个更新 patch，本次不升依赖。未升版本、打包、OTA、发布 npm 或部署服务。验证与局限见 [扫码框记录](../3.1/qr-scan-frame-2026-10-01.md)，后续 App 更新和原手机验收见 HT-QR-FRAME-1001。
+
 - 2026-10-01 用户气泡恢复原来的颜色（负责人：还是原本的颜色设计好看，恢复成一开始的蓝色）：撤回 #74 的调浅，冰川蓝回到浅 `#1F5EFF` / 深 `#2A57D6`，其余五种强调色也一起回到原色，白字对比度门槛回到 4.5:1。#74 的画布记录和进度日志保留作历史。
 
 - 2026-10-01 会话面板打开不再卡顿（负责人：OpenClaw「Lucy」里打开会话面板有卡顿、掉帧感，问有没有更简单的优化）。
@@ -1264,6 +1266,7 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 | HT-ONBOARDING-1001 | 按平台连接引导真机视觉验收 | 在后续授权的 App 更新或开发包中查看平台列表、Codex 终端、Hermes Agent、电脑自动选择及手输码；不要求刷新现有配对凭据。 | iOS/Android 浅色与深色、大字号、键盘避让和方式切换；核对扫码/相册/码连接失败恢复表单。 | 自动化交互与代码检查已通过，未操作模拟器或设备；真机视觉验收待负责人完成，未发起打包或发布。 |
 | HT-CODEX-RUNTIME-0930 | 桌面运行时优先的手机验收 | 本机现有 3.1.6 已通过保存的原生执行路径切到桌面 0.159.2，Bridge 重启完成；手机重新连接，无需重新扫码。 | 模型目录与新对话一致，消息得到回复；旧原生会话仍可继续。 | 隔离真实新对话成功；本机配对保留、认证/目录读回通过，负责人已确认手机新建成功；旧原生会话续聊仍待验收。负责人已授权本次 Bridge 发布，App 更新另行授权。见 ../3.1/codex-desktop-runtime-2026-09-30.md。 |
 | HT-CODEX-AUTH-0930 | 原故障 iPhone 的认证与错误回显验收 | 负责人恢复必要的原生登录，安装本轮公开 Bridge 后重新配对，在新对话发送无副作用消息。 | 手机得到真实回复；认证失败显示明确提示，退出重进历史仍保留。记录 App build 和运行 Bridge。 | 原故障与旧/新历史差异已只读复现；本机清理完成，本轮 Bridge 发布进行中。新 Mobile 通用兜底需要独立 App 更新，真机验收待负责人完成。 |
+| HT-QR-FRAME-1001 | 扫码框与首次扫码真机验收 | 后续授权 App 更新或开发包中，iOS/Android 各测单 QR、框外第二 QR（Production Codex + Preview OpenClaw）、取消再打开；Android 须包含新原生相机代码。 | 第一次只接收框内码、环境正确；移入同一码可识别，取消/退出无迟到配对；保留固定诊断原因。 | 源码修复与受控回归完成；原现场物理码选择无证据，真机与交付待负责人后续验收。见 ../3.1/qr-scan-frame-2026-10-01.md。 |
 | HT-FIRST-SCAN-0930 | 首次扫码故障真机验证 | 已确认两个后端均立即报错、只有一个二维码、App 为当前仓库构建的 3.1.0；后续授权的 App 更新后重测首次扫码并保留固定校验原因。 | 区分真实首次校验原因与受控旧回调复现；当前代码修改不等于手机已收到修复。 | 本地旧回调竞态和错误反馈修复已实现，原现场的环境变化仍无证据，待 App 更新后负责人验证。见 ../3.1/first-scan-investigation-2026-09-30.md。 |
 | HT-NPM-315-0930 | Bridge 3.1.5 npm 发布两步验证 | 在 npm 官方浏览器流程完成验证，不在聊天中发送密码或验证码。 | npm 发布成功，公开 latest=3.1.5，公开包与固定候选逐字节一致。 | 已完成：npm 两步验证成功；公开 latest=3.1.5，下载包逐字节及 SHA-1/SHA-512 校验通过。 |
 | HT-NPM-314-0929 | Bridge 3.1.4 npm 发布安全密钥验证 | 在已打开的 npm 官方页面完成安全密钥/Touch ID，无需提供密钥。 | npm发布成功，公开latest及下载包SHA与固定候选一致。 | 已完成：五Relay已发布并核验；npm latest=3.1.4，公开下载包三项哈希与固定候选一致。 |
@@ -2904,3 +2907,9 @@ Native-browser login and separate publish authentication completed; npm accepted
 ### 2026-10-01 — Agent profile connection settings label
 
 Owner requested the Agent profile connection entry read “Connection settings”. Updated its presentation key and all 19 Mobile settings catalogs, including Simplified Chinese “连接设置” and Traditional Chinese “連線設定”. Connection status, navigation and backend behavior remain unchanged. Strict locale and documentation checks verify the copy-only change; no build, version bump or release.
+
+### 2026-10-01 — Device names in new Codex / Claude Code connections
+
+Owner approved `Product · Device name` defaults after naming research. New Bridge configurations save a bounded macOS ComputerName (hostname fallback on other systems or failed lookup), reused by Registry registration, compact Relay QR and encrypted code invitations. An additive native LAN QR `displayName` now reaches the saved Mobile connection label and existing device-Agent presentation. Refresh/computer renames do not regenerate the saved default or rename Registry records; old configurations without a name retain plain product defaults. Phone re-pairing keeps existing and manually renamed labels, and equal names never merge different computer identities. OpenClaw, Hermes and Pi naming remains unchanged; device labels are not diagnostic/analytics fields.
+
+Serial focused verification: CLI name resolver eight, Codex pairing 14, Claude pairing 11, Mobile QR parsing 35, pairing save nine and connection storage 27 cases (104 total across six files). Bridge/Mobile types and the local Bridge bundle pass; bundle verification covers three files, four runtime boundaries, 86 modules and 128 provenance inputs. Docs checks passed seven instruction pairs and five checker cases; full required checks and v1 replay remain CI-only. No version bump, npm publication, App distribution, Worker deploy or installed-runtime/configuration change. Relay naming needs a future Bridge release; LAN naming also needs a future App release. See [Codex naming](../3.1/codex.md#local-display-names) and [Claude Code naming](../3.1/claude-code.md#local-display-names).

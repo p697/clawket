@@ -174,8 +174,19 @@ describe('native device connection names', () => {
     }).label;
     expect(build()).toBe(name);
     expect(build(`${name} · Computer`)).toBe(name);
+    expect(build(`${name} · 工作室的 Mac mini`)).toBe(`${name} · 工作室的 Mac mini`);
     expect(build('Studio laptop')).toBe('Studio laptop');
     expect(buildPairedConnectionRecord({ payload: { backendKind, mode: 'local', url: 'ws://localhost/ws' },
       debugMode: false, connectionCount: 0 }).label).toBe(name);
+    expect(buildPairedConnectionRecord({ payload: { backendKind, mode: 'local', url: 'ws://localhost/ws', displayName: ` ${name} · 工作室 Mac ` },
+      debugMode: false, connectionCount: 0 }).label).toBe(`${name} · 工作室 Mac`);
+  });
+
+  it.each(['openclaw', 'hermes', 'pi'] as const)('ignores native LAN label metadata for %s', backendKind => {
+    const build = (displayName?: string) => buildPairedConnectionRecord({
+      payload: { backendKind, mode: 'local', url: 'ws://localhost/ws', displayName },
+      debugMode: false, connectionCount: 0,
+    }).label;
+    expect(build('Native-only label')).toBe(build());
   });
 });

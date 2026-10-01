@@ -47,8 +47,11 @@ export function buildPairedConnectionRecord(input: Readonly<{
     }
     : undefined;
   const defaultName = connectionAgentDefaultName(backendKind);
+  const localName = defaultName && transportKind === 'local' && typeof input.payload.displayName === 'string'
+    ? input.payload.displayName.trim() : undefined;
   const pairedName = input.payload.relay?.displayName?.trim()
     || input.payload.hermes?.displayName?.trim()
+    || localName
     || defaultName
     || buildGatewayDefaultName({
       backendKind,

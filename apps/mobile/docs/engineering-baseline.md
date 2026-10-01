@@ -95,6 +95,10 @@ SDK 57's Gradle 9.3.1 has an [upstream Kotlin DSL symlink regression](https://gi
 
 `patch-expo-sharing.mjs` preserves `EXTRA_STREAM` for text/plain sends and classifies text MIME streams as files in the raw parser, reviewed against expo-sharing 57.0.20. A MIME type alone does not imply an `EXTRA_TEXT` body. Both root and Mobile postinstall apply this idempotent, fail-closed patch; the required gate exercises source drift and missing-dependency failures. Keep URL/text bodies on their existing path and never resolve shared web URLs automatically. Android `expo.autolinking.android.buildFromSource` explicitly includes `expo-sharing`; SDK 57 otherwise links the unpatched prebuilt AAR even when the Kotlin source was changed. The regression checks this configuration. Remove or review the patch when upgrading Expo Sharing. See [Expo precompiled modules](https://docs.expo.dev/guides/prebuilt-expo-modules/).
 
+## Camera barcode delivery
+
+`scripts/patch-expo-camera-barcodes.mjs`, reviewed against expo-camera 57.0.5, delivers every Android MLKit result instead of only `barcodes.first()`. The app selects the code inside its measured scan frame; otherwise an off-frame first result can indefinitely hide the intended code. Preserve each result's data, corners, rotated dimensions and image cleanup. Both root and Mobile postinstall apply the idempotent patch and fail on missing/drifted source; CI checks patch integrity and install wiring. Android `expo.autolinking.android.buildFromSource` includes `expo-camera` so the patched Kotlin is compiled. iOS already delivers all detected QR objects. Review this patch when upgrading Expo Camera; the package version stays unchanged.
+
 ## Brace expansion security pins
 
 Root and standalone Mobile manifests keep matching major-scoped `brace-expansion` overrides: 1.x → 1.1.21, 2.x → 2.1.7 and 5.x → 5.0.12. Both lockfiles must resolve those patched releases for nested glob/minimatch consumers. This addresses the [upstream denial-of-service advisories](https://github.com/advisories/GHSA-q2hr-2g5m-vwhr), including recursive stack exhaustion; retain high-severity audit gates rather than suppressing findings.

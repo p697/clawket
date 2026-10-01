@@ -438,6 +438,37 @@ describe('ConnectionStore', () => {
     expect(store.getSnapshot().connections).toHaveLength(1);
   });
 
+  it.each([
+    ['codex', 'Codex'], ['codex', 'Studio laptop'],
+    ['claude-code', 'Claude Code'], ['claude-code', 'Studio laptop'],
+  ] as const)('retains the saved %s label %s when re-pairing with a device default', async (backendKind, label) => {
+    for (const transportKind of ['local', 'relay'] as const) {
+      const store = new ConnectionStore({ secureStorage: new MemorySecureStorage(), legacyStorage: legacyStorage(), now: () => 200, random: () => 0 });
+      const identity = transportKind === 'relay'
+        ? { url: 'wss://relay.example/ws', relay: { serverUrl: 'https://registry.example', gatewayId: 'stable-gateway', clientToken: 'old-token' } }
+        : { url: `ws://192.168.1.2:18001/v1/${backendKind}/ws` };
+      await store.upsert({ id: 'stable-native', backendKind, transportKind, label, ...identity, auth: { token: 'before' } });
+      const refreshed = await store.upsert({ backendKind, transportKind, ...identity,
+        label: `${backendKind === 'codex' ? 'Codex' : 'Claude Code'} · New computer name`, auth: { token: 'after' } });
+      expect(refreshed).toMatchObject({ created: false, connection: { id: 'stable-native', label } });
+      expect(store.getSnapshot().connections).toHaveLength(1);
+      await store.createAdapter('stable-native', (record, descriptor) => {
+        expect(record.auth?.token).toBe('after');
+        return createMockAdapter({ connection: descriptor });
+      });
+    }
+  });
+
+  it.each(['codex', 'claude-code'] as const)('keeps different %s computers separate even with identical device labels', async backendKind => {
+    const store = new ConnectionStore({ secureStorage: new MemorySecureStorage(), legacyStorage: legacyStorage(), now: () => 200, random: () => 0 });
+    const label = `${backendKind === 'codex' ? 'Codex' : 'Claude Code'} · Studio Mac`;
+    for (const gatewayId of ['first', 'second']) {
+      await store.upsert({ id: gatewayId, backendKind, transportKind: 'relay', label, url: 'wss://relay.example/ws',
+        relay: { serverUrl: 'https://registry.example', gatewayId, clientToken: 'token' } });
+    }
+    expect(store.getSnapshot().connections).toHaveLength(2);
+  });
+
   it('upserts the same direct Hermes bridge while keeping its stable record identity', async () => {
     const store = new ConnectionStore({
       secureStorage: new MemorySecureStorage(),

@@ -16,6 +16,7 @@ import { buildRelayClaimKey } from './connection-form-utils';
 
 export type GatewayScanPayload = {
   url: string;
+  displayName?: string;
   token?: string;
   password?: string;
   bootstrap?: GatewayConfig['bootstrap'];
