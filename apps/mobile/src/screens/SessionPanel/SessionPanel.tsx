@@ -1348,9 +1348,11 @@ export function SessionPanel({
   const group = roster.find((candidate) => (
     candidate.connection.id === (connectionId ?? connections.activeConnectionId)
   ));
+  const activityLive = group?.connection.id === connections.activeConnectionId
+    && connections.activeState === 'ready' && group?.source === 'live';
   const rows = useMemo(
-    () => buildSessionPanelRows(group, { pinnedSessionKeys, live: connections.activeState === 'ready' && group?.source === 'live', runActivities: connections.runActivities, recentFirst: connections.activeAdapter?.capabilities.projects === true }),
-    [group, pinnedSessionKeys, connections.activeAdapter?.capabilities.projects, connections.activeState, connections.runActivities],
+    () => buildSessionPanelRows(group, { pinnedSessionKeys, live: activityLive, runActivities: connections.runActivities, recentFirst: connections.activeAdapter?.capabilities.projects === true }),
+    [group, pinnedSessionKeys, connections.activeAdapter?.capabilities.projects, activityLive, connections.runActivities],
   );
   const agents = useMemo(
     () => group?.agents.map((summary) => summary.agent) ?? [],
@@ -1394,7 +1396,7 @@ export function SessionPanel({
   return (
     <SessionPanelView
       activityAdapter={adapter}
-      activityLive={connections.activeState === 'ready' && group?.source === 'live'}
+      activityLive={activityLive}
       projects={adapter?.capabilities.projects ? projects ?? [] : undefined}
       archiveScope={adapter?.connection.id}
       onLoadArchived={adapter?.capabilities.sessionArchive && adapter.listArchivedSessions && group ? async () => {

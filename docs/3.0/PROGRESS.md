@@ -2929,7 +2929,7 @@ Serial focused verification: CLI name resolver eight, Codex pairing 14, Claude p
 
 ## Session list activity · 2026-10-01
 
-- 2026-10-01 会话列表运行状态（负责人确认按调研建议完整实现）。所有 live session 图标统一使用 `PresenceRing` 运行圆弧；等待输入/批准/未知类型的等待使用注意提示，保留两行布局、未读信号和错误。缓存、断线和 unknown 不显示运行圆弧，减少动态效果时静止。
+- 2026-10-01 会话列表运行状态（负责人确认按调研建议完整实现）。所有 live session 图标统一使用 `PresenceRing` 运行圆弧；等待输入/批准/未知类型的等待使用注意提示，保留两行布局、未读信号和错误。缓存、断线、非当前连接和 unknown 不显示运行圆弧，减少动态效果时静止。
   - OpenClaw/Hermes/Pi/YouMind 复用实时 descriptor 与连接内 run events；Codex/Claude/local-model 增加协商式 `sessions.activity`。Codex 仅观察已授权目录里的可见原生任务，不索引、不加载历史、不接管 writer；Claude busy/idle/waiting/unknown 来自官方只读 owner roster，idle 仍是 owner。手机前台弹窗可见时串行读取最多 32 个 key，关闭/后台停止；Codex 45 秒观察及证据独立过期，打开聊天优先于临时观察；新状态事件只向请求该窗口的直连 socket 发送，Relay 使用已有 origin-routed RPC 返回（最多等 1.5 秒原生新 snapshot），不向旧手机转发新事件。见 [设计与边界](../3.1/session-activity.md)。
   - 本地逐文件串行通过：SessionPanel 33、model 27、useSessionActivity 5、activity adapters 10、SessionActivityRing 2、useAdapterChatEvents 17、Codex activity 7、Desktop IPC 27、Codex service 157、Claude service 30、local-model server 1，Codex direct server 6、Codex Relay 6，以及 Gateway OpenClaw/Hermes recorded 39 项；当前真实 Codex Desktop 运行任务的只读 smoke 通过（首次 68ms，最终原生观察读取路径 74ms 收到 snapshot），没有历史/推理请求。类型检查、完整 Mobile/Bridge/Relay 回归、v1 replay 及 Windows/macOS 兼容门禁由本次 PR CI 验证；本机其他任务持有原生构建 heavy 租约，未并行启动类型检查或全量测试。
   - 未升版本、重启本机 Bridge、打包、部署或发布。新原生状态读取需后续授权交付 App 与 Bridge；手机视觉验收记入 HT-SESSION-ACTIVITY-1001。

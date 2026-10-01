@@ -1046,6 +1046,19 @@ it('shows the same working arc on ordinary Codex tiles while retaining unread an
   view.rerender(<SessionPanelView {...props({ rows: [working], currentSessionKey: 'other', activityLive: false })} />);
   expect(view.queryByTestId(`session-panel-row-${working.id}-running`, { includeHiddenElements: true })).toBeNull();
 });
+it('clears a live roster arc when its connection is no longer the active connection', () => {
+  const activeAdapter = { state: 'ready', connection: { id: 'connection' }, capabilities };
+  const snapshot = { initialized: true, activeConnectionId: 'connection', activeAdapter, activeState: 'ready', error: null };
+  jest.mocked(useConnections).mockReturnValue(snapshot as unknown as ReturnType<typeof useConnections>);
+  jest.mocked(useRoster).mockReturnValue([source]);
+  const panelProps = { connectionId: 'connection', visible: true, currentAgentId: 'main', currentSessionKey: 'agent:main:main', onClose: jest.fn(), onSelectSession: jest.fn() };
+  const view = render(<SessionPanel {...panelProps} />);
+  const id = `session-panel-row-${rows.find(row => row.hasActiveRun)!.id}-running`;
+  expect(view.getByTestId(id, { includeHiddenElements: true })).toBeTruthy();
+  jest.mocked(useConnections).mockReturnValue({ ...snapshot, activeConnectionId: 'other', activeAdapter: { ...activeAdapter, connection: { id: 'other' } } } as unknown as ReturnType<typeof useConnections>);
+  view.rerender(<SessionPanel {...panelProps} />);
+  expect(view.queryByTestId(id, { includeHiddenElements: true })).toBeNull();
+});
 it('shows approval/input/ambiguous waiting distinctly from running', () => {
   const original = rows.find(row => row.kind === 'direct')!;
   for (const [attention, text] of [['approval', 'Waiting for your approval'], ['input', 'Agent needs your input'], [null, 'Needs attention']] as const) {
