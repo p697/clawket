@@ -63,6 +63,19 @@ describe('recycled message entrance', () => {
     expect(start.transformOrigin).toBe('right bottom');
   });
 
+  it('draws an entering row at the start of its motion from its first frame, even in a reused cell', () => {
+    // The timing never writes here: what the first commit draws is what the list shows before the motion runs.
+    mockTiming.mockImplementation(() => undefined as unknown as number);
+    const view = render(row('history', false));
+    expect(style(view).opacity).toBe(1);
+    // The cell is reused for the new row: it must not show the row in place first.
+    view.rerender(row('new', true));
+    expect(style(view).opacity).toBeCloseTo(Motion.send.startOpacity);
+    expect(transform(style(view))).toEqual({ translateX: -Motion.send.offsetX, translateY: Motion.send.offsetY, scale: Motion.send.startScale });
+    const fresh = render(row('fresh', true, 'reply'));
+    expect(transform(style(fresh)).translateY).toBe(8);
+  });
+
   it('lands a sent row at its own place, size and opacity', () => {
     const view = render(row('new', true));
     view.rerender(row('new', true));

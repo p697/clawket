@@ -13,11 +13,17 @@ describe('conversation entrance ownership', () => {
     expect(view.result.current.claimEntrance('old')).toBe(false);
     view.rerender({ messages: [pending, old], scope: 'session-a' });
     expect(view.result.current.entranceIds.has('usr_1')).toBe(true);
+    // Asking is not claiming: a row can start from its first frame and still claim once.
+    expect(view.result.current.isEntrancePending('usr_1')).toBe(true);
+    expect(view.result.current.isEntrancePending('usr_1')).toBe(true);
     expect(view.result.current.claimEntrance('usr_1')).toBe(true);
+    expect(view.result.current.isEntrancePending('usr_1')).toBe(false);
     view.rerender({ messages: [{ ...pending, id: 'server-1', delivery: undefined }, old], scope: 'session-a' });
     expect(view.result.current.claimEntrance('usr_1')).toBe(false);
     view.rerender({ messages: [old], scope: 'session-a' });
     view.rerender({ messages: [pending, old], scope: 'session-a' });
+    // A remounted row that already played is not pending, so it never starts hidden.
+    expect(view.result.current.isEntrancePending('usr_1')).toBe(false);
     expect(view.result.current.claimEntrance('usr_1')).toBe(false);
   });
   it('resets on session change without animating the destination history or honoring an old claim', () => {

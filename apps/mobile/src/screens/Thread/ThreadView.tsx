@@ -686,7 +686,7 @@ export function ThreadView({
   // Whether the previous render showed this session as an authoritative empty
   // conversation: its first message then enters like any later one.
   const emptyConversationRef = useRef(false);
-  const { entranceIds, claimEntrance } = useThreadMessageEntrance(timelineMessages, sessionKey, emptyConversationRef.current);
+  const { claimEntrance, isEntrancePending } = useThreadMessageEntrance(timelineMessages, sessionKey, emptyConversationRef.current);
   emptyConversationRef.current = state.kind === 'empty';
   const runEntranceKeys = useMemo(() => runCards.map((run) => `run:${run.kind}:${run.id}`), [runCards]);
   const runEntrance = useThreadRunEntrance(runEntranceKeys, sessionKey, state.kind === 'ready');
@@ -1017,7 +1017,9 @@ export function ThreadView({
   // one row does not hand every visible cell a new renderer.
   const hasMessageActions = Boolean(messageActions);
   const queuedTapOpensActions = Boolean(messageActions && queuedMessageActions);
-  const { entranceKeys: runEntranceKeysArmed, claimEntrance: claimRunEntrance } = runEntrance;
+  // Rows ask whether their entrance is still to play without claiming it, so
+  // a row that will move starts from its first frame and a played row never hides.
+  const { claimEntrance: claimRunEntrance, isEntrancePending: isRunEntrancePending } = runEntrance;
   const renderMessage = useCallback(
     ({ item, target }: ListRenderItemInfo<ThreadTimelineRow>) => {
       if (item.type === 'tools') {
@@ -1041,7 +1043,7 @@ export function ThreadView({
             <MessageEntrance
               testID={`thread-entrance-${item.key}`}
               animationKey={`run:cron:${oldest.id}`}
-              animate={target === 'Cell' && runEntranceKeysArmed.has(`run:cron:${oldest.id}`)}
+              animate={target === 'Cell' && isRunEntrancePending(`run:cron:${oldest.id}`)}
               claimEntrance={claimRunEntrance}
               motion="reply"
             >
@@ -1068,7 +1070,7 @@ export function ThreadView({
             run={item.run}
             gapAbove={item.gapAbove}
             copy={copy}
-            animateEntrance={target === 'Cell' && runEntranceKeysArmed.has(item.key)}
+            animateEntrance={target === 'Cell' && isRunEntrancePending(item.key)}
             claimEntrance={claimRunEntrance}
             onOpenSession={onOpenRunSession}
             onOpenCronRun={onOpenCronRun}
@@ -1086,7 +1088,7 @@ export function ThreadView({
           capabilities={capabilities}
           copy={copy}
           status={messageStatuses.get(item.message.id) ?? null}
-          animateEntrance={target === 'Cell' && entranceIds.has(item.message.renderKey ?? item.message.id)}
+          animateEntrance={target === 'Cell' && isEntrancePending(item.message.renderKey ?? item.message.id)}
           claimEntrance={claimEntrance}
           onOpenAttachments={onOpenAttachments}
           onLongPress={hasMessageActions ? handleMessageLongPress : undefined}
@@ -1099,8 +1101,8 @@ export function ThreadView({
     [
       capabilities,
       copy,
-      entranceIds,
       claimEntrance,
+      isEntrancePending,
       favoriteMessageIds,
       handleMessageLongPress,
       hasMessageActions,
@@ -1113,8 +1115,8 @@ export function ThreadView({
       onOpenRunSession,
       onRerunCron,
       onResolveApproval,
-      runEntranceKeysArmed,
       claimRunEntrance,
+      isRunEntrancePending,
     ],
   );
   const timelineContentStyle = useMemo(() => [

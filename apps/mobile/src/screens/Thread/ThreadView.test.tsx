@@ -826,7 +826,7 @@ describe('ThreadView', () => {
     // The run starts: the same Stop becomes live.
     view.rerender(<ThreadView {...props} isRunning sendInFlight={false} />);
     expect(primary().props.accessibilityState).toEqual({ disabled: false });
-    expect(flattenStyle(view.getByTestId('thread-screen-composer-primary-surface').props.style).opacity).toBeUndefined();
+    expect(flattenStyle(view.getByTestId('thread-screen-composer-primary-surface').props.style).opacity).toBe(1);
     fireEvent.press(primary());
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
@@ -910,7 +910,9 @@ describe('ThreadView', () => {
 
     const sent: UiMessage = { id: 'usr_2', role: 'user', text: 'New' };
     view.rerender(<ThreadView {...createProps({ messages: [sent, older], isRunning: true, input: '' })} />);
-    expect(flattenStyle(view.getByTestId('thread-entrance-usr_2').props.style).opacity).toBe(1);
+    // The new message is drawn at the start of its flight from its first frame (A+ motion),
+    // never in place first; the reply placeholder and the history stay in full view.
+    expect(flattenStyle(view.getByTestId('thread-entrance-usr_2').props.style).opacity).toBeCloseTo(Motion.send.startOpacity);
     expect(flattenStyle(view.getByTestId('thread-entrance-streaming').props.style).opacity).toBe(1);
     expect(flattenStyle(view.getByTestId('thread-entrance-a0').props.style).opacity).toBe(1);
 

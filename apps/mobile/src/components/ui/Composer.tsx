@@ -362,8 +362,15 @@ function ComposerAction({ icon: Icon, label, onPress, disabled = false, tone = '
   const reducedMotion = useReducedMotion();
   const filled = tone === 'primary' || tone === 'send';
   // A stop that is not available yet (the message is still leaving) keeps its
-  // ink, dimmed, so it does not flash grey before the reply starts.
+  // ink, dimmed, so it does not flash grey before the reply starts; it fades
+  // to full ink when the run begins.
   const dimmedStop = disabled && tone === 'primary';
+  const surfaceOpacity = useSharedValue(dimmedStop ? DIMMED_STOP_OPACITY : 1);
+  useEffect(() => {
+    const target = dimmedStop ? DIMMED_STOP_OPACITY : 1;
+    surfaceOpacity.value = reducedMotion ? target : withTiming(target, { duration: Motion.morph.duration });
+  }, [dimmedStop, reducedMotion, surfaceOpacity]);
+  const surfaceFade = useAnimatedStyle(() => ({ opacity: surfaceOpacity.value }));
   const backgroundColor = filled ? disabled && !dimmedStop ? theme.colors.line : tone === 'send' ? outgoing.backgroundColor : theme.colors.ink
     : tone === 'secondary' ? theme.colors.canvas : tone === 'chrome' ? theme.colors.surface : 'transparent';
   const color = disabled && !dimmedStop ? theme.colors.inkTertiary : tone === 'send' ? outgoing.textColor : tone === 'primary' ? theme.colors.canvas : theme.colors.ink;
@@ -371,16 +378,16 @@ function ComposerAction({ icon: Icon, label, onPress, disabled = false, tone = '
     accessibilityState={{ disabled }} disabled={disabled} onPress={onPress}
     style={({ pressed }) => [actionStyles.target, { opacity: pressed ? 0.7 : 1,
       transform: [{ scale: pressed && !reducedMotion ? Motion.pressedScale : 1 }] }]}>
-    <View testID={testID ? `${testID}-surface` : undefined} style={[actionStyles.surface, { backgroundColor }, tone === 'chrome' ? chrome : null,
-      dimmedStop ? actionStyles.dimmed : null]}>
+    <Animated.View testID={testID ? `${testID}-surface` : undefined} style={[actionStyles.surface, { backgroundColor }, tone === 'chrome' ? chrome : null,
+      surfaceFade]}>
       <Icon size={IconSize.md} color={color} strokeWidth={filled ? 2 : 1.75} />
-    </View>
+    </Animated.View>
   </Pressable>;
 }
+const DIMMED_STOP_OPACITY = 0.4;
 const actionStyles = StyleSheet.create({
   target: { width: ControlSize.floatingButton, height: ControlSize.floatingButton, alignItems: 'center', justifyContent: 'center' },
   surface: { width: ControlSize.floatingButton, height: ControlSize.floatingButton, borderRadius: Radius.full, alignItems: 'center', justifyContent: 'center' },
-  dimmed: { opacity: 0.4 },
   haloHost: { overflow: 'visible' },
   halo: { position: 'absolute', width: ControlSize.pill, height: ControlSize.pill, borderRadius: Radius.full },
 });

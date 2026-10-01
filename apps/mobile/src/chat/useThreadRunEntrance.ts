@@ -25,7 +25,12 @@ export function useThreadRunEntrance(
   keys: ReadonlyArray<string>,
   scope: string | null | undefined,
   visible: boolean,
-): { entranceKeys: ReadonlySet<string>; claimEntrance: (key: string) => boolean } {
+): {
+  entranceKeys: ReadonlySet<string>;
+  claimEntrance: (key: string) => boolean;
+  /** Armed and not yet played, read without claiming, so a card can start from its first frame. */
+  isEntrancePending: (key: string) => boolean;
+} {
   const memoryRef = useRef<RunEntranceMemory>({ scope, keys, visible, armed: NO_KEYS, played: new Set() });
   const entranceKeys = useMemo(() => {
     const memory = memoryRef.current;
@@ -49,11 +54,14 @@ export function useThreadRunEntrance(
     memoryRef.current = { scope, keys, visible, armed, played: memory.played };
     return armed;
   }, [keys, scope, visible]);
-  const claimEntrance = useCallback((key: string) => {
+  const isEntrancePending = useCallback((key: string) => {
     const memory = memoryRef.current;
-    if (memory.scope !== scope || !memory.armed.has(key) || memory.played.has(key)) return false;
-    memory.played.add(key);
-    return true;
+    return memory.scope === scope && memory.armed.has(key) && !memory.played.has(key);
   }, [scope]);
-  return { entranceKeys, claimEntrance };
+  const claimEntrance = useCallback((key: string) => {
+    if (!isEntrancePending(key)) return false;
+    memoryRef.current.played.add(key);
+    return true;
+  }, [isEntrancePending]);
+  return { entranceKeys, claimEntrance, isEntrancePending };
 }

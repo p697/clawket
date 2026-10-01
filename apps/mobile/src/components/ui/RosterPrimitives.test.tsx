@@ -357,14 +357,16 @@ describe.each(['light', 'dark'] as const)('%s roster primitives', (scheme) => {
   it('fades a new status sentence in as it rises, and fades the ring in and out', () => {
     const { withTiming } = jest.requireMock('react-native-reanimated') as { withTiming: jest.Mock };
     const result = render(<HeaderPill testID="header-pill" agentId="main" name="Main" subtitle="Online" />);
+    // The sentence on screen when the header appears stays still, even after a re-render.
+    result.rerender(<HeaderPill testID="header-pill" agentId="main" name="Main" subtitle="Online" />);
+    expect(result.getByTestId('header-pill-subtitle-motion').props.entering).toBeUndefined();
     withTiming.mockClear();
     result.rerender(<HeaderPill testID="header-pill" agentId="main" name="Main" subtitle="Thinking…" presence="working" />);
-    // A+ motion: 200 ms, eased out, rising 4 points while it fades in.
+    expect(result.getByTestId('header-pill-subtitle').props.children).toBe('Thinking…');
+    // A+ motion: the new words enter from their first frame, 4 points low and transparent, over 200 ms.
+    const entering = result.getByTestId('header-pill-subtitle-motion').props.entering as () => { initialValues: unknown };
+    expect(entering().initialValues).toEqual({ opacity: 0, transform: [{ translateY: Motion.status.rise }] });
     expect(withTiming).toHaveBeenCalledWith(1, expect.objectContaining({ duration: Motion.status.duration }));
-    const subtitle = result.getByTestId('header-pill-subtitle');
-    expect(subtitle.props.style).toEqual(expect.arrayContaining([expect.objectContaining({
-      transform: [{ translateY: expect.any(Number) }],
-    })]));
     const ringLayer = result.UNSAFE_getAllByType('AnimatedView' as unknown as React.ComponentType)
       .find((node) => node.props.entering === 'fade-in');
     expect(ringLayer?.props.exiting).toBe('fade-out');

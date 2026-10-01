@@ -22,7 +22,12 @@ export function useThreadMessageEntrance(
   messages: ReadonlyArray<UiMessage>,
   scope: string | null | undefined,
   emptyConversation = false,
-): { entranceIds: ReadonlySet<string>; claimEntrance: (key: string) => boolean } {
+): {
+  entranceIds: ReadonlySet<string>;
+  claimEntrance: (key: string) => boolean;
+  /** Armed and not yet played, read without claiming, so a row can start from its first frame. */
+  isEntrancePending: (key: string) => boolean;
+} {
   const memoryRef = useRef<EntranceMemory>({ scope, messages, armed: NO_IDS, played: new Set() });
   const emptyConversationRef = useRef(emptyConversation);
   emptyConversationRef.current = emptyConversation;
@@ -45,11 +50,14 @@ export function useThreadMessageEntrance(
     memoryRef.current = { scope, messages, armed, played: memory.played };
     return armed;
   }, [messages, scope]);
-  const claimEntrance = useCallback((key: string) => {
+  const isEntrancePending = useCallback((key: string) => {
     const memory = memoryRef.current;
-    if (memory.scope !== scope || !memory.armed.has(key) || memory.played.has(key)) return false;
-    memory.played.add(key);
-    return true;
+    return memory.scope === scope && memory.armed.has(key) && !memory.played.has(key);
   }, [scope]);
-  return { entranceIds, claimEntrance };
+  const claimEntrance = useCallback((key: string) => {
+    if (!isEntrancePending(key)) return false;
+    memoryRef.current.played.add(key);
+    return true;
+  }, [isEntrancePending]);
+  return { entranceIds, claimEntrance, isEntrancePending };
 }

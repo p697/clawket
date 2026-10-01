@@ -21,7 +21,10 @@ describe('scheduled card entrance ownership', () => {
     // A job that finishes while reading slides in once, then stays claimed.
     view.rerender({ keys: ['run:cron:c', 'run:cron:a', 'run:cron:b'], scope: 'session-a', visible: true });
     expect([...view.result.current.entranceKeys]).toEqual(['run:cron:c']);
+    expect(view.result.current.isEntrancePending('run:cron:a')).toBe(false);
+    expect(view.result.current.isEntrancePending('run:cron:c')).toBe(true);
     expect(view.result.current.claimEntrance('run:cron:c')).toBe(true);
+    expect(view.result.current.isEntrancePending('run:cron:c')).toBe(false);
     expect(view.result.current.claimEntrance('run:cron:c')).toBe(false);
     view.rerender({ keys: ['run:cron:a', 'run:cron:b'], scope: 'session-a', visible: true });
     view.rerender({ keys: ['run:cron:c', 'run:cron:a', 'run:cron:b'], scope: 'session-a', visible: true });

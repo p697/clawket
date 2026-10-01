@@ -20,7 +20,11 @@ const SEND_EASING_Y = Easing.bezier(SEND.curveY[0], SEND.curveY[1], SEND.curveY[
 export type MessageEntranceProps = Readonly<{
   /** Identity of the rendered row; a change re-arms the entrance for a recycled cell. */
   animationKey: string;
-  /** Latched per `animationKey` so a later re-render cannot abort the motion. */
+  /**
+   * Latched per `animationKey` so a later re-render cannot abort the motion.
+   * Pass whether the entrance is still to play (armed and not yet claimed):
+   * a row that will move starts from its first frame.
+   */
   animate: boolean;
   /** Conversation-owned claim survives recycled cells and row remounts. */
   claimEntrance?: (key: string) => boolean;
@@ -40,21 +44,43 @@ export type MessageEntranceProps = Readonly<{
  * delivery and history updates cannot hide or shrink a row that has landed.
  */
 export function MessageEntrance({ animationKey, animate, claimEntrance, motion, testID, children }: MessageEntranceProps): React.JSX.Element {
-  const reduceMotion = useReducedMotion();
-  const progress = useSharedValue(1);
-  const progressX = useSharedValue(1);
   const playRef = useRef({ animationKey, animate });
   // FlashList reuses this instance for other rows. Latch intent here, but
   // reset shared animation state only after React commits the new identity.
   if (playRef.current.animationKey !== animationKey) {
     playRef.current = { animationKey, animate };
   }
+  const plays = playRef.current.animate;
+  // A row that enters gets its own animated view, created at the motion's
+  // first frame. A reused cell's animated values would otherwise show the new
+  // row in place for one frame before it moved (device recording 2026-10-01).
+  // Settled rows share one identity, so recycling them stays a plain update.
+  return (
+    <EntranceView key={plays ? `enter:${animationKey}` : 'settled'} animationKey={animationKey} plays={plays}
+      claimEntrance={claimEntrance} motion={motion} testID={testID}>
+      {children}
+    </EntranceView>
+  );
+}
+
+function EntranceView({ animationKey, plays, claimEntrance, motion, testID, children }: Readonly<{
+  animationKey: string;
+  plays: boolean;
+  claimEntrance?: (key: string) => boolean;
+  motion: MessageEntranceMotion;
+  testID?: string;
+  children: React.ReactNode;
+}>): React.JSX.Element {
+  const reduceMotion = useReducedMotion();
   const sent = motion === 'sent';
+  const moves = plays && (sent || !reduceMotion);
+  const progress = useSharedValue(moves ? 0 : 1);
+  const progressX = useSharedValue(moves && sent && !reduceMotion ? 0 : 1);
 
   useLayoutEffect(() => {
     cancelAnimation(progress);
     cancelAnimation(progressX);
-    if (!playRef.current.animate || (reduceMotion && !sent) || (claimEntrance && !claimEntrance(animationKey))) {
+    if (!plays || (reduceMotion && !sent) || (claimEntrance && !claimEntrance(animationKey))) {
       progress.value = 1;
       progressX.value = 1;
       return undefined;
@@ -75,7 +101,7 @@ export function MessageEntrance({ animationKey, animate, claimEntrance, motion, 
       cancelAnimation(progress);
       cancelAnimation(progressX);
     };
-  }, [animationKey, claimEntrance, sent, progress, progressX, reduceMotion]);
+  }, [animationKey, claimEntrance, plays, sent, progress, progressX, reduceMotion]);
 
   const animatedStyle = useAnimatedStyle(() => {
     const y = progress.value;
