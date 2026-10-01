@@ -107,6 +107,7 @@ export type RosterViewProps = Readonly<{
   recovering?: boolean;
   showOfflineBanner?: boolean;
   showErrorBanner?: boolean;
+  rosterError?: boolean;
   onOpenAccount: () => void;
   onSearch: () => void;
   onAdd: () => void;
@@ -300,6 +301,7 @@ function RosterConnectionStatus({
   showOfflineBanner,
   recovering,
   showErrorBanner,
+  rosterError,
   onRefresh,
   onReconnect,
 }: Pick<
@@ -308,6 +310,7 @@ function RosterConnectionStatus({
   | 'recovering'
   | 'showOfflineBanner'
   | 'showErrorBanner'
+  | 'rosterError'
   | 'onRefresh'
   | 'onReconnect'
 >): React.JSX.Element | null {
@@ -344,8 +347,8 @@ function RosterConnectionStatus({
         testID="roster-error-banner"
         placement="inline"
         status="error"
-        actionLabel={t('Retry')}
-        accessibilityLabel={`${t('Connection unavailable')}, ${t('Retry')}`}
+        actionLabel={t(rosterError ? 'Retry list' : 'Retry')}
+        accessibilityLabel={rosterError ? t('Retry list') : `${t('Connection unavailable')}, ${t('Retry')}`}
         onAction={reconnect}
       />
     );
@@ -407,6 +410,7 @@ export function RosterView({
   showOfflineBanner,
   recovering,
   showErrorBanner,
+  rosterError,
   onOpenAccount,
   onSearch,
   onAdd,
@@ -550,6 +554,7 @@ export function RosterView({
               recovering={recovering}
               showOfflineBanner={showOfflineBanner}
               showErrorBanner={showErrorBanner}
+              rosterError={rosterError}
               onRefresh={onRefresh}
               onReconnect={onReconnect}
             />
@@ -721,6 +726,10 @@ export function RosterScreen({
     if (!connectionId || reconnectInFlight.current) return;
     reconnectInFlight.current = true;
     try {
+      if (connections.error?.operation === 'roster' && connections.activeState === 'ready') {
+        await getConnectionRuntime().refreshRoster();
+        return;
+      }
       // A button retry is not a pull gesture. The runtime owns recovery UI and
       // opens a fresh socket without expanding iOS RefreshControl's top inset.
       await getConnectionRuntime().reconnectConnection(connectionId);
@@ -729,7 +738,7 @@ export function RosterScreen({
     } finally {
       reconnectInFlight.current = false;
     }
-  }, [connections.activeConnectionId]);
+  }, [connections.activeConnectionId, connections.activeState, connections.error?.operation]);
 
   const pausedActive = activeConnection ? connections.pausedConnectionIds?.includes(activeConnection.id) === true : false;
   const connectionFailure: ConnectionUnavailableProps | undefined = !connections.recovering && !connections.switching && activeConnection
@@ -866,6 +875,7 @@ export function RosterScreen({
         recovering={connections.recovering}
         showOfflineBanner={offline}
         showErrorBanner={connections.error !== null && !offline}
+        rosterError={connections.error?.operation === 'roster' && connections.activeState === 'ready'}
         onOpenAccount={onOpenAccount}
         onSearch={onSearch}
         onAdd={() => addActions.length === 1 ? onAdd() : setAddVisible(true)}

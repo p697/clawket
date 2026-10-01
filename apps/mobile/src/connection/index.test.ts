@@ -209,11 +209,12 @@ async function createMaintenanceHarness(
   await store.load();
   await store.add({ ...connectionInput('alpha'), backendKind });
   const dashboardStorage = new MemoryDashboardStorage();
+  const cache = new RosterCache({ storage: dashboardStorage });
   let adapter: AgentAdapter | null = null;
   let pausedIds: ReadonlyArray<string> = [];
   const coordinator = new ConnectionCoordinator({
     store,
-    cache: new RosterCache({ storage: dashboardStorage }),
+    cache,
     watermarks: new UnreadWatermarks({ storage: dashboardStorage }),
     adapterFactory: (_record, descriptor) => {
       adapter = instrumentAdapter(descriptor, []);
@@ -223,6 +224,7 @@ async function createMaintenanceHarness(
     ...maintenance,
   });
   return {
+    cache,
     coordinator,
     getAdapter(): AgentAdapter {
       if (!adapter) throw new Error('Adapter has not been created');
@@ -1577,6 +1579,67 @@ describe('ConnectionCoordinator', () => {
   });
 
   describe.each(['openclaw', 'hermes', 'claude-code', 'codex', 'pi'] as const)('%s probe ownership', (backendKind) => {
+    it('shows a newly connected Agent before its catalog settles and retains it after catalog failure', async () => {
+      const harness = await createMaintenanceHarness(backendKind, { rosterRefreshIntervalMs: 0, hermesProbeIntervalMs: 0 });
+      const catalog = deferred<SessionDescriptor[]>();
+      let adapter!: AgentAdapter;
+      harness.coordinator.setAdapterFactory((_record, descriptor) => {
+        adapter = instrumentAdapter(descriptor, []);
+        adapter.listSessions = jest.fn().mockReturnValueOnce(catalog.promise)
+          .mockResolvedValue([session(descriptor.id, 40)]);
+        return adapter;
+      });
+      const start = harness.coordinator.start();
+      try {
+        await flushMaintenance();
+        const partial = harness.coordinator.getSnapshot();
+        expect(partial.activeState).toBe('ready');
+        expect(partial.roster[0].agents[0]?.agent.connectionId).toBe('alpha');
+        expect(partial.roster[0]).toMatchObject({ source: 'cache', syncedAt: 0 });
+        expect(partial.roster[0].agents[0].sessions).toEqual([]);
+
+        catalog.reject(new AdapterError('server', 'Invalid session catalog response'));
+        await start;
+        await flushMaintenance();
+        expect(harness.coordinator.getSnapshot()).toMatchObject({ activeState: 'ready', error: { operation: 'roster' } });
+        expect(harness.coordinator.getSnapshot().roster[0].agents).toHaveLength(1);
+        expect(await harness.cache.get('alpha')).toBeNull();
+
+        // A saved-connection update rehydrates caches. It must not erase the
+        // current in-memory Agent merely because no complete catalog exists.
+        await harness.coordinator.addConnection({ ...connectionInput('beta'), backendKind });
+        expect(harness.coordinator.getSnapshot().activeConnectionId).toBe('alpha');
+        expect(harness.coordinator.getSnapshot().roster.find(group => group.connection.id === 'alpha')?.agents).toHaveLength(1);
+
+        await harness.coordinator.refreshRoster();
+        expect(harness.coordinator.getSnapshot()).toMatchObject({ activeState: 'ready', error: null });
+        expect(harness.coordinator.getSnapshot().roster[0]).toMatchObject({ source: 'live' });
+        expect(harness.coordinator.getSnapshot().roster[0].agents[0].sessions).toHaveLength(1);
+        expect((await harness.cache.get('alpha'))?.sessions).toHaveLength(1);
+      } finally {
+        catalog.resolve([]);
+        await start;
+        await harness.coordinator.stop();
+      }
+    });
+
+    it('does not let late Agent discovery from a superseded catalog replace the newer roster', async () => {
+      const harness = await createMaintenanceHarness(backendKind, { rosterRefreshIntervalMs: 0, hermesProbeIntervalMs: 0 });
+      try {
+        await harness.coordinator.start();
+        const adapter = harness.getAdapter();
+        const oldAgents = deferred<AgentDescriptor[]>();
+        jest.spyOn(adapter, 'listAgents').mockReturnValueOnce(oldAgents.promise);
+        jest.spyOn(adapter, 'listSessions').mockRejectedValueOnce(new SessionCatalogSupersededError());
+        await harness.coordinator.refreshRoster();
+        const current = harness.coordinator.getSnapshot().roster;
+        oldAgents.resolve([{ ...agent('alpha'), agentId: 'retired-agent' }]);
+        await flushMaintenance();
+        expect(harness.coordinator.getSnapshot().roster).toEqual(current);
+        expect(harness.coordinator.getSnapshot().error).toBeNull();
+      } finally { await harness.coordinator.stop(); }
+    });
+
     it.each([true, false])('does not wait for or trust a pre-background probe (late health=%s)', async (lateHealth) => {
       const harness = await createMaintenanceHarness(backendKind, { rosterRefreshIntervalMs: 0, hermesProbeIntervalMs: 0 });
       try {
