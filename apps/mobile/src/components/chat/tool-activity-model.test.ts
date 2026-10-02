@@ -2,6 +2,7 @@ import type { UiMessage } from '../../types/chat';
 import {
   collectTurnToolSteps,
   describeFailedStep,
+  failureReason,
   describeLiveStep,
   formatActivityDuration,
   formatToolActivitySummary,
@@ -115,5 +116,20 @@ describe('collectTurnToolSteps', () => {
 
   it('yields nothing for an unknown anchor', () => {
     expect(collectTurnToolSteps(messages, 'missing')).toEqual([]);
+  });
+});
+
+describe('failureReason', () => {
+  it('finds the line that names the error, even inside a progress meter redrawn with carriage returns', () => {
+    const curl = '  % Total    % Received\r  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0\rcurl: (6) Could not resolve host: example.org\n';
+    expect(failureReason(curl)).toBe('curl: (6) Could not resolve host: example.org');
+    expect(failureReason('npm ERR! missing script: lint\nnpm ERR! A complete log of this run can be found in ~/.npm')).toBe('npm ERR! A complete log of this run can be found in ~/.npm');
+  });
+
+  it('falls back to the last line, clips long lines and says nothing without output', () => {
+    expect(failureReason('first\nlast words')).toBe('last words');
+    expect(failureReason(`Error: ${'x'.repeat(200)}`)!.length).toBe(80);
+    expect(failureReason(undefined)).toBeUndefined();
+    expect(failureReason('  \n\r ')).toBeUndefined();
   });
 });

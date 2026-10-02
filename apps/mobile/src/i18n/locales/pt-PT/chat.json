@@ -501,5 +501,8 @@
   "Plan for approval": "Plano para aprovar",
   "Asking you a question": "A fazer-te uma pergunta",
   "Updating the plan": "A atualizar o plano",
-  "Presenting a plan": "A apresentar um plano"
+  "Presenting a plan": "A apresentar um plano",
+  "Your answer: {{answer}}": "A tua resposta: {{answer}}",
+  "Asked you a question": "Fez-te uma pergunta",
+  "Asked you {{count}} questions": "Fez-te {{count}} perguntas"
 }

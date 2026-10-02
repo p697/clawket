@@ -501,5 +501,8 @@
   "Plan for approval": "План на затвердження",
   "Asking you a question": "Ставить вам запитання",
   "Updating the plan": "Оновлює план",
-  "Presenting a plan": "Пропонує план"
+  "Presenting a plan": "Пропонує план",
+  "Your answer: {{answer}}": "Ваша відповідь: {{answer}}",
+  "Asked you a question": "Поставив вам запитання",
+  "Asked you {{count}} questions": "Поставив вам запитань: {{count}}"
 }

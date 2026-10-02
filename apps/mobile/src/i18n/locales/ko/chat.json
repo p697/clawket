@@ -501,5 +501,8 @@
   "Plan for approval": "승인 대기 중인 계획",
   "Asking you a question": "질문하는 중",
   "Updating the plan": "계획을 업데이트하는 중",
-  "Presenting a plan": "계획을 제시하는 중"
+  "Presenting a plan": "계획을 제시하는 중",
+  "Your answer: {{answer}}": "내 답변: {{answer}}",
+  "Asked you a question": "질문 1개를 했어요",
+  "Asked you {{count}} questions": "질문 {{count}}개를 했어요"
 }

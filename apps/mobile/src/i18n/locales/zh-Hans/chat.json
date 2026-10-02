@@ -501,5 +501,8 @@
   "Plan for approval": "待确认的计划",
   "Asking you a question": "正在向你提问",
   "Updating the plan": "正在更新计划",
-  "Presenting a plan": "正在提交计划"
+  "Presenting a plan": "正在提交计划",
+  "Your answer: {{answer}}": "你的回答：{{answer}}",
+  "Asked you a question": "问了你 1 个问题",
+  "Asked you {{count}} questions": "问了你 {{count}} 个问题"
 }

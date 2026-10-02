@@ -1,11 +1,11 @@
 import { isIncomingParticipant } from '../../chat/messageAttribution';
 import type { UiMessage } from '../../types/chat';
-import { resolveToolDetail, toolCategory, unwrapToolCall, type ToolCategory } from '../../utils/tool-display';
+import { isQuestionTool, resolveToolDetail, toolCategory, unwrapToolCall, type ToolCategory } from '../../utils/tool-display';
 
 type Translate = (key: string, options?: Record<string, unknown>) => string;
 
 /** Summary categories; the rarer tool kinds read as generic tool use. */
-export type ToolActivityKind = 'command' | 'read' | 'edit' | 'search' | 'web' | 'other';
+export type ToolActivityKind = 'command' | 'read' | 'edit' | 'search' | 'web' | 'question' | 'other';
 
 export type ToolActivitySummary = Readonly<{
   steps: number;
@@ -84,7 +84,8 @@ export function summarizeToolActivity(messages: ReadonlyArray<UiMessage>): ToolA
   ));
   const counts = new Map<ToolActivityKind, { count: number; files: Set<string>; order: number }>();
   ordered.forEach((message, index) => {
-    const kind = activityKind(toolCategory(effectiveTool(message).name));
+    const name = effectiveTool(message).name;
+    const kind = isQuestionTool(name) ? 'question' : activityKind(toolCategory(name));
     const entry = counts.get(kind) ?? { count: 0, files: new Set<string>(), order: index };
     entry.count += 1;
     if (kind === 'read' || kind === 'edit') toolCallFiles(message).forEach((file) => entry.files.add(file));
@@ -103,6 +104,7 @@ const KIND_COPY: Record<ToolActivityKind, readonly [one: string, many: string]> 
   edit: ['Edited a file', 'Edited {{count}} files'],
   search: ['Searched once', 'Searched {{count}} times'],
   web: ['Opened a page', 'Opened {{count}} pages'],
+  question: ['Asked you a question', 'Asked you {{count}} questions'],
   other: ['Used a tool', 'Used {{count}} tools'],
 };
 
@@ -154,6 +156,23 @@ export function formatTurnReceipt(steps: ReadonlyArray<UiMessage>, t: Translate)
   }
   if (summary.durationMs !== undefined) parts.push(formatActivityDuration(summary.durationMs, t));
   return parts.join(' · ');
+}
+
+/**
+ * One line that says why a step failed: the first output line that names an
+ * error, else the last line, clipped. Nothing when the step left no output.
+ */
+const REASON_LIMIT = 80;
+
+export function failureReason(detail: string | undefined): string | undefined {
+  // Progress meters redraw with carriage returns: each redraw is its own line.
+  const lines = (detail ?? '').split(/[\r\n]+/).map((line) => line.trim()).filter(Boolean);
+  if (lines.length === 0) return undefined;
+  const named = [...lines].reverse().find((line) => (
+    /error|failed|failure|denied|not found|no such|cannot|can't|could not|couldn't|unable|refused|timed out|permission|错误|失败/i.test(line)
+  ));
+  const line = (named ?? lines[lines.length - 1]!).replace(/\s+/g, ' ');
+  return line.length > REASON_LIMIT ? `${line.slice(0, REASON_LIMIT - 1)}…` : line;
 }
 
 /** Joined phrases continue a sentence; scripts without case are unchanged. */

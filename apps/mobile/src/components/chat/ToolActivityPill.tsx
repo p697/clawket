@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Text } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { Brain, CalendarClock, CircleAlert, FilePenLine, FileSearch, Globe, Layers, MessageSquare, Search, Terminal, Wrench, type LucideIcon } from 'lucide-react-native';
+import { Brain, CalendarClock, CircleAlert, FilePenLine, FileSearch, Globe, Layers, MessageCircleQuestion, MessageSquare, Search, Terminal, Wrench, type LucideIcon } from 'lucide-react-native';
 import type { UiMessage } from '../../types/chat';
-import { formatToolDisplayName, resolveToolTitle, toolCategory } from '../../utils/tool-display';
+import { formatToolDisplayName, isQuestionTool, resolveToolTitle, toolCategory } from '../../utils/tool-display';
 import { ServicePill, servicePillCodeStyle } from './ServicePill';
 import {
   describeFailedStep,
@@ -17,6 +17,7 @@ const ELAPSED_TICK_MS = 1000;
 
 /** One glyph per kind of tool, shared by the work record rows. */
 export function toolIcon(name: string): LucideIcon {
+  if (isQuestionTool(name)) return MessageCircleQuestion;
   switch (toolCategory(name)) {
     case 'command': return Terminal;
     case 'read': return FileSearch;

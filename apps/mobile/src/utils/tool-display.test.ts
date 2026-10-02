@@ -7,6 +7,7 @@ import {
   resolveToolTitle,
   stripToolStatusPrefix,
   unwrapShellCommand,
+  resolveQuestionExchange,
   unwrapToolCall,
 } from './tool-display';
 
@@ -269,5 +270,19 @@ describe('stripToolStatusPrefix', () => {
     expect(stripToolStatusPrefix('Command ~/foo abgeschlossen', deT)).toBe('Command ~/foo');
     expect(stripToolStatusPrefix('Command ls fehlgeschlagen', deT)).toBe('Command ls');
     expect(stripToolStatusPrefix('Command ls wird ausgeführt', deT)).toBe('Command ls');
+  });
+});
+
+describe('resolveQuestionExchange', () => {
+  const args = JSON.stringify({ questions: [{ question: '你更喜欢红色还是蓝色？', header: '颜色偏好', options: [{ label: '红色' }, { label: '蓝色' }] }] });
+  it('reads what a Claude Code question asked and what the user answered', () => {
+    const result = 'Your questions have been answered: "你更喜欢红色还是蓝色？"="蓝色". You can now continue with these answers in mind.';
+    expect(resolveQuestionExchange('AskUserQuestion', args, result)).toEqual({ question: '你更喜欢红色还是蓝色？', answer: '蓝色' });
+    expect(resolveQuestionExchange('AskUserQuestion', args)).toEqual({ question: '你更喜欢红色还是蓝色？', answer: undefined });
+  });
+
+  it('ignores other tools and malformed input', () => {
+    expect(resolveQuestionExchange('Bash', args, '"a"="b"')).toBeUndefined();
+    expect(resolveQuestionExchange('AskUserQuestion', '{broken', '')).toEqual({ question: undefined, answer: undefined });
   });
 });

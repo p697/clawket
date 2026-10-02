@@ -161,6 +161,11 @@ describe('formatTurnReceipt', () => {
     expect(formatTurnReceipt(steps, t)).toBe('Edited a file · 5 steps · 2 min 40 s');
   });
 
+  it('says when the turn asked the user a question', () => {
+    expect(formatTurnReceipt([call('AskUserQuestion')], t)).toBe('Asked you a question');
+    expect(formatTurnReceipt([call('AskUserQuestion'), call('AskUserQuestion'), call('exec')], t)).toBe('Asked you 2 questions · 3 steps');
+  });
+
   it('drops the step count when the lead already says it', () => {
     expect(formatTurnReceipt([call('exec'), call('exec'), call('bash')], t)).toBe('Ran 3 commands');
     expect(formatTurnReceipt([call('exec'), call('exec'), call('read', { path: 'b.ts' })], t)).toBe('Ran 2 commands · 3 steps');

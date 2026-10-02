@@ -17,8 +17,8 @@ import { useAppTheme } from '../../theme';
 import { withAlpha } from '../../theme/color';
 import { createThemedShadowStyle, FontSize, FontWeight, LineHeight, Motion, Radius, Shadow, Space } from '../../theme/tokens';
 import type { UiMessage } from '../../types/chat';
-import { formatToolDisplayName, resolveToolDetail, resolveToolTitle } from '../../utils/tool-display';
-import { effectiveTool, formatActivityDuration } from './tool-activity-model';
+import { formatToolDisplayName, resolveQuestionExchange, resolveToolDetail, resolveToolTitle, unwrapShellCommand } from '../../utils/tool-display';
+import { effectiveTool, failureReason, formatActivityDuration } from './tool-activity-model';
 import { toolIcon, useElapsed } from './ToolActivityPill';
 import type { TurnWork } from './turn-work';
 import type { TurnEntry } from './turn-work';
@@ -32,7 +32,6 @@ const STEP_WELL = 30;
 const STEP_SPINNER_SCALE = 0.7;
 /** The panel never covers more than this share of the window; longer runs scroll inside it. */
 const PANEL_MAX_SHARE = 0.62;
-const REASON_LIMIT = 80;
 // `monospace` is a family only Android resolves; iOS falls back to the system face without Menlo.
 const CODE_FONT = Platform.select({ ios: 'Menlo', default: 'monospace' });
 
@@ -41,18 +40,6 @@ export function formatStepDuration(ms: number | undefined, t: Translate): string
   if (typeof ms !== 'number' || !Number.isFinite(ms) || ms < 0) return undefined;
   if (ms < 1000) return t('{{count}} s', { ns: 'chat', count: Math.max(0.1, Math.round(ms / 100) / 10) });
   return formatActivityDuration(ms, t);
-}
-
-/**
- * One line that says why a step failed: the first output line that names an
- * error, else the last line, clipped. Nothing when the step left no output.
- */
-export function failureReason(detail: string | undefined): string | undefined {
-  const lines = (detail ?? '').split('\n').map((line) => line.trim()).filter(Boolean);
-  if (lines.length === 0) return undefined;
-  const named = lines.find((line) => /error|failed|failure|denied|not found|cannot|unable|错误|失败/i.test(line));
-  const line = (named ?? lines[lines.length - 1]!).replace(/\s+/g, ' ');
-  return line.length > REASON_LIMIT ? `${line.slice(0, REASON_LIMIT - 1)}…` : line;
 }
 
 function singleLine(value: string | undefined): string | undefined {
@@ -100,7 +87,7 @@ export function WorkEntryRow({ entry, onOpenStep, testID }: Readonly<{
 
   if (entry.kind === 'approval') {
     const approval = message.approval;
-    const command = approval && approval.kind !== 'pair' ? singleLine(approval.command) : undefined;
+    const command = approval && approval.kind !== 'pair' ? singleLine(unwrapShellCommand(approval.command.trim())) : undefined;
     const status = approval?.status ?? 'pending';
     const denied = status === 'denied' || status === 'expired';
     const title = status === 'allowed' ? t('You allowed it')
@@ -126,8 +113,11 @@ export function WorkEntryRow({ entry, onOpenStep, testID }: Readonly<{
   const failed = message.toolStatus === 'error';
   const running = message.toolStatus === 'running';
   const displayName = formatToolDisplayName(name, t);
-  const stepTitle = resolveToolTitle(tool.args) ?? displayName;
-  const target = singleLine(resolveToolDetail(name, tool.args));
+  // A question step reads as the exchange: what was asked, then the user's answer.
+  const exchange = resolveQuestionExchange(name, tool.args, message.toolDetail);
+  const stepTitle = exchange?.question ?? resolveToolTitle(tool.args) ?? displayName;
+  const target = exchange ? (exchange.answer ? t('Your answer: {{answer}}', { answer: exchange.answer }) : undefined)
+    : singleLine(resolveToolDetail(name, tool.args));
   const reason = failed ? failureReason(message.toolDetail) : undefined;
   const status = failed ? t('Failed') : message.toolStatus === 'unknown' ? t('Result unavailable') : undefined;
   return (
@@ -151,7 +141,7 @@ export function WorkEntryRow({ entry, onOpenStep, testID }: Readonly<{
         {reason ? (
           <Text numberOfLines={1} style={[styles.reason, { color: colors.bad }]}>{reason}</Text>
         ) : target ? (
-          <Text numberOfLines={1} style={[styles.code, { color: colors.inkSecondary }]}>{target}</Text>
+          <Text numberOfLines={1} style={[exchange ? styles.answer : styles.code, { color: colors.inkSecondary }]}>{target}</Text>
         ) : null}
       </View>
       {failed || message.toolStatus === 'unknown' ? (
@@ -373,6 +363,10 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
   reason: {
+    fontSize: FontSize.caption,
+    lineHeight: 17,
+  },
+  answer: {
     fontSize: FontSize.caption,
     lineHeight: 17,
   },

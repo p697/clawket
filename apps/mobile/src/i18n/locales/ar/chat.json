@@ -501,5 +501,8 @@
   "Plan for approval": "خطة بانتظار الموافقة",
   "Asking you a question": "يطرح عليك سؤالًا",
   "Updating the plan": "يحدّث الخطة",
-  "Presenting a plan": "يقدّم خطة"
+  "Presenting a plan": "يقدّم خطة",
+  "Your answer: {{answer}}": "إجابتك: {{answer}}",
+  "Asked you a question": "طرح عليك سؤالًا",
+  "Asked you {{count}} questions": "طرح عليك {{count}} أسئلة"
 }

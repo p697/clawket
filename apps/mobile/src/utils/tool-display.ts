@@ -114,6 +114,34 @@ export function resolveToolDetail(name: string, args?: unknown): string | undefi
     .replace(/^\/home\/[^/]+\//, '~/');
 }
 
+/** Steps that ask the user something and wait for the answer (Claude Code AskUserQuestion). */
+export function isQuestionTool(name: string): boolean {
+  return name.replace(/^mcp__.+?__/, '').toLowerCase() === 'askuserquestion';
+}
+
+/**
+ * What a question step asked and what the user answered: the first question
+ * of its input and the matching `"question"="answer"` pair of its result.
+ * Undefined for any other tool.
+ */
+export function resolveQuestionExchange(name: string, args?: unknown, result?: string): { question?: string; answer?: string } | undefined {
+  if (!isQuestionTool(name)) return undefined;
+  if (typeof args === 'string') {
+    try { args = JSON.parse(args); } catch { args = undefined; }
+  }
+  const questions = args && typeof args === 'object' ? (args as { questions?: unknown }).questions : undefined;
+  const first = Array.isArray(questions) ? questions[0] as { question?: unknown } | undefined : undefined;
+  const question = typeof first?.question === 'string' ? first.question.replace(/\s+/g, ' ').trim() || undefined : undefined;
+  let answer: string | undefined;
+  for (const match of (result ?? '').matchAll(/"((?:[^"\\]|\\.)*)"="((?:[^"\\]|\\.)*)"/g)) {
+    if (!question || match[1]!.replace(/\s+/g, ' ').trim() === question) {
+      answer = match[2]!.trim() || undefined;
+      break;
+    }
+  }
+  return { question, answer };
+}
+
 /** Input keys an Agent fills with what one call is for, in order of preference. */
 const TOOL_TITLE_KEYS = ['title', 'description', 'summary'] as const;
 const TOOL_TITLE_LIMIT = 120;

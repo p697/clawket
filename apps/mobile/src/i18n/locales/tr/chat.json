@@ -501,5 +501,8 @@
   "Plan for approval": "Onay bekleyen plan",
   "Asking you a question": "Size bir soru soruyor",
   "Updating the plan": "Planı güncelliyor",
-  "Presenting a plan": "Bir plan sunuyor"
+  "Presenting a plan": "Bir plan sunuyor",
+  "Your answer: {{answer}}": "Yanıtınız: {{answer}}",
+  "Asked you a question": "Size bir soru sordu",
+  "Asked you {{count}} questions": "Size {{count}} soru sordu"
 }

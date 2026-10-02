@@ -501,5 +501,8 @@
   "Plan for approval": "स्वीकृति के लिए योजना",
   "Asking you a question": "आपसे प्रश्न पूछ रहा है",
   "Updating the plan": "योजना अपडेट कर रहा है",
-  "Presenting a plan": "योजना प्रस्तुत कर रहा है"
+  "Presenting a plan": "योजना प्रस्तुत कर रहा है",
+  "Your answer: {{answer}}": "आपका जवाब: {{answer}}",
+  "Asked you a question": "आपसे 1 प्रश्न पूछा",
+  "Asked you {{count}} questions": "आपसे {{count}} प्रश्न पूछे"
 }

@@ -501,5 +501,8 @@
   "Plan for approval": "承認待ちのプラン",
   "Asking you a question": "質問しています",
   "Updating the plan": "プランを更新中",
-  "Presenting a plan": "プランを提示中"
+  "Presenting a plan": "プランを提示中",
+  "Your answer: {{answer}}": "あなたの回答：{{answer}}",
+  "Asked you a question": "1 件の質問をしました",
+  "Asked you {{count}} questions": "{{count}} 件の質問をしました"
 }

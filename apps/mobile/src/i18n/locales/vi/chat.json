@@ -501,5 +501,8 @@
   "Plan for approval": "Kế hoạch chờ duyệt",
   "Asking you a question": "Đang hỏi bạn",
   "Updating the plan": "Đang cập nhật kế hoạch",
-  "Presenting a plan": "Đang trình bày kế hoạch"
+  "Presenting a plan": "Đang trình bày kế hoạch",
+  "Your answer: {{answer}}": "Câu trả lời của bạn: {{answer}}",
+  "Asked you a question": "Đã hỏi bạn 1 câu",
+  "Asked you {{count}} questions": "Đã hỏi bạn {{count}} câu"
 }

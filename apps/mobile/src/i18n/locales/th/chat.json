@@ -501,5 +501,8 @@
   "Plan for approval": "แผนที่รออนุมัติ",
   "Asking you a question": "กำลังถามคุณ",
   "Updating the plan": "กำลังอัปเดตแผน",
-  "Presenting a plan": "กำลังเสนอแผน"
+  "Presenting a plan": "กำลังเสนอแผน",
+  "Your answer: {{answer}}": "คำตอบของคุณ: {{answer}}",
+  "Asked you a question": "ถามคุณ 1 คำถาม",
+  "Asked you {{count}} questions": "ถามคุณ {{count}} คำถาม"
 }

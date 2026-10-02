@@ -501,5 +501,8 @@
   "Plan for approval": "Plano para aprovar",
   "Asking you a question": "Fazendo uma pergunta para você",
   "Updating the plan": "Atualizando o plano",
-  "Presenting a plan": "Apresentando um plano"
+  "Presenting a plan": "Apresentando um plano",
+  "Your answer: {{answer}}": "Sua resposta: {{answer}}",
+  "Asked you a question": "Fez uma pergunta para você",
+  "Asked you {{count}} questions": "Fez {{count}} perguntas para você"
 }
