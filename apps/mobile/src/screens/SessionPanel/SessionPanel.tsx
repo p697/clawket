@@ -1131,7 +1131,7 @@ export function SessionPanelView({
     <SessionPanelPlatform.Provider value={platform}>
       <Sheet
         testID="session-panel"
-        snapPoints={['95%']}
+        snapPoints={['98%']}
         visible={visible}
         title={t('Sessions')}
         titleContent={viewAgent ? (
