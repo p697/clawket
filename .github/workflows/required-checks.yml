@@ -115,9 +115,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - name: Audit high-severity dependencies in both lockfiles
-        run: |
-          npm audit --audit-level=high
-          npm --prefix apps/mobile audit --audit-level=high --workspaces=false
+        run: node scripts/ci/dependency-audit.mjs
 
   mobile-tests:
     name: Mobile tests (shard ${{ matrix.shard }}/3)
