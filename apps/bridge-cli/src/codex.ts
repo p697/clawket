@@ -62,7 +62,12 @@ async function runCodexCommand(args: string[], progress: Progress): Promise<void
       try { await codexControl(config, 'bridge.stop'); stoppedOwned = true; }
       catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ECONNREFUSED') throw error; }
     } else {
-      try { health = await codexControl(config); } catch { /* An offline runtime may be started or diagnosed below. */ }
+      try { health = await codexControl(config); }
+      catch (error) {
+        // A failed native handshake is not proof that the authenticated owner
+        // is absent. Only an explicitly refused connection permits startup.
+        if ((error as NodeJS.ErrnoException).code !== 'ECONNREFUSED') throw error;
+      }
     }
     if (command === 'status') { console.log(`Codex · ${label}: ${health ? 'ready' : 'offline'}`); return; }
     if (command === 'doctor' && health) { console.log(`Codex RPC: ready\nModel: ${health.modelReady ? 'configured' : 'sign in to Codex on this computer'}`); return; }

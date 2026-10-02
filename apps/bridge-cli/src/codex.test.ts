@@ -22,7 +22,7 @@ beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'codex-cli-')); mock.home = root; project = join(root, 'project'); mkdirSync(project); path = join(root, 'runtime.json');
   mock.control.mockReset(); mock.background.mockReset(); mock.fetch.mockReset();
   mock.name.mockReset().mockReturnValue('Codex · 工作室 Mac'); mock.qr.mockReset().mockResolvedValue('[test QR]');
-  mock.control.mockRejectedValue(new Error('offline'));
+  mock.control.mockRejectedValue(Object.assign(new Error('offline'), { code: 'ECONNREFUSED' }));
   if (process.send) vi.spyOn(process as unknown as { send: (...args: unknown[]) => boolean }, 'send').mockImplementation(() => true);
   vi.stubGlobal('fetch', mock.fetch); vi.spyOn(console, 'log').mockImplementation(() => {}); vi.spyOn(console, 'error').mockImplementation(() => {});
 });
@@ -140,6 +140,26 @@ it('does not start a replacement when authenticated stop is unconfirmed', async 
   mock.control.mockRejectedValue(new Error('Codex Bridge did not answer'));
   await expect(handleCodexCommand(['restart', '--project', project, '--config', path])).rejects.toThrow('did not answer');
   expect(mock.background).not.toHaveBeenCalled();
+});
+
+it.each(['pair', 'start', 'doctor', 'status'])('does not treat a failed %s health check as an absent owner', async command => {
+  saved({});
+  const before = readFileSync(path, 'utf8');
+  const errors = [
+    new Error('The existing Codex Bridge failed its native health check'),
+    new Error('Codex Bridge rejected the control request'),
+    new Error('Codex Bridge did not answer'),
+    Object.assign(new Error('Codex Bridge is not reachable'), { code: 'ECONNRESET' }),
+  ];
+  for (const error of errors) {
+    mock.control.mockReset().mockRejectedValue(error);
+    await expect(handleCodexCommand([command, '--project', project, '--config', path])).rejects.toBe(error);
+    expect(mock.control.mock.calls).toHaveLength(1);
+    expect(mock.control.mock.calls[0][1]).toBeUndefined();
+    expect(mock.background).not.toHaveBeenCalled();
+    expect(mock.fetch).not.toHaveBeenCalled();
+    expect(readFileSync(path, 'utf8')).toBe(before);
+  }
 });
 
 it('allows start after an explicitly refused local connection', async () => {

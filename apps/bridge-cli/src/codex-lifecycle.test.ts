@@ -42,6 +42,22 @@ it('keeps ordinary health on the existing native-health handshake', async () => 
   expect(params).toEqual({ token: config.token });
 });
 
+it('reports native health failure with explicit restart guidance and no native error body', async () => {
+  const config = await listen();
+  const methods: string[] = [];
+  server!.on('connection', socket => socket.on('message', raw => {
+    const frame = JSON.parse(raw.toString()); methods.push(frame.method);
+    socket.send(JSON.stringify({ type: 'res', id: frame.id, ok: false,
+      error: { code: 'codex_error', message: 'private-native-error-body' } }));
+  }));
+  const error = await codexControl(config).catch(error => error);
+  expect(error).toBeInstanceOf(Error);
+  expect(error.message).toContain('existing Codex Bridge failed its native health check');
+  expect(error.message).toContain('clawket codex restart');
+  expect(error.message).not.toContain('private-native-error-body');
+  expect(methods).toEqual(['connect']);
+});
+
 it('never sends a stop after authentication rejection', async () => {
   const config = await listen();
   const methods: string[] = [];

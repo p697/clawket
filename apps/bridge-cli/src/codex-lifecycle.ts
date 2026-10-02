@@ -24,6 +24,10 @@ export function codexControl(config: { port: number; token: string }, method = '
           socket.send(JSON.stringify({ type: 'req', id: 'identity', method: 'agents.list' }));
           return;
         }
+        if (method === 'health' && frame.id === 'auth' && frame.error?.code === 'codex_error') {
+          finish(new Error('The existing Codex Bridge failed its native health check. Run clawket codex restart with the same pairing options, then retry. Inspect clawket codex logs for details.'));
+          return;
+        }
         finish(new Error('Codex Bridge rejected the control request')); return;
       }
       if (frame.id === 'auth') {
