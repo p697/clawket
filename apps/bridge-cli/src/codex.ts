@@ -107,8 +107,8 @@ async function runCodexCommand(args: string[], progress: Progress): Promise<void
     const health = await service.health() as { model: string; modelReady: boolean };
     let qrPayload: string | undefined, code: string | undefined;
     if (command === 'pair') {
-      if (!configExists) config.displayName = defaultDeviceConnectionName('Codex');
-      const displayName = typeof config.displayName === 'string' && config.displayName.trim() || 'Codex';
+      const displayName = typeof config.displayName === 'string' && config.displayName.trim() || defaultDeviceConnectionName('Codex');
+      config.displayName = displayName;
       if (args.includes('local') || args.includes('--local')) {
         config.host = flag(args, '--host') ?? '0.0.0.0'; config.relay = undefined;
         const address = flag(args, '--address') ?? Object.values(networkInterfaces()).flat().find(a => a?.family === 'IPv4' && !a.internal)?.address;
@@ -122,7 +122,7 @@ async function runCodexCommand(args: string[], progress: Progress): Promise<void
         const previous = config.relay;
         const previousRegistry = previous?.registryUrl ?? (() => { try { return JSON.parse(previous?.invitation?.qrPayload ?? '{}').s; } catch { return undefined; } })();
         const registered = previous && previousRegistry === registryUrl
-          ? { ...previous, ...await post<{ accessCode: string }>(registryUrl.replace(/\/$/, '') + '/v1/pair/access-code', { gatewayId: previous.gatewayId, relaySecret: previous.relaySecret }) }
+          ? { ...previous, ...await post<{ accessCode: string }>(registryUrl.replace(/\/$/, '') + '/v1/pair/access-code', { gatewayId: previous.gatewayId, relaySecret: previous.relaySecret, displayName }) }
           : await post<{ gatewayId: string; relaySecret: string; relayUrl: string; accessCode: string }>(registryUrl.replace(/\/$/, '') + '/v1/pair/register', { displayName });
         if (!registered.gatewayId || !registered.relaySecret || !registered.relayUrl || !registered.accessCode) throw new Error('Invalid Codex registration');
         qrPayload = JSON.stringify({ v: 2, k: 'cp', b: 'codex', s: registryUrl, g: registered.gatewayId, a: registered.accessCode, n: displayName });

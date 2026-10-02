@@ -1,5 +1,11 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-02 Codex / Claude Code 新增连接缺少电脑名（负责人要求调查、修复并测试）。
+  - 原来的 #91 实现仍在 main；只为全新 Bridge 配置生成名称，旧配置缺少 displayName 时直接退回产品名。本机两种 Production 设备配置均没有保存名称（只读取字段存在性，未输出凭据）。客户端认领优先采用 Registry 名称，因此仅补 QR 名称不足以修复已有配对记录。
+  - 显式 pair 为旧配置的缺失/空白名称补上已实现的 macOS ComputerName / hostname 默认，并保存复用；所有非空名称保留。现有认证 access-code 刷新同时同步保存名称到 Registry，保持 gatewayId、Relay secret、旧手机凭据与项目/设备作用域。新扫码、加密邀请与配对码得到一致名称；普通 run/start/restart 不迁移，电脑改名不重算，手机已有名称/手动改名仍保留。OpenClaw / Hermes / Pi 不改。
+  - 新回归覆盖旧配置 LAN/Relay、重复配对和电脑改名、保存名称/纯产品名保留、邀请一致性、同步失败不写配置、普通 run 无迁移；真实 Registry handler 覆盖两原生后端认证更新→新 claim 名称及旧 client token 有效。
+  - 本机 simulator 正被另一个任务用于商店素材；按资源规则不同时跑本地测试/构建。完整类型、Mobile 三分片、Bridge/Registry 回归、文档、v1 replay 与 Windows/macOS 门禁由本 PR CI 验证，结果待记录。无版本升级、分发打包、发布、生产配置修改、Worker 部署或本机 Bridge 重启；已安装 Bridge 取得修复需另行授权的发布/更新（HT-NATIVE-NAME-1002）。
+
 - 2026-10-02 Bridge 全命令审计与多 Agent 运维优化（负责人授权：逐个检查，明确正收益直接修改、自测）。
   - 全部命令/别名/作用范围记录在 `../bridge/architecture/cli-runtime.md`。确认默认 status/doctor/logs 漏掉 Codex、Claude Code、Pi；status 默认过量展示路径/ID/能力；新 Agent logs 缺过滤/跟随；Claude/Pi catch-all 把健康错误当离线；未知 backend 可落入默认 reset。
   - 默认状态摘要与 doctor 纳入已保存的项目/设备/环境；详细能力/路径保留 `--verbose`，JSON 增加 connections/summary 并保留 doctor 既有字段。诊断不创建配对目录、不启动离线原生/SDK 进程。损坏配置/项目已删除仍可读取日志；本地 readiness、Relay/手机和 inference 证据明确区分。本地模型仅报告保存配置/未实测，Windows supervisor 日志纳入。
@@ -1349,6 +1355,7 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 
 | 编号 | 事项 | 怎么做 | 验证方法 | 状态 |
 |---|---|---|---|---|
+| HT-NATIVE-NAME-1002 | 新增原生连接电脑名修复的 Bridge 交付与手机验收 | 在另行授权的 Bridge 发布/更新后，用旧设备配置执行显式 Codex / Claude Code pair，再在手机新增连接；普通运行不会自行补名称，已有连接可在连接设置手动改名。 | 新连接显示 Product · 电脑名；旧手机继续连接，已有/手动名称不被重配覆盖。本次只改源码并由 CI 验证，不发布、不修改现有配对配置。 | 待负责人授权交付与验收 |
 | HT-USER-FOLD-1002 | 用户消息折叠的双端体验验收 | 在包含本轮代码的开发 App 或后续授权更新中，查看中英文长消息、连续换行、带图片 / 文件的消息；调整字号并在 iPad 分栏查看。 | 默认 6 行，展开 / 收起可达且阅读不被拉向页尾；时间和送达标记不盖文字；长按状态一致、复制 / 分享保留全文；短消息及助手回复照旧。 | 定向自动化已通过；待负责人真机视觉 / 手感验收，本轮未打包或发布。 |
 | HT-HERMES-GATEWAY-KEY-1002 | Hermes gateway 所有权恢复（#69）的发布决定 | 3.1.10 从 `accfe2f4` 起，不含本修复；由负责人决定随哪个 Bridge 版本发布 | 升级后用 `clawket pair --backend hermes --restart-hermes` 让新 bridge 启动并记录 gateway，再 `clawket reset` 后重新配对：手机应直接连上，`hermes-bridge.log` 出现 `owner=clawket`；没有记录的旧 gateway 应在配对时失败并提示 `--restart-hermes` | 待负责人决定；本轮不打包、不发布。 |
 | HT-NPM-3110-1002 | Bridge 3.1.10 npm 本机认证 | 在 npm 官方登录与独立发布认证页解锁现有安全密钥；不在聊天中发送密码或验证码。 | npm 接受固定候选，公开 latest=3.1.10，下载包逐字节/三项哈希与全新安装通过。 | 负责人已完成两次本机认证；npm 接受固定候选，公开 registry 仍在处理，下载与公开安装待验证。 |

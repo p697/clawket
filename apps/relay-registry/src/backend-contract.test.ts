@@ -126,6 +126,44 @@ async function register(backendCase: BackendCase, env: unknown) {
 }
 
 describe('Registry backend contract matrix', () => {
+  it.each([
+    ['codex', 'Codex'], ['claude-code', 'Claude Code'],
+  ])('carries refreshed %s device names to new claims without retiring old clients', async (backend, product) => {
+    const { env, selectedKv } = createEnv(BACKENDS[0], { RELAY_BACKEND: backend });
+    const registeredResponse = await postJson('/v1/pair/register', { displayName: product }, env);
+    expect(registeredResponse.status).toBe(200);
+    const registered = await registeredResponse.json() as Record<string, string>;
+    const oldClaim = await postJson('/v1/pair/claim', {
+      gatewayId: registered.gatewayId, accessCode: registered.accessCode,
+    }, env);
+    expect(oldClaim.status).toBe(200);
+    const oldClient = await oldClaim.json() as Record<string, string>;
+    const displayName = `${product} · Lucy 的 Mac mini`;
+    const denied = await postJson('/v1/pair/access-code', {
+      gatewayId: registered.gatewayId, relaySecret: 'wrong-secret', displayName,
+    }, env);
+    expect(denied.status).toBe(401);
+    expect(JSON.parse(selectedKv.map.get(`pair-gateway:${registered.gatewayId}`)!).displayName).toBe(product);
+
+    const refresh = await postJson('/v1/pair/access-code', {
+      gatewayId: registered.gatewayId, relaySecret: registered.relaySecret, displayName,
+    }, env);
+    expect(refresh.status).toBe(200);
+    const refreshed = await refresh.json() as Record<string, string>;
+    expect(refreshed).toMatchObject({ gatewayId: registered.gatewayId, displayName });
+    const newClaim = await postJson('/v1/pair/claim', {
+      gatewayId: registered.gatewayId, accessCode: refreshed.accessCode,
+    }, env);
+    expect(newClaim.status).toBe(200);
+    await expect(newClaim.json()).resolves.toMatchObject({ gatewayId: registered.gatewayId, displayName });
+    const oldClientVerification = await fetchHandler(new Request(
+      `https://registry.example.com/v1/verify/${registered.gatewayId}`,
+      { headers: { authorization: `Bearer ${oldClient.clientToken}` } },
+    ), env);
+    expect(oldClientVerification.status).toBe(200);
+    await expect(oldClientVerification.json()).resolves.toEqual({ ok: true, role: 'client' });
+  });
+
   it('fails closed when RELAY_BACKEND is configured to an unsupported value', async () => {
     await expect(fetchHandler(new Request('https://registry.example.com/v1/health'), {
       RELAY_BACKEND: 'hermez',

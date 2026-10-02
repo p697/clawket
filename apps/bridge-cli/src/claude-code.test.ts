@@ -76,31 +76,75 @@ it('reuses one device label for Registry, QR and code invitations after a comput
   mock.name.mockReturnValue('Claude Code · Renamed computer');
   await handleClaudeCommand(args);
   expect(mock.name).toHaveBeenCalledTimes(1);
-  expect(JSON.parse(mock.fetch.mock.calls[2][1].body)).toEqual({ gatewayId: initial.relay.gatewayId, relaySecret: initial.relay.relaySecret });
+  expect(JSON.parse(mock.fetch.mock.calls[2][1].body)).toEqual({ gatewayId: initial.relay.gatewayId, relaySecret: initial.relay.relaySecret, displayName: initial.displayName });
   expect(JSON.parse(mock.qr.mock.calls[1][0]).n).toBe(initial.displayName);
 });
 
-it.each([undefined, 'Studio laptop'])('preserves an existing local pairing label %s', async displayName => {
+it.each([undefined, '', '   '])('backfills an unnamed existing local pairing (%s) once', async displayName => {
+  saved({});
+  const initial = JSON.parse(readFileSync(path, 'utf8'));
+  writeFileSync(path, JSON.stringify({ ...initial, displayName }));
+  const args = ['pair', '--foreground', '--local', '--address', '127.0.0.1', '--config', path];
+  await handleClaudeCommand(args);
+  expect(JSON.parse(mock.qr.mock.calls[0][0])).toMatchObject({ backendKind: 'claude-code', mode: 'local', displayName: 'Claude Code · 工作室 Mac', token: initial.token });
+  expect(JSON.parse(readFileSync(path, 'utf8'))).toMatchObject({ displayName: 'Claude Code · 工作室 Mac', token: initial.token, project: initial.project, port: initial.port });
+  mock.name.mockReturnValue('Claude Code · Renamed computer');
+  await handleClaudeCommand(args);
+  expect(JSON.parse(mock.qr.mock.calls[1][0]).displayName).toBe('Claude Code · 工作室 Mac');
+  expect(mock.name).toHaveBeenCalledTimes(1);
+});
+
+it.each(['Studio laptop', 'Claude Code', 'Claude Code · Saved computer'])('preserves an existing local pairing label %s', async displayName => {
   saved({});
   const initial = JSON.parse(readFileSync(path, 'utf8'));
   writeFileSync(path, JSON.stringify({ ...initial, displayName }));
   await handleClaudeCommand(['pair', '--foreground', '--local', '--address', '127.0.0.1', '--config', path]);
-  expect(JSON.parse(mock.qr.mock.calls[0][0])).toMatchObject({ backendKind: 'claude-code', mode: 'local', displayName: displayName ?? 'Claude Code', token: initial.token });
+  expect(JSON.parse(mock.qr.mock.calls[0][0])).toMatchObject({ backendKind: 'claude-code', mode: 'local', displayName, token: initial.token });
   expect(mock.name).not.toHaveBeenCalled();
 });
-it('refreshes the same registration without invalidating existing client identity', async () => {
+
+it.each([undefined, '   ', 'Studio laptop'])('synchronizes the saved label on same-identity Relay pairing (%s)', async savedName => {
   saved({ registryUrl: 'https://claude-code.example', gatewayId: 'existing-id', relaySecret: 'existing-secret', relayUrl: 'wss://relay.example' });
-  mock.fetch.mockImplementation(async (url: string) => url.endsWith('/access-code') ? Response.json({ accessCode: 'new-code' }) : Response.json({ sessionId: 'legacy' }));
+  const initial = JSON.parse(readFileSync(path, 'utf8'));
+  writeFileSync(path, JSON.stringify({ ...initial, displayName: savedName }));
+  mock.fetch.mockImplementation(async (url: string) => url.endsWith('/access-code')
+    ? Response.json({ accessCode: 'new-code' })
+    : Response.json({ sessionId: `ps_${'a'.repeat(64)}`, expiresAt: new Date(Date.now() + 60_000).toISOString(), capabilities: ['pairing.secure-short-code.v2'] }));
   await handleClaudeCommand(['pair', '--foreground', '--project', project, '--config', path, '--registry', 'https://claude-code.example']);
+  const displayName = savedName?.trim() || 'Claude Code · 工作室 Mac';
   expect(mock.fetch.mock.calls.map(c => c[0])).toEqual(['https://claude-code.example/v1/pair/access-code', 'https://claude-code.example/v1/pair/session']);
-  expect(JSON.parse(readFileSync(path, 'utf8')).relay).toMatchObject({ gatewayId: 'existing-id', relaySecret: 'existing-secret' });
+  expect(JSON.parse(mock.fetch.mock.calls[0][1].body)).toEqual({ gatewayId: initial.relay.gatewayId, relaySecret: initial.relay.relaySecret, displayName });
+  const updated = JSON.parse(readFileSync(path, 'utf8'));
+  expect(updated).toMatchObject({ displayName, token: initial.token, project: initial.project, port: initial.port,
+    relay: { gatewayId: initial.relay.gatewayId, relaySecret: initial.relay.relaySecret } });
+  expect(JSON.parse(mock.qr.mock.calls[0][0]).n).toBe(displayName);
+  expect(JSON.parse(updated.relay.invitation.qrPayload).n).toBe(displayName);
+  expect(mock.name).toHaveBeenCalledTimes(savedName?.trim() ? 0 : 1);
+});
+
+it('leaves the saved configuration intact when label synchronization fails', async () => {
+  saved({ registryUrl: 'https://claude-code.example', gatewayId: 'existing-id', relaySecret: 'existing-secret', relayUrl: 'wss://relay.example' });
+  const before = readFileSync(path, 'utf8');
+  mock.fetch.mockResolvedValue(new Response(null, { status: 401 }));
+  await expect(handleClaudeCommand(['pair', '--foreground', '--project', project, '--config', path, '--registry', 'https://claude-code.example'])).rejects.toThrow('HTTP 401');
+  expect(readFileSync(path, 'utf8')).toBe(before);
+  expect(mock.qr).not.toHaveBeenCalled();
+});
+
+it('does not generate a name or rewrite configuration during ordinary run', async () => {
+  saved({});
+  const before = readFileSync(path, 'utf8');
+  await handleClaudeCommand(['run', '--config', path]);
+  expect(readFileSync(path, 'utf8')).toBe(before);
+  expect(mock.name).not.toHaveBeenCalled();
+  expect(mock.fetch).not.toHaveBeenCalled();
 });
 it('uses a distinct registration when the requested environment changes', async () => {
   saved({ registryUrl: 'https://production.example', gatewayId: 'existing-id', relaySecret: 'existing-secret', relayUrl: 'wss://relay.example' });
   mock.fetch.mockImplementation(async (url: string) => url.endsWith('/register') ? Response.json({ gatewayId: 'preview-id', relaySecret: 'preview-secret', relayUrl: 'wss://preview.example', accessCode: 'code' }) : Response.json({ sessionId: 'legacy' }));
   await handleClaudeCommand(['pair', '--foreground', '--project', project, '--config', path, '--registry', 'https://preview.example']);
   expect(mock.fetch.mock.calls[0][0]).toBe('https://preview.example/v1/pair/register');
-  expect(JSON.parse(mock.fetch.mock.calls[0][1].body)).toEqual({ displayName: 'Claude Code' });
+  expect(JSON.parse(mock.fetch.mock.calls[0][1].body)).toEqual({ displayName: 'Claude Code · 工作室 Mac' });
   expect(JSON.parse(readFileSync(path, 'utf8')).relay.gatewayId).toBe('preview-id');
 });
 it('does not stop an active task to refresh pairing', async () => {
