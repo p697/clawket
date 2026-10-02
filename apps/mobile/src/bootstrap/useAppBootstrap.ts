@@ -65,7 +65,7 @@ export function useAppBootstrap({
   const [debugMode, setDebugMode] = useState(false);
   const [showAgentAvatar, setShowAgentAvatar] = useState(false);
   const [showModelUsage, setShowModelUsage] = useState(true);
-  const [execApprovalEnabled, setExecApprovalEnabled] = useState(false);
+  const [execApprovalEnabled, setExecApprovalEnabled] = useState(true);
   const [chatFontSize, setChatFontSize] = useState(DEFAULT_CHAT_FONT_SIZE);
   const [chatAppearance, setChatAppearance] = useState<ChatAppearanceSettings>(DEFAULT_CHAT_APPEARANCE);
   const [themeMode, setThemeMode] = useState<ThemeMode>('system');

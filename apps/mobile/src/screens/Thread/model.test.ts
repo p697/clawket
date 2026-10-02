@@ -1,13 +1,14 @@
 import { formatThreadTimestamp } from './timestamps';
 import type { AdapterErrorCode, Capabilities, CronJob } from '@clawket/agent-protocol';
 import type { UiMessage } from '../../types/chat';
+import { foldTurnSteps } from '../../components/chat/turn-work';
 import {
   buildCronRunSeeds,
   buildThreadTimelineItems,
   areThreadRunSeedsEqual,
   copiedSessionTitle,
   deriveThreadContentState,
-  groupThreadTools,
+  placeTurnReceipts,
   withThreadRhythm,
   stabilizeThreadRows,
   formatThreadLocalTime,
@@ -409,8 +410,7 @@ describe('Thread model', () => {
 
   it('spaces rows by voice: joined within a speaker group, apart across turns, sectioned by time labels', () => {
     const at = (minute: number) => new Date(2026, 8, 5, 12, minute).getTime();
-    const timeline = groupThreadTools(buildThreadTimelineItems({
-      messages: [
+    const folded = foldTurnSteps([
         { id: 'follow-up', role: 'assistant', text: 'Anything else?', timestampMs: at(10) },
         { id: 'reply', role: 'assistant', text: 'Done', timestampMs: at(10) },
         { id: 'exec-2', role: 'tool', text: '', toolStatus: 'success', timestampMs: at(10) },
@@ -419,18 +419,16 @@ describe('Thread model', () => {
         { id: 'ask', role: 'user', text: 'Check it', timestampMs: at(10) },
         { id: 'again', role: 'user', text: 'Correction', timestampMs: at(0) },
         { id: 'first', role: 'user', text: 'Hello', timestampMs: at(0) },
-        { id: 'notice', role: 'system', text: 'Context compacted', timestampMs: at(0) },
-      ],
-      runs: [],
-      locale: 'en-US',
-    }));
+      { id: 'notice', role: 'system', text: 'Context compacted', timestampMs: at(0) },
+    ], false);
+    const timeline = placeTurnReceipts(buildThreadTimelineItems({ messages: folded.messages, runs: [], locale: 'en-US' }), folded);
 
-    // Newest first, as the list data is built before it is reversed.
+    // Newest first, as the list data is built before it is reversed. The
+    // turn's steps left the conversation, so its two replies join; the
+    // receipt rides on the last one.
     expect(withThreadRhythm(timeline).map((row) => [row.key, row.gapAbove, row.joinsOlder, row.joinsNewer])).toEqual([
       ['message:follow-up', 'joined', true, false],
-      ['message:reply', 'stack', false, true],
-      ['tools:exec-1', 'stack', false, false],
-      ['tools:failed', 'turn', false, false],
+      ['message:reply', 'turn', false, true],
       ['message:ask', 'none', false, false],
       ['date:message:ask', 'section', false, false],
       ['message:again', 'joined', true, false],
@@ -440,6 +438,9 @@ describe('Thread model', () => {
       ['message:notice', 'none', false, false],
       ['date:message:first', 'none', false, false],
     ]);
+    const receipt = timeline[0]?.type === 'message' ? timeline[0].receipt : undefined;
+    expect(receipt?.steps.map((step) => step.id)).toEqual(['failed', 'exec-1', 'exec-2']);
+    expect(receipt?.failed).toBe(false);
   });
 
   it('keeps an approval prompt inside the Agent turn regardless of its wire role', () => {
@@ -501,7 +502,10 @@ it('preserves cached content during recovery before surfacing a failure', () => 
 });
 
 describe('stabilizeThreadRows', () => {
-  const rows = (messages: UiMessage[]) => withThreadRhythm(groupThreadTools(buildThreadTimelineItems({ messages, runs: [] }))).reverse();
+  const rows = (messages: UiMessage[], live = false) => {
+    const folded = foldTurnSteps(messages, live);
+    return withThreadRhythm(placeTurnReceipts(buildThreadTimelineItems({ messages: folded.messages, runs: [] }), folded)).reverse();
+  };
   const tool = (id: string, status: UiMessage['toolStatus'] = 'success'): UiMessage => ({ id, role: 'tool', text: '', toolName: 'bash', toolStatus: status });
 
   it('returns the previous array when every row renders the same', () => {
@@ -513,16 +517,25 @@ describe('stabilizeThreadRows', () => {
 
   it('reuses unchanged rows and replaces only the rows whose content, rhythm or grouping changed', () => {
     const user: UiMessage = { id: 'u', role: 'user', text: 'Run it' };
-    const previous = rows([{ id: 'streaming', renderKey: 'reply:1:0', role: 'assistant', text: 'Wor', streaming: true }, tool('t2', 'running'), tool('t1'), user]);
+    const previous = rows([{ id: 'streaming', renderKey: 'reply:1:0', role: 'assistant', text: 'Wor', streaming: true }, tool('t2', 'running'), tool('t1'), user], true);
     const next = stabilizeThreadRows(previous, rows([
       { id: 'streaming', renderKey: 'reply:1:0', role: 'assistant', text: 'World', streaming: true },
       tool('t2'), tool('t1'), { ...user },
-    ]));
+    ], true));
     expect(next).not.toBe(previous);
     expect(next.map((row) => row.key)).toEqual(previous.map((row) => row.key));
     const changed = next.filter((row, index) => row !== previous[index]).map((row) => row.key);
-    expect(changed).toEqual(['tools:t1', 'message:reply:1:0']);
+    expect(changed).toEqual(['message:reply:1:0']);
     expect(next[0]).toBe(previous[0]);
+  });
+
+  it('replaces a reply row when its receipt changes and keeps it when the receipt renders the same', () => {
+    const user: UiMessage = { id: 'u', role: 'user', text: 'Run it' };
+    const answer: UiMessage = { id: 'a', role: 'assistant', text: 'Done' };
+    const previous = rows([answer, tool('t1'), user]);
+    expect(stabilizeThreadRows(previous, rows([{ ...answer }, tool('t1'), { ...user }]))).toBe(previous);
+    const changed = stabilizeThreadRows(previous, rows([answer, tool('t2'), tool('t1'), user]));
+    expect(changed.find((row) => row.key === 'message:a')).not.toBe(previous.find((row) => row.key === 'message:a'));
   });
 
   it('replaces a bubble row whose group changed so its corners and tail follow', () => {

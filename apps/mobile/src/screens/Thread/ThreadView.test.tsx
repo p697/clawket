@@ -157,7 +157,7 @@ jest.mock('react-native', () => {
 });
 
 // Tokens the copy under test fills in; others stay visible as keys.
-const mockInterpolatedTokens = new Set(['count', 'percent', 'name', 'detail', 'first', 'second', 'minutes', 'seconds', 'hours']);
+const mockInterpolatedTokens = new Set(['count', 'percent', 'name', 'detail', 'first', 'second', 'minutes', 'seconds', 'hours', 'text', 'summary']);
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string, options?: Record<string, unknown>) => key === 'Yesterday' ? require(`../../i18n/locales/${options?.lng === 'zh-Hans' ? 'zh-Hans' : String(options?.lng || 'en').split('-')[0]}/common.json`).Yesterday : key.replace(/\{\{(\w+)\}\}/g, (match, token: string) => (mockInterpolatedTokens.has(token) ? String(options?.[token] ?? '') : match)) }),
 }));
@@ -2293,31 +2293,28 @@ describe('ThreadView', () => {
   });
 });
 
-it('folds tool activity into one pill that opens the turn work record and each step\'s full details', () => {
+it('moves a finished turn into a receipt on its last reply that opens the work record and each step', () => {
   const prompt: UiMessage = { id: 'ask', role: 'user', text: 'Check the repo' };
   const first: UiMessage = { id: 'a', role: 'tool', text: '', toolName: 'bash', toolArgs: JSON.stringify({ command: 'git status' }), toolStatus: 'success' };
-  const second: UiMessage = { ...first, id: 'b', toolArgs: JSON.stringify({ command: 'git log' }), toolStatus: 'running' };
-  const props = createProps({ messages: [second, first, prompt] });
+  const second: UiMessage = { ...first, id: 'b', toolArgs: JSON.stringify({ command: 'git log' }) };
+  const answer: UiMessage = { id: 'answer', role: 'assistant', text: 'The tree is clean.' };
+  const props = createProps({ messages: [answer, second, first, prompt] });
   const view = render(<ThreadView {...props} />);
   const timeline = () => view.getByTestId('thread-screen-timeline');
-  // One live pill for the running step; the calls themselves stay off the timeline.
-  expect(timeline().props.data.map((item: any) => item.key)).toEqual(['message:ask', 'tools:a']);
-  expect(view.getByTestId('tools:a-busy')).toBeTruthy();
-  expect(view.getByText('git log')).toBeTruthy();
+  // The calls leave the conversation; the reply carries what the turn did.
+  expect(timeline().props.data.map((item: any) => item.key)).toEqual(['message:ask', 'message:answer']);
+  expect(within(view.getByTestId('thread-receipt-answer')).getByText('Ran 2 commands')).toBeTruthy();
   expect(view.queryByTestId('thread-run-a')).toBeNull();
   mockScrollToEnd.mockClear();
 
-  fireEvent.press(view.getByTestId('tools:a'));
+  fireEvent.press(view.getByTestId('thread-receipt-answer'));
   expect(view.getByTestId('work-record-sheet').props.title).toBe('Work record');
   expect(view.getByTestId('thread-run-a')).toBeTruthy();
   expect(view.getByTestId('thread-run-b')).toBeTruthy();
   expect(mockScrollToEnd).not.toHaveBeenCalled();
 
-  // The record follows the turn through updates: finished steps, new calls, a replaced id.
-  view.rerender(<ThreadView {...props} messages={[{ ...first, id: 'c' }, { ...second, toolStatus: 'success' }, first, prompt]} />);
-  expect(timeline().props.data.map((item: any) => item.key)).toEqual(['message:ask', 'tools:a']);
-  expect(view.getByText('Ran 3 commands')).toBeTruthy();
-  expect(view.getByTestId('work-record-sheet')).toBeTruthy();
+  // The record follows the turn through updates: a new call, a replaced id.
+  view.rerender(<ThreadView {...props} messages={[answer, { ...first, id: 'c' }, second, first, prompt]} />);
   expect(view.getByTestId('thread-run-c')).toBeTruthy();
   fireEvent.press(view.getByTestId('thread-run-a'));
   expect(view.getByTestId('thread-tool-detail').props).toMatchObject({
@@ -2326,39 +2323,150 @@ it('folds tool activity into one pill that opens the turn work record and each s
   });
 });
 
-it('names Codex js calls by their titles in the pill, the work record and the step details', () => {
-  const prompt: UiMessage = { id: 'ask', role: 'user', text: '再帮我看一眼现在状态怎么样了？' };
-  const js = (id: string, title: string, toolStatus: UiMessage['toolStatus']): UiMessage => ({
-    id, role: 'tool', text: '', toolName: 'js', toolStatus,
-    toolArgs: JSON.stringify({ code: 'await cua.getState();', title }),
-  });
-  const props = createProps({ messages: [js('b', '刷新审核状态', 'running'), js('a', '查看当前浏览器页面', 'success'), prompt] });
-  const view = render(<ThreadView {...props} />);
-  // A running call with no known target reads as its title, not "Using js".
-  expect(view.getByText('刷新审核状态')).toBeTruthy();
-  expect(view.queryByText('Using js')).toBeNull();
+it('names Codex js calls by their titles in the work dock, the work record and the step details', () => {
+  jest.useFakeTimers();
+  try {
+    const prompt: UiMessage = { id: 'ask', role: 'user', text: '再帮我看一眼现在状态怎么样了？' };
+    const js = (id: string, title: string, toolStatus: UiMessage['toolStatus']): UiMessage => ({
+      id, role: 'tool', text: '', toolName: 'js', toolStatus,
+      toolArgs: JSON.stringify({ code: 'await cua.getState();', title }),
+    });
+    const props = createProps({ isRunning: true, messages: [js('b', '刷新审核状态', 'running'), js('a', '查看当前浏览器页面', 'success'), prompt] });
+    const view = render(<ThreadView {...props} />);
+    act(() => jest.advanceTimersByTime(1_000));
+    // A running call reads as its title, not "Using js".
+    expect(within(view.getByTestId('thread-screen-work-dock')).getByText('刷新审核状态')).toBeTruthy();
+    expect(view.queryByText('Using js')).toBeNull();
 
-  view.rerender(<ThreadView {...props} messages={[js('b', '刷新审核状态', 'success'), js('a', '查看当前浏览器页面', 'success'), prompt]} />);
-  fireEvent.press(view.getByTestId('tools:a'));
-  const row = within(view.getByTestId('thread-run-a'));
-  expect(row.getByText('查看当前浏览器页面')).toBeTruthy();
-  expect(row.getByText('js')).toBeTruthy();
-  expect(view.getByTestId('thread-run-a').props.accessibilityLabel).toBe('查看当前浏览器页面, js');
-  fireEvent.press(view.getByTestId('thread-run-a'));
-  expect(view.getByTestId('thread-tool-detail').props).toMatchObject({ name: 'js', stepTitle: '查看当前浏览器页面' });
+    // The turn ended on a step: one pill stands for it.
+    view.rerender(<ThreadView {...props} isRunning={false} messages={[js('b', '刷新审核状态', 'success'), js('a', '查看当前浏览器页面', 'success'), prompt]} />);
+    fireEvent.press(view.getByTestId('tools:a'));
+    const row = within(view.getByTestId('thread-run-a'));
+    expect(row.getByText('查看当前浏览器页面')).toBeTruthy();
+    expect(view.getByTestId('thread-run-a').props.accessibilityLabel).toBe('查看当前浏览器页面, js');
+    fireEvent.press(view.getByTestId('thread-run-a'));
+    expect(view.getByTestId('thread-tool-detail').props).toMatchObject({ name: 'js', stepTitle: '查看当前浏览器页面' });
+  } finally {
+    jest.useRealTimers();
+  }
 });
 
-it('gives a failed call its own red pill and keeps it in the work record', () => {
+it('keeps a failure the Agent moved past quiet and gives a turn that ended on one a single red pill', () => {
   const prompt: UiMessage = { id: 'ask', role: 'user', text: 'Check CI' };
   const ok: UiMessage = { id: 'a', role: 'tool', text: '', toolName: 'exec', toolArgs: JSON.stringify({ command: 'gh pr view 50' }), toolStatus: 'success' };
   const failed: UiMessage = { ...ok, id: 'b', toolArgs: JSON.stringify({ command: 'gh pr checks 50' }), toolStatus: 'error' };
   const view = render(<ThreadView {...createProps({ messages: [failed, ok, prompt] })} />);
-  expect(view.getByTestId('thread-screen-timeline').props.data.map((item: any) => item.key))
-    .toEqual(['message:ask', 'tools:a', 'tools:b']);
-  expect(view.getByTestId('tools:b').props.accessibilityLabel).toBe('gh pr checks 50 failed');
-  fireEvent.press(view.getByTestId('tools:b'));
+  const keys = () => view.getByTestId('thread-screen-timeline').props.data.map((item: any) => item.key);
+  expect(keys()).toEqual(['message:ask', 'tools:a']);
+  expect(view.getByTestId('tools:a').props.accessibilityLabel).toBe('gh pr checks 50 failed');
+  fireEvent.press(view.getByTestId('tools:a'));
   expect(view.getByTestId('thread-run-a')).toBeTruthy();
   expect(view.getByTestId('thread-run-b').props.accessibilityLabel).toContain('Failed');
+
+  const answer: UiMessage = { id: 'answer', role: 'assistant', text: 'CI is green now.' };
+  view.rerender(<ThreadView {...createProps({ messages: [answer, { ...ok, id: 'c' }, failed, ok, prompt] })} />);
+  expect(keys()).toEqual(['message:ask', 'message:answer']);
+  expect(within(view.getByTestId('thread-receipt-answer')).getByText('Ran 3 commands')).toBeTruthy();
+});
+
+describe('work dock', () => {
+  const prompt: UiMessage = { id: 'ask', role: 'user', text: 'Fix the tests' };
+  const read: UiMessage = { id: 'r', role: 'tool', text: '', toolName: 'read', toolArgs: JSON.stringify({ path: 'a.ts' }), toolStatus: 'success' };
+  const said: UiMessage = { id: 'said', role: 'assistant', text: 'Found it.' };
+  const run: UiMessage = { id: 'x', role: 'tool', text: '', toolName: 'exec', toolArgs: JSON.stringify({ command: 'npm test' }), toolStatus: 'running' };
+  const keys = (view: ReturnType<typeof render>) => view.getByTestId('thread-screen-timeline').props.data.map((item: any) => item.key);
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  it('rises a second into a tool turn, names the step and opens every step so far', () => {
+    const props = createProps({ isRunning: true, messages: [run, said, read, prompt] });
+    const view = render(<ThreadView {...props} />);
+    // Within the grace the reply's own live pill speaks; steps never enter the conversation.
+    expect(view.queryByTestId('thread-screen-work-dock')).toBeNull();
+    expect(keys(view)).toEqual(['message:ask', 'message:said', 'message:streaming']);
+
+    act(() => jest.advanceTimersByTime(1_000));
+    const dock = view.getByTestId('thread-screen-work-dock');
+    expect(within(dock).getByText('Running npm test')).toBeTruthy();
+    expect(within(dock).getByText('Step 2')).toBeTruthy();
+    expect(view.getByTestId('thread-screen-work-dock-working')).toBeTruthy();
+    // Once the dock is up, a second "Thinking" in the conversation would contradict it.
+    expect(keys(view)).toEqual(['message:ask', 'message:said']);
+
+    fireEvent.press(dock);
+    const panel = within(view.getByTestId('work-panel'));
+    expect(panel.getByText('“Found it.”')).toBeTruthy();
+    expect(view.getByTestId('thread-run-x')).toBeTruthy();
+    fireEvent.press(view.getByTestId('thread-run-r'));
+    expect(view.getByTestId('thread-tool-detail').props).toMatchObject({ args: JSON.stringify({ path: 'a.ts' }) });
+    fireEvent.press(view.getByTestId('work-panel-close'));
+    expect(view.queryByTestId('work-panel')).toBeNull();
+
+    // The turn ends: the dock leaves and the last reply carries the receipt.
+    const done: UiMessage = { id: 'done', role: 'assistant', text: 'All green.' };
+    view.rerender(<ThreadView {...props} isRunning={false} messages={[done, { ...run, toolStatus: 'success' }, said, read, prompt]} />);
+    expect(view.queryByTestId('thread-screen-work-dock')).toBeNull();
+    expect(view.getByTestId('thread-receipt-done')).toBeTruthy();
+  });
+
+  it('never rises for a turn that finished within the grace', () => {
+    const props = createProps({ isRunning: true, messages: [run, prompt] });
+    const view = render(<ThreadView {...props} />);
+    act(() => jest.advanceTimersByTime(400));
+    view.rerender(<ThreadView {...props} isRunning={false} messages={[{ id: 'done', role: 'assistant', text: 'Done.' }, { ...run, toolStatus: 'success' }, prompt]} />);
+    act(() => jest.advanceTimersByTime(1_000));
+    expect(view.queryByTestId('thread-screen-work-dock')).toBeNull();
+    expect(view.getByTestId('thread-receipt-done')).toBeTruthy();
+  });
+
+  it('turns amber for a pending approval at once and takes the reader back to the card', () => {
+    const approval: UiMessage = {
+      id: 'approval_1', role: 'system', text: '',
+      approval: { id: '1', kind: 'exec', command: 'rm -rf build', status: 'pending', expiresAtMs: null },
+    };
+    const view = render(<ThreadView {...createProps({ isRunning: true, messages: [approval, run, prompt] })} />);
+    const dock = view.getByTestId('thread-screen-work-dock');
+    expect(within(dock).getByText('Waiting for your approval')).toBeTruthy();
+    expect(within(dock).getByText('rm -rf build')).toBeTruthy();
+    expect(within(dock).getByText('Review')).toBeTruthy();
+    expect(view.getByTestId('thread-screen-work-dock-attention')).toBeTruthy();
+    expect(view.getByTestId('thread-approval-approval_1')).toBeTruthy();
+
+    const list = view.getByTestId('thread-screen-timeline');
+    fireEvent(list, 'load', { elapsedTimeInMs: 10 });
+    fireEvent(list, 'scrollBeginDrag');
+    fireEvent.scroll(list, scrollEvent(800));
+    mockScrollToEnd.mockClear();
+    fireEvent.press(dock);
+    expect(mockScrollToEnd).toHaveBeenCalledTimes(1);
+    expect(view.queryByTestId('work-panel')).toBeNull();
+  });
+
+  it('makes way for a waiting question and shrinks to one line while typing', () => {
+    const props = createProps({ isRunning: true, messages: [run, prompt] });
+    const view = render(<ThreadView {...props} />);
+    act(() => jest.advanceTimersByTime(1_000));
+    expect(view.getByTestId('thread-screen-work-dock-subtitle')).toBeTruthy();
+    view.rerender(<ThreadView {...props} keyboardVisible />);
+    expect(view.getByTestId('thread-screen-work-dock')).toBeTruthy();
+    expect(view.queryByTestId('thread-screen-work-dock-subtitle')).toBeNull();
+    view.rerender(<ThreadView {...props} questionPending />);
+    expect(view.queryByTestId('thread-screen-work-dock')).toBeNull();
+  });
+
+  it('stays to say the connection dropped while the turn was running', () => {
+    const props = createProps({ isRunning: true, messages: [run, prompt] });
+    const view = render(<ThreadView {...props} />);
+    act(() => jest.advanceTimersByTime(1_000));
+    expect(view.getByTestId('thread-screen-work-dock')).toBeTruthy();
+    // The controller clears the run while the connection is down.
+    view.rerender(<ThreadView {...props} isRunning={false} state={{ kind: 'offline' }} />);
+    const dock = view.getByTestId('thread-screen-work-dock');
+    expect(within(dock).getByText('Connection lost. Reconnecting…')).toBeTruthy();
+    expect(within(dock).getByText('The Agent may still be working on your computer')).toBeTruthy();
+    view.rerender(<ThreadView {...props} isRunning={false} state={{ kind: 'ready' }} />);
+    expect(view.queryByTestId('thread-screen-work-dock')).toBeNull();
+  });
 });
 
 it('uses a human title for a new session whose backend title is only its internal key', () => {

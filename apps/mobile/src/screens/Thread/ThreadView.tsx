@@ -101,10 +101,23 @@ import { HeaderTextAction } from '../../components/ui/HeaderTextAction';
 import { HeaderPill } from '../../components/ui/HeaderPill';
 import type { PlatformKind } from '../../components/ui/PlatformMark';
 import { ToolActivityPill, useElapsed } from '../../components/chat/ToolActivityPill';
+import { TurnReceiptChip } from '../../components/chat/TurnReceiptChip';
+import { WorkDock } from '../../components/chat/WorkDock';
+import { WorkPanel } from '../../components/chat/WorkPanel';
+import {
+  collectLiveTurnWork,
+  collectTurnWorkAround,
+  EMPTY_TURN_WORK,
+  foldTurnSteps,
+  opensTurn,
+  renderKeyOf,
+  type TurnReceipt,
+} from '../../components/chat/turn-work';
+import { resolveWorkDockPhase, WORK_DOCK_GRACE_MS } from '../../components/chat/work-dock-model';
 import { ServicePill } from '../../components/chat/ServicePill';
 import { WorkRecordSheet } from '../../components/chat/WorkRecordSheet';
 import { CronDigest } from '../../components/chat/CronDigest';
-import { collectTurnToolSteps, formatActivityDuration } from '../../components/chat/tool-activity-model';
+import { formatActivityDuration } from '../../components/chat/tool-activity-model';
 import { Sheet } from '../../components/ui/Sheet';
 import { ReplyFailureSheet } from '../../components/chat/ReplyFailureSheet';
 import { RunResult } from '../../components/chat/RunResult';
@@ -130,11 +143,10 @@ import { useMarkdownSelectionMenu } from '../../components/chat/useMarkdownSelec
 import {
   buildThreadTimelineItems,
   groupThreadRuns,
-  groupThreadTools,
   resolveThreadHeaderName,
   resolveThreadHeaderSubtitle,
   resolveThreadWorkingStatus,
-  isToolRunningInTurn,
+  placeTurnReceipts,
   stabilizeThreadRows,
   type ThreadContentState,
   type ThreadRowGap,
@@ -187,7 +199,11 @@ const REPLY_PLACEHOLDER: UiMessage = { id: REPLY_PLACEHOLDER_ID, role: 'assistan
 /** Execution summaries outgrow the screen: the run sheet scrolls inside fixed detents. */
 const RUN_RESULT_SNAP_POINTS: string[] = ['68%', '92%'];
 const EMPTY_RUN_CARDS: ReadonlyArray<ThreadRunCard> = Object.freeze([]);
-const EMPTY_TOOL_STEPS: ReadonlyArray<UiMessage> = Object.freeze([]);
+const CLOSED_WORK_PANEL = Object.freeze({ open: false, bottom: 0 });
+/** Opening the work panel waits this long at most for the keyboard to finish leaving. */
+const KEYBOARD_SETTLE_FALLBACK_MS = 400;
+/** A dock seen this recently when the connection drops stays to say so. */
+const DOCK_OFFLINE_HOLD_MS = 3_000;
 const EMPTY_TIMELINE_ROWS: ReadonlyArray<ThreadTimelineRow> = Object.freeze([]);
 /** The last committed list geometry, owned by one list instance. */
 type CommittedTimelineLayout = Readonly<{
@@ -347,6 +363,10 @@ export type ThreadViewProps = Readonly<{
   input: string;
   selectedSkill?: React.ReactNode;
   pendingQuestions?: React.ReactNode;
+  /** An Agent question waits above the composer; it takes the work dock's place. */
+  questionPending?: boolean;
+  /** The keyboard is up: the work dock shrinks to one line. */
+  keyboardVisible?: boolean;
   readOnlyFooter?: React.ReactNode;
   isRunning: boolean;
   /** A local send is leaving the device; the composer already shows Stop (A+ motion: send turns into stop). */
@@ -486,6 +506,8 @@ export function ThreadView({
   input,
   selectedSkill,
   pendingQuestions,
+  questionPending = false,
+  keyboardVisible = false,
   readOnlyFooter,
   isRunning,
   sendInFlight = false,
@@ -571,17 +593,17 @@ export function ThreadView({
   const selectedToolMessage = selectedToolMessageId
     ? messages.find((message) => message.id === selectedToolMessageId) ?? null
     : null;
-  // The work record follows the turn of the pill that opened it, by render
-  // identity, so history replacing live call ids keeps it open.
+  // The work record follows the turn of the receipt or pill that opened it,
+  // by render identity, so history replacing live call ids keeps it open.
   const [workRecordAnchor, setWorkRecordAnchor] = useState<string | null>(null);
   useEffect(() => { setWorkRecordAnchor(null); }, [sessionKey]);
-  const workRecordSteps = useMemo(
-    () => (workRecordAnchor ? collectTurnToolSteps(messages, workRecordAnchor) : EMPTY_TOOL_STEPS),
+  const workRecord = useMemo(
+    () => (workRecordAnchor ? collectTurnWorkAround(messages, workRecordAnchor) : EMPTY_TURN_WORK),
     [messages, workRecordAnchor],
   );
   useEffect(() => {
-    if (workRecordAnchor && workRecordSteps.length === 0) setWorkRecordAnchor(null);
-  }, [workRecordAnchor, workRecordSteps.length]);
+    if (workRecordAnchor && workRecord.entries.length === 0) setWorkRecordAnchor(null);
+  }, [workRecordAnchor, workRecord.entries.length]);
   const workspace = useWorkspaceLayout();
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
   // Immersive mode: the wallpaper fills the screen and every control floats
@@ -680,10 +702,54 @@ export function ThreadView({
     const timer = setInterval(() => setCalendarDay(localDayNumber(Date.now())), 60_000);
     return () => clearInterval(timer);
   }, []);
-  // A running step already has its own live pill; a second "Thinking" spinner
-  // beside it would contradict it, so the empty reply waits for the step.
-  const toolRunning = isToolRunningInTurn(messages);
-  const showReplyPlaceholder = presentedRunning && !awaitingInput && !locked && !sessionPreview && !toolRunning
+  // The work dock (tool process design C, owner decision 2026-10-02): once a
+  // running turn has used a tool for a second, its steps live in one capsule
+  // above the composer until the turn ends, so the conversation keeps only
+  // what was said. A quick reply never raises it. An approval raises it at
+  // once; a question takes its place above the composer instead.
+  const liveWork = useMemo(() => collectLiveTurnWork(messages), [messages]);
+  const liveTurnKey = useMemo(() => {
+    const prompt = messages.find(opensTurn);
+    return prompt ? renderKeyOf(prompt) : null;
+  }, [messages]);
+  const approvalWaiting = capabilities.execApproval && Boolean(liveWork.pendingApproval);
+  // Seen on this phone: history reloads can drop a step's own start time.
+  const stepsSeenRef = useRef<{ turn: string | null; at: number } | null>(null);
+  if (!isRunning) stepsSeenRef.current = null;
+  else if (liveWork.steps.length > 0 && stepsSeenRef.current?.turn !== liveTurnKey) {
+    stepsSeenRef.current = { turn: liveTurnKey, at: Date.now() };
+  }
+  const dockRiseAt = approvalWaiting ? 0
+    : stepsSeenRef.current?.turn === liveTurnKey && stepsSeenRef.current ? stepsSeenRef.current.at + WORK_DOCK_GRACE_MS : undefined;
+  const [, setDockClock] = useState(0);
+  useEffect(() => {
+    if (dockRiseAt === undefined) return undefined;
+    const wait = dockRiseAt - Date.now();
+    if (wait <= 0) return undefined;
+    const timer = setTimeout(() => setDockClock((tick) => tick + 1), wait);
+    return () => clearTimeout(timer);
+  }, [dockRiseAt]);
+  const runDockVisible = isRunning && dockRiseAt !== undefined && Date.now() >= dockRiseAt;
+  // A dropped connection clears the run until it is back; the dock stays to say so.
+  const connectionDown = state.kind === 'offline' || state.kind === 'reconnecting';
+  const dockLastUpRef = useRef(0);
+  if (runDockVisible) dockLastUpRef.current = Date.now();
+  const [dockHeldOffline, setDockHeldOffline] = useState(false);
+  useEffect(() => {
+    if (!connectionDown) setDockHeldOffline(false);
+    else if (Date.now() - dockLastUpRef.current < DOCK_OFFLINE_HOLD_MS) setDockHeldOffline(true);
+  }, [connectionDown]);
+  const dockOffline = dockHeldOffline && connectionDown;
+  const dockVisible = !locked && !sessionPreview && !questionPending && (runDockVisible || dockOffline);
+  const dockShown = dockVisible && !showSlashSuggestions && !composerExpanded;
+  const dockPhase = resolveWorkDockPhase({
+    work: approvalWaiting ? liveWork : { ...liveWork, pendingApproval: undefined },
+    messages,
+    offline: dockOffline,
+  });
+  // Until the dock rises the reply's own live pill speaks for the turn; once
+  // it is up, a second "Thinking" in the conversation would contradict it.
+  const showReplyPlaceholder = presentedRunning && !awaitingInput && !locked && !sessionPreview && !dockVisible
     && !messages.some((message) => message.id === REPLY_PLACEHOLDER_ID
       || (message.role === 'assistant' && message.streaming === true));
   // Carries the controller's identity for this run's reply, so the first
@@ -691,10 +757,10 @@ export function ThreadView({
   const replyPlaceholder = useMemo(() => (pendingReplyRenderKey
     ? { ...REPLY_PLACEHOLDER, renderKey: pendingReplyRenderKey } : REPLY_PLACEHOLDER), [pendingReplyRenderKey]);
   const timelineMessages = useMemo(
-    () => awaitingInput || toolRunning
+    () => awaitingInput || dockVisible
       ? replyEntrance.messages.filter(message => !(message.role === 'assistant' && message.streaming && !message.text.trim()))
       : showReplyPlaceholder ? [replyPlaceholder, ...replyEntrance.messages] : replyEntrance.messages,
-    [awaitingInput, replyEntrance.messages, replyPlaceholder, showReplyPlaceholder, toolRunning],
+    [awaitingInput, dockVisible, replyEntrance.messages, replyPlaceholder, showReplyPlaceholder],
   );
   // Whether the previous render showed this session as an authoritative empty
   // conversation: its first message then enters like any later one.
@@ -738,12 +804,15 @@ export function ThreadView({
     () => ({ label: liveActivityLabel, startedAt: runStartedAt }),
     [liveActivityLabel, runStartedAt],
   );
-  const rhythmRows = useMemo(() => withThreadRhythm(groupThreadRuns(groupThreadTools(buildThreadTimelineItems({
-    messages: timelineMessages,
+  // Tool steps leave the conversation: a finished turn leaves a receipt on its
+  // last reply (or one pill), the running turn's steps live in the work dock.
+  const foldedTurns = useMemo(() => foldTurnSteps(timelineMessages, isRunning), [isRunning, timelineMessages]);
+  const rhythmRows = useMemo(() => withThreadRhythm(groupThreadRuns(placeTurnReceipts(buildThreadTimelineItems({
+    messages: foldedTurns.messages,
     runs: runCards,
     locale,
     yesterdayLabel: t('Yesterday', { lng: locale }),
-  })))).reverse(), [locale, timelineMessages, runCards, calendarDay, t]);
+  }), foldedTurns))).reverse(), [locale, foldedTurns, runCards, calendarDay, t]);
   // Unchanged rows keep their objects: a streamed chunk re-renders the reply
   // that grew, not every visible cell.
   const stableRowsRef = useRef<ReadonlyArray<ThreadTimelineRow>>(EMPTY_TIMELINE_ROWS);
@@ -1100,6 +1169,7 @@ export function ThreadView({
           showIdentity={false}
           joinsOlder={row?.joinsOlder ?? false}
           joinsNewer={row?.joinsNewer ?? false}
+          receipt={row?.type === 'message' ? row.receipt : undefined}
           selectable
         />
       </View>
@@ -1111,6 +1181,70 @@ export function ThreadView({
     const oldest = calls[calls.length - 1];
     if (oldest) setWorkRecordAnchor(oldest.renderKey ?? oldest.id);
   }, []);
+  const openReceipt = useCallback((receipt: TurnReceipt) => {
+    const oldest = receipt.steps[0];
+    if (oldest) setWorkRecordAnchor(renderKeyOf(oldest));
+  }, []);
+  // The work panel grows out of the dock: it opens at the dock's measured
+  // bottom edge, after the keyboard has gone.
+  const screenRef = useRef<View>(null);
+  const dockSlotRef = useRef<View>(null);
+  const keyboardVisibleRef = useRef(keyboardVisible);
+  keyboardVisibleRef.current = keyboardVisible;
+  const [workPanel, setWorkPanel] = useState<{ open: boolean; bottom: number }>(CLOSED_WORK_PANEL);
+  const closeWorkPanel = useCallback(() => setWorkPanel(CLOSED_WORK_PANEL), []);
+  const openWorkPanel = useCallback(() => {
+    const measure = () => {
+      const screen = screenRef.current;
+      const slot = dockSlotRef.current;
+      if (typeof screen?.measureInWindow !== 'function' || typeof slot?.measureInWindow !== 'function') {
+        setWorkPanel({ open: true, bottom: compactComposerHeight.current + Space.sm });
+        return;
+      }
+      screen!.measureInWindow((_screenX, screenY, _screenWidth, screenHeight) => {
+        slot!.measureInWindow((_slotX, slotY, _slotWidth, slotHeight) => {
+          setWorkPanel({ open: true, bottom: Math.max(0, screenY + screenHeight - (slotY + slotHeight)) });
+        });
+      });
+    };
+    if (!keyboardVisibleRef.current) {
+      measure();
+      return;
+    }
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      subscription.remove();
+      clearTimeout(fallback);
+      measure();
+    };
+    const subscription = Keyboard.addListener('keyboardDidHide', finish);
+    const fallback = setTimeout(finish, KEYBOARD_SETTLE_FALLBACK_MS);
+    Keyboard.dismiss();
+  }, []);
+  useEffect(() => { setWorkPanel(CLOSED_WORK_PANEL); }, [sessionKey]);
+  // The panel belongs to a running turn; a request for the user takes the stage.
+  useEffect(() => {
+    if (!dockShown || dockPhase.kind === 'approval' || dockPhase.kind === 'offline') setWorkPanel(CLOSED_WORK_PANEL);
+  }, [dockPhase.kind, dockShown]);
+  const liveWorkRef = useRef(liveWork);
+  liveWorkRef.current = liveWork;
+  // "Review" takes the user to the approval card, wherever they were reading.
+  const attendApproval = useCallback(() => {
+    const approval = liveWorkRef.current.pendingApproval;
+    if (!approval) return;
+    const rows = timelineItemsRef.current;
+    const index = rows.findIndex((row) => row.key === `message:${renderKeyOf(approval)}`);
+    if (index < 0) return;
+    if (index >= rows.length - 2) {
+      scrollToBottom();
+      return;
+    }
+    cancelBottomFollow();
+    followNewMessagesRef.current = false;
+    void timelineRef.current?.scrollToIndex({ index, animated: !reduceMotion, viewPosition: 0.9 });
+  }, [cancelBottomFollow, reduceMotion, scrollToBottom]);
   // The row renderer reads only stable values, so a streamed chunk that changes
   // one row does not hand every visible cell a new renderer.
   const hasMessageActions = Boolean(messageActions);
@@ -1122,7 +1256,7 @@ export function ThreadView({
     ({ item, target }: ListRenderItemInfo<ThreadTimelineRow>) => {
       if (item.type === 'tools') {
         return <View style={[stylesStatic.timelineItem, rowGapStyles[item.gapAbove]]}>
-          <ToolActivityPill testID={item.key} messages={item.messages} onPress={() => openWorkRecord(item.messages)} />
+          <ToolActivityPill testID={item.key} messages={item.messages} failed={item.failed} onPress={() => openWorkRecord(item.messages)} />
         </View>;
       }
       if (item.type === 'date') {
@@ -1193,6 +1327,8 @@ export function ThreadView({
           queuedTapOpensActions={queuedTapOpensActions}
           favorited={favoriteMessageIds?.has(item.message.id) ?? false}
           onResolveApproval={onResolveApproval}
+          receipt={item.receipt}
+          onOpenReceipt={openReceipt}
         />
       );
     },
@@ -1205,6 +1341,7 @@ export function ThreadView({
       handleMessageLongPress,
       hasMessageActions,
       messageStatuses,
+      openReceipt,
       openWorkRecord,
       queuedTapOpensActions,
       onOpenAttachments,
@@ -1282,7 +1419,7 @@ export function ThreadView({
     <ChatPresentationProvider value={presentation}>
     <ArtifactProvider operations={artifactOperations} sessionKey={sessionKey}>
     <ThreadLiveActivityContext.Provider value={liveActivity}>
-    <View testID={testID} style={[styles.screen, { backgroundColor: theme.colors.canvas }]}
+    <View ref={screenRef} collapsable={false} testID={testID} style={[styles.screen, { backgroundColor: theme.colors.canvas }]}
       onLayout={({ nativeEvent }) => {
         const { width, height } = nativeEvent.layout;
         setScreenSize((previous) => (previous?.width === width && previous.height === height ? previous : { width, height }));
@@ -1530,6 +1667,20 @@ export function ThreadView({
             </View>
           ) : null}
           {pendingQuestions}
+          {dockShown ? (
+            <View ref={dockSlotRef} collapsable={false} testID={`${testID}-work-dock-slot`}>
+              <WorkDock
+                testID={`${testID}-work-dock`}
+                phase={dockPhase}
+                work={liveWork}
+                startedAt={runStartedAt}
+                compact={keyboardVisible}
+                appearance={wallpaperActive ? 'glass' : 'surface'}
+                onExpand={openWorkPanel}
+                onAttend={attendApproval}
+              />
+            </View>
+          ) : null}
           <Composer
             ref={composerRef}
             attachments={pendingAttachments.length > 0
@@ -1618,8 +1769,8 @@ export function ThreadView({
         {selectedRun ? <RunResult presentation="sheet" summary={selectedRun.summary} statusLabel={copy.formatRunDetail(selectedRun.statusLabel, selectedRun.timeLabel)} /> : null}
       </Sheet>
       <WorkRecordSheet
-        visible={workRecordSteps.length > 0}
-        steps={workRecordSteps}
+        visible={workRecord.entries.length > 0}
+        work={workRecord}
         onClose={() => setWorkRecordAnchor(null)}
         onOpenStep={(message) => setSelectedToolMessageId(message.id)}
       />
@@ -1664,6 +1815,15 @@ export function ThreadView({
         />
       ) : null}
     </KeyboardAvoidingView>
+    <WorkPanel
+      visible={workPanel.open && dockShown}
+      phase={dockPhase}
+      work={liveWork}
+      startedAt={runStartedAt}
+      bottomOffset={workPanel.bottom}
+      onClose={closeWorkPanel}
+      onOpenStep={(message) => setSelectedToolMessageId(message.id)}
+    />
     </View>
     </ThreadLiveActivityContext.Provider>
     </ArtifactProvider>
@@ -1808,6 +1968,9 @@ function ThreadRunTimelineItem({
 
 type ThreadMessageTimelineItemProps = Readonly<{
   message: UiMessage;
+  /** The receipt of the turn this reply finished (tool process design C). */
+  receipt?: TurnReceipt;
+  onOpenReceipt?: (receipt: TurnReceipt) => void;
   /** Rhythm toward the older row above; owned by the timeline model. */
   gapAbove: ThreadRowGap;
   /** Bubble grouping with the same speaker's neighbours; owned by the timeline model. */
@@ -1861,6 +2024,8 @@ const ThreadMessageTimelineItem = React.memo(function ThreadMessageTimelineItem(
   favorited,
   queuedTapOpensActions = false,
   onResolveApproval,
+  receipt,
+  onOpenReceipt,
 }: ThreadMessageTimelineItemProps): React.JSX.Element | null {
   const { t } = useTranslation('chat');
   const rowRef = useRef<View>(null);
@@ -1941,6 +2106,8 @@ const ThreadMessageTimelineItem = React.memo(function ThreadMessageTimelineItem(
           status={status}
           onOpenAttachments={onOpenAttachments}
           onLongPress={actionable ? handleLongPress : undefined}
+          receipt={receipt}
+          onOpenReceipt={onOpenReceipt}
         />
       </Pressable>
     );
@@ -1981,6 +2148,8 @@ function ThreadMessageRowContent({
   selectable = false,
   onOpenAttachments,
   onLongPress,
+  receipt,
+  onOpenReceipt,
 }: Readonly<{
   message: UiMessage;
   copy: ThreadCopy;
@@ -1999,6 +2168,9 @@ function ThreadMessageRowContent({
   onOpenAttachments?: (message: UiMessage, index?: number) => void;
   /** Row long-press forwarded to the album so photos open the same actions. */
   onLongPress?: () => void;
+  /** The finished turn's receipt under the Agent's last reply. */
+  receipt?: TurnReceipt;
+  onOpenReceipt?: (receipt: TurnReceipt) => void;
 }>): React.JSX.Element | null {
   const { colors } = useConversationTheme();
   const surfaces = useChatSurfaces();
@@ -2023,7 +2195,7 @@ function ThreadMessageRowContent({
       {hasBubble ? (
         message.role === 'assistant' ? (
           <AssistantBubble message={message} showIdentity={showIdentity} selectable={selectable}
-            joinsOlder={joinsOlder} joinsNewer={bubbleJoinsNewer} />
+            joinsOlder={joinsOlder} joinsNewer={bubbleJoinsNewer} receipt={receipt} onOpenReceipt={onOpenReceipt} />
         ) : (
           <UserBubble message={message} status={status} copy={copy} selectable={selectable}
             joinsOlder={joinsOlder} joinsNewer={bubbleJoinsNewer} />
@@ -2387,12 +2559,16 @@ function AssistantBubble({
   selectable = false,
   joinsOlder = false,
   joinsNewer = false,
+  receipt,
+  onOpenReceipt,
 }: {
   message: UiMessage;
   showIdentity?: boolean;
   selectable?: boolean;
   joinsOlder?: boolean;
   joinsNewer?: boolean;
+  receipt?: TurnReceipt;
+  onOpenReceipt?: (receipt: TurnReceipt) => void;
 }): React.JSX.Element {
   const theme = useConversationTheme();
   const { fontSize, identity } = useChatPresentation();
@@ -2448,7 +2624,12 @@ function AssistantBubble({
           selectionMenuConfig={selectionMenu}
           streamingAnimation={streamingAnimation}
         />
-        {time ? (
+        {receipt ? (
+          <View style={stylesStatic.receiptRow}>
+            <TurnReceiptChip testID={`thread-receipt-${message.id}`} receipt={receipt} onPress={onOpenReceipt} />
+            {time ? <MessageMeta testID={`thread-meta-${message.id}`} time={time} style={stylesStatic.receiptTime} /> : null}
+          </View>
+        ) : time ? (
           <View>
             <MessageMeta testID={`thread-meta-${message.id}`} time={time} style={stylesStatic.metaRowAssistant} />
           </View>
@@ -2593,6 +2774,16 @@ const stylesStatic = StyleSheet.create({
   metaRowAssistant: {
     alignSelf: 'flex-end',
     marginTop: Space.xs,
+  },
+  // A finished turn's receipt shares the reply's last line with its time.
+  receiptRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.sm,
+    marginTop: Space.xs + 2,
+  },
+  receiptTime: {
+    marginLeft: 'auto',
   },
   metaRowUser: {
     alignSelf: 'flex-end',

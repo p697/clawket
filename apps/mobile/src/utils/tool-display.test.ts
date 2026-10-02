@@ -108,8 +108,10 @@ describe('formatToolOneLiner', () => {
     expect(formatToolOneLiner('exec', null)).toBe('exec');
   });
 
-  it('returns name only when args is not an object', () => {
-    expect(formatToolOneLiner('exec', 'string')).toBe('exec');
+  it('reads a plain-text input as the target and ignores other shapes', () => {
+    // Hermes previews a call's input as plain text rather than JSON.
+    expect(formatToolOneLiner('terminal', 'ls -la')).toBe('terminal ls -la');
+    expect(formatToolOneLiner('exec', '{"truncated": ')).toBe('exec');
     expect(formatToolOneLiner('exec', 42)).toBe('exec');
   });
 

@@ -984,7 +984,9 @@ export const StorageService = {
 
   async getExecApprovalEnabled(): Promise<boolean> {
     const raw = await SecureStore.getItemAsync(KEYS.execApproval, SECURE_OPTIONS);
-    return raw === '1'; // default OFF
+    // Default ON (owner request 2026-10-02): an approval the Agent asks for
+    // during a chat appears in that chat. Only an explicit legacy opt-out hides it.
+    return raw !== '0';
   },
 
   async setChatFontSize(size: number): Promise<void> {

@@ -1,48 +1,57 @@
-import { groupThreadTools, type ThreadTimelineItem } from './model';
+import type { UiMessage } from '../../types/chat';
+import { foldTurnSteps } from '../../components/chat/turn-work';
+import { buildThreadTimelineItems, placeTurnReceipts, type ThreadTimelineItem } from './model';
 
-const tool = (id: string, status: 'running' | 'success' | 'error' = 'success'): ThreadTimelineItem => ({
-  type: 'message', key: `message:${id}`, message: { id, role: 'tool', text: '', toolStatus: status },
-});
-const reply: ThreadTimelineItem = { type: 'message', key: 'reply', message: { id: 'reply', role: 'assistant', text: 'Hello' } };
+const prompt = (id: string): UiMessage => ({ id, role: 'user', text: id });
+const reply = (id: string): UiMessage => ({ id, role: 'assistant', text: `${id} text` });
+const tool = (id: string, status: UiMessage['toolStatus'] = 'success', patch: Partial<UiMessage> = {}): UiMessage => (
+  { id, role: 'tool', text: '', toolName: 'exec', toolStatus: status, ...patch }
+);
+/** The controller's newest-first array from a conversation written oldest first. */
+const newestFirst = (...messages: UiMessage[]) => [...messages].reverse();
+const timeline = (messages: UiMessage[], live = false): ThreadTimelineItem[] => {
+  const folded = foldTurnSteps(messages, live);
+  return placeTurnReceipts(buildThreadTimelineItems({ messages: folded.messages, runs: [] }), folded);
+};
 const keys = (items: ThreadTimelineItem[]) => items.map((item) => item.key);
 
-it('folds adjacent tools into one pill and gives a failed call its own', () => {
-  const grouped = groupThreadTools([reply, tool('c'), tool('b'), tool('a'), tool('failed', 'error')]);
-  expect(keys(grouped)).toEqual(['reply', 'tools:a', 'tools:failed']);
-  const pill = grouped[1];
-  expect(pill?.type === 'tools' ? pill.messages.map((message) => message.id) : null).toEqual(['c', 'b', 'a']);
+it('takes a finished turn out of the conversation and leaves its receipt on the last reply', () => {
+  const items = timeline(newestFirst(prompt('ask'), tool('a'), reply('said'), tool('b', 'error'), tool('c'), reply('answer')));
+  expect(keys(items)).toEqual(['message:answer', 'message:said', 'message:ask']);
+  const answer = items[0];
+  expect(answer?.type === 'message' ? answer.receipt?.steps.map((step) => step.id) : null).toEqual(['a', 'b', 'c']);
+  expect(answer?.type === 'message' ? answer.receipt?.failed : null).toBe(false);
 });
 
-it('turns a single call into a pill as well', () => {
-  expect(keys(groupThreadTools([reply, tool('only', 'running')]))).toEqual(['reply', 'tools:only']);
+it('keeps one pill for a turn that ended on a step, keyed by its oldest call and red only on failure', () => {
+  const quiet = timeline(newestFirst(prompt('ask'), tool('a'), tool('b')));
+  expect(keys(quiet)).toEqual(['tools:a', 'message:ask']);
+  const pill = quiet[0];
+  expect(pill?.type === 'tools' ? [pill.messages.map((message) => message.id), pill.failed] : null).toEqual([['b', 'a'], false]);
+  const failed = timeline(newestFirst(prompt('ask'), reply('trying'), tool('a', 'error')));
+  expect(failed[0]?.type === 'tools' ? failed[0].failed : null).toBe(true);
+  expect(keys(failed)).toEqual(['tools:a', 'message:trying', 'message:ask']);
 });
 
-it('keeps the oldest call as a stable pill identity while streaming adds calls', () => {
-  expect(groupThreadTools([tool('b'), tool('a')])[0]?.key).toBe('tools:a');
-  expect(groupThreadTools([tool('c', 'running'), tool('b'), tool('a')])[0]?.key).toBe('tools:a');
-});
-
-it('never combines activity across a reply, a failure or a call with media', () => {
-  expect(keys(groupThreadTools([tool('b'), reply, tool('a')]))).toEqual(['tools:b', 'reply', 'tools:a']);
-  expect(keys(groupThreadTools([tool('c'), tool('b', 'error'), tool('a')]))).toEqual(['tools:c', 'tools:b', 'tools:a']);
-  const media: ThreadTimelineItem = { type: 'message', key: 'message:m', message: { id: 'm', role: 'tool', text: '', toolStatus: 'success', imageUris: ['file:///shot.png'] } };
-  expect(keys(groupThreadTools([tool('c'), media, tool('a')]))).toEqual(['tools:c', 'tools:m', 'tools:a']);
+it('shows nothing for the running turn steps: the work dock does', () => {
+  const items = timeline(newestFirst(prompt('ask'), tool('a'), reply('said'), tool('b', 'running')), true);
+  expect(keys(items)).toEqual(['message:said', 'message:ask']);
+  expect(items.some((item) => item.type === 'message' && item.receipt)).toBe(false);
 });
 
 it('leaves approval prompts as messages', () => {
-  const approval: ThreadTimelineItem = {
-    type: 'message', key: 'message:approval',
-    message: { id: 'approval', role: 'tool', text: '', approval: { id: 'x', kind: 'exec', command: 'ls', status: 'pending', expiresAtMs: null } as never },
+  const approval: UiMessage = {
+    id: 'approval', role: 'system', text: '',
+    approval: { id: 'x', kind: 'exec', command: 'ls', status: 'allowed', expiresAtMs: null },
   };
-  expect(keys(groupThreadTools([tool('b'), approval, tool('a')]))).toEqual(['tools:b', 'message:approval', 'tools:a']);
+  expect(keys(timeline(newestFirst(prompt('ask'), tool('a'), approval, tool('b'), reply('done'))))).toEqual([
+    'message:done', 'message:approval', 'message:ask',
+  ]);
 });
 
 it('keeps a pill when history replaces a live call id', () => {
-  const rendered = (id: string, renderKey: string): ThreadTimelineItem => ({
-    type: 'message', key: `message:${renderKey}`, message: { id, renderKey, role: 'tool', text: '', toolStatus: 'success' },
-  });
-  const live = [rendered('toolcall_b', 'toolcall_b'), rendered('toolcall_a', 'toolcall_a')];
-  const settled = [rendered('toolresult_b', 'toolcall_b'), rendered('toolresult_a', 'toolcall_a')];
-  expect(groupThreadTools(live)[0]?.key).toBe('tools:toolcall_a');
-  expect(groupThreadTools(settled)[0]?.key).toBe('tools:toolcall_a');
+  const live = timeline(newestFirst(prompt('ask'), tool('toolcall_a', 'success', { renderKey: 'toolcall_a' })));
+  const settled = timeline(newestFirst(prompt('ask'), tool('toolresult_a', 'success', { renderKey: 'toolcall_a' })));
+  expect(live[0]?.key).toBe('tools:toolcall_a');
+  expect(settled[0]?.key).toBe('tools:toolcall_a');
 });

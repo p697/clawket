@@ -138,6 +138,24 @@ export function formatToolActivitySummary(summary: ToolActivitySummary, t: Trans
   return summary.durationMs !== undefined ? `${phrase} · ${formatActivityDuration(summary.durationMs, t)}` : phrase;
 }
 
+/**
+ * A finished turn's receipt (tool process design C, owner decision
+ * 2026-10-02): what changed first — edited files lead whenever the turn
+ * edited any — then the step count when other kinds of steps ran too, then
+ * the time: "Edited a file · 6 steps · 2 min 40 s".
+ */
+export function formatTurnReceipt(steps: ReadonlyArray<UiMessage>, t: Translate): string {
+  const summary = summarizeToolActivity(steps);
+  const lead = summary.kinds.find((entry) => entry.kind === 'edit') ?? summary.kinds[0]
+    ?? { kind: 'other' as const, count: summary.steps };
+  const parts = [kindPhrase(lead.kind, lead.count, t)];
+  if (summary.steps > lead.count) {
+    parts.push(summary.steps === 1 ? t('1 step', { ns: 'chat' }) : t('{{count}} steps', { ns: 'chat', count: summary.steps }));
+  }
+  if (summary.durationMs !== undefined) parts.push(formatActivityDuration(summary.durationMs, t));
+  return parts.join(' · ');
+}
+
 /** Joined phrases continue a sentence; scripts without case are unchanged. */
 function lowerFirst(value: string): string {
   const first = value.charAt(0);
@@ -192,8 +210,9 @@ function renderKeyOf(message: UiMessage): string {
   return message.renderKey ?? message.id;
 }
 
+/** A prompt the Agent received; a queued or sending draft has not started a turn yet. */
 function isOwnPrompt(message: UiMessage): boolean {
-  return message.role === 'user' && !isIncomingParticipant(message);
+  return message.role === 'user' && !isIncomingParticipant(message) && message.delivery === undefined;
 }
 
 /**

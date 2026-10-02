@@ -230,6 +230,8 @@ function ThreadScreenContent({
   const [recoveringDraft, setRecoveringDraft] = useState(false);
   const [addSheetVisible, setAddSheetVisible] = useState(false);
   const [commandsSheetVisible, setCommandsSheetVisible] = useState(false);
+  // A pending Agent question takes the work dock's place above the composer.
+  const [questionPending, setQuestionPending] = useState(false);
   const [selectedSkill, setSelectedSkill] = useState<{ scope: string; name: string; prefix: string } | null>(null);
   const [runInputId, setRunInputId] = useState<string | null>(null);
   const [sessionFilesVisible, setSessionFilesVisible] = useState(false);
@@ -1030,7 +1032,9 @@ function ThreadScreenContent({
         runCards={sessionPreview ? EMPTY_RUN_CARDS : runCards}
         locale={locale}
         input={displayInput}
-        pendingQuestions={adapter && capabilities.agentQuestions && !nativeReadOnly ? <AgentQuestions key={`${connectionId}:${sessionKey}`} adapter={adapter} sessionKey={sessionKey} /> : undefined}
+        pendingQuestions={adapter && capabilities.agentQuestions && !nativeReadOnly ? <AgentQuestions key={`${connectionId}:${sessionKey}`} adapter={adapter} sessionKey={sessionKey} onPendingChange={setQuestionPending} /> : undefined}
+        questionPending={Boolean(adapter && capabilities.agentQuestions && !nativeReadOnly) && questionPending}
+        keyboardVisible={controller.keyboardVisible}
         selectedSkill={activeSkill ? <SelectedSkill name={activeSkill.name} onRemove={() => {
           controller.setInput(displayInput); setSelectedSkill(null);
         }} /> : undefined}

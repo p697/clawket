@@ -3,13 +3,11 @@ import { Text } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Brain, CalendarClock, CircleAlert, FilePenLine, FileSearch, Globe, Layers, MessageSquare, Search, Terminal, Wrench, type LucideIcon } from 'lucide-react-native';
 import type { UiMessage } from '../../types/chat';
-import { formatToolActivity, formatToolDisplayName, resolveToolTitle, toolCategory } from '../../utils/tool-display';
+import { formatToolDisplayName, resolveToolTitle, toolCategory } from '../../utils/tool-display';
 import { ServicePill, servicePillCodeStyle } from './ServicePill';
 import {
   describeFailedStep,
-  describeLiveStep,
   effectiveTool,
-  formatActivityDuration,
   formatToolActivitySummary,
   summarizeToolActivity,
   type TemplateParts,
@@ -53,54 +51,35 @@ function InlineParts({ parts, code }: { parts: TemplateParts; code: boolean }): 
 }
 
 /**
- * Tool activity as one of three centred pills (A+ chat design, owner
- * decision 2026-09-30): a running step names itself with a spinner and its
- * elapsed time, a finished run of calls reads as one summary ("Ran 6
- * commands, read a file · 38 s"), and a failed call is a red pill of its
- * own. Every pill opens the turn's work record.
+ * A finished turn that said nothing after its last step keeps one centred
+ * pill (A+ chat design 2026-09-30; tool process design C 2026-10-02): the
+ * turn's summary ("Ran 6 commands, read a file · 38 s"), or — only when that
+ * last step failed and the turn ended there — a red pill naming it. A
+ * failure the Agent moved past never turns it red. It opens the turn's
+ * work record. Running steps live in the work dock, not here.
  */
-export function ToolActivityPill({ messages, onPress, testID }: Readonly<{
-  /** The calls this pill stands for, newest first. */
+export function ToolActivityPill({ messages, failed = false, onPress, testID }: Readonly<{
+  /** The turn's calls, newest first. */
   messages: ReadonlyArray<UiMessage>;
+  /** The turn ended on its failed newest step. */
+  failed?: boolean;
   onPress: () => void;
   testID: string;
 }>): React.JSX.Element {
   const { t } = useTranslation('chat');
-  const running = messages.find((message) => message.toolStatus === 'running');
-  const elapsed = useElapsed(running ? running.toolStartedAt ?? running.timestampMs : undefined);
-  if (running) {
-    const tool = effectiveTool(running);
-    const live = describeLiveStep(running, t);
-    // A call with no known target reads as what the Agent said it is for.
-    const label = live ? `${live.before}${live.value}${live.after}`
-      : resolveToolTitle(tool.args) ?? formatToolActivity(tool.name || t('Tool'), t);
-    const time = elapsed !== undefined && elapsed >= ELAPSED_TICK_MS ? formatActivityDuration(elapsed, t) : undefined;
-    return (
-      <ServicePill
-        testID={testID}
-        busy
-        stepKey={label}
-        trailing={time}
-        onPress={onPress}
-        accessibilityLabel={[label, time].filter(Boolean).join(', ')}
-      >
-        {live ? <InlineParts parts={live} code /> : label}
-      </ServicePill>
-    );
-  }
-  const only = messages.length === 1 ? messages[0]! : null;
-  if (only?.toolStatus === 'error') {
-    const tool = effectiveTool(only);
-    const failed = describeFailedStep(only, resolveToolTitle(tool.args) ?? formatToolDisplayName(tool.name || t('Tool'), t), t);
+  const last = messages[0];
+  if (failed && last) {
+    const tool = effectiveTool(last);
+    const failure = describeFailedStep(last, resolveToolTitle(tool.args) ?? formatToolDisplayName(tool.name || t('Tool'), t), t);
     return (
       <ServicePill
         testID={testID}
         tone="bad"
         icon={CircleAlert}
         onPress={onPress}
-        accessibilityLabel={`${failed.before}${failed.value}${failed.after}`}
+        accessibilityLabel={`${failure.before}${failure.value}${failure.after}`}
       >
-        <InlineParts parts={failed} code={failed.code} />
+        <InlineParts parts={failure} code={failure.code} />
       </ServicePill>
     );
   }

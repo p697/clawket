@@ -20,6 +20,9 @@ jest.mock('../../components/ui', () => ({ SettingsGroup: ({ children }: any) => 
 jest.mock('@gorhom/bottom-sheet', () => ({ BottomSheetScrollView: ({ children }: any) => <>{children}</> }));
 jest.mock('../../theme', () => ({ useAppTheme: () => ({ theme: { colors: { ink: 'black' } } }) }));
 jest.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+// The pending question rides in the work dock (design C); its own rendering is covered by WorkDock.test.tsx.
+jest.mock('../../components/chat/WorkDock', () => ({ WorkDock: ({ onAttend, detail, testID }: any) => { const { Text, View } = require('react-native'); return <View><Text testID={testID} onPress={onAttend}>Respond</Text>{detail ? <Text>{detail}</Text> : null}</View>; } }));
+jest.mock('../../components/chat/ChatPresentation', () => ({ useChatSurfaces: () => ({ wallpaper: 'plain' }) }));
 
 beforeEach(() => {
   const values = new Map<string, string>();

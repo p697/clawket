@@ -10,6 +10,7 @@ import type {
 } from '@clawket/agent-protocol';
 import type { ConnectionState as LegacyConnectionState } from '../../types';
 import type { UiMessage } from '../../types/chat';
+import { renderKeyOf, type FoldedTurns, type TurnReceipt } from '../../components/chat/turn-work';
 import { toolCategory, unwrapToolCall } from '../../utils/tool-display';
 import { resolveCronRunSessionKey } from '../../connection/adapters/cron-run-content';
 import { isSystemOwnedCronJob } from '../AgentSettings/cron-model';
@@ -101,12 +102,22 @@ export function areThreadRunSeedsEqual(
 }
 
 export type ThreadTimelineItem =
-  | Readonly<{ type: 'tools'; key: string; messages: ReadonlyArray<UiMessage>; timestampMs?: number }>
+  | Readonly<{
+      /** A finished turn that said nothing after its last step: one pill, red when that step failed. */
+      type: 'tools';
+      key: string;
+      /** The turn's calls, newest first. */
+      messages: ReadonlyArray<UiMessage>;
+      failed?: boolean;
+      timestampMs?: number;
+    }>
   | Readonly<{
       type: 'message';
       key: string;
       timestampMs?: number;
       message: UiMessage;
+      /** The receipt of the turn this reply finished (tool process design C). */
+      receipt?: TurnReceipt;
     }>
   | Readonly<{
       type: 'run';
@@ -511,8 +522,9 @@ export function resolveThreadHeaderSubtitle({
 
 type Translate = (key: string, options?: Record<string, unknown>) => string;
 
+/** A prompt the Agent received; a queued or sending draft has not started a turn yet. */
 function isOwnPrompt(message: UiMessage): boolean {
-  return message.role === 'user' && !isIncomingParticipant(message);
+  return message.role === 'user' && !isIncomingParticipant(message) && message.delivery === undefined;
 }
 
 /** A tool call of the current turn is still running. `messages` is newest-first. */
@@ -627,43 +639,42 @@ export function resolveThreadErrorDetail(error: unknown): string | undefined {
   return typeof message === 'string' ? message.trim() || undefined : undefined;
 }
 
-/** A tool row that joins its neighbours in one activity pill. */
-function isGroupableTool(item: ThreadTimelineItem): item is Extract<ThreadTimelineItem, { type: 'message' }> {
-  return item.type === 'message' && item.message.role === 'tool' && !item.message.approval
-    && !item.message.toolPresentation?.length && !item.message.imageUris?.length && item.message.toolStatus !== 'error';
-}
-
 /**
- * Folds tool activity into pills (A+ chat design, owner decision 2026-09-30):
- * every run of adjacent calls becomes one `tools` row, a failed call or one
- * carrying media stands alone as its own pill, and approvals stay messages.
- * Input is newest-first. The oldest call anchors a group while new calls arrive.
+ * Places what `foldTurnSteps` decided (tool process design C, owner decision
+ * 2026-10-02): a finished turn's last reply carries its receipt, and a turn
+ * that ended on a step keeps one pill where that step was, keyed by the
+ * turn's oldest call so it stays put while history replaces live call ids.
+ * Any other tool call leaves the conversation: the work dock shows the
+ * running turn. Approvals stay messages. Input is newest-first.
  */
-export function groupThreadTools(items: ReadonlyArray<ThreadTimelineItem>): ThreadTimelineItem[] {
+export function placeTurnReceipts(
+  items: ReadonlyArray<ThreadTimelineItem>,
+  folded: Pick<FoldedTurns, 'receipts' | 'pills'>,
+): ThreadTimelineItem[] {
   const result: ThreadTimelineItem[] = [];
-  for (let index = 0; index < items.length;) {
-    const item = items[index]!;
-    if (item.type !== 'message' || item.message.role !== 'tool' || item.message.approval) {
-      result.push(item); index += 1; continue;
+  for (const item of items) {
+    if (item.type !== 'message') {
+      result.push(item);
+      continue;
     }
-    const calls: Extract<ThreadTimelineItem, { type: 'message' }>[] = [item];
-    index += 1;
-    if (isGroupableTool(item)) {
-      while (index < items.length) {
-        const next = items[index]!;
-        if (!isGroupableTool(next)) break;
-        calls.push(next); index += 1;
-      }
+    const key = renderKeyOf(item.message);
+    const receipt = folded.receipts.get(key);
+    if (receipt) {
+      result.push({ ...item, receipt });
+      continue;
     }
-    // Keyed like message rows: history can replace a live call's id
-    // (`toolcall_` → `toolresult_`, Hermes aliases) while its render identity,
-    // and with it the pill, stays put.
-    const oldest = calls[calls.length - 1]!.message;
+    if (item.message.role !== 'tool' || item.message.approval) {
+      result.push(item);
+      continue;
+    }
+    const pill = folded.pills.get(key);
+    if (!pill || pill.steps.length === 0) continue;
     result.push({
       type: 'tools',
-      key: `tools:${oldest.renderKey ?? oldest.id}`,
+      key: `tools:${renderKeyOf(pill.steps[0]!)}`,
       timestampMs: item.timestampMs,
-      messages: calls.map((call) => call.message),
+      messages: [...pill.steps].reverse(),
+      failed: pill.failed,
     });
   }
   return result;
@@ -772,15 +783,23 @@ function hasSameMessages(left: ReadonlyArray<UiMessage>, right: ReadonlyArray<Ui
     || (left.length === right.length && left.every((message, index) => hasSameFields(message, right[index]!)));
 }
 
+function hasSameReceipt(left: TurnReceipt | undefined, right: TurnReceipt | undefined): boolean {
+  if (left === right) return true;
+  if (!left || !right) return false;
+  return left.failed === right.failed && hasSameMessages(left.steps, right.steps);
+}
+
 function reuseThreadRow(previous: ThreadTimelineRow, next: ThreadTimelineRow): ThreadTimelineRow {
   if (previous === next) return previous;
   if (previous.type !== next.type || previous.gapAbove !== next.gapAbove || previous.timestampMs !== next.timestampMs
     || previous.joinsOlder !== next.joinsOlder || previous.joinsNewer !== next.joinsNewer) return next;
   switch (next.type) {
     case 'message':
-      return previous.type === 'message' && hasSameFields(previous.message, next.message) ? previous : next;
+      return previous.type === 'message' && hasSameFields(previous.message, next.message)
+        && hasSameReceipt(previous.receipt, next.receipt) ? previous : next;
     case 'tools':
-      return previous.type === 'tools' && hasSameMessages(previous.messages, next.messages) ? previous : next;
+      return previous.type === 'tools' && previous.failed === next.failed
+        && hasSameMessages(previous.messages, next.messages) ? previous : next;
     case 'run':
       return previous.type === 'run' && previous.run === next.run ? previous : next;
     case 'cron':

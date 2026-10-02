@@ -1,5 +1,5 @@
 import { loadQuestionDraft, saveQuestionDraft, removeQuestionDraft } from './question-drafts';
-import { ChevronRight, MessageCircleQuestion, Circle, CircleCheck } from 'lucide-react-native';
+import { Circle, CircleCheck } from 'lucide-react-native';
 import { StructuredQuestionForm } from './StructuredQuestionForm';
 import React, { useEffect, useRef, useState } from 'react';
 import { Keyboard, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -11,12 +11,28 @@ import { Sheet } from '../../components/ui/Sheet';
 import { Button } from '../../components/ui/Button';
 import { FormTextInput } from '../../components/ui/FormTextInput';
 import { useAppTheme } from '../../theme';
+import { useChatSurfaces } from '../../components/chat/ChatPresentation';
+import { WorkDock } from '../../components/chat/WorkDock';
+import { EMPTY_TURN_WORK } from '../../components/chat/turn-work';
 import { FontSize, LineHeight, Space, IconSize, Radius, HitSize, BorderWidth } from '../../theme/tokens';
 
-/** Pending questions survive route changes through the adapter snapshot. Dismissal never answers implicitly. */
-export function AgentQuestions({ adapter, sessionKey }: { adapter: AgentAdapter; sessionKey: string }): React.JSX.Element | null {
+const QUESTION_PHASE = { kind: 'question' } as const;
+
+/**
+ * Pending questions survive route changes through the adapter snapshot.
+ * Dismissal never answers implicitly. While one waits it holds the work
+ * dock's place above the composer in the dock's amber "your turn" look (tool
+ * process design C, owner decision 2026-10-02); tapping it opens the answer.
+ */
+export function AgentQuestions({ adapter, sessionKey, onPendingChange }: {
+  adapter: AgentAdapter;
+  sessionKey: string;
+  /** Whether a question is waiting, so the work dock can make way. */
+  onPendingChange?: (pending: boolean) => void;
+}): React.JSX.Element | null {
   const { t } = useTranslation('chat');
   const { theme } = useAppTheme();
+  const { wallpaper } = useChatSurfaces();
   const [questions, setQuestions] = useState<AgentQuestion[]>([]);
   const [visible, setVisible] = useState(false);
   const [draft, setDraft] = useState('');
@@ -30,6 +46,9 @@ export function AgentQuestions({ adapter, sessionKey }: { adapter: AgentAdapter;
   const lastQuestion = useRef<AgentQuestion | undefined>(undefined);
   if (question) lastQuestion.current = question;
   const displayedQuestion = question ?? lastQuestion.current;
+  const hasQuestion = Boolean(question) && Boolean(adapter.questions);
+  useEffect(() => { onPendingChange?.(hasQuestion); }, [hasQuestion, onPendingChange]);
+  useEffect(() => () => onPendingChange?.(false), [onPendingChange]);
   useEffect(() => {
     const epoch = ++generation.current;
     let revision = 0;
@@ -89,12 +108,12 @@ export function AgentQuestions({ adapter, sessionKey }: { adapter: AgentAdapter;
     catch { if (generation.current === epoch) setFailed(true); }
     finally { busy.current = false; if (generation.current === epoch) setSaving(false); }
   };
-  const pending = question ? <Pressable accessibilityRole="button" accessibilityLabel={t('Respond')} onPress={() => { Keyboard.dismiss(); setVisible(true); }} testID="agent-question-pending" style={styles.prompt}>
-      <MessageCircleQuestion size={IconSize.md} color={theme.colors.inkSecondary} />
-      <Text numberOfLines={1} style={[styles.promptLabel, { color: theme.colors.ink }]}>{(question.kind === 'form' ? question.fields?.map(f => f.header).filter(Boolean).join(' · ') : question.title) || t('Agent needs your input')}</Text>
-      <Text style={[styles.promptAction, { color: theme.colors.inkSecondary }]}>{t('Respond')}</Text>
-      <ChevronRight size={IconSize.sm} color={theme.colors.inkTertiary} />
-    </Pressable> : null;
+  const openAnswer = () => { Keyboard.dismiss(); setVisible(true); };
+  const asked = question ? (question.kind === 'form'
+    ? question.fields?.map(f => f.header || f.title).filter(Boolean).join(' · ')
+    : question.title) : undefined;
+  const pending = question ? <WorkDock testID="agent-question-pending" phase={QUESTION_PHASE} work={EMPTY_TURN_WORK} detail={asked}
+    appearance={wallpaper === 'plain' ? 'surface' : 'glass'} onExpand={openAnswer} onAttend={openAnswer} /> : null;
   if (displayedQuestion?.kind === 'form') return <>
     {pending}
     <StructuredQuestionForm question={displayedQuestion} visible={visible && !!question} scope={`${adapter.connection.id}:${sessionKey}`} saving={saving} failed={failed} onClose={() => { if (!busy.current) setVisible(false); }} onSubmit={submit} />
@@ -133,4 +152,4 @@ export function AgentQuestions({ adapter, sessionKey }: { adapter: AgentAdapter;
     </Sheet>
   </>;
 }
-const styles = StyleSheet.create({ choices: { gap: Space.md }, choice: { minHeight: HitSize.lg, padding: Space.lg, borderRadius: Radius.card, borderWidth: BorderWidth.strong, flexDirection: 'row', alignItems: 'center', gap: Space.md }, optionLabel: { flex: 1 }, prompt: { minHeight: HitSize.md, flexDirection: 'row', alignItems: 'center', gap: Space.sm, paddingHorizontal: Space.lg, paddingVertical: Space.sm, borderRadius: Radius.card }, promptLabel: { flex: 1, fontSize: FontSize.secondary, lineHeight: LineHeight.secondary }, promptAction: { fontSize: FontSize.secondary, lineHeight: LineHeight.secondary }, body: { paddingHorizontal: Space.lg, paddingBottom: Space.lg, gap: Space.lg }, actions: { flexDirection: 'row', flexWrap: 'wrap', gap: Space.sm, justifyContent: 'flex-end' }, text: { fontSize: FontSize.body, lineHeight: LineHeight.body } });
+const styles = StyleSheet.create({ choices: { gap: Space.md }, choice: { minHeight: HitSize.lg, padding: Space.lg, borderRadius: Radius.card, borderWidth: BorderWidth.strong, flexDirection: 'row', alignItems: 'center', gap: Space.md }, optionLabel: { flex: 1 }, body: { paddingHorizontal: Space.lg, paddingBottom: Space.lg, gap: Space.lg }, actions: { flexDirection: 'row', flexWrap: 'wrap', gap: Space.sm, justifyContent: 'flex-end' }, text: { fontSize: FontSize.body, lineHeight: LineHeight.body } });
