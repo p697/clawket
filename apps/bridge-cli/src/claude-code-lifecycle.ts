@@ -42,7 +42,7 @@ export function claudeControl(config: { port: number; token: string }, method = 
 }
 
 /** Detach only after authenticated startup. Pairing credentials go over IPC to the invoking terminal, never to persistent logs. */
-export async function startClaudeBackground(args: string[], logPath: string, progress?: Progress, executable = process.execPath, entry = process.argv[1]): Promise<void> {
+export async function startClaudeBackground(args: string[], logPath: string, progress?: Progress, executable = process.execPath, entry = process.argv[1], quiet = false): Promise<void> {
   const fd = openSync(logPath, 'a', 0o600);
   const child = spawn(executable, [entry, 'claude-code', ...args, '--foreground'], { detached: true, stdio: ['ignore', fd, fd, 'ipc'], windowsHide: true });
   closeSync(fd);
@@ -59,7 +59,7 @@ export async function startClaudeBackground(args: string[], logPath: string, pro
     child.once('exit', () => finish(new Error('Claude Code Bridge exited during startup. Inspect clawket claude-code logs.')));
     child.on('message', (message: any) => {
       if (message?.type === 'claude-code.progress' && typeof message.text === 'string') progress?.update(message.text);
-      if (message?.type === 'claude-code.display' && typeof message.text === 'string') { progress?.succeed(); console.log(message.text); }
+      if (message?.type === 'claude-code.display' && typeof message.text === 'string' && !quiet) { progress?.succeed(); console.log(message.text); }
       if (message?.type === 'claude-code.ready') finish();
     });
   });

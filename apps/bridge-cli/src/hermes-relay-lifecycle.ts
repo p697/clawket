@@ -1,4 +1,4 @@
-export async function keepHermesRelayRuntimeAlive(runtime: { stop(): Promise<void> }): Promise<void> {
+export async function keepHermesRelayRuntimeAlive(runtime: { stop(): Promise<void> }, releaseOwner?: () => Promise<void>): Promise<void> {
   // A pending Promise alone does not keep Node alive. Preserve a yielded owner
   // for diagnostics until explicit shutdown, so the watchdog cannot respawn it.
   const keepAlive = setInterval(() => {}, 60_000);
@@ -7,6 +7,7 @@ export async function keepHermesRelayRuntimeAlive(runtime: { stop(): Promise<voi
     process.off('SIGINT', shutdown);
     process.off('SIGTERM', shutdown);
     await runtime.stop();
+    await releaseOwner?.();
     process.exit(0);
   };
   process.on('SIGINT', shutdown);

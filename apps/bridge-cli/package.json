@@ -2,6 +2,7 @@
   "name": "@p697/clawket",
   "version": "3.1.10",
   "private": false,
+  "clawket": { "updateProtocol": 1 },
   "type": "module",
   "license": "AGPL-3.0-only",
   "description": "Clawket CLI for pairing and running the Relay bridge runtime",

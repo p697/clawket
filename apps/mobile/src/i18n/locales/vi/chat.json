@@ -486,5 +486,14 @@
   "Presenting a plan": "Đang trình bày kế hoạch",
   "Your answer: {{answer}}": "Câu trả lời của bạn: {{answer}}",
   "Asked you a question": "Đã hỏi bạn 1 câu",
-  "Asked you {{count}} questions": "Đã hỏi bạn {{count}} câu"
+  "Asked you {{count}} questions": "Đã hỏi bạn {{count}} câu",
+  "Bridge and updates": "Bridge và cập nhật",
+  "Bridge update available": "Có bản cập nhật Bridge",
+  "Current Bridge version": "Phiên bản Bridge hiện tại",
+  "Last confirmed Bridge version": "Phiên bản Bridge được xác nhận gần nhất",
+  "Latest Bridge: {{version}}": "Bridge mới nhất: {{version}}",
+  "Check for Bridge updates": "Kiểm tra cập nhật Bridge",
+  "Could not check Bridge updates. Try again later.": "Không thể kiểm tra cập nhật. Hãy thử lại sau.",
+  "The unified updater is available in newer Bridge releases. Use your original deployment method for this release.": "Các bản Bridge mới hơn hỗ trợ trình cập nhật hợp nhất. Với bản này, hãy dùng phương thức triển khai ban đầu.",
+  "Confirm the current version here after reconnecting.": "Sau khi kết nối lại, xác nhận phiên bản hiện tại tại đây."
 }

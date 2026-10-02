@@ -1,3 +1,4 @@
+import type { ConnectionAdapterRuntimeMetadata } from '../runtime-details';
 import { sessionActivityUpdate, validateSessionActivity } from './session-activity';
 import {
   AdapterError, resolveCapabilities,
@@ -32,6 +33,8 @@ export class LocalModelAdapter implements AgentAdapter {
   get readSessionActivity() { return this.activityEnabled && this.state === 'ready' ? this.readActivity : undefined; }
   private transport: RelayWsTransport;
   private currentState: ConnectionState = 'idle';
+  private bridgeVersion: string | undefined;
+  getConnectionRuntimeMetadata(): ConnectionAdapterRuntimeMetadata { return { bridgeVersion: this.bridgeVersion }; }
   private model = '';
   private active = false;
   private epoch = 0;
@@ -84,12 +87,14 @@ export class LocalModelAdapter implements AgentAdapter {
 
   private async handshake(): Promise<void> {
     const epoch = ++this.epoch;
+    this.bridgeVersion = undefined;
     try {
       // Relay authenticates its socket; only direct connections need connect/token.
       // A Relay connect request starts OpenClaw's challenge lifecycle.
-      const health = await this.rpc<{ sessionActivity?: unknown; backend: string; vision: boolean; model: string }>(this.record.transportKind === 'relay' ? 'health' : 'connect', { token: this.record.auth?.token });
+      const health = await this.rpc<{ bridgeVersion?: string; sessionActivity?: unknown; backend: string; vision: boolean; model: string }>(this.record.transportKind === 'relay' ? 'health' : 'connect', { token: this.record.auth?.token });
       if (epoch !== this.epoch) return;
       if (health.backend !== 'local-model') throw new AdapterError('unsupported', 'Endpoint is not a local model Bridge');
+      this.bridgeVersion = typeof health.bridgeVersion === 'string' ? health.bridgeVersion : undefined;
       this.activityEnabled = health.sessionActivity === 1;
       this.capabilities.attachments = health.vision === true;
       this.model = health.model;
@@ -132,8 +137,9 @@ export class LocalModelAdapter implements AgentAdapter {
   async probe(timeoutMs = 5_000): Promise<boolean> {
     const epoch = this.epoch;
     try {
-      const health = await this.rpc<{ sessionActivity?: unknown; backend: string; vision: boolean; model: string }>('health', {}, timeoutMs);
+      const health = await this.rpc<{ bridgeVersion?: string; sessionActivity?: unknown; backend: string; vision: boolean; model: string }>('health', {}, timeoutMs);
       if (epoch !== this.epoch || health.backend !== 'local-model') return false;
+      this.bridgeVersion = typeof health.bridgeVersion === 'string' ? health.bridgeVersion : undefined;
       this.activityEnabled = health.sessionActivity === 1;
       this.capabilities.attachments = health.vision === true; this.model = health.model;
       return true;

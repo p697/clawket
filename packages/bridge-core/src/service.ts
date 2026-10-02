@@ -8,6 +8,7 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
@@ -170,6 +171,56 @@ export function installService(context: ServiceLaunchContext = {}): ServiceStatu
   }
 
   return getServiceStatus();
+}
+
+/** Refresh an existing stopped registration without installing or starting a service. */
+export function updateStoppedService(context: ServiceLaunchContext): (() => void) | null {
+  const status = getServiceStatus();
+  if (status.running) throw new Error('The service started during update. Stop it before updating its registration.');
+  if (!status.installed) return null;
+  const paths = process.platform === 'win32' ? [] : [SERVICE_LAUNCHER_PATH, status.servicePath];
+  const previous = paths.map(path => {
+    if (!existsSync(path)) return { path, bytes: null, mode: 0o600 };
+    const stat = statSync(path);
+    if (!stat.isFile() || stat.size > 1024 * 1024) throw new Error('Invalid service registration.');
+    return { path, bytes: readFileSync(path), mode: stat.mode & 0o777 };
+  });
+  const cron = status.method === 'linux-crontab' ? readLinuxCrontab() : null;
+  const registryArgs = ['HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run', '/v', WINDOWS_RUN_KEY];
+  const oldRun = process.platform === 'win32'
+    ? execFileSync('reg', ['query', ...registryArgs], { encoding: 'utf8', maxBuffer: 1024 * 1024 }).match(/ClawketBridgeCli\s+REG_SZ\s+([^\r\n]+)/)?.[1]
+    : undefined;
+  if (process.platform === 'win32' && !oldRun) throw new Error('Invalid service registration.');
+  const writeRun = (value: string) => execFileSync('reg', ['add', ...registryArgs, '/t', 'REG_SZ', '/d', value, '/f'], { stdio: 'ignore' });
+  const restore = () => {
+    for (const file of previous) {
+      if (file.bytes) { writeFileSync(file.path, file.bytes, { mode: file.mode }); chmodSync(file.path, file.mode); }
+      else rmIfExists(file.path);
+    }
+    if (cron) writeLinuxCrontab(cron);
+    if (oldRun) writeRun(oldRun);
+    if (status.method === 'systemd-user') execFileSync('systemctl', ['--user', 'daemon-reload'], { stdio: 'ignore' });
+  };
+  try {
+    const args = getServiceProgramArgs(context);
+    switch (status.method) {
+      case 'launchagent':
+        writeFileSync(MACOS_PLIST_PATH, buildMacosPlist(args, SERVICE_LOG_PATH, SERVICE_ERROR_LOG_PATH), 'utf8');
+        break;
+      case 'systemd-user':
+        writeFileSync(LINUX_SERVICE_PATH, buildLinuxSystemdUnit(args, SERVICE_LOG_PATH, SERVICE_ERROR_LOG_PATH), 'utf8');
+        execFileSync('systemctl', ['--user', 'daemon-reload'], { stdio: 'ignore' });
+        break;
+      case 'linux-crontab': {
+        const entry = buildLinuxCronEntry(args, SERVICE_LOG_PATH, SERVICE_ERROR_LOG_PATH);
+        writeLinuxCrontabEntry(entry); writeFileSync(LINUX_CRON_RECORD_PATH, entry + '\n', 'utf8');
+        break;
+      }
+      case 'windows-run-registry': writeRun(buildWindowsRunCommand(args)); break;
+      default: throw new Error('Unsupported service registration.');
+    }
+    return restore;
+  } catch (error) { restore(); throw error; }
 }
 
 export function restartService(context: ServiceLaunchContext = {}): ServiceStatus {

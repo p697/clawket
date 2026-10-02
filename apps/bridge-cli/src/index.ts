@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+import { delegateManagedRuntime, isRuntimeCommand } from './managed-release.js';
+import { registerRuntimeOwner } from './runtime-owner.js';
+import { handleUpdateCommand } from './update.js';
 import { handleClaudeCommand } from './claude-code.js';
 import { handleCodexCommand } from './codex.js';
 import { handlePiCommand } from './pi.js';
@@ -89,7 +92,9 @@ const PREVIEW_REGISTRY_URL = 'https://clawket-registry-preview.clawket.workers.d
 const BRIDGE_CAPABILITIES_V2 = 'bridge.capabilities.v2';
 
 async function main(): Promise<void> {
-  const [, , rawCommand = 'help', ...args] = process.argv;
+  const argv = process.argv.slice(2);
+  const [rawCommand = 'help', ...args] = argv;
+  if (isRuntimeCommand(argv) && await delegateManagedRuntime(argv)) return;
   let command = rawCommand;
   if ((rawCommand === 'hermes' && ['status', 'doctor', 'logs', 'start', 'install', 'restart', 'stop', 'uninstall', 'reset'].includes(args[0]))
     || (rawCommand === 'local-model' && ['status', 'doctor', 'logs'].includes(args[0]))) {
@@ -105,6 +110,7 @@ async function main(): Promise<void> {
   }
 
   const backend = requestedBackend(args);
+  if (command === 'update') { await handleUpdateCommand(args); return; }
   if (['openclaw', 'hermes', 'codex', 'claude-code', 'pi', 'local-model'].includes(rawCommand) && backend && backend !== rawCommand) {
     throw new Error('The backend command and --backend disagree; no runtime was changed.');
   }
@@ -363,12 +369,14 @@ async function main(): Promise<void> {
       if (hermesServiceWatchdog) {
         clearInterval(hermesServiceWatchdog);
       }
+      await releaseOwner();
       unregisterRuntimeProcess(process.pid);
       if (isServiceMode) {
         clearServiceState(process.pid);
       }
       process.exit(0);
     };
+    const releaseOwner = await registerRuntimeOwner({ backend: 'openclaw', prepare: () => true, stop: () => { void shutdown(); } });
     process.on('SIGINT', shutdown);
     process.on('SIGTERM', shutdown);
     await new Promise<void>(() => {});
@@ -1325,7 +1333,8 @@ async function handleHermesRelayRunCommand(args: string[], jsonOutput: boolean):
     console.log('');
   }
 
-  await keepHermesRelayRuntimeAlive(runtime);
+  const releaseOwner = await registerRuntimeOwner({ backend: 'hermes-relay', configPath: getHermesRelayConfigPath(), prepare: () => true, stop: () => process.emit('SIGTERM') });
+  await keepHermesRelayRuntimeAlive(runtime, releaseOwner);
 }
 
 async function handleHermesLifecycle(
@@ -1580,10 +1589,12 @@ async function buildHermesLocalPairing(options: {
 }
 
 async function keepHermesBridgeAlive(bridge: HermesLocalBridge): Promise<void> {
+  const releaseOwner = await registerRuntimeOwner({ backend: 'hermes', configPath: HERMES_BRIDGE_CONFIG_PATH, prepare: () => bridge.prepareForUpdate(), stop: () => process.emit('SIGTERM') });
   const shutdown = async () => {
     process.off('SIGINT', shutdown);
     process.off('SIGTERM', shutdown);
     await bridge.stop();
+    await releaseOwner();
     process.exit(0);
   };
   process.on('SIGINT', shutdown);
@@ -2420,6 +2431,8 @@ function printHelp(): void {
     'clawket refresh-code [--preview] [--qr-file <path>] [--open] [--json]',
     'clawket start',
     'clawket install',
+    'clawket update       Update saved Bridge runtimes without pairing again',
+    '  [--backend <name>] [--config <path> | --project <directory>] [--preview] [--version <stable version>] [--json]',
     'clawket restart',
     'clawket stop',
     'clawket uninstall',

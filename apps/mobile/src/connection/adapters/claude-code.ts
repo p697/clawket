@@ -1,3 +1,4 @@
+import type { ConnectionAdapterRuntimeMetadata } from '../runtime-details';
 import { sessionActivityUpdate, validateSessionActivity } from './session-activity';
 import { artifactHistoryDisplay, artifactUpdateDisplay } from './artifact-display';
 import type { ArtifactOperations } from '@clawket/agent-protocol';
@@ -56,6 +57,8 @@ export class ClaudeCodeAdapter implements AgentAdapter {
   get readSessionActivity() { return this.activityEnabled && this.state === 'ready' ? this.readActivity : undefined; }
   private transport: RelayWsTransport;
   private currentState: ConnectionState = 'idle';
+  private bridgeVersion: string | undefined;
+  getConnectionRuntimeMetadata(): ConnectionAdapterRuntimeMetadata { return { bridgeVersion: this.bridgeVersion }; }
   private epoch = 0;
   private readonly sessionCatalog = new SessionCatalogConsumer((method, params) => this.rpc(method, params));
   private handshakeError: AdapterError | null = null;
@@ -109,13 +112,15 @@ export class ClaudeCodeAdapter implements AgentAdapter {
 
   private async handshake(): Promise<void> {
     const epoch = ++this.epoch;
+    this.bridgeVersion = undefined;
     this.sessionCatalog.retire();
     try {
       // Relay authenticates its socket; only direct connections need connect/token.
       // A Relay connect request starts OpenClaw's challenge lifecycle.
-      const health = await this.rpc<{ sessionActivity?: unknown; artifacts?: boolean; promptStatus?: boolean; sessionCatalogSync?: unknown; backend: string; vision: boolean; model: string; projects?: boolean }>(this.record.transportKind === 'relay' ? 'health' : 'connect', { token: this.record.auth?.token });
+      const health = await this.rpc<{ bridgeVersion?: string; sessionActivity?: unknown; artifacts?: boolean; promptStatus?: boolean; sessionCatalogSync?: unknown; backend: string; vision: boolean; model: string; projects?: boolean }>(this.record.transportKind === 'relay' ? 'health' : 'connect', { token: this.record.auth?.token });
       if (epoch !== this.epoch) return;
       if (health.backend !== 'claude-code') throw new AdapterError('unsupported', 'Endpoint is not a Claude Code Bridge');
+      this.bridgeVersion = typeof health.bridgeVersion === 'string' ? health.bridgeVersion : undefined;
       this.activityEnabled = health.sessionActivity === 1;
       this.sessionCatalog.configure(health.sessionCatalogSync);
       this.artifactsEnabled = health.artifacts === true;
@@ -171,8 +176,9 @@ export class ClaudeCodeAdapter implements AgentAdapter {
   async probe(timeoutMs = 5_000): Promise<boolean> {
     const epoch = this.epoch;
     try {
-      const health = await this.rpc<{ sessionActivity?: unknown; artifacts?: boolean; promptStatus?: boolean; sessionCatalogSync?: unknown; backend: string; vision: boolean; model: string; projects?: boolean }>('health', {}, timeoutMs);
+      const health = await this.rpc<{ bridgeVersion?: string; sessionActivity?: unknown; artifacts?: boolean; promptStatus?: boolean; sessionCatalogSync?: unknown; backend: string; vision: boolean; model: string; projects?: boolean }>('health', {}, timeoutMs);
       if (epoch !== this.epoch || health.backend !== 'claude-code') return false;
+      this.bridgeVersion = typeof health.bridgeVersion === 'string' ? health.bridgeVersion : undefined;
       this.activityEnabled = health.sessionActivity === 1;
       this.sessionCatalog.configure(health.sessionCatalogSync);
       this.artifactsEnabled = health.artifacts === true;

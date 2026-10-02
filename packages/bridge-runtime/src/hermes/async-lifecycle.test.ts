@@ -143,3 +143,10 @@ describe('Hermes asynchronous operation lifecycle', () => {
   });
 
 });
+
+it('refuses update during a queued mutation and fences new RPCs once idle', async () => {
+  const subject = await bridge();
+  (subject as any).queuedMutations = 1; expect(subject.prepareForUpdate()).toBe(false);
+  (subject as any).queuedMutations = 0; expect(subject.prepareForUpdate()).toBe(true);
+  await expect(subject.dispatchRequest('health', {})).rejects.toThrow('restarting');
+});

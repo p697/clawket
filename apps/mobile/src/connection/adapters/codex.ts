@@ -1,3 +1,4 @@
+import type { ConnectionAdapterRuntimeMetadata } from '../runtime-details';
 import { sessionActivityUpdate, validateSessionActivity } from './session-activity';
 import { validProfileReply } from './profile-reply';
 import { artifactHistoryDisplay, artifactUpdateDisplay } from './artifact-display';
@@ -57,6 +58,8 @@ export class CodexAdapter implements AgentAdapter {
   private transport: RelayWsTransport;
   private readonly unencryptedTransport: boolean;
   private currentState: ConnectionState = 'idle';
+  private bridgeVersion: string | undefined;
+  getConnectionRuntimeMetadata(): ConnectionAdapterRuntimeMetadata { return { bridgeVersion: this.bridgeVersion }; }
   private epoch = 0;
   private readonly sessionCatalog = new SessionCatalogConsumer((method, params) => this.rpc(method, params));
   private handshakeError: AdapterError | null = null;
@@ -135,13 +138,15 @@ export class CodexAdapter implements AgentAdapter {
 
   private async handshake(): Promise<void> {
     const epoch = ++this.epoch;
+    this.bridgeVersion = undefined;
     this.sessionCatalog.retire();
     try {
       // Relay authenticates its socket; only direct connections need connect/token.
       // A Relay connect request starts OpenClaw's challenge lifecycle.
-      const health = await this.rpc<{ sessionActivity?: unknown; profileVersion?: unknown; artifacts?: boolean; promptStatus?: boolean; sessionCatalogSync?: unknown; sessionCatalogPageIndex?: unknown; backend: string; vision: boolean; model: string; projects?: boolean; fastMode?: boolean; sessionPermissions?: boolean; sessionArchive?: boolean }>(this.record.transportKind === 'relay' ? 'health' : 'connect', { token: this.record.auth?.token });
+      const health = await this.rpc<{ bridgeVersion?: string; sessionActivity?: unknown; profileVersion?: unknown; artifacts?: boolean; promptStatus?: boolean; sessionCatalogSync?: unknown; sessionCatalogPageIndex?: unknown; backend: string; vision: boolean; model: string; projects?: boolean; fastMode?: boolean; sessionPermissions?: boolean; sessionArchive?: boolean }>(this.record.transportKind === 'relay' ? 'health' : 'connect', { token: this.record.auth?.token });
       if (epoch !== this.epoch) return;
       if (health.backend !== 'codex') throw new AdapterError('unsupported', 'Endpoint is not a Codex Bridge');
+      this.bridgeVersion = typeof health.bridgeVersion === 'string' ? health.bridgeVersion : undefined;
       this.activityEnabled = health.sessionActivity === 1;
       this.sessionCatalog.configure(health.sessionCatalogSync, health.sessionCatalogPageIndex);
       this.artifactsEnabled = health.artifacts === true;
@@ -199,8 +204,9 @@ export class CodexAdapter implements AgentAdapter {
   async probe(timeoutMs = 5_000): Promise<boolean> {
     const epoch = this.epoch;
     try {
-      const health = await this.rpc<{ sessionActivity?: unknown; profileVersion?: unknown; artifacts?: boolean; promptStatus?: boolean; sessionCatalogSync?: unknown; sessionCatalogPageIndex?: unknown; backend: string; vision: boolean; model: string; projects?: boolean; fastMode?: boolean; sessionPermissions?: boolean; sessionArchive?: boolean }>('health', {}, timeoutMs);
+      const health = await this.rpc<{ bridgeVersion?: string; sessionActivity?: unknown; profileVersion?: unknown; artifacts?: boolean; promptStatus?: boolean; sessionCatalogSync?: unknown; sessionCatalogPageIndex?: unknown; backend: string; vision: boolean; model: string; projects?: boolean; fastMode?: boolean; sessionPermissions?: boolean; sessionArchive?: boolean }>('health', {}, timeoutMs);
       if (epoch !== this.epoch || health.backend !== 'codex') return false;
+      this.bridgeVersion = typeof health.bridgeVersion === 'string' ? health.bridgeVersion : undefined;
       this.activityEnabled = health.sessionActivity === 1;
       this.sessionCatalog.configure(health.sessionCatalogSync, health.sessionCatalogPageIndex);
       this.artifactsEnabled = health.artifacts === true;

@@ -1,3 +1,4 @@
+vi.mock('./runtime-owner.js', () => ({ registerRuntimeOwner: vi.fn(async () => async () => {}) }));
 import { expect, it, vi } from 'vitest';
 import { discoverLocalModelEndpoints } from './local-model.js';
 

@@ -1,3 +1,4 @@
+import { UpdateAdmission } from '../update-admission.js';
 import { HermesArtifacts } from './artifacts.js';
 import { SessionFileStore } from '../session-files.js';
 import { HermesFileListing, hermesFileRoots } from './session-files.js';
@@ -746,11 +747,20 @@ export class HermesLocalBridge {
     return { ok: true, key };
   }
 
+  private readonly updateAdmission = new UpdateAdmission();
+  prepareForUpdate(): boolean {
+    return this.updateAdmission.prepare(() => this.activeRuns.size > 0 || this.pendingRunStarts.size > 0 || this.queuedMutations > 0);
+  }
+
   private operationGeneration = 0;
   private mutationTail: Promise<unknown> = Promise.resolve();
   private queuedMutations = 0;
 
   async dispatchRequest(method: string, params: unknown): Promise<unknown> {
+    return this.updateAdmission.request(() => this.dispatchAdmittedRequest(method, params));
+  }
+
+  private async dispatchAdmittedRequest(method: string, params: unknown): Promise<unknown> {
     // Keep whole config/session mutations serialized after making Python nonblocking.
     // Read-only requests and health must never wait behind these operations.
     if (/^(model\.set|skills\.(install|update|delete|content\.update)|hermes\.(reasoning|fast)\.set|hermes\.cron\.jobs\.(create|update|pause|resume|run|remove)|chat\.send)$/.test(method)) {

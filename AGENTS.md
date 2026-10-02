@@ -200,6 +200,7 @@ Owner rules (2026-09-26, after the development Mac froze three times): never run
 2. Hermes support in those commands must be additive and limited to Clawket-managed Hermes bridge and relay runtimes.
 3. `stop` and `uninstall` should stop Hermes runtimes without deleting Hermes config; `reset` remains the command that clears local Hermes state.
 4. Hermes-only users must be able to use lifecycle commands without requiring an OpenClaw pairing config.
+5. Unified updates may refresh an existing stopped OpenClaw service registration, but must not install missing autostart or start a stopped runtime. Preserve the original launch registration for rollback; details are in `docs/bridge-updates.md`.
 
 ## Connection Diagnostics Rule
 

@@ -1,3 +1,4 @@
+import { UpdateAdmission } from '../update-admission.js';
 import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
@@ -21,6 +22,9 @@ export class LocalModelConversation extends EventEmitter {
   private saved: SavedConversation;
   private active: { id: string; controller: AbortController; task?: Promise<void> } | null = null;
   private mutation = false;
+  private readonly updateAdmission = new UpdateAdmission();
+  requestForUpdate<T>(operation: () => Promise<T>): Promise<T> { return this.updateAdmission.request(operation); }
+  prepareForUpdate(): boolean { return this.updateAdmission.prepare(() => this.active !== null || this.mutation); }
   private stopped = false;
   private capability: { models: string[]; vision: boolean } | null = null;
   private readonly providers: Map<string, LocalModelProvider>;

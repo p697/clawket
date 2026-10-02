@@ -148,3 +148,5 @@ Live-service and release integration checks have separate prerequisites; see the
 ## License
 
 Unless a subdirectory states otherwise, this repository is licensed under [AGPL-3.0-only](./LICENSE).
+
+Bridge upgrades preserve existing pairing. See [Bridge updates](docs/bridge-updates.md) for unified update support, runtime verification and manual deployment exceptions.

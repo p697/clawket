@@ -122,3 +122,7 @@ Codex foreground/background native RPC diagnostics use the runtime's bounded met
 ## Pairing progress
 
 `src/progress.ts` draws one live status line while `pair`, `pair choose` discovery, `refresh-code` and Agent/local-model pairing wait. It draws only on an interactive stderr outside CI and `TERM=dumb`; `--json`, pipes and scripts keep byte-identical output. Detached Agent children forward step text over IPC (`<backend>.progress`), and the launching terminal closes the line with ✔/✖ before printing a code, QR or error. Step text must never contain codes, tokens or payloads.
+
+## Unified Bridge update
+
+`update` is the explicit all-saved-managed-runtime exception to default lifecycle scope. Keep its bounded authenticated private owner control, idle admission fence, immutable package staging and verified version transition. Retain exact config/identity/history; never pair/reset, infer ownership from ports, or start a second owner after an uncertain stop. Preserve stopped scopes and report independent supervisors as manual. Future starts use a validated managed snapshot; old global CLIs require the latest npx invocation. Details and release limitations: `../../docs/bridge-updates.md`.

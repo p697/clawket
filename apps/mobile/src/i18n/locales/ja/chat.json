@@ -486,5 +486,14 @@
   "Presenting a plan": "プランを提示中",
   "Your answer: {{answer}}": "あなたの回答：{{answer}}",
   "Asked you a question": "1 件の質問をしました",
-  "Asked you {{count}} questions": "{{count}} 件の質問をしました"
+  "Asked you {{count}} questions": "{{count}} 件の質問をしました",
+  "Bridge and updates": "Bridge と更新",
+  "Bridge update available": "Bridge の更新があります",
+  "Current Bridge version": "現在の Bridge バージョン",
+  "Last confirmed Bridge version": "最後に確認した Bridge バージョン",
+  "Latest Bridge: {{version}}": "最新の Bridge：{{version}}",
+  "Check for Bridge updates": "Bridge の更新を確認",
+  "Could not check Bridge updates. Try again later.": "更新を確認できません。後でもう一度お試しください。",
+  "The unified updater is available in newer Bridge releases. Use your original deployment method for this release.": "新しい Bridge リリースでは統合アップデーターを利用できます。このリリースは従来の導入方法で更新してください。",
+  "Confirm the current version here after reconnecting.": "再接続後、ここで現在のバージョンを確認してください。"
 }

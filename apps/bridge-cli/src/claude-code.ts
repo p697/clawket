@@ -1,3 +1,5 @@
+import { registerRuntimeOwner } from './runtime-owner.js';
+import { readCliVersion } from './metadata.js';
 import { handleAgentDiagnostics } from './operations.js';
 import { claudeControl, startClaudeBackground } from './claude-code-lifecycle.js';
 import { agentPairProgress, type Progress } from './progress.js';
@@ -92,8 +94,9 @@ async function runClaudeCommand(args: string[], progress: Progress): Promise<voi
   }
   const show = (text: string) => { if (process.send) process.send({ type: 'claude-code.display', text }); else { progress.succeed(); console.log(text); } };
   const installed = await inspectClaudeInstallation(config.command);
-  const service = new ClaudeService({ project: config.project, directory: join(directory, 'sessions'), executable: installed.executable, device: config.device });
+  const service = new ClaudeService({ bridgeVersion: readCliVersion(), project: config.project, directory: join(directory, 'sessions'), executable: installed.executable, device: config.device });
   let server: ClaudeServer | undefined, relay: ClaudeRelay | undefined;
+  let releaseOwner: (() => Promise<void>) | undefined;
   try {
     await service.health();
     let qrPayload: string | undefined, code: string | undefined;
@@ -134,10 +137,11 @@ async function runClaudeCommand(args: string[], progress: Progress): Promise<voi
       relay = new ClaudeRelay(service, config.relay, invitation => { config.relay!.invitation = invitation; save(config); }, message => console.error(`[${Date.now()}] ${message}`));
       relay.start(); await relay.waitUntilReady();
     }
+    releaseOwner = await registerRuntimeOwner({ backend: 'claude-code', configPath, prepare: () => service.prepareForUpdate(), stop: () => service.emit('shutdown') });
     if (code) show(`Pairing code: ${code}`);
     if (qrPayload) { show(await QRCode.toString(qrPayload, { type: 'terminal', small: true })); const output = flag(args, '--qr-file'); if (output) await QRCode.toFile(resolve(output), qrPayload); }
     show(process.send ? `Claude Code · ${label} is running in the background. ${config.device ? 'Choose a project when starting a chat on your phone.' : 'New chats use this project.'} Use clawket claude-code status / stop with the same pairing options.` : `Claude Code · ${label} is running. Keep this terminal open. Ctrl+C stops Clawket-owned Claude sessions.`);
 
     await new Promise<void>(done => { const stop = () => { process.off('SIGINT', stop); process.off('SIGTERM', stop); service.off('shutdown', stop); done(); }; process.once('SIGINT', stop); process.once('SIGTERM', stop); service.once('shutdown', stop); process.send?.({ type: 'claude-code.ready' }); });
-  } finally { relay?.stop(); if (server) await server.stop(); else await service.stop(); }
+  } finally { await releaseOwner?.(); relay?.stop(); if (server) await server.stop(); else await service.stop(); }
 }

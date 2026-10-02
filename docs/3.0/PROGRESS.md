@@ -1,5 +1,12 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-03 Bridge 统一升级与设置页版本入口（负责人授权按调研方案直接落地并测试）。
+  - `npx ... pair choose` 不更新已运行进程；正常升级无需删除手机连接或重新配对。新增 `clawket update`：核验官方稳定版本与发布支持标记，安装到独立不可变目录，保留配置/凭据/历史及原项目、设备、Production/Preview 范围，再更新全部已保存且可验证的受管实例。旧全局 CLI 不感知新 manifest，后续运维使用最新版 npx；独立 Windows local-model supervisor、Docker/自定义部署明确报告人工更新，不假称全部完成。
+  - 私有认证本机 IPC 核验真实 PID/版本/来源/范围；原生活跃/排队请求阻止关闭，idle admission 同步封闭后才退出，确认旧 PID 退出再起新进程。OpenClaw 先停共享服务/watchdog，再恢复 Hermes Bridge→Relay→共享服务；本地就绪和版本核验后才确认成功，失败按捕获的旧来源尝试恢复，关闭不确定不另起 owner。已停止实例保持停止；已有停止的自启注册只刷新启动入口，可回滚，不新增自启。旧 owner 首次迁移要求可验证来源与空闲证据；无法证明时拒绝替换。
+  - 设置永久提供「Bridge 与更新」，各连接显示握手确认的当前/上次版本，官方 stable npm 检查 24 小时缓存与手动重试，失败保留既有证据。仅真正发布 `clawket.updateProtocol: 1` 的版本提供固定版本升级命令；复制/分享不标记成功，重连握手才更新实际版本。补齐 Codex / Claude Code / Pi / local-model 健康版本；直接 OpenClaw Gateway 不冒充 Bridge。19 语言、浅色/深色布局覆盖。
+  - 本机隔离 HOME、逐文件串行：CLI `runtime-owner`、`update`、`update-transaction`、`update-process`、`update-startup`、`managed-release`；core `service`、`service-update`；runtime `update-admission`、Codex/Claude/Pi `service`、Hermes `async-lifecycle`、local-model `server`；各原生命令/生命周期与 `index`；Mobile release/version hooks、升级页、旧 upgrade hook、Settings 与四个 adapter 回归全部通过。真实子进程确认旧 PID 退出、新版本生效，配对/历史文件字节不变；停止服务测试覆盖 launchd/systemd/cron/Windows Run 更新且不 spawn。类型、开发 bundle、设计系统、19 语言检查通过；本地 v1 live replay 8/8。完整门禁与 Windows/macOS 实跑由本条 PR CI 验证。
+  - 沿用版本 3.1.10，没有 npm 发布、App 分发/OTA、生产部署或本机现有 Bridge 重启。公开 3.1.10 尚不含更新器；上线仍需另行授权的 Bridge 和 App 交付及手机重连验收（HT-BRIDGE-UPDATE-1003）。行为与首次升级限制见 `../bridge-updates.md`。
+
 - 2026-10-02 商店第二张图「Stay in the flow」19 语言制作与保存（负责人已验收英文并授权两个商店上传保存）。
   - 按已验收的 `9059c185` JS bundle / assets，在已有 iPhone 17 和 iPad Pro 11 英寸 (M5) 模拟器壳中切换 App 原生语言、实拍全部 19 语言。保留专用演示会话的英文对话、原生工具步骤及型号名称；iPad 收起侧栏，避免私人会话预览。未用生图翻译 UI。
   - 风格 A / `Stay in the flow.` / `Natural conversations. Clear progress.` 本地化；iPhone 原图 1206×2622、Apple 上传 1242×2688，iPad 横屏原图 2420×1668、成图 2752×2064；Google Play 导出 1080×1920，去除 iOS 系统栏并使用中性设备框，按既定方案复用于两个安卓平板栏位。共 38 张原生截图；133 个来源/预览/上传文件的尺寸和 SHA-256 已记录，上传文件均无透明通道。
@@ -1013,6 +1020,7 @@
 
 | 里程碑 | 状态 | 完成日期 | 验证结果 | 提交 |
 |---|---|---|---|---|
+| HT-BRIDGE-UPDATE-1003 | Bridge 统一升级交付与现有手机连接验收 | 负责人决定后续 Bridge / App 发布版本；发布含 updateProtocol 标记的 Bridge 后，在有旧配对的电脑执行统一 update，保持手机连接和原配置；独立 supervisor 按原部署方法更新。 | 设置显示真实旧/新版本与更新提示；活跃任务不被打断，原有连接重连后继续聊天，配置/凭据/历史保留；验证两环境、多项目、停止实例、失败回滚及手机/Relay 往返。 | 本地定向自动化与 v1 live replay 已通过；完整 CI 随本条 PR。未发布、未打分发包、未重启本机现有 Bridge；待负责人授权交付及手机验收。 |
 | M0 基线与护栏 | 已完成 | 2026-09-05 | 干净 `npm ci`；required 全绿；compat 5 files / 34 tests；双 lock audit 0 high/critical；LOC 已记录 | `717f265bd3ca15fcbed4207c653c6c56e920bd6d` |
 | M1 契约与包骨架 | 已完成 | 2026-09-05 | required 全绿；协议包 3 files / 23 tests、四项覆盖率 100%；Mobile 162 suites / 1361 tests；compat 5 files / 34 tests；Android Metro 与 Bridge/CLI bundle 验证通过 | `ef8ae596d031d891a4263fa4a3c04d192f8658a1` |
 | M2 Relay / Registry 合一与安全口子 | 已完成 | 2026-09-05 | M2a compat 字节等价；M2b required、35 compat、4 integration、20 配置 dry-run；四 Preview 服务部署成功，OpenClaw 9/9、Hermes 7/7 | M2a `f0ac6d2f676e6a9ade4f4dfb23d3c748f832c9fd`；M2b `4d4f9f88f344e8a91038cc678300d1e5be26369c` |

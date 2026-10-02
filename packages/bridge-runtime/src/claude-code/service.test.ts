@@ -379,3 +379,15 @@ it('projects native busy/idle/waiting/unknown without changing ownership or star
   expect(mocks.starts).not.toHaveBeenCalled(); expect(mocks.history).not.toHaveBeenCalled();
   await expect(request(service, 'sessions.activity', { keys: ['same', 'same'] })).rejects.toThrow('Invalid session activity request');
 });
+
+it('reports package version and protects active work before fencing update admission', async () => {
+  const { service: subject } = fixture();
+  (subject as any).options.bridgeVersion = '3.1.11';
+  expect(await subject.request({ type: 'req', id: 'version', method: 'health' })).toMatchObject({ backend: 'claude-code', bridgeVersion: '3.1.11' });
+  (subject as any).sessions.set('update-test', { activeRun: {} });
+  expect(subject.prepareForUpdate()).toBe(false);
+  (subject as any).sessions.delete('update-test');
+  // The ordinary fixture may have a real idle native process; those remain restartable.
+  expect(subject.prepareForUpdate()).toBe(true);
+  await expect(subject.request({ type: 'req', id: 'after', method: 'sessions.list' })).rejects.toThrow('restarting');
+});

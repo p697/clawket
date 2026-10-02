@@ -486,5 +486,14 @@
   "Presenting a plan": "योजना प्रस्तुत कर रहा है",
   "Your answer: {{answer}}": "आपका जवाब: {{answer}}",
   "Asked you a question": "आपसे 1 प्रश्न पूछा",
-  "Asked you {{count}} questions": "आपसे {{count}} प्रश्न पूछे"
+  "Asked you {{count}} questions": "आपसे {{count}} प्रश्न पूछे",
+  "Bridge and updates": "Bridge और अपडेट",
+  "Bridge update available": "Bridge अपडेट उपलब्ध है",
+  "Current Bridge version": "वर्तमान Bridge संस्करण",
+  "Last confirmed Bridge version": "आखिरी पुष्टि किया गया Bridge संस्करण",
+  "Latest Bridge: {{version}}": "नवीनतम Bridge: {{version}}",
+  "Check for Bridge updates": "Bridge अपडेट जाँचें",
+  "Could not check Bridge updates. Try again later.": "अपडेट जाँचे नहीं जा सके। बाद में फिर कोशिश करें।",
+  "The unified updater is available in newer Bridge releases. Use your original deployment method for this release.": "नए Bridge संस्करणों में एकीकृत अपडेटर उपलब्ध है। इस संस्करण के लिए अपनी मूल डिप्लॉयमेंट विधि इस्तेमाल करें।",
+  "Confirm the current version here after reconnecting.": "दोबारा कनेक्ट होने के बाद यहाँ वर्तमान संस्करण की पुष्टि करें।"
 }

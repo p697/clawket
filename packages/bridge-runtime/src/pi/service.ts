@@ -1,3 +1,4 @@
+import { UpdateAdmission } from '../update-admission.js';
 import { DeliveredArtifacts } from '../delivered-artifacts.js';
 import { SessionCatalogSync } from '../session-catalog.js';
 import { InteractionAttention } from '../interaction-attention.js';
@@ -16,7 +17,7 @@ import { piBranch, piMessages, piText, piUsage } from './history.js';
 import { persistedPiCursor, piPromptEntryId } from './prompt-identity.js';
 
 export interface PiRequest { type: 'req'; id: string; method: string; params?: Record<string, unknown> }
-export interface PiOptions { project: string; directory: string; command?: string; agentDirectory?: string; nativeSessionDirectory?: string; args?: string[]; env?: NodeJS.ProcessEnv }
+export interface PiOptions { bridgeVersion?: string; project: string; directory: string; command?: string; agentDirectory?: string; nativeSessionDirectory?: string; args?: string[]; env?: NodeJS.ProcessEnv }
 type RecordEntry = { id: string; file: string; title: string; created: number; activity?: number; model?: string; provider?: string; preview?: string; keys: Record<string, { hash: string; runId: string; nativeEntryId?: string; nativeFile?: string }> };
 type PromptIdentity = { sessionId: string; leafId: string | null; file: string; key: string; acknowledged: boolean; starts: number; users: number; valid: boolean; capturing?: boolean };
 type Running = { rpc: PiRpc; identityCapture?: Promise<void>; run?: { id: string; text: string; started: number; inputText?: string; identity?: PromptIdentity; agentStarted?: boolean; stop?: 'cancelled' | 'error'; final?: any; visibleReply?: string }; questions: Map<string, AgentQuestion> };
@@ -29,6 +30,7 @@ export class PiService extends EventEmitter {
   private processes = new Map<string, Running>();
   private native = new Map<string, string>();
   private stopped = false;
+  private readonly updateAdmission = new UpdateAdmission();
   private queues = new Map<string, Promise<unknown>>();
   private lockPath: string;
   private readonly project: string;
@@ -177,9 +179,12 @@ export class PiService extends EventEmitter {
     const catalog = await live.rpc.request('get_available_models');
     const record = this.records.find(item => this.processes.get(item.id) === live);
     if (record) { record.model = state.model?.id; record.provider = state.model?.provider; }
-    return { backend: 'pi', sessionCatalogSync: 1, artifacts: true, promptStatus: true, protocol: 1, modelReady: (catalog.models ?? []).some((m: any) => m.provider === state.model?.provider && m.id === state.model?.id), model: state.model?.id ?? '', vision: state.model?.input?.includes('image') === true, project: basename(this.project) };
+    return { backend: 'pi', ...(this.options.bridgeVersion ? { bridgeVersion: this.options.bridgeVersion } : {}), sessionCatalogSync: 1, artifacts: true, promptStatus: true, protocol: 1, modelReady: (catalog.models ?? []).some((m: any) => m.provider === state.model?.provider && m.id === state.model?.id), model: state.model?.id ?? '', vision: state.model?.input?.includes('image') === true, project: basename(this.project) };
   }
   async request(frame: PiRequest): Promise<unknown> {
+    return this.updateAdmission.request(() => this.requestNow(frame));
+  }
+  private async requestNow(frame: PiRequest): Promise<unknown> {
     const result = await this.dispatch(frame);
     if (['sessions.create', 'sessions.rename', 'sessions.reset', 'sessions.delete'].includes(frame.method)) this.catalogSync.invalidate();
     if (['sessions.reset', 'sessions.delete'].includes(frame.method) && typeof frame.params?.sessionKey === 'string') this.artifacts.forget(frame.params.sessionKey);
@@ -448,6 +453,8 @@ export class PiService extends EventEmitter {
     this.update({ type: 'run_finished', sessionKey: record.id, runId: run.id, stopReason, message: run.final ? { role: 'assistant', content: piText(run.final.content).slice(0, 128_000), attachments: piMessages([{ id: run.id, message: run.final }]).find(message => message.role === 'assistant')?.attachments, model: run.final.model, provider: run.final.provider } : undefined, usage: piUsage(run.final?.usage) });
     this.update({ type: 'session_info_update', session: this.descriptor(record) });
   }
+  prepareForUpdate(): boolean { return this.updateAdmission.prepare(() => [...this.processes.values()].some(live => !!live.run)); }
+
   async stop(): Promise<void> {
     if (this.stopped) return;
     this.stopped = true; this.artifacts.clear();

@@ -1,3 +1,5 @@
+import { registerRuntimeOwner } from './runtime-owner.js';
+import { readCliVersion } from './metadata.js';
 import { handleAgentDiagnostics } from './operations.js';
 import { piControl, startPiBackground } from './pi-lifecycle.js';
 import { agentPairProgress, type Progress } from './progress.js';
@@ -147,8 +149,9 @@ async function runPiCommand(args: string[], progress: Progress): Promise<void> {
     await startPiBackground([...args, '--config', configPath], join(directory, 'pi.log'), progress); return;
   }
   await inspectPiInstallation(config.command);
-  const service = new PiService({ project: config.project, directory: join(directory, 'sessions'), command: config.command, agentDirectory: config.agentDirectory, nativeSessionDirectory: config.nativeSessionDirectory });
+  const service = new PiService({ bridgeVersion: readCliVersion(), project: config.project, directory: join(directory, 'sessions'), command: config.command, agentDirectory: config.agentDirectory, nativeSessionDirectory: config.nativeSessionDirectory });
   let server: PiServer | undefined, relay: PiRelay | undefined;
+  let releaseOwner: (() => Promise<void>) | undefined;
   try {
     const health = await service.health() as { model: string; modelReady: boolean };
     let qrPayload: string | undefined, code: string | undefined;
@@ -183,10 +186,11 @@ async function runPiCommand(args: string[], progress: Progress): Promise<void> {
       relay = new PiRelay(service, config.relay, invitation => { config.relay!.invitation = invitation; save(config); }, message => console.error(`[${Date.now()}] ${message}`));
       relay.start(); await relay.waitUntilReady();
     }
+    releaseOwner = await registerRuntimeOwner({ backend: 'pi', configPath, prepare: () => service.prepareForUpdate(), stop: () => service.emit('shutdown') });
     if (code) show(`Pairing code: ${code}`);
     if (qrPayload) { show(await QRCode.toString(qrPayload, { type: 'terminal', small: true })); const output = flag(args, '--qr-file'); if (output) await QRCode.toFile(resolve(output), qrPayload); }
     show(process.send ? `Pi · ${basename(config.project)} is running in the background. Use clawket pi status / stop from this project.` : `Pi · ${basename(config.project)} is running. Keep this terminal open. Ctrl+C stops Clawket-owned Pi sessions.`);
     if (!health.modelReady) show('Configure a model on this computer with pi and /login before chatting.');
     await new Promise<void>(done => { const stop = () => { process.off('SIGINT', stop); process.off('SIGTERM', stop); service.off('shutdown', stop); done(); }; process.once('SIGINT', stop); process.once('SIGTERM', stop); service.once('shutdown', stop); process.send?.({ type: 'pi.ready' }); });
-  } finally { relay?.stop(); if (server) await server.stop(); else await service.stop(); }
+  } finally { await releaseOwner?.(); relay?.stop(); if (server) await server.stop(); else await service.stop(); }
 }

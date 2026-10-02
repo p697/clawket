@@ -1,3 +1,6 @@
+import { useBridgeRelease } from './src/features/app-updates/useBridgeRelease';
+import { useBridgeVersions } from './src/features/app-updates/useBridgeVersions';
+import { newerVersion, usesBridge, stableVersion } from './src/features/app-updates/bridge-release';
 import * as Clipboard from 'expo-clipboard';
 import { BridgeUpgradeScreen } from './src/features/app-updates/BridgeUpgradeScreen';
 import { useBridgeUpgrade } from './src/features/app-updates/useBridgeUpgrade';
@@ -420,7 +423,10 @@ function AppContent({
     setSimulateFreeAccount,
   } = useProPaywall();
   const connections = useConnections();
-  const bridgeUpgradeIds = useBridgeUpgrade(connections.initialized, connections.connections, connections.connectionDetails);
+  const legacyBridgeUpgradeIds = useBridgeUpgrade(connections.initialized, connections.connections, connections.connectionDetails);
+  const bridgeRelease = useBridgeRelease(connections.initialized);
+  const bridgeVersions = useBridgeVersions(connections.initialized, connections.connections, connections.connectionDetails);
+  const bridgeUpgradeIds = Array.from(new Set([...legacyBridgeUpgradeIds, ...connections.connections.filter(c => usesBridge(c) && bridgeRelease.release && bridgeVersions[c.id] && newerVersion(bridgeRelease.release.version, bridgeVersions[c.id])).map(c => c.id)]));
   const rootNavigationRef = useMemo(() => createNavigationContainerRef<RootStackParamList>(), []);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [agentAvatars, setAgentAvatars] = useState<Record<string, string>>({});
@@ -1944,7 +1950,7 @@ function AppContent({
                   {({ navigation }) => <DesignSystemScreen onBack={navigation.goBack} />}
                 </RootStack.Screen>
                 <RootStack.Screen name="BridgeUpgrade">
-                  {({ navigation }) => <BridgeUpgradeScreen onBack={navigation.goBack} />}
+                  {({ navigation }) => <BridgeUpgradeScreen onBack={navigation.goBack} connections={connections.connections} versions={bridgeVersions} {...bridgeRelease} onCheck={() => { void bridgeRelease.refresh(); }} readyId={connections.activeState === 'ready' && connections.activeConnectionId && stableVersion(connections.connectionDetails[connections.activeConnectionId]?.bridgeVersion) ? connections.activeConnectionId : null} />}
                 </RootStack.Screen>
                 <RootStack.Screen name="Connection">
                   {({ navigation, route }) => {
@@ -1969,7 +1975,7 @@ function AppContent({
                 <RootStack.Screen name="AccountSettings">
                   {({ navigation }) => (
                     <AccountSettingsScreen
-                      onUpgradeBridge={bridgeUpgradeIds.length > 0 ? () => navigation.navigate('BridgeUpgrade') : undefined}
+                      onUpgradeBridge={() => navigation.navigate('BridgeUpgrade')} bridgeUpdateAvailable={bridgeUpgradeIds.length > 0}
                       status={accountSettingsStatus}
                       connections={settingsConnections}
                       labels={accountSettingsLabels}

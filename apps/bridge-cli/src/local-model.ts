@@ -1,3 +1,5 @@
+import { registerRuntimeOwner } from './runtime-owner.js';
+import { readCliVersion } from './metadata.js';
 import { mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
@@ -9,7 +11,7 @@ import { ensureLocalModelRouter, type LocalModelLauncher } from './local-model-l
 import { noProgress, startProgress, type Progress } from './progress.js';
 
 const PREVIEW = 'https://clawket-local-model-registry-preview.clawket.workers.dev';
-interface RuntimeConfig { endpoints: LocalModelEndpoint[]; token: string; relay?: LocalModelRelayConfig; launcher?: LocalModelLauncher }
+interface RuntimeConfig { port?: number; endpoints: LocalModelEndpoint[]; token: string; relay?: LocalModelRelayConfig; launcher?: LocalModelLauncher }
 
 function flag(args: string[], name: string): string | undefined {
   const index = args.indexOf(name);
@@ -106,11 +108,12 @@ async function runLocalModelCommand(args: string[], progress: Progress): Promise
   progress.update('Starting the local model bridge…');
   const conversation = new LocalModelConversation(config.endpoints, join(dirname(configPath), 'conversation.json'));
   await conversation.select(conversation.selection);
-  const server = new LocalModelServer(conversation, config.token);
-  const port = Number(flag(args, '--port') ?? 17880);
+  const server = new LocalModelServer(conversation, config.token, readCliVersion());
+  const port = Number(flag(args, '--port') ?? config.port ?? 17880);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid Bridge port');
   await server.start(port);
   let relay: LocalModelRelay | undefined;
+  let releaseOwner: (() => Promise<void>) | undefined;
   try {
     let code: string | undefined;
     let qrPayload: string | undefined;
@@ -127,13 +130,15 @@ async function runLocalModelCommand(args: string[], progress: Progress): Promise
       if (!invitation.capabilities?.includes('pairing.secure-short-code.v2') || !/^ps_[a-f0-9]{64}$/.test(invitation.sessionId) || !Number.isFinite(Date.parse(invitation.expiresAt))) throw new Error('Registry does not support secure six-digit pairing');
       config.relay = { relayUrl: registered.relayUrl, gatewayId: registered.gatewayId, relaySecret: registered.relaySecret,
         invitation: { sessionId: invitation.sessionId, expiresAt: invitation.expiresAt, codeKeyHex: securePairingCodeKeyHex(draft.shortPairingCode), qrPayload, attempts: 0 } };
-      code = draft.shortPairingCode; save(config);
+      code = draft.shortPairingCode; config.port = port; save(config);
     }
     if (!config.relay) throw new Error('Pair the local model Bridge before running it');
-    relay = new LocalModelRelay(new LocalModelService(conversation), config.relay, invitation => { config.relay!.invitation = invitation; save(config); }, message => console.error(message));
+    relay = new LocalModelRelay(new LocalModelService(conversation, readCliVersion()), config.relay, invitation => { config.relay!.invitation = invitation; save(config); }, message => console.error(message));
     progress.update('Connecting to Clawket Relay…');
     relay.start();
     await relay.waitUntilReady();
+    // An independent supervisor owns its child and bundle; it must update through that installer.
+    if (!process.send) releaseOwner = await registerRuntimeOwner({ backend: 'local-model', configPath, port, prepare: () => conversation.prepareForUpdate(), stop: () => { process.emit('SIGTERM'); } });
     progress.succeed();
     if (code && qrPayload) {
       console.log(`Pairing code: ${code}`);
@@ -149,7 +154,7 @@ async function runLocalModelCommand(args: string[], progress: Progress): Promise
     });
   } finally {
     process.off('disconnect', supervisorStop); process.off('message', supervisorMessage);
-    relay?.stop(); await server.stop();
+    await releaseOwner?.(); relay?.stop(); await server.stop();
     if (process.connected) process.disconnect();
   }
 }

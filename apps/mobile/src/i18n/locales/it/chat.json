@@ -486,5 +486,14 @@
   "Presenting a plan": "Presenta un piano",
   "Your answer: {{answer}}": "La tua risposta: {{answer}}",
   "Asked you a question": "Ti ha fatto una domanda",
-  "Asked you {{count}} questions": "Ti ha fatto {{count}} domande"
+  "Asked you {{count}} questions": "Ti ha fatto {{count}} domande",
+  "Bridge and updates": "Bridge e aggiornamenti",
+  "Bridge update available": "Aggiornamento del Bridge disponibile",
+  "Current Bridge version": "Versione attuale del Bridge",
+  "Last confirmed Bridge version": "Ultima versione confermata del Bridge",
+  "Latest Bridge: {{version}}": "Bridge più recente: {{version}}",
+  "Check for Bridge updates": "Verifica aggiornamenti del Bridge",
+  "Could not check Bridge updates. Try again later.": "Impossibile verificare gli aggiornamenti. Riprova più tardi.",
+  "The unified updater is available in newer Bridge releases. Use your original deployment method for this release.": "Le versioni più recenti del Bridge offrono un aggiornamento unificato. Per questa versione usa il metodo di distribuzione abituale.",
+  "Confirm the current version here after reconnecting.": "Dopo la riconnessione, conferma qui la versione attuale."
 }

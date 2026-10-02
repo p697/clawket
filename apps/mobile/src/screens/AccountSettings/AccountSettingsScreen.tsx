@@ -50,8 +50,9 @@ export type AccountSettingsScreenProps = Readonly<{
   onRetry?: () => void;
   onOpenAction: (action: AccountSettingsAction) => void;
   onOpenConnection: (connectionId: string) => void;
-  /** Present only when a saved connection has verified legacy Bridge evidence. */
+  /** Opens the permanent Bridge version and update guide. */
   onUpgradeBridge?: () => void;
+  bridgeUpdateAvailable?: boolean;
   onOpenPaywall: (
     reason: 'gatewayConnections' | 'appIcons' | 'generic',
     onContinue?: () => void,
@@ -171,6 +172,7 @@ export function AccountSettingsScreen({
   onBack,
   onOpenSection,
   onUpgradeBridge,
+  bridgeUpdateAvailable,
   onRetry,
   onOpenAction,
   onOpenPaywall,
@@ -240,7 +242,9 @@ export function AccountSettingsScreen({
                     <>
                       <SettingsDivider inset="icon" />
                       <SettingsRow testID="account-settings-bridge-upgrade"
-                        title={t('Update your Bridge', { ns: 'chat' })}
+                        title={t('Bridge and updates', { ns: 'chat' })}
+                        value={bridgeUpdateAvailable ? t('Bridge update available', { ns: 'chat' }) : undefined}
+                        attention={bridgeUpdateAvailable}
                         leading={<SettingsIcon icon={Download} tone="neutral" size={20} strokeWidth={1.75} />}
                         showChevron onPress={onUpgradeBridge} />
                     </>

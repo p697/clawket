@@ -353,3 +353,15 @@ it('preserves legacy Pi inline images until the history reader opts into artifac
   expect(current.messages[0].attachments[0].content).toBeUndefined();
   expect(current.messages[0].attachments[0].artifactId).toMatch(/^image_/);
 });
+
+it('reports package version and protects active work before fencing update admission', async () => {
+  const subject = setup();
+  (subject as any).options.bridgeVersion = '3.1.11';
+  expect(await subject.request({ type: 'req', id: 'version', method: 'health' })).toMatchObject({ backend: 'pi', bridgeVersion: '3.1.11' });
+  (subject as any).processes.set('update-test', { run: {} });
+  expect(subject.prepareForUpdate()).toBe(false);
+  (subject as any).processes.delete('update-test');
+  // The ordinary fixture may have a real idle native process; those remain restartable.
+  expect(subject.prepareForUpdate()).toBe(true);
+  await expect(subject.request({ type: 'req', id: 'after', method: 'sessions.list' })).rejects.toThrow('restarting');
+});

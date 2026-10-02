@@ -161,3 +161,11 @@ it('uses the latest local connection name even when an Agent reply was already i
   expect(await pending).toEqual([expect.objectContaining({ connectionId: record.id, name: 'Work laptop' })]);
   expect(adapter.state).toBe('ready');
 });
+
+it('reports authenticated Bridge-version evidence and replaces it after reconnecting', async () => {
+  const first = adapter.connect(); sockets[0].open();
+  const reply = (socket: Socket, bridgeVersion?: string) => { const request = JSON.parse(socket.sent.at(-1)!); socket.onmessage?.({ data: JSON.stringify({ type: 'res', id: request.id, ok: true, payload: { backend: 'claude-code', model: 'test', vision: false, bridgeVersion } }) }); };
+  reply(sockets[0], '3.1.10'); await first; expect(adapter.getConnectionRuntimeMetadata().bridgeVersion).toBe('3.1.10');
+  adapter.disconnect(); const next = adapter.connect(); sockets.at(-1)!.open(); expect(adapter.getConnectionRuntimeMetadata().bridgeVersion).toBeUndefined();
+  reply(sockets.at(-1)!, '3.1.11'); await next; expect(adapter.getConnectionRuntimeMetadata().bridgeVersion).toBe('3.1.11');
+});

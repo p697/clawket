@@ -42,7 +42,7 @@ export function piControl(config: { port: number; token: string }, method = 'hea
 }
 
 /** Detach only after authenticated startup. Pairing credentials go over IPC to the invoking terminal, never to persistent logs. */
-export async function startPiBackground(args: string[], logPath: string, progress?: Progress, executable = process.execPath, entry = process.argv[1]): Promise<void> {
+export async function startPiBackground(args: string[], logPath: string, progress?: Progress, executable = process.execPath, entry = process.argv[1], quiet = false): Promise<void> {
   const fd = openSync(logPath, 'a', 0o600);
   const child = spawn(executable, [entry, 'pi', ...args, '--foreground'], { detached: true, stdio: ['ignore', fd, fd, 'ipc'], windowsHide: true });
   closeSync(fd);
@@ -59,7 +59,7 @@ export async function startPiBackground(args: string[], logPath: string, progres
     child.once('exit', () => finish(new Error('Pi Bridge exited during startup. Inspect clawket pi logs.')));
     child.on('message', (message: any) => {
       if (message?.type === 'pi.progress' && typeof message.text === 'string') progress?.update(message.text);
-      if (message?.type === 'pi.display' && typeof message.text === 'string') { progress?.succeed(); console.log(message.text); }
+      if (message?.type === 'pi.display' && typeof message.text === 'string' && !quiet) { progress?.succeed(); console.log(message.text); }
       if (message?.type === 'pi.ready') finish();
     });
   });

@@ -486,5 +486,14 @@
   "Presenting a plan": "กำลังเสนอแผน",
   "Your answer: {{answer}}": "คำตอบของคุณ: {{answer}}",
   "Asked you a question": "ถามคุณ 1 คำถาม",
-  "Asked you {{count}} questions": "ถามคุณ {{count}} คำถาม"
+  "Asked you {{count}} questions": "ถามคุณ {{count}} คำถาม",
+  "Bridge and updates": "Bridge และการอัปเดต",
+  "Bridge update available": "มีอัปเดต Bridge",
+  "Current Bridge version": "เวอร์ชัน Bridge ปัจจุบัน",
+  "Last confirmed Bridge version": "เวอร์ชัน Bridge ที่ยืนยันล่าสุด",
+  "Latest Bridge: {{version}}": "Bridge ล่าสุด: {{version}}",
+  "Check for Bridge updates": "ตรวจสอบอัปเดต Bridge",
+  "Could not check Bridge updates. Try again later.": "ตรวจสอบอัปเดตไม่สำเร็จ โปรดลองภายหลัง",
+  "The unified updater is available in newer Bridge releases. Use your original deployment method for this release.": "Bridge รุ่นใหม่รองรับตัวอัปเดตรวม สำหรับรุ่นนี้ ให้ใช้วิธีติดตั้งเดิมเพื่ออัปเดต",
+  "Confirm the current version here after reconnecting.": "หลังเชื่อมต่ออีกครั้ง ให้ยืนยันเวอร์ชันปัจจุบันที่นี่"
 }

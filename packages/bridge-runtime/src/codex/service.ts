@@ -1,3 +1,4 @@
+import { UpdateAdmission } from '../update-admission.js';
 import { DeliveredArtifacts } from '../delivered-artifacts.js';
 import { sessionActivityKeys } from '../session-activity.js';
 import { CodexSessionActivity } from './session-activity.js';
@@ -23,7 +24,7 @@ import { canonicalProject, projectDescriptor, savedCodexProjects } from './proje
 import { DesktopIpc, DesktopIpcError, type DesktopSnapshot } from './desktop-ipc.js';
 
 export interface CodexRequest { type: 'req'; id: string; method: string; params?: Record<string, unknown> }
-export interface CodexOptions { project: string; directory: string; command?: string; env?: NodeJS.ProcessEnv; device?: boolean; desktop?: DesktopIpc }
+export interface CodexOptions { bridgeVersion?: string; project: string; directory: string; command?: string; env?: NodeJS.ProcessEnv; device?: boolean; desktop?: DesktopIpc }
 type Entry = { permissionsUnconfirmed?: true; archived?: boolean; cwd?: string; native?: boolean; id: string; threadId?: string; title: string; created: number; activity?: number; model?: string; provider?: string; effort?: string; serviceTier?: string | null; speedPreference?: { serviceTier: string | null; provider: string }; preview?: string; keys: Record<string, { hash: string; runId: string }> };
 type Run = { desktop?: boolean; id: string; turnId?: string; text: string; started: number; itemId?: string; final?: string; items: Map<string, any> };
 type Consent = { desktop?: boolean; wireId: string | number; entry: Entry; turnId: string; approval: Extract<ApprovalRequest, { kind: 'exec' }>; permissions?: object };
@@ -66,6 +67,7 @@ export class CodexService extends EventEmitter {
   private questions = new Map<string, QuestionGroup>();
   private items = new Map<string, any>();
   private stopped = false;
+  private readonly updateAdmission = new UpdateAdmission();
   private disconnected = false;
   private catalog: any[] = [];
   private projects = new Map<string, ReturnType<typeof projectDescriptor>>();
@@ -235,7 +237,10 @@ export class CodexService extends EventEmitter {
       'thread-follower-command-approval-decision', 'thread-follower-file-approval-decision', 'thread-follower-permissions-request-approval-response', 'thread-follower-submit-user-input',
     ].includes(method);
   }
-  private async desktopRequest(method: string, p: any): Promise<any> {
+  private desktopRequest(method: string, p: any): Promise<any> {
+    return this.updateAdmission.request(() => this.desktopRequestNow(method, p));
+  }
+  private async desktopRequestNow(method: string, p: any): Promise<any> {
     const r = this.records.find(row => row.threadId === p.conversationId)!;
     const call = (method: string, params: object) => this.request({ type: 'req', id: randomUUID(), method, params: { sessionKey: r.id, ...params } });
     if (method === 'thread-owner-discovery') return { supportsUntrustedAppInput: false };
@@ -766,9 +771,12 @@ export class CodexService extends EventEmitter {
     await this.recover();
     const catalog = this.catalog.length ? this.catalog : await this.refreshModels();
     const account = await this.rpc.request('account/read', { refreshToken: false });
-    return { backend: 'codex', sessionActivity: 1, profileVersion: 1, sessionCatalogSync: 1, sessionCatalogPageIndex: 1, artifacts: true, modelReady: account.requiresOpenaiAuth !== true || !!account.account, model: catalog.find(m => m.isDefault)?.model ?? '', vision: true, project: basename(this.project), projects: !!this.options.device, fastMode: true, sessionPermissions: true, sessionArchive: true, promptStatus: true, desktopConnected: this.desktop?.ready === true };
+    return { backend: 'codex', ...(this.options.bridgeVersion ? { bridgeVersion: this.options.bridgeVersion } : {}), sessionActivity: 1, profileVersion: 1, sessionCatalogSync: 1, sessionCatalogPageIndex: 1, artifacts: true, modelReady: account.requiresOpenaiAuth !== true || !!account.account, model: catalog.find(m => m.isDefault)?.model ?? '', vision: true, project: basename(this.project), projects: !!this.options.device, fastMode: true, sessionPermissions: true, sessionArchive: true, promptStatus: true, desktopConnected: this.desktop?.ready === true };
   }
   async request(frame: CodexRequest): Promise<unknown> {
+    return this.updateAdmission.request(() => this.requestNow(frame));
+  }
+  private async requestNow(frame: CodexRequest): Promise<unknown> {
     const result = await this.dispatch(frame);
     if (['sessions.create', 'sessions.rename', 'sessions.reset', 'sessions.delete', 'sessions.archive'].includes(frame.method)) this.catalogSync.invalidate();
     return result;
@@ -1283,6 +1291,8 @@ export class CodexService extends EventEmitter {
       message: { role: 'assistant', content: terminalMessage.text } } : run.final || generated.length ? { message: { role: 'assistant', content: run.final ?? '', ...(generated.length ? { attachments: generated } : {}), model: r.model, provider: r.provider } } : {}) });
     this.update({ type: 'session_info_update', session: this.descriptor(r) });
   }
+  prepareForUpdate(): boolean { return this.updateAdmission.prepare(() => this.runs.size > 0 || this.starts.size > 0); }
+
   async stop(): Promise<void> {
     if (this.stopped) return; this.stopped = true; this.artifacts.clear();
     for (const timer of this.publishTimers.values()) clearTimeout(timer); this.publishTimers.clear();

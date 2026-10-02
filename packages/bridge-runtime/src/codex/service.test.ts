@@ -1495,3 +1495,16 @@ it('observes catalog-only desktop tasks without indexing, opening, publishing hi
   expect(mock.request).not.toHaveBeenCalled();
   await expect(request('sessions.activity', { keys: Array(33).fill(key) })).rejects.toThrow('Invalid session activity request');
 });
+
+it('reports package version and protects active work before fencing update admission', async () => {
+  const subject = service;
+  (subject as any).options.bridgeVersion = '3.1.11';
+  expect(await subject.request({ type: 'req', id: 'version', method: 'health' })).toMatchObject({ backend: 'codex', bridgeVersion: '3.1.11' });
+  (subject as any).runs.set('update-test', { run: {} });
+  expect(subject.prepareForUpdate()).toBe(false);
+  (subject as any).runs.delete('update-test');
+  // The ordinary fixture may have a real idle native process; those remain restartable.
+  expect(subject.prepareForUpdate()).toBe(true);
+  await expect(subject.request({ type: 'req', id: 'after', method: 'sessions.list' })).rejects.toThrow('restarting');
+  await expect((subject as any).desktopRequest('thread-owner-discovery', { conversationId: threadId })).rejects.toThrow('restarting');
+});

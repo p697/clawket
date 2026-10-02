@@ -486,5 +486,14 @@
   "Presenting a plan": "Пропонує план",
   "Your answer: {{answer}}": "Ваша відповідь: {{answer}}",
   "Asked you a question": "Поставив вам запитання",
-  "Asked you {{count}} questions": "Поставив вам запитань: {{count}}"
+  "Asked you {{count}} questions": "Поставив вам запитань: {{count}}",
+  "Bridge and updates": "Bridge та оновлення",
+  "Bridge update available": "Доступне оновлення Bridge",
+  "Current Bridge version": "Поточна версія Bridge",
+  "Last confirmed Bridge version": "Остання підтверджена версія Bridge",
+  "Latest Bridge: {{version}}": "Найновіший Bridge: {{version}}",
+  "Check for Bridge updates": "Перевірити оновлення Bridge",
+  "Could not check Bridge updates. Try again later.": "Не вдалося перевірити оновлення. Спробуйте пізніше.",
+  "The unified updater is available in newer Bridge releases. Use your original deployment method for this release.": "Нові версії Bridge підтримують єдине оновлення. Цю версію оновіть звичним способом розгортання.",
+  "Confirm the current version here after reconnecting.": "Після повторного підключення перевірте тут поточну версію."
 }

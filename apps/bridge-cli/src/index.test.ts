@@ -1,3 +1,5 @@
+vi.mock('./managed-release.js', () => ({ delegateManagedRuntime: vi.fn(async () => false), isRuntimeCommand: (args: string[]) => ['run', 'start', 'install', 'restart'].includes(args[0]) }));
+vi.mock('./runtime-owner.js', () => ({ registerRuntimeOwner: vi.fn(async () => async () => {}) }));
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -235,6 +237,7 @@ describe('cli pairing output', () => {
     // Process listings below are mocked POSIX ps output.
     vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
     vi.clearAllMocks();
+    vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
     const testHome = mkdtempSync(join(tmpdir(), 'clawket-cli-home-'));
     vi.stubEnv('HOME', testHome);
     vi.stubEnv('USERPROFILE', testHome);
@@ -339,7 +342,10 @@ describe('cli pairing output', () => {
     consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    vi.useRealTimers();
+    await new Promise(resolve => setImmediate(resolve));
     // The watchdog test switches to fake timers; restore them here so a failure
     // before its own `vi.useRealTimers()` cannot stall every later test.
     vi.useRealTimers();
@@ -1127,6 +1133,7 @@ describe('cli pairing output', () => {
       bridgeUrl: 'ws://127.0.0.1:4321/v1/hermes/ws?token=test',
     }));
 
+    await vi.waitFor(() => expect(exitSpy).toHaveBeenCalledWith(0));
     processOnSpy.mockRestore();
     exitSpy.mockRestore();
   });
@@ -1393,6 +1400,7 @@ describe('cli pairing output', () => {
     );
     expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('[hermes-service] Started Hermes bridge runtime (pid 40160).'));
 
+    await vi.waitFor(() => expect(exitSpy).toHaveBeenCalledWith(0));
     processOnSpy.mockRestore();
     exitSpy.mockRestore();
   });

@@ -486,5 +486,14 @@
   "Presenting a plan": "正在提交计划",
   "Your answer: {{answer}}": "你的回答：{{answer}}",
   "Asked you a question": "问了你 1 个问题",
-  "Asked you {{count}} questions": "问了你 {{count}} 个问题"
+  "Asked you {{count}} questions": "问了你 {{count}} 个问题",
+  "Bridge and updates": "Bridge 与更新",
+  "Bridge update available": "Bridge 有更新",
+  "Current Bridge version": "当前 Bridge 版本",
+  "Last confirmed Bridge version": "上次确认的 Bridge 版本",
+  "Latest Bridge: {{version}}": "最新 Bridge：{{version}}",
+  "Check for Bridge updates": "检查 Bridge 更新",
+  "Could not check Bridge updates. Try again later.": "无法检查 Bridge 更新，请稍后重试。",
+  "The unified updater is available in newer Bridge releases. Use your original deployment method for this release.": "较新的 Bridge 版本支持统一升级。此版本请使用原来的部署方式更新。",
+  "Confirm the current version here after reconnecting.": "重新连接后，在这里确认当前版本。"
 }

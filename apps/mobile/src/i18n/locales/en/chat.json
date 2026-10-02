@@ -486,5 +486,14 @@
   "Presenting a plan": "Presenting a plan",
   "Your answer: {{answer}}": "Your answer: {{answer}}",
   "Asked you a question": "Asked you a question",
-  "Asked you {{count}} questions": "Asked you {{count}} questions"
+  "Asked you {{count}} questions": "Asked you {{count}} questions",
+  "Bridge and updates": "Bridge and updates",
+  "Bridge update available": "Bridge update available",
+  "Current Bridge version": "Current Bridge version",
+  "Last confirmed Bridge version": "Last confirmed Bridge version",
+  "Latest Bridge: {{version}}": "Latest Bridge: {{version}}",
+  "Check for Bridge updates": "Check for Bridge updates",
+  "Could not check Bridge updates. Try again later.": "Could not check Bridge updates. Try again later.",
+  "The unified updater is available in newer Bridge releases. Use your original deployment method for this release.": "The unified updater is available in newer Bridge releases. Use your original deployment method for this release.",
+  "Confirm the current version here after reconnecting.": "Confirm the current version here after reconnecting."
 }

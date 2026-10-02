@@ -1,3 +1,4 @@
+import { UpdateAdmission } from '../update-admission.js';
 import { DeliveredArtifacts } from '../delivered-artifacts.js';
 import { sessionActivityKeys } from '../session-activity.js';
 import { SessionCatalogSync } from '../session-catalog.js';
@@ -21,7 +22,7 @@ import { ClaudeStore, type ClaudeRecord } from './store.js';
 import { claudeModels } from './models.js';
 
 export interface ClaudeRequest { type: 'req'; id: string; method: string; params?: Record<string, unknown> }
-export interface ClaudeOptions { project: string; directory: string; executable: string; device?: boolean; ownershipDirectory?: string }
+export interface ClaudeOptions { bridgeVersion?: string; project: string; directory: string; executable: string; device?: boolean; ownershipDirectory?: string }
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 function string(value: unknown, label: string, max = 300): string {
   if (typeof value !== 'string' || !value.trim() || value.length > max) throw new ClaudeFault(`Invalid ${label}`);
@@ -41,6 +42,7 @@ export class ClaudeService extends EventEmitter {
   private previews = new Map<string, { preview: string; lastActivityAt: number }>();
   private queue: Promise<unknown> = Promise.resolve();
   private stopped = false;
+  private readonly updateAdmission = new UpdateAdmission();
 
   constructor(private readonly options: ClaudeOptions) {
     super();
@@ -106,11 +108,14 @@ export class ClaudeService extends EventEmitter {
   async health(): Promise<object> {
     if (this.stopped) throw new ClaudeFault('Claude Bridge is stopped');
     // Viewing projects/history remains useful when model authentication needs attention.
-    return { backend: 'claude-code', sessionActivity: 1, sessionCatalogSync: 1, artifacts: true, promptStatus: true, projects: true, vision: true,
+    return { backend: 'claude-code', ...(this.options.bridgeVersion ? { bridgeVersion: this.options.bridgeVersion } : {}), sessionActivity: 1, sessionCatalogSync: 1, artifacts: true, promptStatus: true, projects: true, vision: true,
       capabilities: { steer: false, thinkingLevels: false, skills: false, sessionBranch: true } };
   }
 
   async request(frame: ClaudeRequest): Promise<unknown> {
+    return this.updateAdmission.request(() => this.requestNow(frame));
+  }
+  private async requestNow(frame: ClaudeRequest): Promise<unknown> {
     const result = await this.dispatch(frame);
     if (['sessions.create', 'sessions.rename', 'sessions.reset', 'sessions.delete'].includes(frame.method)) this.catalogSync.invalidate();
     if (['sessions.reset', 'sessions.delete'].includes(frame.method) && typeof frame.params?.sessionKey === 'string') this.artifacts.forget(frame.params.sessionKey);
@@ -447,6 +452,8 @@ export class ClaudeService extends EventEmitter {
     return { key, messages: rendered, hasActiveRun: !!activeRun,
       ...(activeRun ? { activeRun } : {}), ...(page.nextCursor ? { nextCursor: page.nextCursor } : {}) };
   }
+
+  prepareForUpdate(): boolean { return this.updateAdmission.prepare(() => [...this.sessions.values()].some(session => !!session.activeRun)); }
 
   async stop(): Promise<void> {
     if (this.stopped) return;

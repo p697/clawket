@@ -1,3 +1,4 @@
+import type { ConnectionAdapterRuntimeMetadata } from '../runtime-details';
 import { artifactHistoryDisplay, artifactUpdateDisplay } from './artifact-display';
 import type { ArtifactOperations } from '@clawket/agent-protocol';
 import {
@@ -39,6 +40,8 @@ export class PiAdapter implements AgentAdapter {
   readonly management: ManagementOperations;
   private transport: RelayWsTransport;
   private currentState: ConnectionState = 'idle';
+  private bridgeVersion: string | undefined;
+  getConnectionRuntimeMetadata(): ConnectionAdapterRuntimeMetadata { return { bridgeVersion: this.bridgeVersion }; }
   private epoch = 0;
   private readonly sessionCatalog = new SessionCatalogConsumer((method, params) => this.rpc(method, params));
   private handshakeError: AdapterError | null = null;
@@ -87,13 +90,15 @@ export class PiAdapter implements AgentAdapter {
 
   private async handshake(): Promise<void> {
     const epoch = ++this.epoch;
+    this.bridgeVersion = undefined;
     this.sessionCatalog.retire();
     try {
       // Relay authenticates its socket; only direct connections need connect/token.
       // A Relay connect request starts OpenClaw's challenge lifecycle.
-      const health = await this.rpc<{ artifacts?: boolean; promptStatus?: boolean; sessionCatalogSync?: unknown; backend: string; vision: boolean; model: string }>(this.record.transportKind === 'relay' ? 'health' : 'connect', { token: this.record.auth?.token });
+      const health = await this.rpc<{ bridgeVersion?: string; artifacts?: boolean; promptStatus?: boolean; sessionCatalogSync?: unknown; backend: string; vision: boolean; model: string }>(this.record.transportKind === 'relay' ? 'health' : 'connect', { token: this.record.auth?.token });
       if (epoch !== this.epoch) return;
       if (health.backend !== 'pi') throw new AdapterError('unsupported', 'Endpoint is not a Pi Bridge');
+      this.bridgeVersion = typeof health.bridgeVersion === 'string' ? health.bridgeVersion : undefined;
       this.sessionCatalog.configure(health.sessionCatalogSync);
       this.artifactsEnabled = health.artifacts === true;
       this.capabilities.promptStatus = health.promptStatus === true;
@@ -148,8 +153,9 @@ export class PiAdapter implements AgentAdapter {
   async probe(timeoutMs = 5_000): Promise<boolean> {
     const epoch = this.epoch;
     try {
-      const health = await this.rpc<{ artifacts?: boolean; promptStatus?: boolean; sessionCatalogSync?: unknown; backend: string; vision: boolean; model: string }>('health', {}, timeoutMs);
+      const health = await this.rpc<{ bridgeVersion?: string; artifacts?: boolean; promptStatus?: boolean; sessionCatalogSync?: unknown; backend: string; vision: boolean; model: string }>('health', {}, timeoutMs);
       if (epoch !== this.epoch || health.backend !== 'pi') return false;
+      this.bridgeVersion = typeof health.bridgeVersion === 'string' ? health.bridgeVersion : undefined;
       this.sessionCatalog.configure(health.sessionCatalogSync);
       this.artifactsEnabled = health.artifacts === true;
       this.capabilities.promptStatus = health.promptStatus === true;

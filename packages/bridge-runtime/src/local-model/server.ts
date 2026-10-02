@@ -10,14 +10,17 @@ export interface LocalModelRequest { type: 'req'; id: string; method: string; pa
 
 /** The same bounded RPC dispatcher serves direct and authenticated Relay clients. */
 export class LocalModelService {
-  constructor(readonly conversation: LocalModelConversation) {}
+  constructor(readonly conversation: LocalModelConversation, private readonly bridgeVersion?: string) {}
 
-  async request(frame: LocalModelRequest): Promise<unknown> {
+  request(frame: LocalModelRequest): Promise<unknown> {
+    return this.conversation.requestForUpdate(() => this.requestNow(frame));
+  }
+  private async requestNow(frame: LocalModelRequest): Promise<unknown> {
     if (!frame || frame.type !== 'req' || typeof frame.id !== 'string' || !frame.id || frame.id.length > 200) throw new Error('Invalid request');
     const params = frame.params ?? {};
     switch (frame.method) {
       case 'connect':
-      case 'health': return { backend: 'local-model', sessionActivity: 1, protocol: 1, ...await this.conversation.health() };
+      case 'health': return { backend: 'local-model', ...(this.bridgeVersion ? { bridgeVersion: this.bridgeVersion } : {}), sessionActivity: 1, protocol: 1, ...await this.conversation.health() };
       case 'sessions.activity': return sessionActivityKeys(params.keys).map(key => ({ key, state: key !== 'main' ? 'unknown' : this.conversation.running ? 'running' : 'idle' }));
       case 'chat.history':
         if (params.cursor !== undefined && typeof params.cursor !== 'string') throw new Error('Invalid history cursor');
@@ -64,9 +67,9 @@ export class LocalModelServer {
     }
   };
 
-  constructor(readonly conversation: LocalModelConversation, private readonly token: string) {
+  constructor(readonly conversation: LocalModelConversation, private readonly token: string, bridgeVersion?: string) {
     if (Buffer.byteLength(token) < 32) throw new Error('Bridge token must contain at least 32 bytes');
-    this.service = new LocalModelService(conversation);
+    this.service = new LocalModelService(conversation, bridgeVersion);
   }
 
   async start(port = 17880, host = '127.0.0.1'): Promise<number> {

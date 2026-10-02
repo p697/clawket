@@ -1,3 +1,5 @@
+import { registerRuntimeOwner } from './runtime-owner.js';
+import { readCliVersion } from './metadata.js';
 import { handleAgentDiagnostics } from './operations.js';
 import { codexControl, startCodexBackground } from './codex-lifecycle.js';
 import { agentPairProgress, type Progress } from './progress.js';
@@ -97,12 +99,13 @@ async function runCodexCommand(args: string[], progress: Progress): Promise<void
   }
   const show = (text: string) => { if (process.send) process.send({ type: 'codex.display', text }); else { progress.succeed(); console.log(text); } };
   await inspectCodexInstallation(config.command);
-  const service = new CodexService({ project: config.project, directory: join(directory, 'sessions'), command: config.command, device: config.device });
+  const service = new CodexService({ bridgeVersion: readCliVersion(), project: config.project, directory: join(directory, 'sessions'), command: config.command, device: config.device });
   service.on('diagnostic', diagnostic => console.log(JSON.stringify({
     scope: 'codex_bridge', event: 'native_rpc_diagnostic', ts: new Date().toISOString(),
     reason: diagnostic.reason, pendingCount: diagnostic.pendingCount, frameBytes: diagnostic.frameBytes,
   })));
   let server: CodexServer | undefined, relay: CodexRelay | undefined;
+  let releaseOwner: (() => Promise<void>) | undefined;
   try {
     const health = await service.health() as { model: string; modelReady: boolean };
     let qrPayload: string | undefined, code: string | undefined;
@@ -143,10 +146,11 @@ async function runCodexCommand(args: string[], progress: Progress): Promise<void
       relay = new CodexRelay(service, config.relay, invitation => { config.relay!.invitation = invitation; save(config); }, message => console.error(`[${Date.now()}] ${message}`));
       relay.start(); await relay.waitUntilReady();
     }
+    releaseOwner = await registerRuntimeOwner({ backend: 'codex', configPath, prepare: () => service.prepareForUpdate(), stop: () => service.emit('shutdown') });
     if (code) show(`Pairing code: ${code}`);
     if (qrPayload) { show(await QRCode.toString(qrPayload, { type: 'terminal', small: true })); const output = flag(args, '--qr-file'); if (output) await QRCode.toFile(resolve(output), qrPayload); }
     show(process.send ? `Codex · ${label} is running in the background. ${config.device ? 'Choose a project when starting a chat on your phone.' : 'New chats use this project.'} Use clawket codex status / stop with the same pairing options.` : `Codex · ${label} is running. Keep this terminal open. Ctrl+C stops Clawket-owned Codex sessions.`);
     if (!health.modelReady) show('Configure a model on this computer with codex login before chatting.');
     await new Promise<void>(done => { const stop = () => { process.off('SIGINT', stop); process.off('SIGTERM', stop); service.off('shutdown', stop); done(); }; process.once('SIGINT', stop); process.once('SIGTERM', stop); service.once('shutdown', stop); process.send?.({ type: 'codex.ready' }); });
-  } finally { relay?.stop(); if (server) await server.stop(); else await service.stop(); }
+  } finally { await releaseOwner?.(); relay?.stop(); if (server) await server.stop(); else await service.stop(); }
 }

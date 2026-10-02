@@ -148,3 +148,5 @@ npm run check:required
 ## 许可证
 
 除子目录另有声明外，本仓库采用 [AGPL-3.0-only](./LICENSE) 许可证。
+
+Bridge 升级保留现有配对。统一升级命令、运行版本确认及手动部署例外见 [Bridge 升级说明](docs/bridge-updates.md)。
