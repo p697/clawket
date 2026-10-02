@@ -17,14 +17,15 @@ cd /Volumes/Lucy-SSD/clawket-worktrees/claude-pairing-copy
 # edit, run the narrowest checks, commit
 git push -u origin claude/pairing-copy
 gh pr create --base main --fill
+gh pr checks <number> --watch                           # same turn, after every push
 # once the required checks pass on a branch that is current with main:
 gh pr merge --squash
 node scripts/worktree.mjs finish                        # fast-forward main, remove worktree and branch
 ```
 
 - `create` links the local files below and runs `npm ci`. Pass `--no-install` for documentation-only work; `bootstrap` later re-links and installs. An existing local or remote branch is attached instead of recreated.
-- When `main` moves under an open PR: `git fetch origin && git rebase origin/main && git push --force-with-lease` (or `gh pr update-branch`), then wait for the checks again. Claude desktop worktree sessions may use the app's base-branch sync instead.
-- Wait for checks with the tool's CI notifications or `gh pr checks <number> --watch`; the required gate usually takes a few minutes, and the Windows and macOS Bridge jobs run only when a change can affect the desktop Bridge. A red required check is fixed in the same branch; never merge around it.
+- When `main` moves under an open PR: `git fetch origin && git rebase origin/main && git push --force-with-lease` (or `gh pr update-branch`), then wait for the checks again. Claude desktop worktree sessions may use the app's base-branch sync instead. Most PRs add an entry at the top of `docs/3.0/PROGRESS.md` and often a HUMAN TODO row, so each merge leaves the other open PRs conflicting there: keep both sides, with the entry that merges last on top.
+- Wait for checks in the same turn with `gh pr checks <number> --watch` (in the background while other work continues), then merge once `gh pr view <number> --json mergeStateStatus` reports `CLEAN`. Notifications cannot replace this. The Claude desktop PR monitor is off by default, reports only failures, conflicts and review comments (never success), and its cached status can lag GitHub. The repository has no auto-merge or merge queue. The required gate usually takes a few minutes, and the Windows and macOS Bridge jobs run only when a change can affect the desktop Bridge. A red required check is fixed in the same branch; never merge around it.
 - Do not use `gh pr merge --delete-branch`: it tries to check out `main` inside the task worktree, which git refuses because the primary checkout holds `main`. `finish` deletes the local branch after confirming the PR merged at the local head; GitHub deletes the remote branch.
 - `finish` deletes the directory it runs in; continue from the primary checkout path it prints.
 - To park unfinished work, push the branch and run `remove`: it requires a clean worktree whose commits exist on a remote branch, and keeps the branch. Never delete an unmerged branch.
