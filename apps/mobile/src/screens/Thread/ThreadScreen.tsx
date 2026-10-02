@@ -1110,7 +1110,6 @@ function ThreadScreenContent({
           controller.setModelPickerVisible(!reviewPermissions);
           controller.retryModelPickerLoad();
         } : undefined}
-        permissionMode={controller.permissions?.mode}
         onResolveApproval={controller.resolveApproval}
       />
       <RunInputSheet visible={Boolean(runInputId) && !sessionPreview} scope={`${connectionId}:${agentId}:${sessionKey}`}

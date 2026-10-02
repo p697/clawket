@@ -1,4 +1,4 @@
-import { ShieldAlert, type LucideIcon } from 'lucide-react-native';
+import type { LucideIcon } from 'lucide-react-native';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleProp, StyleSheet, Text, type ViewStyle, View } from 'react-native';
 import Animated, { Easing, FadeIn, FadeOut, withTiming, type EntryExitAnimationFunction } from 'react-native-reanimated';
@@ -23,8 +23,6 @@ import { SwapEntrance } from './SwapEntrance';
 const HEADER_AVATAR_SIZE = ControlSize.pill - Space.md;
 
 const PRESSED_OPACITY = 0.88;
-/** The warning shield matches the name's cap height. */
-const WARNING_SIZE = 13;
 
 export type HeaderPillProps = Readonly<{
   icon?: LucideIcon;
@@ -41,12 +39,6 @@ export type HeaderPillProps = Readonly<{
   presence?: PresenceRingTone | null;
   /** An idle Agent that can answer: its "Online" subtitle takes the accent, as in Telegram. */
   online?: boolean;
-  /**
-   * A risky standing setting, named for assistive technology (Codex full
-   * access): a small warn shield precedes the name, like Telegram's lock on
-   * a secret chat (A+ model sheet, owner decision 2026-10-01).
-   */
-  warning?: string;
   emoji?: string | null;
   avatarUrl?: string | null;
   /** The Agent's backend: a product Agent wears the official mark, as on the roster. */
@@ -70,7 +62,6 @@ export function HeaderPill({
   subtitle,
   subtitleEllipsizeMode = 'tail',
   presence = null,
-  warning,
   online = false,
   emoji,
   avatarUrl,
@@ -123,12 +114,9 @@ export function HeaderPill({
         ) : null}
       </View>
       <View style={styles.labels}>
-        <View style={styles.nameRow}>
-          {warning ? <ShieldAlert testID={testID ? `${testID}-warning` : undefined} size={WARNING_SIZE} color={theme.colors.warn} strokeWidth={2.1} /> : null}
-          <Text style={[styles.name, styles.nameText, { color: theme.colors.ink }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>
-            {name}
-          </Text>
-        </View>
+        <Text style={[styles.name, { color: theme.colors.ink }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>
+          {name}
+        </Text>
         {subtitle.trim() ? <SwapEntrance swapKey={subtitle} ready={subtitleReady} entering={statusRiseIn}
           reducedEntering={statusFadeIn} testID={testID ? `${testID}-subtitle-motion` : undefined}>
           <Text
@@ -154,7 +142,7 @@ export function HeaderPill({
     <Pressable
       testID={testID}
       accessibilityRole="button"
-      accessibilityLabel={[accessibilityLabel ?? name, warning].filter(Boolean).join(', ')}
+      accessibilityLabel={accessibilityLabel ?? name}
       accessibilityHint={accessibilityHint}
       onPress={onPress}
       style={({ pressed }) => [rootStyle, pressed ? styles.pressed : null]}
@@ -208,15 +196,8 @@ const styles = StyleSheet.create({
   labels: {
     flexShrink: 1,
   },
-  nameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Space.xs - 1,
-  },
-  nameText: {
-    flexShrink: 1,
-  },
   name: {
+    flexShrink: 1,
     fontSize: FontSize.secondary,
     lineHeight: LineHeight.caption,
     fontWeight: FontWeight.semibold,

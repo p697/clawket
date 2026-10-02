@@ -414,8 +414,6 @@ export type ThreadViewProps = Readonly<{
   onSelectSlashCommand?: (command: SlashCommand) => void;
   onDismissSlashSuggestions?: () => void;
   onReviewRuntimeSettings?: () => void;
-  /** The conversation's confirmed permission mode; full access marks the header (A+ model sheet, 2026-10-01). */
-  permissionMode?: string | null;
   onResolveApproval?: (
     approvalId: string,
     decision: 'allow-once' | 'allow-always' | 'deny' | 'approve' | 'reject',
@@ -535,7 +533,6 @@ export function ThreadView({
   onSelectSlashCommand,
   onDismissSlashSuggestions,
   onReviewRuntimeSettings,
-  permissionMode,
   onResolveApproval,
   testID = 'thread-screen',
 }: ThreadViewProps): React.JSX.Element {
@@ -1297,7 +1294,6 @@ export function ThreadView({
             platform={agentPlatform}
             status={avatarStatus}
             material={wallpaperActive ? 'glass' : 'surface'}
-            warning={capabilities.sessionPermissions && permissionMode === 'full-access' ? t('Full access', { ns: 'chat' }) : undefined}
             accessibilityLabel={copy.settings}
             onPress={!locked ? onOpenSettings : undefined}
           />
@@ -1521,8 +1517,7 @@ export function ThreadView({
             ) : undefined)}
             testID={`${testID}-composer`}
             accessory={capabilities.models ? ({ drafting, room }: ComposerAccessorySpace) => {
-              // The capsule holds the model only: permissions live in the model sheet,
-              // and full access marks the header (A+ model sheet, owner decision 2026-10-01).
+              // The capsule holds the model only; permissions live in the model sheet.
               const chipRoom = room == null ? null : room - Space.sm;
               return (
                 <View style={styles.composerOptions}>
