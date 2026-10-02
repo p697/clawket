@@ -6,6 +6,7 @@ import {
   resolveToolDetail,
   resolveToolTitle,
   stripToolStatusPrefix,
+  unwrapShellCommand,
   unwrapToolCall,
 } from './tool-display';
 
@@ -185,6 +186,23 @@ describe('formatToolDisplayName', () => {
   it('keeps unknown tool names readable', () => {
     expect(formatToolDisplayName('custom_tool', t)).toBe('custom tool');
     expect(formatToolDisplayName('js', t)).toBe('js');
+  });
+});
+
+describe('unwrapShellCommand', () => {
+  it('names the command a Codex shell invocation ran', () => {
+    expect(unwrapShellCommand('/bin/zsh -lc "git ls-files -z | python3 -c \\"print(1)\\""'))
+      .toBe('git ls-files -z | python3 -c "print(1)"');
+    expect(unwrapShellCommand("bash -lc 'echo it'\\''s done'")).toBe("echo it's done");
+    expect(unwrapShellCommand('/usr/bin/sh -c "ls -la"')).toBe('ls -la');
+    expect(resolveToolDetail('exec', { command: '/bin/zsh -lc "git status"' })).toBe('git status');
+    expect(resolveToolDetail('terminal', { command: '/bin/zsh -lc "npm test"' })).toBe('npm test');
+  });
+
+  it('leaves plain commands and anything after the quoted script as recorded', () => {
+    expect(unwrapShellCommand('git status')).toBe('git status');
+    expect(unwrapShellCommand('/bin/zsh -lc "make" && echo done')).toBe('/bin/zsh -lc "make" && echo done');
+    expect(resolveToolDetail('read', { path: '/bin/zsh -lc "x"' })).toBe('/bin/zsh -lc "x"');
   });
 });
 

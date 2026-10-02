@@ -37,6 +37,18 @@ export function toolCategory(name: string): ToolCategory {
   return 'other';
 }
 
+/**
+ * Codex reports a command as the shell invocation that ran it
+ * (`/bin/zsh -lc "git status"`), so every row would start alike. Summaries
+ * name the command itself; the detail sheet keeps the raw input.
+ */
+export function unwrapShellCommand(command: string): string {
+  const match = /^(?:\/usr)?(?:\/bin\/)?(?:ba|z)?sh\s+-l?c\s+(["'])([\s\S]*)\1\s*$/.exec(command.trim());
+  if (!match) return command;
+  const [, quote, inner] = match;
+  return quote === '"' ? inner!.replace(/\\(["\\$`])/g, '$1') : inner!.replace(/'\\''/g, "'");
+}
+
 export function resolveToolDetail(name: string, args?: unknown): string | undefined {
   if (typeof args === 'string') {
     const raw = args;
@@ -79,6 +91,7 @@ export function resolveToolDetail(name: string, args?: unknown): string | undefi
   }
 
   if (!detail) return undefined;
+  if (toolCategory(name) === 'command') detail = unwrapShellCommand(detail);
   return detail
     .replace(/^\/Users\/[^/]+\//, '~/')
     .replace(/^\/home\/[^/]+\//, '~/');

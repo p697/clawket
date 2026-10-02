@@ -3,8 +3,9 @@
 - 2026-10-02 工作记录里的工具步骤显示 Agent 写的标题（负责人：Codex 的「Used 4 tools」点开后四步都叫「js」，太草率；详情里明明有 title）。
   - 调研（本机真实会话，只统计参数字段）：Codex 的 `js` 工具 1377 次调用全部带 `title`；Claude Code 的 Bash 99.7% 带 `description`，Agent（子任务）也带；Hermes（terminal、read_file、skill_view）和 Pi（read、bash、edit、write）没有这类字段。
   - 改法（`resolveToolTitle`）：输入里有 `title` / `description` / `summary` 时，这句话当工作记录这一行的主行，下一行是工具名和命令 / 路径。详情弹层标题改用它，工具名放到状态行。运行中和失败的胶囊在没有命令、路径或查询可显示时也用它，不再是「Using js」。没有这类字段的工具显示不变。
-  - 顺手：搜索类工具显示要找的内容（Claude Code Grep/Glob、Pi grep、Hermes search_files 的 `pattern`）；Hermes `terminal` 显示为「命令」、`patch` 和 Claude Code `MultiEdit` 显示为「写入文件」，Claude Code `WebFetch` / `WebSearch` 用本地化名称。
-  - 单测逐文件串行：tool-display 35、ToolDetailModal 6、tool-activity-model 11、useAdapterChatEvents 17、historyLineage 8、chat-cache 42、ThreadView 定向 9。
+  - 顺手：Codex 每条命令都套着 `/bin/zsh -lc "…"`，工作记录和胶囊里只显示里面的命令，详情里的原始输入不变（真机看到真正的命令被挤到后面截断）。搜索类工具显示要找的内容（Claude Code Grep/Glob、Pi grep、Hermes search_files 的 `pattern`）；Hermes `terminal` 显示为「命令」、`patch` 和 Claude Code `MultiEdit` 显示为「写入文件」，Claude Code `WebFetch` / `WebSearch` 用本地化名称。
+  - 真机（SM-A566B QA 包）：Claude Code 的 Bash 步骤显示「显示当前目录并列出文件」，下一行「命令 · pwd && ls -la」；详情标题同句，状态行「命令 · ✓ 已完成」。手机上的 Codex 连接只有命令工具，js 由单测覆盖。
+  - 单测逐文件串行：tool-display 37、ToolDetailModal 6、tool-activity-model 11、useAdapterChatEvents 17、historyLineage 8、chat-cache 42、ThreadView 定向 9。tsc、ui-style 通过。
 
 - 2026-10-02 用户气泡跑到左下角变半透明、切回会话后整页空白（负责人在 iOS 上用 Codex 时遇到，偶发）。
   - 原因：不是 Codex 协议或连接问题，是 Reanimated 4.5.1 的已知 bug，4.5.3 已修。动画结束后，Reanimated 每 500ms 把最终值同步回 React，但会先删掉超过 2 秒的记录、不先同步。只要 JS 卡了约 1 秒以上（发消息后 Codex 开跑、切会话挂载长列表、App 进后台），这一步就被跳过；之后这个视图再被 React 渲染一次，就退回动画第 0 帧。
