@@ -1,7 +1,8 @@
+import { handleAgentDiagnostics } from './operations.js';
 import { codexControl, startCodexBackground } from './codex-lifecycle.js';
 import { agentPairProgress, type Progress } from './progress.js';
 import { defaultDeviceConnectionName } from './device-connection-name.js';
-import { openSync, readSync, closeSync, fstatSync, mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, unlinkSync, realpathSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, unlinkSync, realpathSync } from 'node:fs';
 import { dirname, join, resolve, basename } from 'node:path';
 import { homedir } from 'node:os';
 import { randomBytes, createHash } from 'node:crypto';
@@ -29,15 +30,24 @@ export async function handleCodexCommand(args: string[]): Promise<void> {
 
 async function runCodexCommand(args: string[], progress: Progress): Promise<void> {
   const command = args[0] ?? 'pair';
+  if (await handleAgentDiagnostics('codex', args)) return;
   if (!['pair', 'run', 'doctor', 'status', 'start', 'restart', 'stop', 'logs', 'reset'].includes(command)) throw new Error('Use codex pair, run, start, restart, stop, status, doctor, logs or reset');
   if (args.includes('--device') && flag(args, '--project')) throw new Error('Choose --device or --project, not both');
   const device = args.includes('--device') || (!flag(args, '--project') && !flag(args, '--config'));
   const deviceRoot = join(homedir(), 'Documents', 'Clawket', 'Chats');
   if (device) mkdirSync(deviceRoot, { recursive: true, mode: 0o700 });
-  const project = realpathSync(resolve(flag(args, '--project') ?? (device ? deviceRoot : process.cwd())));
+  const requestedProject = resolve(flag(args, '--project') ?? (device ? deviceRoot : process.cwd()));
+  const project = flag(args, '--config') && !existsSync(requestedProject) ? requestedProject : realpathSync(requestedProject);
   const projectId = createHash('sha256').update(project).digest('hex').slice(0, 16);
   const configPath = resolve(flag(args, '--config') ?? join(homedir(), '.clawket', 'codex', device ? 'device' : projectId, args.includes('--preview') ? 'preview' : 'production', 'runtime.json'));
   const directory = dirname(configPath);
+  if (!existsSync(configPath) && ['start', 'restart', 'stop', 'reset', 'run'].includes(command)) {
+    if (command === 'stop' || command === 'reset') {
+      const message = 'Codex has no saved pairing at this scope.';
+      console.log(args.includes('--json') ? JSON.stringify({ ok: true, message, configPath }) : message); return;
+    }
+    throw new Error('Pair this connection first, or select its original --config / --project.');
+  }
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const save = (value: Config) => { writeFileSync(configPath + '.pending', JSON.stringify(value, null, 2), { mode: 0o600 }); renameSync(configPath + '.pending', configPath); };
   const configExists = existsSync(configPath);
@@ -46,15 +56,7 @@ async function runCodexCommand(args: string[], progress: Progress): Promise<void
   const label = config.device ? 'Computer' : basename(config.project);
   if (command === 'pair' && flag(args, '--port')) config.port = Number(flag(args, '--port'));
   if (!Number.isInteger(config.port) || config.port < 1 || config.port > 65535) throw new Error('Invalid Codex Bridge port');
-  if (command === 'logs') {
-    const log = join(directory, 'codex.log');
-    if (!existsSync(log)) { console.log('No Codex Bridge logs yet.'); return; }
-    const fd = openSync(log, 'r');
-    try { const size = fstatSync(fd).size; const buffer = Buffer.alloc(Math.min(size, 32000)); readSync(fd, buffer, 0, buffer.length, Math.max(0, size - buffer.length)); console.log(buffer.toString('utf8')); }
-    finally { closeSync(fd); }
-    return;
-  }
-  if (['pair', 'status', 'doctor', 'stop', 'restart', 'reset', 'start'].includes(command)) {
+  if (['pair', 'stop', 'restart', 'reset', 'start'].includes(command)) {
     let health: { model: string; modelReady: boolean } | undefined;
     const explicitStop = ['stop', 'restart', 'reset'].includes(command);
     let stoppedOwned = false;
@@ -69,8 +71,6 @@ async function runCodexCommand(args: string[], progress: Progress): Promise<void
         if ((error as NodeJS.ErrnoException).code !== 'ECONNREFUSED') throw error;
       }
     }
-    if (command === 'status') { console.log(`Codex · ${label}: ${health ? 'ready' : 'offline'}`); return; }
-    if (command === 'doctor' && health) { console.log(`Codex RPC: ready\nModel: ${health.modelReady ? 'configured' : 'sign in to Codex on this computer'}`); return; }
     if (command === 'pair' && health) {
       const sessions = await codexControl(config, 'sessions.list') as unknown as Array<{ hasActiveRun?: boolean }>;
       if (sessions.some(s => s.hasActiveRun)) throw new Error('Finish the current Codex task before refreshing pairing. Existing phone connections remain usable.');
@@ -78,11 +78,14 @@ async function runCodexCommand(args: string[], progress: Progress): Promise<void
       await codexControl(config, 'bridge.stop');
       stoppedOwned = true;
     }
+    if (!health && !stoppedOwned && ['pair', 'start', 'restart'].includes(command) && existsSync(join(directory, 'sessions', 'owner.lock'))) {
+      throw new Error('The saved Codex owner is locked without verified health. Inspect logs before starting another runtime.');
+    }
     if (stoppedOwned) {
       const deadline = Date.now() + 10000;
       while (existsSync(join(directory, 'sessions', 'owner.lock'))) { if (Date.now() > deadline) throw new Error('Codex is still stopping; retry after it exits.'); await new Promise(r => setTimeout(r, 100)); }
     }
-    if (command === 'reset') { if (existsSync(join(directory, 'sessions', 'owner.lock'))) throw new Error('Stop the Codex owner before resetting pairing'); if (existsSync(configPath)) unlinkSync(configPath); console.log('Codex pairing cleared. Session history retained.'); return; }
+    if (command === 'reset') { if (existsSync(join(directory, 'sessions', 'owner.lock'))) throw new Error('Stop the Codex owner before resetting pairing'); if (existsSync(configPath)) unlinkSync(configPath); console.log(args.includes('--json') ? JSON.stringify({ ok: true, backend: 'codex', configPath, historyRetained: true }) : 'Codex pairing cleared. Session history retained.'); return; }
     if (command === 'stop') { console.log(stoppedOwned ? 'Codex Bridge stopped.' : 'Codex Bridge is offline.'); return; }
     if (command === 'start' && health) { console.log('Codex Bridge is already running.'); return; }
     if (command === 'start' || command === 'restart') { if (!existsSync(configPath)) throw new Error('Pair this Codex connection first'); await startCodexBackground(['run', '--config', configPath], join(directory, 'codex.log')); return; }
@@ -93,7 +96,7 @@ async function runCodexCommand(args: string[], progress: Progress): Promise<void
     await startCodexBackground([...args, ...(config.device && !args.includes('--device') ? ['--device'] : []), '--config', configPath], join(directory, 'codex.log'), progress); return;
   }
   const show = (text: string) => { if (process.send) process.send({ type: 'codex.display', text }); else { progress.succeed(); console.log(text); } };
-  const installed = await inspectCodexInstallation(config.command);
+  await inspectCodexInstallation(config.command);
   const service = new CodexService({ project: config.project, directory: join(directory, 'sessions'), command: config.command, device: config.device });
   service.on('diagnostic', diagnostic => console.log(JSON.stringify({
     scope: 'codex_bridge', event: 'native_rpc_diagnostic', ts: new Date().toISOString(),
@@ -102,7 +105,6 @@ async function runCodexCommand(args: string[], progress: Progress): Promise<void
   let server: CodexServer | undefined, relay: CodexRelay | undefined;
   try {
     const health = await service.health() as { model: string; modelReady: boolean };
-    if (command === 'doctor') { console.log(`Codex ${installed.version} RPC: ready\nModel: ${health.modelReady ? 'configured' : 'not configured — sign in to Codex on this computer'}\nProject: ${basename(config.project)}`); return; }
     let qrPayload: string | undefined, code: string | undefined;
     if (command === 'pair') {
       if (!configExists) config.displayName = defaultDeviceConnectionName('Codex');
@@ -135,10 +137,10 @@ async function runCodexCommand(args: string[], progress: Progress): Promise<void
       }
       save(config);
     } else if (!existsSync(configPath)) throw new Error('Pair this Codex connection first');
-    server = new CodexServer(service, config.token, message => console.error(message)); await server.start(config.port, config.host);
+    server = new CodexServer(service, config.token, message => console.error(`[${Date.now()}] ${message}`)); await server.start(config.port, config.host);
     if (config.relay) {
       progress.update('Connecting to Clawket Relay…');
-      relay = new CodexRelay(service, config.relay, invitation => { config.relay!.invitation = invitation; save(config); }, message => console.error(message));
+      relay = new CodexRelay(service, config.relay, invitation => { config.relay!.invitation = invitation; save(config); }, message => console.error(`[${Date.now()}] ${message}`));
       relay.start(); await relay.waitUntilReady();
     }
     if (code) show(`Pairing code: ${code}`);

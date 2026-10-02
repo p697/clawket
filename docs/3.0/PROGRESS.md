@@ -1,5 +1,13 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-02 Bridge 全命令审计与多 Agent 运维优化（负责人授权：逐个检查，明确正收益直接修改、自测）。
+  - 全部命令/别名/作用范围记录在 `../bridge/architecture/cli-runtime.md`。确认默认 status/doctor/logs 漏掉 Codex、Claude Code、Pi；status 默认过量展示路径/ID/能力；新 Agent logs 缺过滤/跟随；Claude/Pi catch-all 把健康错误当离线；未知 backend 可落入默认 reset。
+  - 默认状态摘要与 doctor 纳入已保存的项目/设备/环境；详细能力/路径保留 `--verbose`，JSON 增加 connections/summary 并保留 doctor 既有字段。诊断不创建配对目录、不启动离线原生/SDK 进程。损坏配置/项目已删除仍可读取日志；本地 readiness、Relay/手机和 inference 证据明确区分。本地模型仅报告保存配置/未实测，Windows supervisor 日志纳入。
+  - 全局/Agent 日志复用 bounded tail + 字节增量 follow，默认包含 stderr，支持时间/条数、来源、JSON/JSONL、UTF-8 分块与轮转；旧无时间戳行保留并说明年龄未知。新 Agent callback 仅给现有脱敏诊断添加时间。
+  - Claude/Pi 启停补齐认证后的 native-independent identity fallback；Codex 响应关联同步收紧。仅连接拒绝代表无 listener，超时/拒绝认证/错误身份不替换、不删配置；writer lock 未退不得另起。默认生命周期/reset 保留 OpenClaw/Hermes 范围并明确提示；新 Agent 需显式 backend/原 scope，reset 保留历史。未知/冲突 backend 和无 backend 的 scope 选项在操作前拒绝。
+  - 本地 narrow 串行：CLI 12 个文件 187 项（agent-inventory、cli-logs、agent-control、operations、codex、claude-code、pi、index、diagnostics、codex-lifecycle、pi-lifecycle、hermes-relay-lifecycle）；类型、开发 bundle 构建、check:docs（7 指令对/5 检查器用例）通过。开发 bundle 在隔离 HOME/loopback fixture 完成 7 次实际命令冒烟，未触及原生账号或云服务。v1 live replay 8/8 通过（本地双后端 Worker/Bridge）；首轮 PR CI 全绿；rebase 保留随后 main 合入的 Hermes gateway/readiness 修复，新合并状态再由完整 CI 验证（其他任务占用 simulator/heavy，未并行本地测试）。
+  - 沿用 Bridge 3.1.10，无打包分发、上传、npm 发布、Production 修改或部署；已安装 Bridge 需后续获授权的发布/更新及重启才能取得这些源码改进。
+
 - 2026-10-02 用户长消息自动折叠（负责人：长消息影响整体阅读，要求简单、合理、优雅的展开交互）。
   - 共享用户气泡按实际排版超过 6 行时默认显示 6 行及省略号，气泡内增加同色轻量「展开 / 收起」与上下箭头，44-point 点击区；时间 / 送达标记独立放在按钮旁。短消息保留原来的行内时间，恰好 6 行正文仍允许时间另起一行；附件和助手回复保持完整。
   - 原生测量跟随手机 / iPad 分栏宽度、聊天字号和系统字体缩放，不按字符数猜测。状态按会话及稳定 render key 保存，保留列表复用、历史回声换 ID 和长按浮起克隆的一致几何；点击前暂停底部跟随，防止长文展开把读者带到页尾。测量只通知对应行，结果复用且测量后移除隐藏视图，隐藏文字不参与触摸或无障碍；按钮公开展开状态，正文保留无障碍长按操作。
@@ -14,6 +22,7 @@
   - 限制：3.1.10 及更早版本启动的 gateway 没有记录，新版本对它们只给出明确失败和补救命令；由新 bridge 启动的 gateway 才能自动恢复。
   - 验证（逐个文件）：bridge-runtime 网关记录 3（另 1 项仅 Windows）、api-recovery 11、http-server 5、hermes/index 22；bridge-cli hermes-readiness 3、index 32；关掉替换逻辑的变异检查会让对应测试失败；持 heavy 租约 `npm run bridge:typecheck` 通过；用编译后的 bridge-runtime 加一个假的 `hermes gateway run` 脚本做真实进程演练（临时目录、回环端口，不碰本机真实 bridge / gateway）：换 token 后 Clawket 启动的网关被接管、`/health` 恢复 ok，用户自己启动的网关保持运行且报 `credential_mismatch`，记录文件不含 key；check:docs 通过。
   - 影响：3.1.10 从 `accfe2f4` 起，不含本修复；已安装用户要等后续 Bridge 版本（HT-HERMES-GATEWAY-KEY-1002）。未打包、发布或部署。
+
 
 - 2026-10-02 安卓 Companion 等待动画偶发闪退（负责人：SM-A566B QA 包 10-01 22:47 与 10-02 12:59 两次 `Underflow in restore - more restores than saves`，第二次在「重新连接…」时从会话面板新开 OpenClaw 会话）。
   - 原因：react-native-svg 15.15.4 安卓 `GroupView.drawGroup`（上游 #2450 引入，15.15.5 与上游 main 未变，也无人报过）。opacity 不为 1 的 `<G>` 把子元素画进自己的离屏画布；opacity 为 1 时却把「画它的那块画布」存进同一个字段，之后 opacity 一离开 1 就对它 `setBitmap`。那块画布若是外层半透明 `<G>` 正在用的离屏画布，外层的保存栈被清空，它的 `restore()` 抛异常，App 退出。
@@ -1280,6 +1289,7 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 
 | 位置（文件 § 节） | 规格原文 | 实际做法 | 理由 | 影响 |
 |---|---|---|---|---|
+| 2026-10-02 · `08-milestones.md` M3 CLI 能力输出 | status / doctor 显示 Bridge 能力列表；命令面不变。 | 默认摘要，能力和路径留在 `--verbose`；诊断聚合已授权新 Agent，补 JSON/统一日志选项。 | 负责人明确要求全面审计与正收益优化；旧默认信息过量且漏掉新后端。 | 保留能力信息、协议、配对身份及旧后台服务范围；无发布/部署。 |
 | 2026-09-22 · 花名册排序与时间 | 同连接 Agent 强制相邻；预览优先 main；缓存行显示同步时间，徽标替代时间。 | 负责人授权完整优化：跨连接全局置顶 / 活动排序；预览与活动时间同源，非 main 标来源；缓存仍显示活动时间，徽标在时间下方。 | 隐式分组搬动无关 Agent、时间含义变化让聊天列表难以理解；另修局部快照污染与旧响应回写。 | main 点击和单活连接策略保留；Hermes 新增向后兼容活动字段，旧 Bridge 回退原行为；用户负责设备验收。 |
 | 2026-09-21 · 00 §9 / 02 §5 WAF 实施 | WS 30/IP/min，四条 WAF，日用量三阈值和 Discord。 | 按本次负责人明确的正常使用与稳定性优先要求，WS 初始防洪阈值 120，配对 20 补双后端路径，使用 Pro 两条规则；机器 API 不加挑战。日用量/Discord 保留未完成状态。 | 最高成功建连样本 25/min 已接近 30，共享 IP 与新版通道需余量；Pro 规则额度/周期及原生告警能力与旧规格不符。 | 降低误伤同时保留边缘防洪；未降低候选代码注册 10/hour、8 MiB、认证和 liveness 门禁。该项不视为完全满足原始 30/min 规格，前后配置及回退见专项报告。 |
 | 2026-09-21 · Mobile 页面顶部保存 | Ghost / 纯文字 Save。 | 六类编辑页统一复用 primary 胶囊按钮，保留禁用态与原位 loading。 | 负责人截图反馈保存不明显，要求简约、有品质。 | 仅视觉及聊天主题保存中的可访问状态；原有保存条件、确认和后端操作不变。 |

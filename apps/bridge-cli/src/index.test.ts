@@ -343,6 +343,7 @@ describe('cli pairing output', () => {
     // The watchdog test switches to fake timers; restore them here so a failure
     // before its own `vi.useRealTimers()` cannot stall every later test.
     vi.useRealTimers();
+    process.exitCode = 0;
     process.argv = originalArgv.slice();
     consoleLogSpy.mockRestore();
     consoleErrorSpy.mockRestore();
@@ -390,7 +391,7 @@ describe('cli pairing output', () => {
   });
 
   it('prints OpenClaw and Hermes Bridge capabilities in status output', async () => {
-    process.argv = ['node', 'clawket', 'status'];
+    process.argv = ['node', 'clawket', 'status', '--verbose'];
     buildDoctorReportMock.mockResolvedValue({
       paired: true,
       hermesRelayPaired: true,
@@ -410,8 +411,40 @@ describe('cli pairing output', () => {
     );
   });
 
+  it('prints compact status JSON and leaves legacy details behind --verbose', async () => {
+    process.argv = ['node', 'clawket', 'status', '--json'];
+    buildDoctorReportMock.mockResolvedValue({ paired: true, serviceRunning: true, localGatewayReachable: true });
+    await import('./index.js');
+    await vi.waitFor(() => expect(consoleLogSpy).toHaveBeenCalled());
+    const result = JSON.parse(String(consoleLogSpy.mock.calls[0][0]));
+    expect(result.connections[0]).toMatchObject({ backend: 'openclaw', state: 'running' });
+    expect(consoleLogSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['reset', '--backend', 'typo'],
+    ['reset', '--backend', 'local-model'],
+    ['reset', '--config', '/an-agent.json'],
+    ['reset', '--backend', 'openclaw', '--config', '/an-agent.json'],
+    ['codex', 'reset', '--backend', 'hermes'],
+  ])('rejects an ambiguous reset without stopping any legacy service: %j', async (...args) => {
+    process.argv = ['node', 'clawket', ...args];
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    await import('./index.js');
+    await vi.waitFor(() => expect(exit).toHaveBeenCalledWith(1));
+    expect(stopServiceMock).not.toHaveBeenCalled(); expect(stopRuntimeProcessesMock).not.toHaveBeenCalled();
+  });
+
+  it('Hermes reset does not stop the shared OpenClaw service', async () => {
+    process.argv = ['node', 'clawket', 'reset', '--backend', 'hermes', '--json'];
+    await import('./index.js');
+    await vi.waitFor(() => expect(consoleLogSpy).toHaveBeenCalled());
+    expect(JSON.parse(String(consoleLogSpy.mock.calls[0][0])).scope).toBe('hermes');
+    expect(stopServiceMock).not.toHaveBeenCalled(); expect(stopRuntimeProcessesMock).not.toHaveBeenCalled();
+  });
+
   it('prints empty Bridge capability lists for legacy status and doctor payloads', async () => {
-    process.argv = ['node', 'clawket', 'doctor'];
+    process.argv = ['node', 'clawket', 'doctor', '--verbose'];
     buildDoctorReportMock.mockResolvedValue({
       paired: true,
       hermesRelayPaired: true,

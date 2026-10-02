@@ -22,13 +22,11 @@ When improving the local Hermes testing flow:
 
 ## CLI Observability Rule
 
-When expanding `status`, `doctor`, `logs`, `reset`, or related operational commands:
-
-1. Treat them as product-level diagnostics for both OpenClaw and Hermes, not as OpenClaw-only legacy helpers.
-2. Hermes detached bridge and relay runtimes must write to stable log files under the Clawket log directory so `clawket logs` and field debugging work without ad hoc shell inspection.
-3. `reset` must clear Hermes bridge and relay local state only in Clawket-owned files and processes; do not delete or mutate Hermes source trees.
-4. Do not remove or weaken OpenClaw diagnostics while adding Hermes coverage; the correct outcome is additive dual-backend visibility.
-5. Prefer product-facing diagnostics over raw state dumps: `doctor` should surface an overall health conclusion, and `logs` should support a practical follow mode for live debugging.
+1. `status`, `doctor` and `logs` cover all saved Clawket backends. `src/agent-inventory.ts` reads only the bounded Clawket state layout; custom configs require their original `--config`. Never scan native histories or start a native/Bridge process for an offline diagnostic.
+2. Default status is a compact local-state summary; `--verbose` exposes details. Doctor reports findings/remedies and exits nonzero for missing, invalid, stopped or unverified selected state. Local readiness, configured model, Relay attachment and successful inference are separate evidence.
+3. `src/cli-logs.ts` provides bounded tails, timestamp filtering and byte-based follow for both global and backend commands. Include stderr by default, label sources, preserve untimestamped legacy lines with an explicit age warning, and retain JSON snapshots / JSONL follow. New Agent runtime callbacks timestamp only their existing sanitized messages.
+4. Stop/reset/restart require authenticated local lifecycle control even after native-health failure; only `ECONNREFUSED` proves no listener. Authentication failures, mismatched identities, timeouts and resets never authorize replacement or config deletion. Preserve exact response correlation and the bounded authenticated legacy identity fallback.
+5. Default lifecycle/reset retains the OpenClaw/Hermes service scope. Codex, Claude Code and Pi require an explicit backend and original scope; reset removes only pairing config and retains history. Unknown/conflicting backends and scope flags without a backend fail before mutations. Never delete native source/config or stop unrelated processes.
 
 ## CLI Lifecycle Rule
 
@@ -56,7 +54,7 @@ When expanding `start`, `install`, `restart`, `stop`, or `uninstall`:
 1. `clawket pair --preview` uses the official Preview Registry and writes `~/.clawket/bridge-cli.preview.json`; it must never overwrite Production pairing state.
 2. The installed service runs every configured OpenClaw Relay environment in one process. Treat each runtime as independent so a Preview outage cannot break Production.
 3. `refresh-code --preview` and `reset --preview` affect Preview only. A full reset may clear both OpenClaw environments while preserving existing Hermes cleanup semantics.
-4. Preview currently supports OpenClaw Relay only. Do not silently route Hermes or local pairing through Preview.
+4. The shared service Preview scope is OpenClaw Relay only. Codex/Claude Code use their independent Preview state; Pi requires its original isolated Registry/config. Do not enroll Hermes or infer Preview from a transport kind.
 
 ## Secure Pairing Invitation Rule
 

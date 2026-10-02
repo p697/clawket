@@ -69,6 +69,8 @@ clawket pair local
 
 To select a backend explicitly, use `--backend` with `openclaw`, `hermes`, `codex`, `claude-code`, `pi`, or `local-model`. Use `clawket status`, `clawket doctor`, and `clawket logs` to inspect your connection.
 
+`status` summarizes all saved Agent connections; add `--verbose` for paths and capabilities. Use `clawket logs --backend codex --last 10m --follow` (or another backend) for live troubleshooting. Default lifecycle/reset commands retain the OpenClaw/Hermes service scope; use `clawket codex reset`, `clawket claude-code reset`, or `clawket pi reset` with the original pairing options for those Agents. Reset retains session history.
+
 ## Build from source
 
 Use **Node.js 22.x** and npm for this checkout. iOS development requires macOS and Xcode; Android development requires Android Studio and its SDK.

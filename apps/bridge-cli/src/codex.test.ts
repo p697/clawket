@@ -28,6 +28,11 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); rmSync(root, { recursive: true, force: true }); });
 const saved = (relay: object) => writeFileSync(path, JSON.stringify({ project, command: 'codex', token: 'local-test-token', port: 18499, host: '127.0.0.1', relay }));
+it('does not launch another Codex runtime while a refused owner retains its writer lock', async () => {
+  saved({}); mkdirSync(join(root, 'sessions')); writeFileSync(join(root, 'sessions', 'owner.lock'), 'owned');
+  await expect(handleCodexCommand(['start', '--config', path])).rejects.toThrow('locked without verified health');
+  expect(mock.background).not.toHaveBeenCalled(); expect(readFileSync(path, 'utf8')).toContain('local-test-token');
+});
 it('reuses one device label for Registry, QR and code invitations after a computer rename', async () => {
   mock.fetch.mockImplementation(async (url: string) => {
     if (url.endsWith('/register')) return Response.json({ gatewayId: 'new-id', relaySecret: 'new-secret', relayUrl: 'wss://relay.example', accessCode: 'code' });
@@ -142,7 +147,7 @@ it('does not start a replacement when authenticated stop is unconfirmed', async 
   expect(mock.background).not.toHaveBeenCalled();
 });
 
-it.each(['pair', 'start', 'doctor', 'status'])('does not treat a failed %s health check as an absent owner', async command => {
+it.each(['pair', 'start'])('does not treat a failed %s health check as an absent owner', async command => {
   saved({});
   const before = readFileSync(path, 'utf8');
   const errors = [

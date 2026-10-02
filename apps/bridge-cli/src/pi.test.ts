@@ -28,9 +28,25 @@ beforeEach(() => {
   vi.stubGlobal('fetch', mock.fetch); vi.spyOn(console, 'log').mockImplementation(() => {}); vi.spyOn(console, 'error').mockImplementation(() => {});
   if (process.send) vi.spyOn(process as unknown as { send: (...args: unknown[]) => boolean }, 'send').mockImplementation(() => true);
 });
-afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { process.exitCode = 0; vi.unstubAllGlobals(); vi.restoreAllMocks(); rmSync(root, { recursive: true, force: true }); });
 function save() { original = JSON.stringify(config, null, 2); writeFileSync(path, original); }
 const pair = (...args: string[]) => handlePiCommand(['pair', '--config', path, ...args]);
+it('does not launch another Pi runtime while a refused owner retains its writer lock', async () => {
+  mock.control.mockRejectedValue(Object.assign(new Error('offline'), { code: 'ECONNREFUSED' }));
+  await expect(handlePiCommand(['start', '--config', path])).rejects.toThrow('locked without verified health');
+  expect(mock.background).not.toHaveBeenCalled(); expect(readFileSync(path, 'utf8')).toBe(original);
+});
+it.each(['start', 'restart', 'stop', 'reset'])('does not change Pi state after an uncertain %s control request', async command => {
+  const error = new Error('control did not answer'); mock.control.mockRejectedValue(error);
+  await expect(handlePiCommand([command, '--config', path])).rejects.toBe(error);
+  expect(readFileSync(path, 'utf8')).toBe(original); expect(mock.background).not.toHaveBeenCalled(); expect(mock.service).not.toHaveBeenCalled();
+});
+it('restarts Pi using authenticated lifecycle control independent of native health', async () => {
+  unlinkSync(join(root, 'sessions', 'owner.lock'));
+  mock.control.mockImplementation(async (_config, method) => { if (method !== 'bridge.stop') throw new Error('native health failed'); return { ok: true }; });
+  await handlePiCommand(['restart', '--config', path]);
+  expect(mock.control).toHaveBeenCalledTimes(1); expect(mock.control.mock.calls[0][1]).toBe('bridge.stop'); expect(mock.background).toHaveBeenCalledTimes(1);
+});
 function unchanged() {
   expect(readFileSync(path, 'utf8')).toBe(original);
   expect(readFileSync(join(root, 'sessions', 'owner.lock'), 'utf8')).toBe('12345');

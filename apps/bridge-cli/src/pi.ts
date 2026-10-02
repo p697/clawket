@@ -1,6 +1,7 @@
+import { handleAgentDiagnostics } from './operations.js';
 import { piControl, startPiBackground } from './pi-lifecycle.js';
 import { agentPairProgress, type Progress } from './progress.js';
-import { openSync, readSync, closeSync, fstatSync, mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, unlinkSync, realpathSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, unlinkSync, realpathSync } from 'node:fs';
 import { dirname, join, resolve, basename } from 'node:path';
 import { homedir } from 'node:os';
 import { randomBytes, createHash } from 'node:crypto';
@@ -88,11 +89,20 @@ export async function handlePiCommand(args: string[]): Promise<void> {
 
 async function runPiCommand(args: string[], progress: Progress): Promise<void> {
   const command = args[0] ?? 'pair';
+  if (await handleAgentDiagnostics('pi', args)) return;
   if (!['pair', 'run', 'doctor', 'status', 'start', 'restart', 'stop', 'logs', 'reset'].includes(command)) throw new Error('Use pi pair, run, start, restart, stop, status, doctor, logs or reset');
-  const project = realpathSync(resolve(flag(args, '--project') ?? process.cwd()));
+  const requestedProject = resolve(flag(args, '--project') ?? process.cwd());
+  const project = flag(args, '--config') && !existsSync(requestedProject) ? requestedProject : realpathSync(requestedProject);
   const projectId = createHash('sha256').update(project).digest('hex').slice(0, 16);
   const configPath = resolve(flag(args, '--config') ?? join(homedir(), '.clawket', 'pi', projectId, 'runtime.json'));
   const directory = dirname(configPath);
+  if (!existsSync(configPath) && ['start', 'restart', 'stop', 'reset', 'run'].includes(command)) {
+    if (command === 'stop' || command === 'reset') {
+      const message = 'Pi has no saved pairing at this scope.';
+      console.log(args.includes('--json') ? JSON.stringify({ ok: true, message, configPath }) : message); return;
+    }
+    throw new Error('Pair this connection first, or select its original --config / --project.');
+  }
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const save = (value: Config) => { writeFileSync(configPath + '.pending', JSON.stringify(value, null, 2), { mode: 0o600 }); renameSync(configPath + '.pending', configPath); };
   let config: Config = existsSync(configPath) ? JSON.parse(readFileSync(configPath, 'utf8')) : { project, agentDirectory: flag(args, '--agent-dir') ?? process.env.PI_CODING_AGENT_DIR, nativeSessionDirectory: flag(args, '--sessions-dir'), command: flag(args, '--pi-command') ?? 'pi', token: randomBytes(32).toString('hex'), port: Number(flag(args, '--port') ?? (18000 + parseInt(projectId.slice(0, 4), 16) % 20000)), host: '127.0.0.1' };
@@ -109,26 +119,26 @@ async function runPiCommand(args: string[], progress: Progress): Promise<void> {
   }
   if (command === 'pair' && flag(args, '--port')) config.port = Number(flag(args, '--port'));
   if (!Number.isInteger(config.port) || config.port < 1 || config.port > 65535) throw new Error('Invalid Pi Bridge port');
-  if (command === 'logs') {
-    const log = join(directory, 'pi.log');
-    if (!existsSync(log)) { console.log('No Pi Bridge logs yet.'); return; }
-    const fd = openSync(log, 'r');
-    try { const size = fstatSync(fd).size; const buffer = Buffer.alloc(Math.min(size, 32000)); readSync(fd, buffer, 0, buffer.length, Math.max(0, size - buffer.length)); console.log(buffer.toString('utf8')); }
-    finally { closeSync(fd); }
-    return;
-  }
-  if (['status', 'doctor', 'stop', 'restart', 'reset', 'start'].includes(command)) {
+  if (['stop', 'restart', 'reset', 'start'].includes(command)) {
     let health: { model: string; modelReady: boolean } | undefined;
-    try { health = await piControl(config); } catch { /* An offline runtime may be started or diagnosed below. */ }
-    if (command === 'status') { console.log(`Pi · ${basename(config.project)}: ${health ? 'ready' : 'offline'}`); return; }
-    if (command === 'doctor' && health) { console.log(`Pi RPC: ready\nModel: ${health.modelReady ? 'configured' : 'run pi and /login in this project'}`); return; }
-    if (['stop', 'restart', 'reset'].includes(command) && health) {
-      await piControl(config, 'bridge.stop');
+    const explicitStop = ['stop', 'restart', 'reset'].includes(command);
+    let stoppedOwned = false;
+    if (explicitStop) {
+      try { await piControl(config, 'bridge.stop'); stoppedOwned = true; }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ECONNREFUSED') throw error; }
+    } else {
+      try { health = await piControl(config); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ECONNREFUSED') throw error; }
+    }
+    if (!health && !stoppedOwned && ['pair', 'start', 'restart'].includes(command) && existsSync(join(directory, 'sessions', 'owner.lock'))) {
+      throw new Error('The saved Pi owner is locked without verified health. Inspect logs before starting another runtime.');
+    }
+    if (stoppedOwned) {
       const deadline = Date.now() + 10000;
       while (existsSync(join(directory, 'sessions', 'owner.lock'))) { if (Date.now() > deadline) throw new Error('Pi is still stopping; retry after it exits.'); await new Promise(r => setTimeout(r, 100)); }
     }
-    if (command === 'reset') { if (existsSync(join(directory, 'sessions', 'owner.lock'))) throw new Error('Stop the Pi owner before resetting pairing'); if (existsSync(configPath)) unlinkSync(configPath); console.log('Pi pairing cleared. Session history retained.'); return; }
-    if (command === 'stop') { console.log(health ? 'Pi Bridge stopped.' : 'Pi Bridge is offline.'); return; }
+    if (command === 'reset') { if (existsSync(join(directory, 'sessions', 'owner.lock'))) throw new Error('Stop the Pi owner before resetting pairing'); if (existsSync(configPath)) unlinkSync(configPath); console.log(args.includes('--json') ? JSON.stringify({ ok: true, backend: 'pi', configPath, historyRetained: true }) : 'Pi pairing cleared. Session history retained.'); return; }
+    if (command === 'stop') { console.log(stoppedOwned ? 'Pi Bridge stopped.' : 'Pi Bridge is offline.'); return; }
     if (command === 'start' && health) { console.log('Pi Bridge is already running.'); return; }
     if (command === 'start' || command === 'restart') { if (!existsSync(configPath)) throw new Error('Pair this project first'); await startPiBackground(['run', '--config', configPath], join(directory, 'pi.log')); return; }
   }
@@ -136,12 +146,11 @@ async function runPiCommand(args: string[], progress: Progress): Promise<void> {
   if (command === 'pair' && !args.includes('--foreground')) {
     await startPiBackground([...args, '--config', configPath], join(directory, 'pi.log'), progress); return;
   }
-  const installed = await inspectPiInstallation(config.command);
+  await inspectPiInstallation(config.command);
   const service = new PiService({ project: config.project, directory: join(directory, 'sessions'), command: config.command, agentDirectory: config.agentDirectory, nativeSessionDirectory: config.nativeSessionDirectory });
   let server: PiServer | undefined, relay: PiRelay | undefined;
   try {
     const health = await service.health() as { model: string; modelReady: boolean };
-    if (command === 'doctor') { console.log(`Pi ${installed.version} RPC: ready\nModel: ${health.modelReady ? 'configured' : 'not configured — run pi and /login in this project'}\nProject: ${basename(config.project)}`); return; }
     let qrPayload: string | undefined, code: string | undefined;
     if (command === 'pair') {
       if (args.includes('local') || args.includes('--local')) {
@@ -168,10 +177,10 @@ async function runPiCommand(args: string[], progress: Progress): Promise<void> {
       }
       save(config);
     } else if (!existsSync(configPath)) throw new Error('Pair this Pi project first');
-    server = new PiServer(service, config.token, message => console.error(message)); await server.start(config.port, config.host);
+    server = new PiServer(service, config.token, message => console.error(`[${Date.now()}] ${message}`)); await server.start(config.port, config.host);
     if (config.relay) {
       progress.update('Connecting to Clawket Relay…');
-      relay = new PiRelay(service, config.relay, invitation => { config.relay!.invitation = invitation; save(config); }, message => console.error(message));
+      relay = new PiRelay(service, config.relay, invitation => { config.relay!.invitation = invitation; save(config); }, message => console.error(`[${Date.now()}] ${message}`));
       relay.start(); await relay.waitUntilReady();
     }
     if (code) show(`Pairing code: ${code}`);

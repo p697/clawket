@@ -179,9 +179,6 @@ export async function buildDoctorReport(): Promise<CliDoctorReport> {
     ? `http://${normalizeHermesDisplayHost(hermesBridgeConfig.host)}:${hermesBridgeConfig.port}`
     : null;
   const hermesBridgeHealthUrl = hermesBridgeUrl ? `${hermesBridgeUrl}/health` : null;
-  const hermesBridgeReachable = hermesBridgeHealthUrl
-    ? await checkHttpReachable(hermesBridgeHealthUrl)
-    : false;
   const hermesHealth = hermesBridgeHealthUrl
     ? await readHermesBridgeHealth(hermesBridgeHealthUrl)
     : null;
@@ -215,7 +212,7 @@ export async function buildDoctorReport(): Promise<CliDoctorReport> {
     hermesBridgeConfigFound: Boolean(hermesBridgeConfig),
     hermesBridgeUrl,
     hermesBridgeHealthUrl,
-    hermesBridgeReachable,
+    hermesBridgeReachable: hermesHealth !== null,
     hermesApiReachable: hermesHealth?.hermesApiReachable ?? null,
     hermesBridgeCapabilities: hermesHealth?.capabilities ?? [],
     hermesBridgeRuntimeRunning: listHermesBridgeRuntimePids().length > 0,
@@ -369,18 +366,9 @@ function readHermesBridgeConfig(path: string): HermesBridgeCliConfig | null {
   }
 }
 
-async function checkHttpReachable(url: string): Promise<boolean> {
-  try {
-    const response = await fetch(url);
-    return response.ok;
-  } catch {
-    return false;
-  }
-}
-
 async function readHermesBridgeHealth(url: string): Promise<HermesBridgeHealth | null> {
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal: AbortSignal.timeout(1500), redirect: 'error' });
     if (!response.ok) return null;
     return parseHermesBridgeHealth(await response.json());
   } catch {

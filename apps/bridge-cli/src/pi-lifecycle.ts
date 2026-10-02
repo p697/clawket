@@ -13,15 +13,29 @@ export function piControl(config: { port: number; token: string }, method = 'hea
     const finish = (error?: Error, value?: unknown) => { if (settled) return; settled = true; clearTimeout(timer); socket.terminate(); error ? reject(error) : resolve(value); };
     socket.on('error', error => finish(Object.assign(new Error('Pi Bridge is not reachable'), { code: (error as NodeJS.ErrnoException).code })));
     socket.on('close', () => finish(new Error('Pi Bridge closed the connection')));
-    socket.on('open', () => socket.send(JSON.stringify({ type: 'req', id: 'auth', method: 'connect', params: { token: config.token } })));
+    socket.on('open', () => socket.send(JSON.stringify({ type: 'req', id: 'auth', method: 'connect', params: { token: config.token, ...(method === 'bridge.stop' ? { controlOnly: true } : {}) } })));
     socket.on('message', raw => {
       let frame: any; try { frame = JSON.parse(raw.toString()); } catch { return; }
       if (frame.type !== 'res' || frame.id !== expectedResponse) return;
-      if (!frame.ok) { finish(new Error('Pi Bridge rejected the control request')); return; }
+      if (!frame.ok) {
+        // Older servers authenticate before native health; confirm native-independent identity before stop.
+        if (method === 'bridge.stop' && frame.id === 'auth' && frame.error?.code === 'pi_error') {
+          expectedResponse = 'identity'; socket.send(JSON.stringify({ type: 'req', id: 'identity', method: 'agents.list' })); return;
+        }
+        if (method === 'health' && frame.id === 'auth' && frame.error?.code === 'pi_error') {
+          finish(new Error('The existing Pi Bridge failed its native health check. Inspect clawket pi logs and explicitly restart with the same pairing options.')); return;
+        }
+        finish(new Error('Pi Bridge rejected the control request')); return;
+      }
       if (frame.id === 'auth') {
         if (frame.payload?.backend !== 'pi') { finish(new Error('Endpoint is not a Pi Bridge')); return; }
         if (method === 'health') finish(undefined, frame.payload);
         else { expectedResponse = 'control'; socket.send(JSON.stringify({ type: 'req', id: 'control', method })); }
+      } else if (frame.id === 'identity') {
+        if (!Array.isArray(frame.payload) || frame.payload.length !== 1 || frame.payload[0]?.agentId !== 'pi') {
+          finish(new Error('Endpoint is not a Pi Bridge')); return;
+        }
+        expectedResponse = 'control'; socket.send(JSON.stringify({ type: 'req', id: 'control', method }));
       } else if (frame.id === 'control') finish(undefined, frame.payload);
     });
   });

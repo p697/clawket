@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { mkdtempSync, mkdirSync, readFileSync, realpathSync, writeFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 const mock = vi.hoisted(() => ({ control: vi.fn(), background: vi.fn(), fetch: vi.fn(), name: vi.fn(), qr: vi.fn(), inspect: vi.fn(), serviceOptions: vi.fn(), home: '' }));
@@ -24,12 +24,42 @@ beforeEach(() => {
   mock.name.mockReset().mockReturnValue('Claude Code · 工作室 Mac'); mock.qr.mockReset().mockResolvedValue('[test QR]');
   mock.inspect.mockReset(); mock.serviceOptions.mockReset();
   mock.inspect.mockResolvedValue({ version: 'test', executable: '/desktop/claude' });
-  mock.control.mockRejectedValue(new Error('offline'));
+  mock.control.mockRejectedValue(Object.assign(new Error('offline'), { code: 'ECONNREFUSED' }));
   if (process.send) vi.spyOn(process as unknown as { send: (...args: unknown[]) => boolean }, 'send').mockImplementation(() => true);
   vi.stubGlobal('fetch', mock.fetch); vi.spyOn(console, 'log').mockImplementation(() => {}); vi.spyOn(console, 'error').mockImplementation(() => {});
 });
-afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { process.exitCode = 0; vi.unstubAllGlobals(); vi.restoreAllMocks(); rmSync(root, { recursive: true, force: true }); });
 const saved = (relay: object) => writeFileSync(path, JSON.stringify({ project, command: 'claude-code', token: 'local-test-token', port: 18499, host: '127.0.0.1', relay }));
+it('does not launch another Claude runtime while a refused owner retains its writer lock', async () => {
+  saved({}); mkdirSync(join(root, 'sessions')); writeFileSync(join(root, 'sessions', 'owner.lock'), 'owned');
+  await expect(handleClaudeCommand(['start', '--config', path])).rejects.toThrow('locked without verified health');
+  expect(mock.background).not.toHaveBeenCalled(); expect(readFileSync(path, 'utf8')).toContain('local-test-token');
+});
+it.each(['pair', 'start', 'restart', 'stop', 'reset'])('does not change a Claude owner after an uncertain %s probe', async command => {
+  saved({}); const before = readFileSync(path, 'utf8');
+  const error = new Error('control did not answer'); mock.control.mockRejectedValue(error);
+  await expect(handleClaudeCommand([command, '--config', path])).rejects.toBe(error);
+  expect(readFileSync(path, 'utf8')).toBe(before); expect(mock.background).not.toHaveBeenCalled(); expect(mock.fetch).not.toHaveBeenCalled();
+});
+it('restarts Claude using authenticated lifecycle control even when native health is broken', async () => {
+  saved({});
+  mock.control.mockImplementation(async (_config, method) => { if (method !== 'bridge.stop') throw new Error('native health failed'); return { ok: true }; });
+  await handleClaudeCommand(['restart', '--config', path]);
+  expect(mock.control).toHaveBeenCalledTimes(1); expect(mock.control.mock.calls[0][1]).toBe('bridge.stop');
+  expect(mock.background).toHaveBeenCalledTimes(1);
+});
+it('resets only saved Claude pairing after authenticated stop and retains history, even if its project is gone', async () => {
+  saved({}); mkdirSync(join(root, 'sessions')); writeFileSync(join(root, 'sessions', 'history.json'), 'preserved');
+  rmSync(project, { recursive: true }); mock.control.mockResolvedValue({ ok: true });
+  await handleClaudeCommand(['reset', '--project', project, '--config', path, '--json']);
+  expect(existsSync(path)).toBe(false); expect(readFileSync(join(root, 'sessions', 'history.json'), 'utf8')).toBe('preserved');
+  expect(mock.control.mock.calls[0][1]).toBe('bridge.stop'); expect(mock.background).not.toHaveBeenCalled();
+});
+it('offline Claude doctor does not instantiate an SDK process', async () => {
+  saved({}); await handleClaudeCommand(['doctor', '--config', path, '--json']);
+  expect(mock.inspect).not.toHaveBeenCalled(); expect(mock.serviceOptions).not.toHaveBeenCalled(); expect(mock.background).not.toHaveBeenCalled();
+  expect(process.exitCode).toBe(1);
+});
 it('reuses one device label for Registry, QR and code invitations after a computer rename', async () => {
   mock.fetch.mockImplementation(async (url: string) => {
     if (url.endsWith('/register')) return Response.json({ gatewayId: 'new-id', relaySecret: 'new-secret', relayUrl: 'wss://relay.example', accessCode: 'code' });

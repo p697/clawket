@@ -9,18 +9,33 @@ export function claudeControl(config: { port: number; token: string }, method = 
     const socket = new WebSocket(`ws://127.0.0.1:${config.port}/v1/claude-code/ws`, { handshakeTimeout: 3000 });
     const timer = setTimeout(() => finish(new Error('Claude Code Bridge did not answer')), 5000);
     let settled = false;
+    let expectedResponse = 'auth';
     const finish = (error?: Error, value?: unknown) => { if (settled) return; settled = true; clearTimeout(timer); socket.terminate(); error ? reject(error) : resolve(value); };
-    socket.on('error', () => finish(new Error('Claude Code Bridge is not reachable')));
+    socket.on('error', error => finish(Object.assign(new Error('Claude Code Bridge is not reachable'), { code: (error as NodeJS.ErrnoException).code })));
     socket.on('close', () => finish(new Error('Claude Code Bridge closed the connection')));
-    socket.on('open', () => socket.send(JSON.stringify({ type: 'req', id: 'auth', method: 'connect', params: { token: config.token } })));
+    socket.on('open', () => socket.send(JSON.stringify({ type: 'req', id: 'auth', method: 'connect', params: { token: config.token, ...(method === 'bridge.stop' ? { controlOnly: true } : {}) } })));
     socket.on('message', raw => {
       let frame: any; try { frame = JSON.parse(raw.toString()); } catch { return; }
-      if (frame.type !== 'res') return;
-      if (!frame.ok) { finish(new Error('Claude Code Bridge rejected the control request')); return; }
+      if (frame.type !== 'res' || frame.id !== expectedResponse) return;
+      if (!frame.ok) {
+        // Older servers authenticate before native health; confirm native-independent identity before stop.
+        if (method === 'bridge.stop' && frame.id === 'auth' && frame.error?.code === 'claude-code_error') {
+          expectedResponse = 'identity'; socket.send(JSON.stringify({ type: 'req', id: 'identity', method: 'agents.list' })); return;
+        }
+        if (method === 'health' && frame.id === 'auth' && frame.error?.code === 'claude-code_error') {
+          finish(new Error('The existing Claude Code Bridge failed its native health check. Inspect clawket claude-code logs and explicitly restart with the same pairing options.')); return;
+        }
+        finish(new Error('Claude Code Bridge rejected the control request')); return;
+      }
       if (frame.id === 'auth') {
         if (frame.payload?.backend !== 'claude-code') { finish(new Error('Endpoint is not a Claude Code Bridge')); return; }
         if (method === 'health') finish(undefined, frame.payload);
-        else socket.send(JSON.stringify({ type: 'req', id: 'control', method }));
+        else { expectedResponse = 'control'; socket.send(JSON.stringify({ type: 'req', id: 'control', method })); }
+      } else if (frame.id === 'identity') {
+        if (!Array.isArray(frame.payload) || frame.payload.length !== 1 || frame.payload[0]?.agentId !== 'claude-code') {
+          finish(new Error('Endpoint is not a Claude Code Bridge')); return;
+        }
+        expectedResponse = 'control'; socket.send(JSON.stringify({ type: 'req', id: 'control', method }));
       } else if (frame.id === 'control') finish(undefined, frame.payload);
     });
   });

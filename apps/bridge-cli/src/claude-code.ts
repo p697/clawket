@@ -1,7 +1,8 @@
+import { handleAgentDiagnostics } from './operations.js';
 import { claudeControl, startClaudeBackground } from './claude-code-lifecycle.js';
 import { agentPairProgress, type Progress } from './progress.js';
 import { defaultDeviceConnectionName } from './device-connection-name.js';
-import { openSync, readSync, closeSync, fstatSync, mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, unlinkSync, realpathSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, unlinkSync, realpathSync } from 'node:fs';
 import { dirname, join, resolve, basename } from 'node:path';
 import { homedir } from 'node:os';
 import { randomBytes, createHash } from 'node:crypto';
@@ -29,15 +30,24 @@ export async function handleClaudeCommand(args: string[]): Promise<void> {
 
 async function runClaudeCommand(args: string[], progress: Progress): Promise<void> {
   const command = args[0] ?? 'pair';
+  if (await handleAgentDiagnostics('claude-code', args)) return;
   if (!['pair', 'run', 'doctor', 'status', 'start', 'restart', 'stop', 'logs', 'reset'].includes(command)) throw new Error('Use claude-code pair, run, start, restart, stop, status, doctor, logs or reset');
   if (args.includes('--device') && flag(args, '--project')) throw new Error('Choose --device or --project, not both');
   const device = args.includes('--device') || (!flag(args, '--project') && !flag(args, '--config'));
   const deviceRoot = join(homedir(), 'Documents', 'Clawket', 'Chats');
   if (device) mkdirSync(deviceRoot, { recursive: true, mode: 0o700 });
-  const project = realpathSync(resolve(flag(args, '--project') ?? (device ? deviceRoot : process.cwd())));
+  const requestedProject = resolve(flag(args, '--project') ?? (device ? deviceRoot : process.cwd()));
+  const project = flag(args, '--config') && !existsSync(requestedProject) ? requestedProject : realpathSync(requestedProject);
   const projectId = createHash('sha256').update(project).digest('hex').slice(0, 16);
   const configPath = resolve(flag(args, '--config') ?? join(homedir(), '.clawket', 'claude-code', device ? 'device' : projectId, args.includes('--preview') ? 'preview' : 'production', 'runtime.json'));
   const directory = dirname(configPath);
+  if (!existsSync(configPath) && ['start', 'restart', 'stop', 'reset', 'run'].includes(command)) {
+    if (command === 'stop' || command === 'reset') {
+      const message = 'Claude Code has no saved pairing at this scope.';
+      console.log(args.includes('--json') ? JSON.stringify({ ok: true, message, configPath }) : message); return;
+    }
+    throw new Error('Pair this connection first, or select its original --config / --project.');
+  }
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const save = (value: Config) => { writeFileSync(configPath + '.pending', JSON.stringify(value, null, 2), { mode: 0o600 }); renameSync(configPath + '.pending', configPath); };
   const configExists = existsSync(configPath);
@@ -46,28 +56,32 @@ async function runClaudeCommand(args: string[], progress: Progress): Promise<voi
   const label = config.device ? 'Computer' : basename(config.project);
   if (command === 'pair' && flag(args, '--port')) config.port = Number(flag(args, '--port'));
   if (!Number.isInteger(config.port) || config.port < 1 || config.port > 65535) throw new Error('Invalid Claude Bridge port');
-  if (command === 'logs') {
-    const log = join(directory, 'claude-code.log');
-    if (!existsSync(log)) { console.log('No Claude Bridge logs yet.'); return; }
-    const fd = openSync(log, 'r');
-    try { const size = fstatSync(fd).size; const buffer = Buffer.alloc(Math.min(size, 32000)); readSync(fd, buffer, 0, buffer.length, Math.max(0, size - buffer.length)); console.log(buffer.toString('utf8')); }
-    finally { closeSync(fd); }
-    return;
-  }
-  if (['pair', 'status', 'doctor', 'stop', 'restart', 'reset', 'start'].includes(command)) {
+  if (['pair', 'stop', 'restart', 'reset', 'start'].includes(command)) {
     let health: { model: string; modelReady: boolean } | undefined;
-    try { health = await claudeControl(config); } catch { /* An offline runtime may be started or diagnosed below. */ }
-    if (command === 'status') { console.log(`Claude Code · ${label}: ${health ? 'ready' : 'offline'}`); return; }
-    if (command === 'doctor' && health) { console.log('Claude Code Bridge: ready. Complete native sign-in in Claude Desktop or check authentication with the selected CLI.'); return; }
-    if (['pair', 'stop', 'restart', 'reset'].includes(command) && health) {
-      if (command === 'pair') { const sessions = await claudeControl(config, 'sessions.list') as unknown as Array<{ hasActiveRun?: boolean }>; if (sessions.some(s => s.hasActiveRun)) throw new Error('Finish the current Claude task before refreshing pairing. Existing phone connections remain usable.'); }
-      progress.update('Stopping the previous Claude Code bridge…');
-      await claudeControl(config, 'bridge.stop');
-      const deadline = Date.now() + 10000;
-      while (existsSync(join(directory, 'sessions', 'owner.lock'))) { if (Date.now() > deadline) throw new Error('Claude is still stopping; retry after it exits.'); await new Promise(r => setTimeout(r, 100)); }
+    const explicitStop = ['stop', 'restart', 'reset'].includes(command);
+    let stoppedOwned = false;
+    if (explicitStop) {
+      try { await claudeControl(config, 'bridge.stop'); stoppedOwned = true; }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ECONNREFUSED') throw error; }
+    } else {
+      try { health = await claudeControl(config); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ECONNREFUSED') throw error; }
     }
-    if (command === 'reset') { if (existsSync(join(directory, 'sessions', 'owner.lock'))) throw new Error('Stop the Claude owner before resetting pairing'); if (existsSync(configPath)) unlinkSync(configPath); console.log('Claude pairing cleared. Session history retained.'); return; }
-    if (command === 'stop') { console.log(health ? 'Claude Bridge stopped.' : 'Claude Bridge is offline.'); return; }
+    if (command === 'pair' && health) {
+      const sessions = await claudeControl(config, 'sessions.list') as unknown as Array<{ hasActiveRun?: boolean }>;
+      if (sessions.some(s => s.hasActiveRun)) throw new Error('Finish the current Claude Code task before refreshing pairing. Existing phone connections remain usable.');
+      progress.update('Stopping the previous Claude Code bridge…');
+      await claudeControl(config, 'bridge.stop'); stoppedOwned = true;
+    }
+    if (!health && !stoppedOwned && ['pair', 'start', 'restart'].includes(command) && existsSync(join(directory, 'sessions', 'owner.lock'))) {
+      throw new Error('The saved Claude Code owner is locked without verified health. Inspect logs before starting another runtime.');
+    }
+    if (stoppedOwned) {
+      const deadline = Date.now() + 10000;
+      while (existsSync(join(directory, 'sessions', 'owner.lock'))) { if (Date.now() > deadline) throw new Error('Claude Code is still stopping; retry after it exits.'); await new Promise(r => setTimeout(r, 100)); }
+    }
+    if (command === 'reset') { if (existsSync(join(directory, 'sessions', 'owner.lock'))) throw new Error('Stop the Claude owner before resetting pairing'); if (existsSync(configPath)) unlinkSync(configPath); console.log(args.includes('--json') ? JSON.stringify({ ok: true, backend: 'claude-code', configPath, historyRetained: true }) : 'Claude pairing cleared. Session history retained.'); return; }
+    if (command === 'stop') { console.log(stoppedOwned ? 'Claude Bridge stopped.' : 'Claude Bridge is offline.'); return; }
     if (command === 'start' && health) { console.log('Claude Bridge is already running.'); return; }
     if (command === 'start' || command === 'restart') { if (!existsSync(configPath)) throw new Error('Pair this Claude connection first'); await startClaudeBackground(['run', '--config', configPath], join(directory, 'claude-code.log')); return; }
   }
@@ -82,7 +96,6 @@ async function runClaudeCommand(args: string[], progress: Progress): Promise<voi
   let server: ClaudeServer | undefined, relay: ClaudeRelay | undefined;
   try {
     await service.health();
-    if (command === 'doctor') { console.log(`Claude Code ${installed.version}: installed\nProject: ${basename(config.project)}\nAuthentication: complete native sign-in in Claude Desktop or check authentication with the selected CLI`); return; }
     let qrPayload: string | undefined, code: string | undefined;
     if (command === 'pair') {
       if (!configExists) config.displayName = defaultDeviceConnectionName('Claude Code');
@@ -115,10 +128,10 @@ async function runClaudeCommand(args: string[], progress: Progress): Promise<voi
       }
       save(config);
     } else if (!existsSync(configPath)) throw new Error('Pair this Claude connection first');
-    server = new ClaudeServer(service, config.token, message => console.error(message)); await server.start(config.port, config.host);
+    server = new ClaudeServer(service, config.token, message => console.error(`[${Date.now()}] ${message}`)); await server.start(config.port, config.host);
     if (config.relay) {
       progress.update('Connecting to Clawket Relay…');
-      relay = new ClaudeRelay(service, config.relay, invitation => { config.relay!.invitation = invitation; save(config); }, message => console.error(message));
+      relay = new ClaudeRelay(service, config.relay, invitation => { config.relay!.invitation = invitation; save(config); }, message => console.error(`[${Date.now()}] ${message}`));
       relay.start(); await relay.waitUntilReady();
     }
     if (code) show(`Pairing code: ${code}`);
