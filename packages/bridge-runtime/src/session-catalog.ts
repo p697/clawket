@@ -76,6 +76,11 @@ export class SessionCatalogSync {
       }
     }
     if (!input.pageIndex) return this.page(snapshot, 0);
+    // Do not split a small catalog just to reserve space for an empty index.
+    if (this.pageEnd(snapshot, 0) === null) {
+      const full = this.page(snapshot, 0), indexed = { ...full, pageOffsets: [] };
+      return Buffer.byteLength(JSON.stringify(indexed)) <= SESSION_CATALOG_PAGE_BYTES ? indexed : full;
+    }
     const first = this.page(snapshot, 0, INDEX_BYTES);
     // A near-limit first row leaves no room for the optional index.
     if (!first.sessions.length && snapshot.rows.length) return this.page(snapshot, 0);

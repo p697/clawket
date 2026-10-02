@@ -48,11 +48,17 @@ describe('bounded immutable conversation catalog sync', () => {
     expect(await catalog.reply({ base: base(first), pageIndex: true })).toEqual({ kind: 'unchanged', ...base(first) });
   });
   it('keeps a valid near-limit first row on serial pages when an index cannot fit', async () => {
-    const rows = [row('large', 'x'.repeat(SESSION_CATALOG_PAGE_BYTES - 1024)), row('small')];
+    const rows = [row('large', 'x'.repeat(SESSION_CATALOG_PAGE_BYTES - 1024)), row('small', 'y'.repeat(4000))];
     const catalog = new SessionCatalogSync(() => rows), first = await catalog.reply({ pageIndex: true });
     expect(first).not.toHaveProperty('pageOffsets');
     expect((await full(catalog, first)).rows).toEqual(rows);
     expect(await new SessionCatalogSync(() => []).reply({ pageIndex: true })).toMatchObject({ sessions: [], nextOffset: null, pageOffsets: [] });
+  });
+  it('keeps a catalog near the single-page budget in one exchange instead of reserving a second page', async () => {
+    const rows = [row('a', 'x'.repeat(31_000)), row('b', 'y'.repeat(31_000))];
+    const catalog = new SessionCatalogSync(() => rows), first = await catalog.reply({ pageIndex: true });
+    expect(first).toMatchObject({ sessions: rows, nextOffset: null });
+    expect(Buffer.byteLength(JSON.stringify(first))).toBeLessThanOrEqual(SESSION_CATALOG_PAGE_BYTES);
   });
   it('reduces full catalog network waits with the real Mobile consumer and a fixed 300ms RPC latency', async () => {
     vi.useFakeTimers();
