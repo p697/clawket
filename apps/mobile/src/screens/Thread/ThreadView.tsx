@@ -200,9 +200,6 @@ const REPLY_PLACEHOLDER: UiMessage = { id: REPLY_PLACEHOLDER_ID, role: 'assistan
 /** Execution summaries outgrow the screen: the run sheet scrolls inside fixed detents. */
 const RUN_RESULT_SNAP_POINTS: string[] = ['68%', '92%'];
 const EMPTY_RUN_CARDS: ReadonlyArray<ThreadRunCard> = Object.freeze([]);
-const CLOSED_WORK_PANEL = Object.freeze({ open: false, bottom: 0 });
-/** Opening the work panel waits this long at most for the keyboard to finish leaving. */
-const KEYBOARD_SETTLE_FALLBACK_MS = 400;
 /** A dock seen this recently when the connection drops stays to say so. */
 const DOCK_OFFLINE_HOLD_MS = 3_000;
 const EMPTY_TIMELINE_ROWS: ReadonlyArray<ThreadTimelineRow> = Object.freeze([]);
@@ -1186,48 +1183,17 @@ export function ThreadView({
     const oldest = receipt.steps[0];
     if (oldest) setWorkRecordAnchor(renderKeyOf(oldest));
   }, []);
-  // The work panel grows out of the dock: it opens at the dock's measured
-  // bottom edge, after the keyboard has gone.
-  const screenRef = useRef<View>(null);
-  const dockSlotRef = useRef<View>(null);
-  const keyboardVisibleRef = useRef(keyboardVisible);
-  keyboardVisibleRef.current = keyboardVisible;
-  const [workPanel, setWorkPanel] = useState<{ open: boolean; bottom: number }>(CLOSED_WORK_PANEL);
-  const closeWorkPanel = useCallback(() => setWorkPanel(CLOSED_WORK_PANEL), []);
+  // The work panel is a sheet: the keyboard leaves as it rises.
+  const [workPanelOpen, setWorkPanelOpen] = useState(false);
+  const closeWorkPanel = useCallback(() => setWorkPanelOpen(false), []);
   const openWorkPanel = useCallback(() => {
-    const measure = () => {
-      const screen = screenRef.current;
-      const slot = dockSlotRef.current;
-      if (typeof screen?.measureInWindow !== 'function' || typeof slot?.measureInWindow !== 'function') {
-        setWorkPanel({ open: true, bottom: compactComposerHeight.current + Space.sm });
-        return;
-      }
-      screen!.measureInWindow((_screenX, screenY, _screenWidth, screenHeight) => {
-        slot!.measureInWindow((_slotX, slotY, _slotWidth, slotHeight) => {
-          setWorkPanel({ open: true, bottom: Math.max(0, screenY + screenHeight - (slotY + slotHeight)) });
-        });
-      });
-    };
-    if (!keyboardVisibleRef.current) {
-      measure();
-      return;
-    }
-    let settled = false;
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      subscription.remove();
-      clearTimeout(fallback);
-      measure();
-    };
-    const subscription = Keyboard.addListener('keyboardDidHide', finish);
-    const fallback = setTimeout(finish, KEYBOARD_SETTLE_FALLBACK_MS);
     Keyboard.dismiss();
+    setWorkPanelOpen(true);
   }, []);
-  useEffect(() => { setWorkPanel(CLOSED_WORK_PANEL); }, [sessionKey]);
+  useEffect(() => { setWorkPanelOpen(false); }, [sessionKey]);
   // The panel belongs to a running turn; a request for the user takes the stage.
   useEffect(() => {
-    if (!dockShown || dockPhase.kind === 'approval' || dockPhase.kind === 'offline') setWorkPanel(CLOSED_WORK_PANEL);
+    if (!dockShown || dockPhase.kind === 'approval' || dockPhase.kind === 'offline') setWorkPanelOpen(false);
   }, [dockPhase.kind, dockShown]);
   const liveWorkRef = useRef(liveWork);
   liveWorkRef.current = liveWork;
@@ -1432,7 +1398,7 @@ export function ThreadView({
     <ArtifactProvider operations={artifactOperations} sessionKey={sessionKey}>
     <ThreadLiveActivityContext.Provider value={liveActivity}>
     <UserMessageDisclosureProvider scope={historyScope ?? readableScope} onToggle={pauseMessageFollow}>
-    <View ref={screenRef} collapsable={false} testID={testID} style={[styles.screen, { backgroundColor: theme.colors.canvas }]}
+    <View testID={testID} style={[styles.screen, { backgroundColor: theme.colors.canvas }]}
       onLayout={({ nativeEvent }) => {
         const { width, height } = nativeEvent.layout;
         setScreenSize((previous) => (previous?.width === width && previous.height === height ? previous : { width, height }));
@@ -1681,7 +1647,7 @@ export function ThreadView({
           ) : null}
           {pendingQuestions}
           {dockShown ? (
-            <View ref={dockSlotRef} collapsable={false} testID={`${testID}-work-dock-slot`}>
+            <View testID={`${testID}-work-dock-slot`}>
               <WorkDock
                 testID={`${testID}-work-dock`}
                 phase={dockPhase}
@@ -1829,11 +1795,10 @@ export function ThreadView({
       ) : null}
     </KeyboardAvoidingView>
     <WorkPanel
-      visible={workPanel.open && dockShown}
+      visible={workPanelOpen && dockShown}
       phase={dockPhase}
       work={liveWork}
       startedAt={runStartedAt}
-      bottomOffset={workPanel.bottom}
       onClose={closeWorkPanel}
       onOpenStep={(message) => setSelectedToolMessageId(message.id)}
     />

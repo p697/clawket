@@ -1,24 +1,22 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   ActivityIndicator,
-  BackHandler,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
-  useWindowDimensions,
 } from 'react-native';
+import { BottomSheetScrollView, type BottomSheetScrollViewMethods } from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown, MessageSquare, ShieldCheck, ShieldX, X } from 'lucide-react-native';
-import Animated, { Easing, FadeIn, FadeOut, useReducedMotion, withSpring, withTiming, type EntryExitAnimationFunction } from 'react-native-reanimated';
+import { MessageSquare, ShieldCheck, ShieldX, X } from 'lucide-react-native';
 import { useAppTheme } from '../../theme';
 import { withAlpha } from '../../theme/color';
-import { createThemedShadowStyle, FontSize, FontWeight, LineHeight, Motion, Radius, Shadow, Space } from '../../theme/tokens';
+import { FontSize, FontWeight, LineHeight, Motion, Radius, Space } from '../../theme/tokens';
 import type { UiMessage } from '../../types/chat';
 import { formatToolDisplayName, resolveQuestionExchange, resolveToolDetail, resolveToolTitle, unwrapShellCommand } from '../../utils/tool-display';
 import { effectiveTool, failureReason, formatActivityDuration, stepDurationMs } from './tool-activity-model';
+import { Sheet } from '../ui/Sheet';
 import { toolIcon, useElapsed } from './ToolActivityPill';
 import type { TurnWork } from './turn-work';
 import type { TurnEntry } from './turn-work';
@@ -30,17 +28,26 @@ type Translate = (key: string, options?: Record<string, unknown>) => string;
 const STEP_WELL = 30;
 /** A spinner scaled into the step glyph's box. */
 const STEP_SPINNER_SCALE = 0.7;
-/** The panel never covers more than this share of the window; longer runs scroll inside it. */
-const PANEL_MAX_SHARE = 0.62;
-/**
- * The panel is drawn in the Thread's own tree, not in a native modal, so its
- * layer must outrank the Thread's stacked layers (timeline 1, floating header
- * 2, expanded composer 3). Without a zIndex of its own the timeline drew over
- * the open panel on iOS (owner report 2026-10-02).
- */
-const PANEL_LAYER_Z_INDEX = 10;
+// A long run outgrows the screen: the same fixed detents and Gorhom scroll view as the work record.
+const SNAP_POINTS: string[] = ['62%', '92%'];
 // `monospace` is a family only Android resolves; iOS falls back to the system face without Menlo.
 const CODE_FONT = Platform.select({ ios: 'Menlo', default: 'monospace' });
+
+/** The title block both work sheets share: the title and one centred grey line under it. */
+export function WorkSheetHeading({ title, detail, detailTestID }: Readonly<{
+  title: string;
+  detail?: string;
+  detailTestID?: string;
+}>): React.JSX.Element {
+  const { theme } = useAppTheme();
+  const { colors } = theme;
+  return (
+    <View style={styles.heading}>
+      <Text accessibilityRole="header" numberOfLines={1} style={[styles.headingTitle, { color: colors.ink }]}>{title}</Text>
+      {detail ? <Text testID={detailTestID} numberOfLines={1} style={[styles.headingDetail, { color: colors.inkSecondary }]}>{detail}</Text> : null}
+    </View>
+  );
+}
 
 /** A step's own time: tenths under a second (a read is often 0.2 s), whole seconds above. */
 export function formatStepDuration(ms: number | undefined, t: Translate): string | undefined {
@@ -166,174 +173,80 @@ export type WorkPanelProps = Readonly<{
   work: TurnWork;
   /** When the turn began, for the caption's clock. */
   startedAt?: number;
-  /** Distance from the screen bottom to the dock's bottom edge, so the panel grows out of the dock. */
-  bottomOffset: number;
   onClose: () => void;
   onOpenStep: (message: UiMessage) => void;
 }>;
 
 /**
  * The work dock opened (tool process design C): every step of the running
- * turn in order, growing up out of the dock over a light scrim. The newest
- * step stays in view as steps arrive; tapping a step opens its detail.
- * The scrim, the system back gesture and "Done" close it.
+ * turn in order, newest in view as steps arrive; tapping a step opens its
+ * detail. A standard `Sheet` like the work record (owner request
+ * 2026-10-02): its grabber and a downward swipe, the close button, the
+ * backdrop and the system back gesture close it — the former in-tree card's
+ * "Done ⌄" pill read as a picker.
  */
-export function WorkPanel({ visible, phase, work, startedAt, bottomOffset, onClose, onOpenStep }: WorkPanelProps): React.JSX.Element | null {
+export function WorkPanel({ visible, phase, work, startedAt, onClose, onOpenStep }: WorkPanelProps): React.JSX.Element {
   const { t } = useTranslation('chat');
   const elapsed = useElapsed(visible ? startedAt : undefined);
-  const caption = formatWorkDockCaption({ phase, work, elapsed, t });
-  const { theme } = useAppTheme();
-  const { colors, scheme } = theme;
-  const reduceMotion = useReducedMotion();
-  const { height } = useWindowDimensions();
-  const scrollRef = useRef<ScrollView>(null);
+  // Keep the turn's steps while the sheet slides away after the turn ends.
+  const shown = useRef(work);
+  useEffect(() => { if (visible && work.entries.length > 0) shown.current = work; }, [visible, work]);
+  const turn = visible && work.entries.length > 0 ? work : shown.current;
+  const caption = formatWorkDockCaption({ phase, work: turn, elapsed, t });
+  const scrollRef = useRef<BottomSheetScrollViewMethods>(null);
   const atEndRef = useRef(true);
-  const lift = useMemo(() => createThemedShadowStyle(colors, scheme, Shadow.lg), [colors, scheme]);
-
-  useEffect(() => {
-    if (!visible || Platform.OS !== 'android') return undefined;
-    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-      onClose();
-      return true;
-    });
-    return () => subscription.remove();
-  }, [onClose, visible]);
-
-  if (!visible) return null;
+  useEffect(() => { if (visible) atEndRef.current = true; }, [visible]);
+  const title = t('Work so far');
   return (
-    <View style={styles.layer} pointerEvents="box-none" testID="work-panel-layer">
-      <Animated.View entering={FadeIn.duration(Motion.duration.normal)} exiting={FadeOut.duration(Motion.duration.fast)}
-        style={[StyleSheet.absoluteFill, { backgroundColor: withAlpha(colors.scrim, scheme === 'dark' ? 0.4 : 0.12) }]}>
-        <Pressable testID="work-panel-scrim" style={StyleSheet.absoluteFill} accessibilityRole="button"
-          accessibilityLabel={t('Close', { ns: 'common' })} onPress={onClose} />
-      </Animated.View>
-      <Animated.View
-        testID="work-panel"
-        accessibilityViewIsModal
-        onAccessibilityEscape={onClose}
-        entering={reduceMotion ? FadeIn.duration(Motion.duration.normal) : panelRise}
-        exiting={reduceMotion ? FadeOut.duration(Motion.duration.fast) : panelFall}
-        style={[styles.panel, lift, {
-          bottom: bottomOffset,
-          maxHeight: Math.round(height * PANEL_MAX_SHARE),
-          backgroundColor: colors.surfaceFloating,
-        }]}
+    <Sheet
+      visible={visible}
+      onClose={onClose}
+      title={title}
+      titleContent={<WorkSheetHeading title={title} detail={caption} detailTestID="work-panel-caption" />}
+      closeAccessibilityLabel={t('Close', { ns: 'common' })}
+      snapPoints={SNAP_POINTS}
+      testID="work-panel"
+    >
+      <BottomSheetScrollView
+        ref={scrollRef}
+        testID="work-panel-scroll"
+        contentContainerStyle={styles.list}
+        showsVerticalScrollIndicator={false}
+        onScroll={({ nativeEvent }) => {
+          atEndRef.current = nativeEvent.contentOffset.y + nativeEvent.layoutMeasurement.height >= nativeEvent.contentSize.height - Space.lg;
+        }}
+        // The newest step stays in view as steps arrive, unless the reader scrolled back.
+        onContentSizeChange={() => { if (atEndRef.current) scrollRef.current?.scrollToEnd({ animated: false }); }}
       >
-        <View style={styles.header}>
-          <View style={styles.heading}>
-            <Text accessibilityRole="header" style={[styles.headingTitle, { color: colors.ink }]}>{t('Work so far')}</Text>
-            {caption ? <Text testID="work-panel-caption" numberOfLines={1} style={[styles.caption, { color: colors.inkSecondary }]}>{caption}</Text> : null}
-          </View>
-          <Pressable testID="work-panel-close" accessibilityRole="button" accessibilityLabel={t('Done', { ns: 'common' })} onPress={onClose}
-            hitSlop={Space.sm} style={({ pressed }) => [styles.close, { backgroundColor: colors.surface }, pressed ? styles.pressed : null]}>
-            <Text style={[styles.closeLabel, { color: colors.inkSecondary }]}>{t('Done', { ns: 'common' })}</Text>
-            <ChevronDown size={14} color={colors.inkSecondary} strokeWidth={2} />
-          </Pressable>
-        </View>
-        <ScrollView
-          ref={scrollRef}
-          testID="work-panel-scroll"
-          style={styles.scroll}
-          contentContainerStyle={styles.list}
-          showsVerticalScrollIndicator={false}
-          onScroll={({ nativeEvent }) => {
-            atEndRef.current = nativeEvent.contentOffset.y + nativeEvent.layoutMeasurement.height >= nativeEvent.contentSize.height - Space.lg;
-          }}
-          scrollEventThrottle={64}
-          // The newest step stays in view as steps arrive, unless the reader scrolled back.
-          onContentSizeChange={() => { if (atEndRef.current) scrollRef.current?.scrollToEnd({ animated: false }); }}
-        >
-          {work.entries.map((entry) => (
-            <WorkEntryRow key={`${entry.kind}:${entry.message.renderKey ?? entry.message.id}`} entry={entry} onOpenStep={onOpenStep} />
-          ))}
-        </ScrollView>
-      </Animated.View>
-    </View>
+        {turn.entries.map((entry) => (
+          <WorkEntryRow key={`${entry.kind}:${entry.message.renderKey ?? entry.message.id}`} entry={entry} onOpenStep={onOpenStep} />
+        ))}
+      </BottomSheetScrollView>
+    </Sheet>
   );
 }
 
-const PANEL_RISE = Space.lg + 2;
-const panelRise: EntryExitAnimationFunction = () => {
-  'worklet';
-  return {
-    initialValues: { opacity: 0, transform: [{ translateY: PANEL_RISE }, { scale: 0.98 }] },
-    animations: {
-      opacity: withTiming(1, { duration: Motion.duration.normal, easing: Easing.out(Easing.cubic) }),
-      transform: [
-        { translateY: withSpring(0, { duration: 280, dampingRatio: 0.86 }) },
-        { scale: withSpring(1, { duration: 280, dampingRatio: 0.86 }) },
-      ],
-    },
-  };
-};
-const panelFall: EntryExitAnimationFunction = () => {
-  'worklet';
-  return {
-    initialValues: { opacity: 1, transform: [{ translateY: 0 }, { scale: 1 }] },
-    animations: {
-      opacity: withTiming(0, { duration: Motion.duration.fast, easing: Easing.in(Easing.cubic) }),
-      transform: [
-        { translateY: withTiming(PANEL_RISE, { duration: Motion.duration.normal, easing: Easing.in(Easing.cubic) }) },
-        { scale: withTiming(0.98, { duration: Motion.duration.normal }) },
-      ],
-    },
-  };
-};
-
 const styles = StyleSheet.create({
-  layer: {
-    ...StyleSheet.absoluteFill,
-    zIndex: PANEL_LAYER_Z_INDEX,
-  },
-  panel: {
-    position: 'absolute',
-    left: Space.md,
-    right: Space.md,
-    borderRadius: Radius.bottomSheet,
-    overflow: 'hidden',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Space.sm,
-    paddingTop: Space.md + 2,
-    paddingBottom: Space.sm,
-    paddingLeft: Space.lg + 2,
-    paddingRight: Space.md + 2,
-  },
   heading: {
-    flex: 1,
-    minWidth: 0,
+    alignSelf: 'stretch',
+    alignItems: 'center',
   },
   headingTitle: {
     fontSize: FontSize.body,
-    lineHeight: LineHeight.secondary + 2,
+    lineHeight: LineHeight.body,
     fontWeight: FontWeight.semibold,
+    textAlign: 'center',
   },
-  caption: {
-    fontSize: FontSize.meta,
-    lineHeight: LineHeight.meta,
-    fontVariant: ['tabular-nums'],
-  },
-  close: {
-    height: 30,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-    paddingLeft: Space.md,
-    paddingRight: Space.sm + 2,
-    borderRadius: Radius.full,
-  },
-  closeLabel: {
+  headingDetail: {
     fontSize: FontSize.caption,
     lineHeight: LineHeight.caption,
+    fontVariant: ['tabular-nums'],
+    textAlign: 'center',
   },
-  scroll: {
-    flexGrow: 0,
-  },
+  // The work record's body insets.
   list: {
     paddingHorizontal: Space.sm,
-    paddingBottom: Space.sm + 2,
+    paddingBottom: Space.xl,
     gap: 2,
   },
   row: {

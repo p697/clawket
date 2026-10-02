@@ -1,14 +1,13 @@
-import React, { useEffect, useMemo, useRef } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { StyleSheet } from 'react-native';
 import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import { Sheet } from '../ui/Sheet';
-import { useAppTheme } from '../../theme';
 import type { UiMessage } from '../../types/chat';
-import { FontSize, FontWeight, LineHeight, Space } from '../../theme/tokens';
+import { Space } from '../../theme/tokens';
 import { formatTurnReceipt } from './tool-activity-model';
 import type { TurnWork } from './turn-work';
-import { WorkEntryRow } from './WorkPanel';
+import { WorkEntryRow, WorkSheetHeading } from './WorkPanel';
 
 // A long run outgrows the screen: scroll inside fixed detents with the
 // Gorhom-integrated scroll view rather than a plain ScrollView the sheet drag steals.
@@ -30,9 +29,6 @@ export type WorkRecordSheetProps = Readonly<{
  */
 export function WorkRecordSheet({ visible, work, onClose, onOpenStep }: WorkRecordSheetProps): React.JSX.Element {
   const { t } = useTranslation('chat');
-  const { theme } = useAppTheme();
-  const { colors } = theme;
-  const styles = useMemo(() => createStyles(colors), [colors]);
   // Keep the last turn while the sheet animates away.
   const shown = useRef(work);
   useEffect(() => { if (visible && work.entries.length > 0) shown.current = work; }, [visible, work]);
@@ -44,12 +40,7 @@ export function WorkRecordSheet({ visible, work, onClose, onOpenStep }: WorkReco
       visible={visible}
       onClose={onClose}
       title={title}
-      titleContent={(
-        <View style={styles.heading}>
-          <Text accessibilityRole="header" numberOfLines={1} style={styles.title}>{title}</Text>
-          {subtitle ? <Text testID="work-record-subtitle" numberOfLines={1} style={styles.subtitle}>{subtitle}</Text> : null}
-        </View>
-      )}
+      titleContent={<WorkSheetHeading title={title} detail={subtitle} detailTestID="work-record-subtitle" />}
       closeAccessibilityLabel={t('Close', { ns: 'common' })}
       snapPoints={SNAP_POINTS}
       testID="work-record-sheet"
@@ -63,11 +54,6 @@ export function WorkRecordSheet({ visible, work, onClose, onOpenStep }: WorkReco
   );
 }
 
-function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors']) {
-  return StyleSheet.create({
-    heading: { alignSelf: 'stretch', alignItems: 'center' },
-    title: { color: colors.ink, fontSize: FontSize.body, lineHeight: LineHeight.body, fontWeight: FontWeight.semibold, textAlign: 'center' },
-    subtitle: { color: colors.inkSecondary, fontSize: FontSize.caption, lineHeight: LineHeight.caption, textAlign: 'center' },
-    content: { paddingHorizontal: Space.sm, paddingBottom: Space.xl, gap: 2 },
-  });
-}
+const styles = StyleSheet.create({
+  content: { paddingHorizontal: Space.sm, paddingBottom: Space.xl, gap: 2 },
+});
