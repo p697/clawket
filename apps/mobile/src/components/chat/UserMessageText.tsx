@@ -100,10 +100,10 @@ export function UserMessageText({ id, text, width, fontSize, fontScale, color, t
         textBreakStrategy="simple" numberOfLines={expanded || disclosure?.long === false ? undefined : USER_MESSAGE_PREVIEW_LINES} ellipsizeMode="tail">
         {text}{long ? null : metaSpacer}
       </Text>
-      <Text testID={`user-message-measure-${id}`} accessible={false} accessibilityElementsHidden
+      {!disclosure ? <Text testID={`user-message-measure-${id}`} accessible={false} accessibilityElementsHidden
         importantForAccessibility="no-hide-descendants" pointerEvents="none"
         style={[textStyle, styles.measurement, { width }]} textBreakStrategy="simple"
-        numberOfLines={USER_MESSAGE_PREVIEW_LINES + 1} onTextLayout={measure}>{text}</Text>
+        numberOfLines={USER_MESSAGE_PREVIEW_LINES + 1} onTextLayout={measure}>{text}</Text> : null}
       {long ? (
         <View testID={`user-message-footer-${id}`} style={styles.footer}>
           <Pressable testID={`user-message-toggle-${id}`} accessibilityRole="button" accessibilityLabel={label}

@@ -46,7 +46,9 @@ it('caps the first frame and uses native overflow for wrapped text, with metadat
   expect(measurement.props.numberOfLines).toBe(7);
   expect(measurement.props.accessible).toBe(false);
   expect(measurement.props.importantForAccessibility).toBe('no-hide-descendants');
+  const repeatMeasurement = measurement.props.onTextLayout;
   measure(view, 7);
+  expect(view.queryByTestId('user-message-measure-prompt', { includeHiddenElements: true })).toBeNull();
   expect(view.queryByTestId('spacer')).toBeNull();
   expect(view.getByTestId('user-message-text-prompt').props.children).toContain(defaults.text);
   const toggle = view.getByTestId('user-message-toggle-prompt');
@@ -56,7 +58,7 @@ it('caps the first frame and uses native overflow for wrapped text, with metadat
   press(view);
   expect(view.getByTestId('user-message-text-prompt').props.numberOfLines).toBeUndefined();
   expect(view.getByTestId('user-message-toggle-prompt').props.accessibilityLabel).toBe('Collapse message');
-  measure(view, 7);
+  act(() => repeatMeasurement({ nativeEvent: { lines: new Array(7).fill({}) } }));
   expect(view.getByTestId('user-message-text-prompt').props.numberOfLines).toBeUndefined();
   press(view);
   expect(view.getByTestId('user-message-text-prompt').props.numberOfLines).toBe(6);
@@ -90,6 +92,7 @@ it('remeasures width, font size and font scale without discarding an explicit ex
   expect(view.getByTestId('user-message-text-prompt').props.numberOfLines).toBeUndefined();
   measure(view, 7);
   expect(view.getByTestId('user-message-text-prompt').props.numberOfLines).toBeUndefined();
+  view.rerender(<UserMessageText {...props()} width={800} fontSize={20} fontScale={1.3} />);
   measure(view, 6);
   expect(view.queryByTestId('user-message-toggle-prompt')).toBeNull();
 });
