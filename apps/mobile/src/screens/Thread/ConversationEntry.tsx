@@ -19,6 +19,7 @@ import { ControlSize, Space } from '../../theme/tokens';
 import { useProPaywall } from '../../contexts/ProPaywallContext';
 import type { ThreadScreenProps } from './ThreadScreen';
 import type { RootStackParamList } from '../../navigation/root-stack';
+import { connectionSlowHintMs } from '../../connection/wait-policy';
 
 /** Navigation only: never mounts a chat controller or creates a placeholder thread. */
 export function ConversationEntry({ navigation, route, locked, lockedReason = 'agents', onSessionAction, onSessionPanelAfterClose, pinnedSessionKeys }: ThreadScreenProps) {
@@ -34,12 +35,13 @@ export function ConversationEntry({ navigation, route, locked, lockedReason = 'a
   const { showPaywall } = useProPaywall();
   const [visible, setVisible] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [stage, setStage] = useState<'connecting' | 'sessions'>('connecting');
   const closed = useRef(false);
   const pending = useRef<RootStackParamList['Thread'] | null>(null);
   const scope = useRef({ connectionId, agentId, focused });
   scope.current = { connectionId, agentId, focused };
   const rosterGroup = connections.roster.find(group => group.connection.id === connectionId);
+  const stage = connections.activeConnectionId === connectionId && connections.activeState === 'ready' ? 'sessions' : 'connecting';
+  const slowAfterMs = connectionSlowHintMs(rosterGroup?.connection.backendKind);
   const rosterAgent = rosterGroup?.agents.find(row => row.agent.agentId === agentId)?.agent;
   const title = rosterAgent?.name ?? t('Sessions');
   // The picker rising over the page is the success moment; a failed connect hands over at once, without the exit.
@@ -50,7 +52,6 @@ export function ConversationEntry({ navigation, route, locked, lockedReason = 'a
     let current = true;
     closed.current = false;
     setLoading(true);
-    setStage('connecting');
     setVisible(false);
     pending.current = null;
     void (async () => {
@@ -58,6 +59,8 @@ export function ConversationEntry({ navigation, route, locked, lockedReason = 'a
       const runtime = getConnectionRuntime();
       const initial = runtime.getSnapshot();
       const initialAdapter = initial.activeAdapter;
+      const initiallyReady = initial.activeConnectionId === connectionId && initial.activeState === 'ready'
+        && initialAdapter?.connection.id === connectionId;
       const lastPromise = SessionPreferencesService.getLastSession(connectionId, agentId).catch(() => null);
       const reopenKnownSession = (last: string | null, adapter: typeof initialAdapter) => {
         if (!last || !adapter || !current || !scope.current.focused
@@ -73,8 +76,7 @@ export function ConversationEntry({ navigation, route, locked, lockedReason = 'a
         current = false;
         return true;
       };
-      if (initial.activeConnectionId === connectionId && initial.activeState === 'ready'
-        && initialAdapter?.connection.id === connectionId) {
+      if (initiallyReady) {
         const last = await lastPromise;
         if (!current || !scope.current.focused || scope.current.connectionId !== connectionId
           || scope.current.agentId !== agentId) return;
@@ -91,7 +93,14 @@ export function ConversationEntry({ navigation, route, locked, lockedReason = 'a
       if (reopenKnownSession(last, activated.activeAdapter)) return;
       if (!current || !scope.current.focused || scope.current.connectionId !== connectionId
         || scope.current.agentId !== agentId || runtime.getSnapshot().activeConnectionId !== connectionId) return;
-      if (current) setStage('sessions');
+      const latest = runtime.getSnapshot();
+      const liveGroup = latest.roster.find(group => group.connection.id === connectionId);
+      // Cold activation has just completed its forced catalog read. The picker
+      // can use that complete live scope without a second native scan/Relay RPC.
+      if (!initiallyReady && latest.activeState === 'ready' && latest.activeAdapter === activated.activeAdapter
+        && activated.activeAdapter?.connection.id === connectionId
+        && latest.error?.operation !== 'roster' && liveGroup?.source === 'live'
+        && liveGroup.agents.some(row => row.agent.agentId === agentId)) return;
       await runtime.refreshRoster();
       reopenKnownSession(last, activated.activeAdapter);
     })().catch(() => { /* The session sheet retains cached history and reconnect controls. */ }).finally(() => {
@@ -120,6 +129,7 @@ export function ConversationEntry({ navigation, route, locked, lockedReason = 'a
     </View>
     {loaderPhase ? <LoadingState testID="conversation-entry-loading" pose="connecting" phase={loaderPhase}
       message={stage === 'connecting' ? t('Connecting') : t('Loading sessions')}
+      slowAfterMs={slowAfterMs} waitKey={`${connectionId}:${stage}`}
       slowAction={{ label: t('Manage connection', { ns: 'config' }), onPress: () => navigation.navigate('Connection', { connectionId }) }} /> : null}
     <SessionPanel connectionId={connectionId} visible={visible && focused} currentAgentId={agentId} currentSessionKey=""
       permissionDenied={locked} pinnedSessionKeys={pinnedSessionKeys} onClose={close}

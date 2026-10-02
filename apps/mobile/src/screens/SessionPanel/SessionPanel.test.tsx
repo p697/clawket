@@ -780,7 +780,7 @@ it('does not offer session creation without a handler or an Agent', () => {
    const onCreateSession = jest.fn(() => new Promise<void>(resolve => { finish = resolve; }));
    const onClose = jest.fn();
    const view = render(<SessionPanelView {...props({ onCreateSession, onClose })} />);
-   expect(view.getByTestId('session-panel').props.snapPoints).toEqual(['95%']);
+   expect(view.getByTestId('session-panel').props.snapPoints).toEqual(['98%']);
    const create = view.getByTestId('session-panel-create');
    fireEvent.press(create);
    fireEvent.press(create);

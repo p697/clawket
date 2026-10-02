@@ -466,27 +466,16 @@ function isEntranceTiming([target, options]: unknown[]): boolean {
 
 describe('ThreadView', () => {
 
-  it.each([undefined, null, 'custom', 'workspace', 'read-only', 'full-access'])('keeps permission mode %s out of the composer: the model sheet holds it', (permissionMode) => {
-    // A+ model sheet (owner decision 2026-10-01): the capsule holds the model only.
-    const callbacks = createProps({ capabilities: { ...CAPABILITY_MATRIX.codex }, permissionMode, onOpenModelPicker: jest.fn() });
+  it.each(['codex', 'openclaw', 'hermes'] as const)('keeps %s permissions in the model sheet without a header warning', (backend) => {
+    const callbacks = createProps({ capabilities: { ...CAPABILITY_MATRIX[backend] }, onOpenModelPicker: jest.fn() });
     const view = render(<ThreadView {...callbacks} />);
     expect(view.queryByTestId('thread-permissions')).toBeNull();
     expect(view.getByTestId('thread-model-picker')).toBeTruthy();
     expect(view.getByTestId('thread-screen-composer-primary').props.accessibilityState.disabled).toBe(false);
-    // Only full access marks the header, beside the name.
-    const warning = view.queryByTestId('thread-screen-header-pill-warning');
-    if (permissionMode === 'full-access') {
-      expect(warning).toBeTruthy();
-      expect(view.getByTestId('thread-screen-header-pill').props.accessibilityLabel).toBe('Agent settings, Full access');
-    } else {
-      expect(warning).toBeNull();
-    }
+    expect(view.queryByTestId('thread-screen-header-pill-warning')).toBeNull();
+    expect(view.getByTestId('thread-screen-header-pill').props.accessibilityLabel).toBe('Agent settings');
   });
 
-  it('never marks the header for a backend without per-conversation permissions', () => {
-    const view = render(<ThreadView {...createProps({ capabilities: { ...CAPABILITY_MATRIX.openclaw }, permissionMode: 'full-access' })} />);
-    expect(view.queryByTestId('thread-screen-header-pill-warning')).toBeNull();
-  });
   it('shows one actionable settings notice only while settings are unconfirmed and preserves the draft', () => {
     const onReviewRuntimeSettings = jest.fn();
     const props = createProps({ canSend: false, onReviewRuntimeSettings });

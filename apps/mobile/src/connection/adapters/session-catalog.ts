@@ -76,22 +76,25 @@ function response(value: unknown): SessionCatalogSyncResponse {
 /** A complete wire baseline, isolated from UI/event objects and socket incarnations. */
 export class SessionCatalogConsumer {
   private enabled = false;
+  private pageIndex = false;
   private generation = 0;
   private baseline: Snapshot | null = null;
   private pending: Promise<Snapshot> | null = null;
 
   constructor(private readonly request: Request) {}
 
-  configure(version: unknown): void {
+  configure(version: unknown, pageIndexVersion?: unknown): void {
     const enabled = version === 1;
-    if (this.enabled !== enabled) { this.generation++; this.pending = null; }
+    const pageIndex = enabled && pageIndexVersion === 1;
+    if (this.enabled !== enabled || this.pageIndex !== pageIndex) { this.generation++; this.pending = null; }
     this.enabled = enabled;
+    this.pageIndex = pageIndex;
     if (!enabled) this.baseline = null;
   }
 
   /** Same configured adapter may reuse a complete baseline after fresh negotiation. */
   retire(): void {
-    this.generation++; this.enabled = false; this.pending = null;
+    this.generation++; this.enabled = false; this.pageIndex = false; this.pending = null;
   }
 
   /** An acknowledged management write cannot join a catalog read begun before it. */
@@ -126,7 +129,8 @@ export class SessionCatalogConsumer {
 
   private async sync(generation: number): Promise<Snapshot> {
     const baseline = this.baseline;
-    let next = await this.read(baseline ? { base: { epoch: baseline.epoch, revision: baseline.revision } } : {}, generation);
+    const initial = (base?: SessionCatalogRevision): SessionCatalogSyncRequest => ({ ...(base ? { base: { epoch: base.epoch, revision: base.revision } } : {}), ...(this.pageIndex ? { pageIndex: true } : {}) });
+    let next = await this.read(initial(baseline ?? undefined), generation);
     let restarts = 0;
     for (;;) {
       if (next.kind === 'unchanged') {
@@ -153,6 +157,12 @@ export class SessionCatalogConsumer {
       if (next.kind !== 'full' || next.offset !== 0) invalid();
       const epoch = next.epoch, version = next.revision, total = next.total;
       if (!integer(total) || total > MAX_SESSIONS) invalid();
+      const offsets = this.pageIndex ? next.pageOffsets : undefined;
+      if (offsets !== undefined && (!Array.isArray(offsets) || offsets.length > 512
+        || offsets.some((offset, i) => !integer(offset) || offset === 0 || offset >= total || (i > 0 && offset <= offsets[i - 1]))
+        || (next.nextOffset === null ? offsets.length !== 0 : offsets[0] !== next.nextOffset))) invalid();
+      let fetched = 0;
+      let queued: SessionCatalogSyncResponse[] = [];
       const result: SessionDescriptor[] = [];
       const keys = new Set<string>();
       let bytes = 2;
@@ -169,13 +179,31 @@ export class SessionCatalogConsumer {
         }
         if (next.nextOffset === null) {
           if (result.length !== total) invalid();
+          if (offsets && (fetched !== offsets.length || queued.length)) invalid();
           return this.commit({ epoch, revision: version, sessions: result }, generation);
         }
         if (!integer(next.nextOffset) || next.nextOffset !== result.length || result.length >= total || next.sessions.length === 0) invalid();
-        next = await this.read({ page: { epoch, revision: version, offset: result.length } }, generation);
+        if (offsets) {
+          if (!queued.length) {
+            const batch = offsets.slice(fetched, fetched + 3);
+            if (!batch.length || batch[0] !== result.length) invalid();
+            // Settle the whole bounded window even on one failed page. A retry
+            // must not accumulate orphaned continuations behind a fast error.
+            const settled = await Promise.allSettled(batch.map(offset => this.read({ page: { epoch, revision: version, offset } }, generation)));
+            this.assertCurrent(generation);
+            queued = settled.map(result => {
+              if (result.status === 'rejected') throw result.reason;
+              return result.value;
+            });
+            fetched += batch.length;
+          }
+          next = queued.shift()!;
+        } else {
+          next = await this.read({ page: { epoch, revision: version, offset: result.length } }, generation);
+        }
         if (next.kind === 'expired') {
           if (restarts++ > 0) invalid();
-          next = await this.read({}, generation);
+          next = await this.read(initial(), generation);
           // A restart cannot apply a delta to the previous partial snapshot.
           if (next.kind !== 'full') invalid();
           break;
