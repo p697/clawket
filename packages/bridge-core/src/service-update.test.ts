@@ -28,8 +28,9 @@ it.each([['darwin', plist], ['linux', unit]])('refreshes a stopped %s registrati
     if (command === 'systemctl' && (args as string[]).includes('is-active')) throw new Error('inactive');
     return '' as any;
   });
-  const restore = updateStoppedService(context)!;
-  expect(readFileSync(launcher, 'utf8')).toContain(context.scriptPath);
+  const posixContext = { ...context, scriptPath: '/saved/new bridge/index.js' };
+  const restore = updateStoppedService(posixContext)!;
+  expect(readFileSync(launcher, 'utf8')).toContain(posixContext.scriptPath);
   expect(readFileSync(path, 'utf8')).toContain('clawket-launcher.sh');
   expect(spawn).not.toHaveBeenCalled();
   const commands = vi.mocked(execFileSync).mock.calls;
