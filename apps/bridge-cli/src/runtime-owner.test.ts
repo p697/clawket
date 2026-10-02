@@ -12,7 +12,10 @@ it('uses authenticated private IPC, rejects busy stops, and acknowledges a singl
   if (process.platform !== 'win32') expect(statSync(owner.endpoint).mode & 0o777).toBe(0o600);
   await expect(queryRuntimeOwner({ ...owner, token: '0'.repeat(64) }, 'stop')).rejects.toThrow('without confirmation');
   expect(await queryRuntimeOwner(owner, 'stop')).toMatchObject({ stopped: false, busy: true }); expect(stop).not.toHaveBeenCalled();
-  busy = false; expect(await queryRuntimeOwner(owner, 'stop')).toMatchObject({ stopped: true }); expect(stop).toHaveBeenCalledOnce();
+  busy = false; expect(await queryRuntimeOwner(owner, 'stop')).toMatchObject({ stopped: true });
+  // Windows pipes can deliver the acknowledgement before the server's write callback.
+  // Actual process exit is verified separately; don't treat an acknowledgement as an exit.
+  await vi.waitFor(() => expect(stop).toHaveBeenCalledOnce());
   expect(await queryRuntimeOwner(owner, 'stop')).toMatchObject({ stopped: false }); expect(stop).toHaveBeenCalledOnce();
 });
 it('does not replace a live owner or let old cleanup delete a replacement record', async () => {
