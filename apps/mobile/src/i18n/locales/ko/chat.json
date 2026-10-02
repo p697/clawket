@@ -163,6 +163,7 @@
   "Send": "보내기",
   "Reconnect": "다시 연결",
   "Offline · reconnecting": "오프라인 · 다시 연결 중",
+  "Load earlier messages": "이전 메시지 불러오기",
   "Loading history": "기록 불러오는 중",
   "Could not load older messages": "이전 메시지를 불러오지 못했습니다",
   "Multiple agents require Pro": "여러 에이전트를 사용하려면 Pro가 필요합니다",

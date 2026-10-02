@@ -163,6 +163,7 @@
   "Send": "傳送",
   "Reconnect": "重新連線",
   "Offline · reconnecting": "離線 · 正在重新連線",
+  "Load earlier messages": "載入更早的訊息",
   "Loading history": "正在載入歷史記錄",
   "Could not load older messages": "無法載入較早的訊息",
   "Multiple agents require Pro": "多個 Agent 需要 Pro",

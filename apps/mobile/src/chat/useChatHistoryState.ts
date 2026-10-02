@@ -1280,7 +1280,7 @@ export function useChatHistoryState({
     } finally {
       if (!isStalePage()) {
         setLoadingMoreHistory(false);
-        setTimeout(() => { if (!isStalePage()) loadMoreLockRef.current = false; }, 350);
+        loadMoreLockRef.current = false;
       }
     }
   }, [adapter, hasMoreHistory, historyLoadMoreError, loadHistory, loadingMoreHistory, localHistoryPaging, readScope, refreshing, sessionKey, sessionKeyRef]);

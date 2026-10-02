@@ -163,6 +163,7 @@
   "Send": "भेजें",
   "Reconnect": "फिर से कनेक्ट करें",
   "Offline · reconnecting": "ऑफ़लाइन · फिर से कनेक्ट हो रहा है",
+  "Load earlier messages": "पुराने संदेश लोड करें",
   "Loading history": "इतिहास लोड हो रहा है",
   "Could not load older messages": "पुराने संदेश लोड नहीं हो सके",
   "Multiple agents require Pro": "कई Agent के लिए Pro ज़रूरी है",

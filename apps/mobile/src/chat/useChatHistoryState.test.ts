@@ -1268,6 +1268,31 @@ describe('useChatHistoryState', () => {
     expect(ChatCacheService.getTimelinePage).not.toHaveBeenCalled();
   });
 
+  it.each(['openclaw', 'hermes', 'codex', 'claude-code', 'pi'])('allows the next %s page immediately after the previous page settles', async backendKind => {
+    const key = 'owned-session';
+    const page = (id: string, nextCursor?: string) => ({ key, sessionId: 'native',
+      messages: [{ id, role: 'user', text: id, timestampMs: 10_000 }], nextCursor });
+    const adapter = { connection: { backendKind }, state: 'ready', loadSession: jest.fn()
+      .mockResolvedValueOnce(page('newest', 'p1'))
+      .mockResolvedValueOnce(page('middle', 'p2'))
+      .mockResolvedValueOnce(page('oldest')) };
+    const { result } = renderHook(() => {
+      const sessionKeyRef = useRef<string | null>(key);
+      return useChatHistoryState({ adapter: adapter as any, dbg: jest.fn(), t: translate, sessionKeyRef,
+        mainSessionKey: key, routeSessionKey: key, gatewayConfigId: null, currentAgentId: 'main' });
+    });
+    await act(async () => { await result.current.loadHistory(key); });
+    await act(async () => { await result.current.onLoadMoreHistory(); });
+    expect(result.current.loadingMoreHistory).toBe(false);
+    // No timer advancement: a second pull after completion must use the new cursor now.
+    await act(async () => { await result.current.onLoadMoreHistory(); });
+    expect(adapter.loadSession).toHaveBeenCalledTimes(3);
+    expect(adapter.loadSession).toHaveBeenLastCalledWith(key, { limit: 50, cursor: 'p2' });
+    expect(result.current.hasMoreHistory).toBe(false);
+    expect(result.current.messages.filter(row => row.role === 'user').map(row => row.text))
+      .toEqual(['oldest', 'middle', 'newest']);
+  });
+
   describe('native history cursor window', () => {
     const key = 'owned-session';
     const message = (id: string, role = 'user') => ({ id, role, text: id, timestampMs: 10_000 });

@@ -163,6 +163,7 @@
   "Send": "ส่ง",
   "Reconnect": "เชื่อมต่อใหม่",
   "Offline · reconnecting": "ออฟไลน์ · กำลังเชื่อมต่อใหม่",
+  "Load earlier messages": "โหลดข้อความก่อนหน้า",
   "Loading history": "กำลังโหลดประวัติ",
   "Could not load older messages": "ไม่สามารถโหลดข้อความก่อนหน้าได้",
   "Multiple agents require Pro": "การใช้หลาย Agent ต้องใช้ Pro",

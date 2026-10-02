@@ -163,6 +163,7 @@
   "Send": "Enviar",
   "Reconnect": "Volver a conectar",
   "Offline · reconnecting": "Sin conexión · reconectando",
+  "Load earlier messages": "Cargar mensajes anteriores",
   "Loading history": "Cargando historial",
   "Could not load older messages": "No se pudieron cargar los mensajes anteriores",
   "Multiple agents require Pro": "Varios agentes requieren Pro",

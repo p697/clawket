@@ -58,6 +58,8 @@ The Channels tab keeps the settings-row language: one grouped card with the `Dir
 
 Roster recovery: the banner retry is independent of native pull-to-refresh. Keep cached rows and header spacing stable while retrying; only a real pull gesture owns the native refresh indicator. Position that indicator below the content-owned header and disable automatic inset adjustment on the roster list.
 
+Chat earlier-history paging uses one stable 44-point header slot with a shared text `Button`: load earlier, busy spinner, or a quiet failure caption with Retry. Busy feedback starts with the request, including a single scoped pull queued behind a head refresh; it never replaces messages with a skeleton card. Automatic top-threshold loading and taps spin in that control. Only an actual pull owns the native `RefreshControl` (below the floating header), because starting it programmatically changes the iOS content offset. Coalesce pulls while pending, release the paging lock as soon as the read settles, and retain the visible-row anchor with bottom following paused. The native beginning and existing Pro preview retain their history semantics; neither offers a false pull-to-refresh.
+
 ## 1. Sources of truth
 
 - Semantic colors and Agent palette: `src/theme/theme.ts`

@@ -9,6 +9,7 @@ import { useReplyEntranceDelay } from '../../chat/useReplyEntranceDelay';
 import { messageTextRaise } from '../../chat/textCentering';
 import { SessionPreviewNotice, SessionPreviewFooter } from './components/SessionPreviewNotice';
 import { useUiThreadFollow, type UiThreadFollow } from './useUiThreadFollow';
+import { useOlderHistoryPaging } from './useOlderHistoryPaging';
 import { useTranslation } from 'react-i18next';
 import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -20,6 +21,7 @@ import {
   KeyboardAvoidingView as NativeKeyboardAvoidingView,
   Platform,
   Pressable,
+  RefreshControl,
   StyleSheet,
   Text,
   useWindowDimensions,
@@ -107,7 +109,7 @@ import { Sheet } from '../../components/ui/Sheet';
 import { ReplyFailureSheet } from '../../components/chat/ReplyFailureSheet';
 import { RunResult } from '../../components/chat/RunResult';
 import { RunCard } from '../../components/ui/RunCard';
-import { Skeleton } from '../../components/ui/Skeleton';
+import { Button } from '../../components/ui/Button';
 import { LoadingState, useLoadingHandoff } from '../../components/ui/LoadingState';
 import { ConnectionUnavailable, type ConnectionUnavailableProps } from '../../components/ui/ConnectionUnavailable';
 import { SystemEventRow } from '../../components/ui/SystemEventRow';
@@ -354,7 +356,9 @@ export type ThreadViewProps = Readonly<{
   canSend: boolean;
   loadingMoreHistory?: boolean;
   historyLoadMoreError?: boolean;
-  onRetryHistory?: () => void;
+  historyPagingBlocked?: boolean;
+  historyScope?: string;
+  onRetryHistory?: () => void | Promise<unknown>;
   topInset?: number;
   bottomInset?: number;
   copy: ThreadCopy;
@@ -379,7 +383,7 @@ export type ThreadViewProps = Readonly<{
   onRetry?: () => void;
   onOpenPaywall?: () => void;
   onErrorAction?: (state: Extract<ThreadContentState, { kind: 'error' }>) => void;
-  onLoadMoreHistory?: () => void;
+  onLoadMoreHistory?: () => void | Promise<unknown>;
   onOpenRunSession?: (
     sessionKey: string,
     agentId: string | undefined,
@@ -489,6 +493,8 @@ export function ThreadView({
   canSend,
   loadingMoreHistory = false,
   historyLoadMoreError = false,
+  historyPagingBlocked = false,
+  historyScope,
   onRetryHistory,
   topInset = 0,
   bottomInset = 0,
@@ -551,11 +557,6 @@ export function ThreadView({
   const [composerExpanded, setComposerExpanded] = useState(false);
   const compactComposerHeight = useRef(0);
   useEffect(() => { setComposerExpanded(false); }, [sessionKey]);
-  // The older-page placeholder is for a reader scrolling up. A short conversation reaches its top on
-  // open and pages once by itself; a placeholder there pushed the whole timeline down and back up
-  // (device review 2026-09-27), so it waits for the reader's first drag in this session.
-  const [historyBrowsed, setHistoryBrowsed] = useState(false);
-  useEffect(() => { setHistoryBrowsed(false); }, [sessionKey]);
   useEffect(() => {
     if (!composerExpanded) return;
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -754,6 +755,7 @@ export function ThreadView({
   const reduceMotionRef = useRef(reduceMotion);
   reduceMotionRef.current = reduceMotion;
   const followNewMessagesRef = useRef(true);
+  const historyPagingBusyRef = useRef(false);
   const previewWasVisible = useRef(Boolean(sessionPreview));
   if (previewWasVisible.current && !sessionPreview) followNewMessagesRef.current = false;
   previewWasVisible.current = Boolean(sessionPreview);
@@ -993,7 +995,7 @@ export function ThreadView({
     cancelReaderSettle();
     if (!readerScrollingRef.current) return;
     readerScrollingRef.current = false;
-    followNewMessagesRef.current = distanceFromBottomRef.current <= Space.lg;
+    followNewMessagesRef.current = !historyPagingBusyRef.current && distanceFromBottomRef.current <= Space.lg;
   }, [cancelReaderSettle]);
   const finishScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     cancelReaderSettle();
@@ -1027,7 +1029,6 @@ export function ThreadView({
     returningToBottomRef.current = false;
     readerScrollingRef.current = true;
     followNewMessagesRef.current = false;
-    setHistoryBrowsed(true);
   }, [cancelBottomFollow, cancelReaderSettle, endFollowGlide]);
   const handleContentSizeChange = useCallback((_width: number, height: number) => {
     const changed = scrollMetricsRef.current.height !== height;
@@ -1226,16 +1227,56 @@ export function ThreadView({
     </View>
   ) : null), [compactionNotice, testID]);
   const previewUpgrade = sessionPreview?.hasHiddenHistory ? sessionPreview.onUpgrade : undefined;
-  const timelineHeader = useMemo(() => (previewUpgrade ? <SessionPreviewNotice onUpgrade={previewUpgrade} /> : historyLoadMoreError ? (
-    <Banner testID={`${testID}-history-error`} message={t('Could not load older messages', { ns: 'chat' })}
-      actionLabel={copy.retry} onAction={onRetryHistory} style={styles.historyRetry} />
-  ) : loadingMoreHistory && historyBrowsed ? (
-    <Skeleton
-      testID={`${testID}-history-more`}
+  const pauseHistoryFollow = useCallback(() => {
+    cancelReaderSettle();
+    cancelBottomFollow();
+    endFollowGlide();
+    returningToBottomRef.current = false;
+    followNewMessagesRef.current = false;
+    historyPagingBusyRef.current = true;
+  }, [cancelBottomFollow, cancelReaderSettle, endFollowGlide]);
+  const historyPaging = useOlderHistoryPaging({
+    scope: historyScope ?? sessionKey ?? '',
+    loading: loadingMoreHistory,
+    blocked: historyPagingBlocked,
+    failed: historyLoadMoreError,
+    load: onLoadMoreHistory,
+    retry: onRetryHistory,
+    onReadEarlier: pauseHistoryFollow,
+  });
+  historyPagingBusyRef.current = historyPaging.loading;
+  const canPageHistory = !previewUpgrade && Boolean(onLoadMoreHistory || historyPaging.failed || historyPaging.loading);
+  const timelineHeader = useMemo(() => (previewUpgrade ? <SessionPreviewNotice onUpgrade={previewUpgrade} /> : canPageHistory ? (
+    <View style={styles.historyControl}>
+      {historyPaging.failed && !historyPaging.loading ? (
+        <Text style={styles.historyErrorCaption} accessibilityLiveRegion="polite">
+          {t('Could not load older messages', { ns: 'chat' })}
+        </Text>
+      ) : null}
+      <Button
+        testID={`${testID}-history-${historyPaging.failed ? 'retry' : 'load'}`}
+        label={historyPaging.loading ? copy.loadingHistory : historyPaging.failed ? copy.retry : t('Load earlier messages', { ns: 'chat' })}
+        accessibilityLabel={historyPaging.loading ? copy.loadingHistory : historyPaging.failed ? `${t('Could not load older messages', { ns: 'chat' })} · ${copy.retry}` : undefined}
+        variant="text"
+        size="sm"
+        loading={historyPaging.loading}
+        onPress={historyPaging.manual}
+      />
+    </View>
+  ) : null), [canPageHistory, copy.loadingHistory, copy.retry, historyPaging.failed, historyPaging.loading, historyPaging.manual, previewUpgrade, styles.historyControl, styles.historyErrorCaption, t, testID]);
+  const historyRefreshControl = useMemo(() => canPageHistory ? (
+    <RefreshControl
+      testID={`${testID}-history-refresh`}
+      refreshing={historyPaging.pulling}
+      onRefresh={historyPaging.pull}
+      progressViewOffset={timelineTopClearance}
+      tintColor={theme.colors.inkSecondary}
+      colors={[theme.colors.inkSecondary]}
+      progressBackgroundColor={theme.colors.canvas}
       accessibilityLabel={copy.loadingHistory}
-      style={styles.historyMore}
+      accessibilityState={{ busy: historyPaging.pulling }}
     />
-  ) : null), [copy.loadingHistory, copy.retry, historyBrowsed, historyLoadMoreError, loadingMoreHistory, onRetryHistory, previewUpgrade, styles.historyMore, styles.historyRetry, t, testID]);
+  ) : undefined, [canPageHistory, copy.loadingHistory, historyPaging.pull, historyPaging.pulling, theme.colors.canvas, theme.colors.inkSecondary, testID, timelineTopClearance]);
 
   return (
     <ChatPresentationProvider value={presentation}>
@@ -1365,7 +1406,8 @@ export function ThreadView({
                 keyExtractor={getTimelineRowKey}
                 renderItem={renderMessage}
                 contentContainerStyle={timelineContentStyle}
-                onStartReached={historyLoadMoreError ? undefined : onLoadMoreHistory}
+                onStartReached={!canPageHistory || historyPaging.failed ? undefined : historyPaging.automatic}
+                refreshControl={historyRefreshControl}
                 onStartReachedThreshold={0.3}
                 ListFooterComponent={timelineFooter}
                 ListHeaderComponent={timelineHeader}
@@ -2621,11 +2663,19 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       justifyContent: 'center',
       paddingHorizontal: Space.lg,
     },
-    historyRetry: { marginHorizontal: Space.lg, marginVertical: Space.sm },
-    historyMore: {
-      alignSelf: 'center',
-      width: '24%',
-      marginVertical: Space.md,
+    historyControl: {
+      minHeight: ControlSize.floatingButton,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: Space.sm,
+      paddingHorizontal: Space.lg,
+    },
+    historyErrorCaption: {
+      fontSize: FontSize.caption,
+      lineHeight: LineHeight.caption,
+      color: colors.inkSecondary,
+      flexShrink: 1,
     },
     composer: {
       marginHorizontal: Space.md,

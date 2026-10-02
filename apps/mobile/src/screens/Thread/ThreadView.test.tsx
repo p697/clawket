@@ -135,6 +135,7 @@ jest.mock('react-native', () => {
     Modal: ({ visible, children, ...props }: any) => visible
       ? ReactRuntime.createElement('Modal', props, children) : null,
     ActivityIndicator: host('ActivityIndicator'),
+    RefreshControl: host('RefreshControl'),
     Pressable: host('Pressable'),
     StyleSheet: {
       absoluteFill: {
@@ -1123,16 +1124,17 @@ describe('ThreadView', () => {
     const props = createProps({ state: { kind }, messages: kind === 'empty' ? [] : [{ id: 'current', role: 'user', text: 'Keep reading' }],
       historyLoadMoreError: true, onRetryHistory });
     const view = render(<ThreadView {...props} />);
-    expect(view.getByTestId('thread-screen-history-error')).toBeTruthy();
+    expect(view.getByTestId('thread-screen-history-retry')).toBeTruthy();
     expect(view.getByText('Could not load older messages')).toBeTruthy();
     expect(view.getByTestId('thread-screen-timeline').props.onStartReached).toBeUndefined();
-    fireEvent.press(view.getByTestId('thread-screen-history-error-action'));
+    fireEvent.press(view.getByTestId('thread-screen-history-retry'));
     expect(onRetryHistory).toHaveBeenCalledTimes(1);
     expect(props.onSend).not.toHaveBeenCalled();
     expect(props.onChangeInput).not.toHaveBeenCalled();
     view.rerender(<ThreadView {...props} historyLoadMoreError={false} />);
-    expect(view.queryByTestId('thread-screen-history-error')).toBeNull();
-    expect(view.getByTestId('thread-screen-timeline').props.onStartReached).toBe(props.onLoadMoreHistory);
+    expect(view.queryByTestId('thread-screen-history-retry')).toBeNull();
+    act(() => { view.getByTestId('thread-screen-timeline').props.onStartReached(); });
+    expect(props.onLoadMoreHistory).toHaveBeenCalledTimes(1);
   });
 
   it('routes header, composer, history, run, attachment, and approval interactions', () => {
@@ -2091,12 +2093,106 @@ describe('ThreadView', () => {
       .toEqual({ disabled: true });
   });
 
-  it('renders earlier-history loading through the canonical skeleton once the reader scrolls', () => {
-    const view = render(<ThreadView {...createProps({ loadingMoreHistory: true })} />);
-    // A short conversation pages by itself on open; no placeholder pushes its rows around.
-    expect(view.queryByTestId('thread-screen-history-more')).toBeNull();
-    act(() => { view.getByTestId('thread-screen-timeline').props.onScrollBeginDrag?.(); });
-    expect(view.getByTestId('thread-screen-history-more')).toBeTruthy();
+  it.each(['ios', 'android'])('shows history progress immediately and reserves native refreshing for the actual %s pull', platform => {
+    const { Platform } = require('react-native');
+    const previous = Platform.OS;
+    Platform.OS = platform;
+    try {
+      const props = createProps();
+      const view = render(<ThreadView {...props} />);
+      const list = view.UNSAFE_getByType(require('@shopify/flash-list').FlashList);
+      const input = view.getByTestId('thread-screen-composer-input');
+      const refresh = () => view.getByTestId('thread-screen-timeline').props.refreshControl.props;
+      expect(refresh().refreshing).toBe(false);
+      view.rerender(<ThreadView {...props} loadingMoreHistory />);
+      // Programmatic native refreshing moves iOS's offset; prefetch spins only in the control.
+      expect(refresh().refreshing).toBe(false);
+      expect(view.getByTestId('thread-screen-history-load').props.accessibilityState.busy).toBe(true);
+      act(() => { refresh().onRefresh(); });
+      expect(refresh().refreshing).toBe(true);
+      expect(refresh().accessibilityState).toEqual({ busy: true });
+      expect(props.onLoadMoreHistory).not.toHaveBeenCalled();
+      expect(view.queryByTestId('thread-screen-history-more')).toBeNull();
+      expect(view.getByTestId('thread-screen-history-load').props.disabled).toBe(true);
+      expect(view.UNSAFE_getByType(require('@shopify/flash-list').FlashList)).toBe(list);
+      expect(view.getByTestId('thread-screen-composer-input')).toBe(input);
+      view.rerender(<ThreadView {...props} />);
+      act(() => { refresh().onRefresh(); });
+      expect(props.onLoadMoreHistory).toHaveBeenCalledTimes(1);
+      view.rerender(<ThreadView {...props} onLoadMoreHistory={undefined} />);
+      expect(view.getByTestId('thread-screen-timeline').props.refreshControl).toBeUndefined();
+      expect(view.queryByTestId('thread-screen-history-load')).toBeNull();
+      view.unmount();
+    } finally { Platform.OS = previous; }
+  });
+
+  it('shows a slow page before controller loading propagates and joins a pull to the same read', async () => {
+    let complete!: () => void;
+    const page = new Promise<void>(resolve => { complete = resolve; });
+    const props = createProps({ onLoadMoreHistory: jest.fn(() => page) });
+    const view = render(<ThreadView {...props} />);
+    fireEvent.press(view.getByTestId('thread-screen-history-load'));
+    const button = () => view.getByTestId('thread-screen-history-load');
+    const refresh = () => view.getByTestId('thread-screen-timeline').props.refreshControl.props;
+    expect(button().props.accessibilityState.busy).toBe(true);
+    expect(button().props.accessibilityLabel).toBe(props.copy.loadingHistory);
+    expect(refresh().refreshing).toBe(false);
+    act(() => { refresh().onRefresh(); });
+    expect(refresh().refreshing).toBe(true);
+    expect(props.onLoadMoreHistory).toHaveBeenCalledTimes(1);
+    await act(async () => { complete(); await page; });
+    expect(button().props.accessibilityState.busy).toBe(false);
+    expect(refresh().refreshing).toBe(false);
+  });
+
+  it.each(['openclaw', 'hermes', 'codex', 'claude-code', 'pi'] as const)(
+    'keeps the reader in place when a manual %s page grows a short conversation', backend => {
+      jest.useFakeTimers();
+      const props = createProps({ capabilities: CAPABILITY_MATRIX[backend],
+        messages: [{ id: 'newest', role: 'user', text: 'Keep this row visible' }] });
+      const view = render(<ThreadView {...props} />);
+      const timeline = view.getByTestId('thread-screen-timeline');
+      const input = view.getByTestId('thread-screen-composer-input');
+      mockListLayout.content = 300;
+      mockListLayout.viewport = 600;
+      fireEvent(timeline, 'load', { elapsedTimeInMs: 5 });
+      act(() => timeline.props.onCommitLayoutEffect());
+      mockScrollToEnd.mockClear();
+      // A tap is an earlier-reading intent even without a drag event.
+      fireEvent.press(view.getByTestId('thread-screen-history-load'));
+      expect(props.onLoadMoreHistory).toHaveBeenCalledTimes(1);
+      view.rerender(<ThreadView {...props} messages={[
+        { id: 'older', role: 'user', text: 'Earlier page' }, ...props.messages,
+      ]} />);
+      mockListLayout.content = 900;
+      act(() => { timeline.props.onContentSizeChange(393, 900); timeline.props.onCommitLayoutEffect(); });
+      act(() => jest.advanceTimersByTime(50));
+      expect(mockScrollToEnd).not.toHaveBeenCalled();
+      expect(view.getByTestId('thread-screen-composer-input')).toBe(input);
+    });
+
+  it('does not resume bottom following when a pull settles before a slow page reaches a short list', () => {
+    jest.useFakeTimers();
+    const props = createProps({ loadingMoreHistory: true });
+    const view = render(<ThreadView {...props} />);
+    const timeline = view.getByTestId('thread-screen-timeline');
+    mockListLayout.content = 300;
+    mockListLayout.viewport = 600;
+    fireEvent(timeline, 'load', { elapsedTimeInMs: 5 });
+    act(() => timeline.props.onCommitLayoutEffect());
+    fireEvent(timeline, 'scrollBeginDrag');
+    fireEvent(timeline, 'scrollEndDrag', { nativeEvent: {
+      contentSize: { width: 393, height: 300 }, layoutMeasurement: { width: 393, height: 600 },
+      contentOffset: { x: 0, y: 0 },
+    } });
+    act(() => jest.advanceTimersByTime(150));
+    mockScrollToEnd.mockClear();
+    // The page arrives after the finger/momentum has stopped.
+    view.rerender(<ThreadView {...props} loadingMoreHistory={false} />);
+    mockListLayout.content = 900;
+    act(() => { timeline.props.onContentSizeChange(393, 900); timeline.props.onCommitLayoutEffect(); });
+    act(() => jest.advanceTimersByTime(50));
+    expect(mockScrollToEnd).not.toHaveBeenCalled();
   });
 
   it('expires a pending approval at its deadline without a controller refresh', () => {

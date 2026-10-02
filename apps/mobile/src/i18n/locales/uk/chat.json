@@ -163,6 +163,7 @@
   "Send": "Надіслати",
   "Reconnect": "Перепідключитися",
   "Offline · reconnecting": "Не в мережі · перепідключення",
+  "Load earlier messages": "Завантажити попередні повідомлення",
   "Loading history": "Завантаження історії",
   "Could not load older messages": "Не вдалося завантажити попередні повідомлення",
   "Multiple agents require Pro": "Для кількох агентів потрібен Pro",

@@ -680,6 +680,15 @@ describe('ThreadScreen connection container', () => {
     });
   });
 
+  it('gives history paging the active conversation scope and head-refresh state', () => {
+    const props = createNavigationProps();
+    mockController.refreshing = true;
+    render(<ThreadScreen {...props} />);
+    expect(mockThreadViewProps?.historyPagingBlocked).toBe(true);
+    expect(mockThreadViewProps?.historyScope).toBe('connection-1:atlas:agent:atlas:main');
+    expect(mockThreadViewProps?.onLoadMoreHistory).toBe(mockController.onLoadMoreHistory);
+  });
+
   it('keeps main conversations and the existing grace period complete', () => {
     mockIsPro = false;
     const props = createNavigationProps();

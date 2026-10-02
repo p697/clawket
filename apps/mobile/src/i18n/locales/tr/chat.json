@@ -163,6 +163,7 @@
   "Send": "Gönder",
   "Reconnect": "Yeniden bağlan",
   "Offline · reconnecting": "Çevrimdışı · yeniden bağlanıyor",
+  "Load earlier messages": "Önceki mesajları yükle",
   "Loading history": "Geçmiş yükleniyor",
   "Could not load older messages": "Önceki mesajlar yüklenemedi",
   "Multiple agents require Pro": "Birden fazla Agent için Pro gerekli",

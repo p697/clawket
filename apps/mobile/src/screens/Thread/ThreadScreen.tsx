@@ -1040,6 +1040,8 @@ function ThreadScreenContent({
         pendingReplyRenderKey={controller.pendingReplyRenderKey}
         canSend={!sessionPreview && controller.canSend}
         loadingMoreHistory={!sessionPreview && controller.loadingMoreHistory}
+        historyPagingBlocked={controller.refreshing}
+        historyScope={`${connectionId}:${agentId}:${sessionKey}`}
         historyLoadMoreError={!sessionPreview && controller.historyLoadMoreError}
         onRetryHistory={!sessionPreview ? controller.retryLoadMoreHistory : undefined}
         topInset={insets.top}
