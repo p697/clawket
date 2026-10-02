@@ -59,7 +59,7 @@ clawket pair
 npx @p697/clawket@latest pair choose
 ```
 
-App 的「在电脑上检测并选择」入口会显示这条命令。按平台连接时，Codex、Claude Code、Pi 和本地模型默认走终端扫码，OpenClaw 和 Hermes 默认让 Agent 代跑；可切换方式，也可输入配对码代替扫码。`pair choose` 需要交互式终端，不接受参数，不适用于 Preview。
+App 配对首页在平台列表下方以「自动检测电脑上的 Agent」标题直接展示这条命令和复制按钮。扫码、相册和可展开的输码都在同一页，手输码需先选择对应平台。按平台连接时，Codex、Claude Code、Pi 和本地模型默认走终端扫码，OpenClaw 和 Hermes 默认让 Agent 代跑；可切换方式，也可输入配对码代替扫码。`pair choose` 需要交互式终端，不接受参数，不适用于 Preview。
 
 如果希望通过本地网络直连：
 

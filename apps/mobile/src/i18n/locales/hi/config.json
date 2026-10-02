@@ -386,15 +386,13 @@
   "Pattern": "पैटर्न",
   "Photo": "फ़ोटो",
   "Plain": "सादा",
-  "Connect on your computer": "कंप्यूटर पर कनेक्ट करें",
-  "Detect and choose on your computer": "कंप्यूटर पर खोजें और चुनें",
-  "One command to choose the agent you want to connect.": "जिस एजेंट को कनेक्ट करना है, उसे एक कमांड से चुनें।",
-  "Have a QR code? Scan to connect": "QR कोड है? कनेक्ट करने के लिए स्कैन करें",
   "Run in your computer terminal": "कंप्यूटर के टर्मिनल में चलाएँ",
-  "Choose an agent, then scan": "एजेंट चुनें, फिर स्कैन करें",
   "Scan the QR code in your terminal": "टर्मिनल में QR कोड स्कैन करें",
-  "Choose an installed agent in Terminal, then scan its QR code here.": "टर्मिनल में इंस्टॉल किया गया एजेंट चुनें, फिर उसका QR कोड यहाँ स्कैन करें।",
   "Change platform": "प्लेटफ़ॉर्म बदलें",
   "Choose the platform that printed your code.": "जिस प्लेटफ़ॉर्म ने कोड बनाया है, उसे चुनें।",
-  "Enter pairing code": "पेयरिंग कोड दर्ज करें"
+  "Enter pairing code": "पेयरिंग कोड दर्ज करें",
+  "Automatically detect agents on your computer": "कंप्यूटर पर एजेंट अपने आप ढूँढें",
+  "Find installed platforms, then choose one to pair.": "इंस्टॉल किए गए प्लेटफ़ॉर्म ढूँढें, फिर पेयर करने के लिए एक चुनें।",
+  "Select platform": "प्लेटफ़ॉर्म चुनें",
+  "Back to scanning": "स्कैन पर वापस जाएँ"
 }

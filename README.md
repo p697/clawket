@@ -59,7 +59,7 @@ To detect installed platforms and choose one interactively (including Codex, Cla
 npx @p697/clawket@latest pair choose
 ```
 
-The app exposes this under **Detect and choose on your computer**. Platform-specific onboarding defaults to terminal scanning for Codex, Claude Code, Pi, and local models; OpenClaw and Hermes default to an agent message. You can switch methods and enter a pairing code instead of scanning. `pair choose` is interactive, accepts no flags, and is not a Preview command.
+The pairing home shows this command and its Copy action directly below the platform list, under **Automatically detect agents on your computer**. Scan, photos, and expandable code entry are available on the same page; manual codes require selecting their platform first. Platform-specific onboarding defaults to terminal scanning for Codex, Claude Code, Pi, and local models; OpenClaw and Hermes default to an agent message. You can switch methods and enter a pairing code instead of scanning. `pair choose` is interactive, accepts no flags, and is not a Preview command.
 
 For direct pairing on your local network:
 

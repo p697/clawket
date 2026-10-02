@@ -386,15 +386,13 @@
   "Pattern": "圖案",
   "Photo": "照片",
   "Plain": "純色",
-  "Connect on your computer": "在電腦上連線",
-  "Detect and choose on your computer": "在電腦上偵測並選擇",
-  "One command to choose the agent you want to connect.": "一行指令，選擇要連線的 Agent。",
-  "Have a QR code? Scan to connect": "已有 QR 碼？掃碼連線",
   "Run in your computer terminal": "在電腦終端機執行",
-  "Choose an agent, then scan": "選擇 Agent，然後掃碼",
   "Scan the QR code in your terminal": "掃描終端機裡的 QR 碼",
-  "Choose an installed agent in Terminal, then scan its QR code here.": "在終端機選擇已安裝的 Agent，再到這裡掃描 QR 碼。",
   "Change platform": "更換平台",
   "Choose the platform that printed your code.": "選擇產生配對碼的平台。",
-  "Enter pairing code": "輸入配對碼"
+  "Enter pairing code": "輸入配對碼",
+  "Automatically detect agents on your computer": "自動偵測電腦上的 Agent",
+  "Find installed platforms, then choose one to pair.": "找到已安裝的平台，選擇後即可配對。",
+  "Select platform": "選擇平台",
+  "Back to scanning": "收合，改用掃碼"
 }

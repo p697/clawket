@@ -386,15 +386,13 @@
   "Pattern": "パターン",
   "Photo": "写真",
   "Plain": "無地",
-  "Connect on your computer": "コンピューターで接続",
-  "Detect and choose on your computer": "コンピューターで検出して選択",
-  "One command to choose the agent you want to connect.": "1つのコマンドで接続するエージェントを選べます。",
-  "Have a QR code? Scan to connect": "QRコードをお持ちですか？スキャンして接続",
   "Run in your computer terminal": "コンピューターのターミナルで実行",
-  "Choose an agent, then scan": "エージェントを選んでスキャン",
   "Scan the QR code in your terminal": "ターミナルのQRコードをスキャン",
-  "Choose an installed agent in Terminal, then scan its QR code here.": "ターミナルでインストール済みのエージェントを選び、ここでQRコードをスキャンしてください。",
   "Change platform": "プラットフォームを変更",
   "Choose the platform that printed your code.": "コードを生成したプラットフォームを選んでください。",
-  "Enter pairing code": "ペアリングコードを入力"
+  "Enter pairing code": "ペアリングコードを入力",
+  "Automatically detect agents on your computer": "パソコン上のエージェントを自動検出",
+  "Find installed platforms, then choose one to pair.": "インストール済みのプラットフォームを検出し、選んでペアリング。",
+  "Select platform": "プラットフォームを選択",
+  "Back to scanning": "スキャンに戻る"
 }

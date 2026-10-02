@@ -62,6 +62,7 @@ describe('PlatformMark', () => {
     const balanced = { openclaw: 36, 'claude-code': 39, hermes: 46, codex: 45, pi: 50 } as const;
     for (const [platform, width] of Object.entries(balanced)) {
       expect(widthOf(<PlatformMark platform={platform as keyof typeof balanced} balanced />)).toBe(width);
+      expect(widthOf(<PlatformMark platform={platform as keyof typeof balanced} balanced size={32} />)).toBeCloseTo(width * 32 / ControlSize.floatingButton);
     }
     const local = render(<PlatformMark platform="local-model" balanced />);
     expect(local.getByTestId('platform-mark-local-model').props).toMatchObject({ width: 41, height: 41 });

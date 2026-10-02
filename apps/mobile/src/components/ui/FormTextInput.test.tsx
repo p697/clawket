@@ -1,6 +1,6 @@
 import React from 'react';
 import { render } from '@testing-library/react-native';
-import { Platform } from 'react-native';
+import { Platform, Text } from 'react-native';
 import { builtInAccents } from '../../theme/accents';
 import { buildTheme } from '../../theme/theme';
 import { ControlSize, FontSize, LineHeight } from '../../theme/tokens';
@@ -74,6 +74,14 @@ describe('FormTextInput', () => {
   it('retains explicit leading for multiline fields', () => {
     const view = render(<FormTextInput testID="multiline" multiline value="First line\nSecond line" />);
     expect(flattenStyle(view.getByTestId('multiline').props.style).lineHeight).toBe(LineHeight.secondary);
+  });
+
+  it('keeps an inline action outside the editable value in a shrinkable field', () => {
+    const view = render(<FormTextInput testID="with-action" value="123456" trailing={<Text>Paste</Text>} />);
+    const input = view.getByTestId('with-action');
+    expect(input.props.defaultValue).toBe('123456');
+    expect(flattenStyle(input.props.style)).toMatchObject({ flex: 1, minWidth: 0 });
+    expect(view.getByText('Paste')).toBeTruthy();
   });
 });
 

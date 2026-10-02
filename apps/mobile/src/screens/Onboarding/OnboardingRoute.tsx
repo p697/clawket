@@ -449,8 +449,9 @@ export function OnboardingRoute({
         await Clipboard.setStringAsync(prompt);
         onAgentPromptCopied?.(backend);
       }}
-      onPastePairingCode={async (backend) => {
+      onPastePairingCode={async (backend, isCurrent) => {
         const pasted = (await Clipboard.getStringAsync()).trim();
+        if (isCurrent && !isCurrent()) return null;
         if (/^(https?:\/\/|clawket:\/\/)/i.test(pasted)) {
           await connectFromPairingLink(pasted, backend);
           return null;

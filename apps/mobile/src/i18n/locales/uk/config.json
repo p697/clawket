@@ -386,15 +386,13 @@
   "Pattern": "Візерунок",
   "Photo": "Фото",
   "Plain": "Однотонний",
-  "Connect on your computer": "Підключити на комп’ютері",
-  "Detect and choose on your computer": "Знайти й вибрати на комп’ютері",
-  "One command to choose the agent you want to connect.": "Одна команда для вибору агента для підключення.",
-  "Have a QR code? Scan to connect": "Уже є QR-код? Скануйте для підключення",
   "Run in your computer terminal": "Запустіть у терміналі комп’ютера",
-  "Choose an agent, then scan": "Виберіть агента й скануйте",
   "Scan the QR code in your terminal": "Скануйте QR-код у терміналі",
-  "Choose an installed agent in Terminal, then scan its QR code here.": "Виберіть встановленого агента в терміналі, потім відскануйте його QR-код тут.",
   "Change platform": "Змінити платформу",
   "Choose the platform that printed your code.": "Виберіть платформу, яка видала код.",
-  "Enter pairing code": "Ввести код сполучення"
+  "Enter pairing code": "Ввести код сполучення",
+  "Automatically detect agents on your computer": "Автоматично знайти агентів на комп’ютері",
+  "Find installed platforms, then choose one to pair.": "Знайдіть установлені платформи та виберіть одну для підключення.",
+  "Select platform": "Вибрати платформу",
+  "Back to scanning": "Повернутися до сканування"
 }

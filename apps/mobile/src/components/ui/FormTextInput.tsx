@@ -34,6 +34,7 @@ type Props = Omit<CompositionSafeTextInputProps, 'style'> & {
   errorMessage?: string;
   minHeight?: number;
   surface?: 'raised' | 'sunken' | 'quiet';
+  trailing?: React.ReactNode;
 };
 
 export const FormTextInput = forwardRef<TextInput, Props>(function FormTextInput(
@@ -47,6 +48,7 @@ export const FormTextInput = forwardRef<TextInput, Props>(function FormTextInput
     multiline = false,
     placeholderTextColor,
     surface = 'quiet',
+    trailing,
     ...rest
   },
   ref,
@@ -62,6 +64,7 @@ export const FormTextInput = forwardRef<TextInput, Props>(function FormTextInput
       styles.field,
       surface === 'quiet' ? styles.quiet : surface === 'sunken' ? styles.sunken : styles.raised,
       invalid && !errorMessage ? styles.invalid : null,
+      trailing ? styles.withTrailing : null,
       containerStyle,
     ]}>
       <Input
@@ -73,11 +76,13 @@ export const FormTextInput = forwardRef<TextInput, Props>(function FormTextInput
         textAlignVertical={multiline ? 'top' : undefined}
         style={[
           styles.input,
+          trailing ? styles.trailingInput : null,
           multiline ? styles.multiline : styles.singleLine,
           minHeight === undefined ? null : { minHeight },
           inputStyle,
         ]}
       />
+      {trailing}
     </View>
   );
   if (!errorMessage) return field;
@@ -99,6 +104,8 @@ function createStyles(
     error: { flexDirection: 'row', alignItems: 'center', gap: Space.sm, paddingHorizontal: Space.xs },
     errorText: { flex: 1, fontSize: FontSize.caption, lineHeight: LineHeight.caption },
     field: { borderRadius: Radius.settingsGroup, overflow: 'hidden' },
+    withTrailing: { flexDirection: 'row', alignItems: 'center', paddingEnd: Space.sm },
+    trailingInput: { flex: 1, minWidth: 0 },
     quiet: { backgroundColor: colors.surface },
     raised: { ...createSurfaceStyle(colors, scheme, 'raised') },
     sunken: {

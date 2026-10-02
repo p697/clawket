@@ -386,15 +386,13 @@
   "Pattern": "نقش",
   "Photo": "صورة",
   "Plain": "سادة",
-  "Connect on your computer": "الاتصال على الكمبيوتر",
-  "Detect and choose on your computer": "اكتشاف واختيار على الكمبيوتر",
-  "One command to choose the agent you want to connect.": "أمر واحد لاختيار الوكيل الذي تريد الاتصال به.",
-  "Have a QR code? Scan to connect": "لديك رمز QR؟ امسحه للاتصال",
   "Run in your computer terminal": "تشغيل في طرفية الكمبيوتر",
-  "Choose an agent, then scan": "اختر وكيلًا، ثم امسح الرمز",
   "Scan the QR code in your terminal": "امسح رمز QR في الطرفية",
-  "Choose an installed agent in Terminal, then scan its QR code here.": "اختر وكيلًا مثبتًا في الطرفية، ثم امسح رمز QR الخاص به هنا.",
   "Change platform": "تغيير المنصة",
   "Choose the platform that printed your code.": "اختر المنصة التي أنشأت الرمز.",
-  "Enter pairing code": "إدخال رمز الاقتران"
+  "Enter pairing code": "إدخال رمز الاقتران",
+  "Automatically detect agents on your computer": "اكتشاف الوكلاء على جهازك تلقائيًا",
+  "Find installed platforms, then choose one to pair.": "اعثر على المنصات المثبتة، ثم اختر منصة للإقران.",
+  "Select platform": "اختيار المنصة",
+  "Back to scanning": "العودة إلى المسح"
 }

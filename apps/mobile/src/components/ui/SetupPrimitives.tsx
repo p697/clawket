@@ -28,13 +28,13 @@ export function PageIntro({ title, description }: { title: string; description?:
 }
 
 /** `locked` swaps the chevron for the Pro lock; the row stays pressable so the caller can open its paywall. */
-export function ChoiceRow({ icon: Icon, leading, title, description, locked = false, onPress, testID }: { icon?: LucideIcon; leading?: React.ReactNode; title: string; description?: string; locked?: boolean; onPress: () => void; testID?: string }) {
+export function ChoiceRow({ icon: Icon, leading, title, description, locked = false, compact = false, onPress, testID }: { icon?: LucideIcon; leading?: React.ReactNode; title: string; description?: string; locked?: boolean; compact?: boolean; onPress: () => void; testID?: string }) {
   const { theme: { colors } } = useAppTheme();
   return <Pressable testID={testID} accessibilityRole="button" accessibilityLabel={description ? `${title}, ${description}` : title} onPress={onPress}
-    style={({ pressed }) => [styles.choice, description ? styles.choiceDescribed : null, { backgroundColor: pressed ? colors.surface : 'transparent' }]}>
-    <View style={[styles.icon, description ? styles.iconDescribed : null, { backgroundColor: leading ? 'transparent' : colors.surface }]}>{leading ?? (Icon ? <Icon size={IconSize.lg} color={colors.ink} strokeWidth={1.5} /> : null)}</View>
+    style={({ pressed }) => [styles.choice, description ? styles.choiceDescribed : null, compact ? styles.choiceCompact : null, { backgroundColor: pressed ? colors.surface : 'transparent' }]}>
+    <View style={[styles.icon, description ? styles.iconDescribed : null, compact ? styles.iconCompact : null, { backgroundColor: leading ? 'transparent' : colors.surface }]}>{leading ?? (Icon ? <Icon size={IconSize.lg} color={colors.ink} strokeWidth={1.5} /> : null)}</View>
     <View style={styles.choiceCopy}>
-      <Text style={[styles.choiceTitle, { color: colors.ink }]}>{title}</Text>
+      <Text style={[styles.choiceTitle, compact ? styles.choiceTitleCompact : null, { color: colors.ink }]}>{title}</Text>
       {description ? <Text style={[styles.description, { color: colors.inkSecondary }]}>{description}</Text> : null}
     </View>
     {locked
@@ -55,7 +55,7 @@ export function FormStep({ number, title, children, action, style }: { number: s
   </View>;
 }
 
-export function CommandBlock({ command, onCopy, copied = false, prose = false, stacked = false, accessibilityLabel, testID = 'onboarding-command', copyTestID = 'onboarding-copy-command' }: {
+export function CommandBlock({ command, onCopy, copied = false, prose = false, stacked = false, footer, accessibilityLabel, testID = 'onboarding-command', copyTestID = 'onboarding-copy-command' }: {
   command: string;
   onCopy?: () => void;
   copied?: boolean;
@@ -63,6 +63,8 @@ export function CommandBlock({ command, onCopy, copied = false, prose = false, s
   prose?: boolean;
   /** A full-width command with its copy action below, for terminal onboarding. */
   stacked?: boolean;
+  /** A short execution hint beside the stacked copy action. */
+  footer?: string;
   accessibilityLabel?: string;
   testID?: string;
   copyTestID?: string;
@@ -72,7 +74,7 @@ export function CommandBlock({ command, onCopy, copied = false, prose = false, s
   return <View testID={testID} style={[styles.commandBlock, prose ? styles.proseBlock : null, stacked ? styles.commandStacked : null, { backgroundColor: colors.surface }]}>
     <Text selectable accessibilityLabel={accessibilityLabel ?? t('Pairing command')} style={[styles.command, prose ? styles.prose : null, stacked ? styles.commandFullWidth : null, { color: colors.ink }]}>{command}</Text>
     {onCopy ? stacked
-      ? <View style={styles.commandCopy}><Button testID={copyTestID} label={t(copied ? 'Copied' : 'Copy command')} icon={copied ? Check : Copy} variant="card" size="sm" multiline style={styles.commandCopyButton} haptic onPress={onCopy} accessibilityLabel={t(copied ? 'Copied' : 'Copy command')} /></View>
+      ? <View style={[styles.commandCopy, footer ? styles.commandFooter : null]}>{footer ? <Text style={[styles.commandHint, { color: colors.inkSecondary }]}>{footer}</Text> : null}<Button testID={copyTestID} label={t(copied ? 'Copied' : 'Copy command')} icon={copied ? Check : Copy} variant="card" size="sm" multiline style={styles.commandCopyButton} haptic onPress={onCopy} accessibilityLabel={t(copied ? 'Copied' : 'Copy command')} /></View>
       : <FloatingButton testID={copyTestID} icon={copied ? Check : Copy} appearance="plain" onPress={onCopy} accessibilityLabel={t(copied ? 'Copied' : 'Copy command')} /> : null}
   </View>;
 }
@@ -110,6 +112,9 @@ const styles = StyleSheet.create({
   // and the roster's two-line height.
   choice: { paddingVertical: Space.md, paddingHorizontal: Space.xs, flexDirection: 'row', alignItems: 'center', gap: Space.lg, borderRadius: Radius.card },
   choiceDescribed: { minHeight: ControlSize.rosterRow, paddingVertical: Space.lg },
+  choiceCompact: { minHeight: ControlSize.settingsRow, paddingVertical: Space.sm, gap: Space.sm },
+  iconCompact: { width: Space.xxl, height: Space.xxl },
+  choiceTitleCompact: { fontSize: FontSize.secondary, lineHeight: LineHeight.secondary },
   icon: { width: ControlSize.floatingButton, height: ControlSize.floatingButton, borderRadius: Radius.card, alignItems: 'center', justifyContent: 'center' },
   iconDescribed: { width: ControlSize.settingsRow, height: ControlSize.settingsRow },
   choiceCopy: { flex: 1, gap: Space.xs },
@@ -123,7 +128,9 @@ const styles = StyleSheet.create({
   commandStacked: { flexDirection: 'column', alignItems: 'stretch', paddingLeft: Space.lg, paddingRight: Space.lg, paddingVertical: Space.lg, gap: Space.sm },
   commandFullWidth: { flex: undefined },
   commandCopy: { alignSelf: 'flex-end', maxWidth: '100%' },
-  commandCopyButton: { minHeight: ControlSize.floatingButton },
+  commandFooter: { alignSelf: 'stretch', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: Space.sm },
+  commandHint: { flexShrink: 1, fontSize: FontSize.caption, lineHeight: LineHeight.caption },
+  commandCopyButton: { minHeight: ControlSize.floatingButton, maxWidth: '100%', flexShrink: 1 },
   proseBlock: { paddingVertical: Space.md, paddingRight: Space.lg },
   messagePreview: { flexDirection: 'row', alignItems: 'center', gap: Space.sm, paddingVertical: Space.md, paddingHorizontal: Space.lg, borderRadius: Radius.settingsGroup },
   prose: { flex: 1, fontSize: FontSize.secondary, lineHeight: LineHeight.secondary, fontFamily: undefined },

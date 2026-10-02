@@ -386,15 +386,13 @@
   "Pattern": "Desen",
   "Photo": "Fotoğraf",
   "Plain": "Düz",
-  "Connect on your computer": "Bilgisayarınızda bağlanın",
-  "Detect and choose on your computer": "Bilgisayarınızda algılayın ve seçin",
-  "One command to choose the agent you want to connect.": "Bağlamak istediğiniz ajanı tek komutla seçin.",
-  "Have a QR code? Scan to connect": "QR kodunuz var mı? Bağlanmak için tarayın",
   "Run in your computer terminal": "Bilgisayar terminalinde çalıştırın",
-  "Choose an agent, then scan": "Bir ajan seçin, ardından tarayın",
   "Scan the QR code in your terminal": "Terminaldeki QR kodunu tarayın",
-  "Choose an installed agent in Terminal, then scan its QR code here.": "Terminalde kurulu bir ajan seçin, ardından QR kodunu burada tarayın.",
   "Change platform": "Platformu değiştir",
   "Choose the platform that printed your code.": "Kodunuzu oluşturan platformu seçin.",
-  "Enter pairing code": "Eşleştirme kodunu girin"
+  "Enter pairing code": "Eşleştirme kodunu girin",
+  "Automatically detect agents on your computer": "Bilgisayarındaki ajanları otomatik bul",
+  "Find installed platforms, then choose one to pair.": "Yüklü platformları bul, ardından eşleştirmek istediğini seç.",
+  "Select platform": "Platform seç",
+  "Back to scanning": "Taramaya dön"
 }

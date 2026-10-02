@@ -386,15 +386,13 @@
   "Pattern": "Pattern",
   "Photo": "Photo",
   "Plain": "Plain",
-  "Connect on your computer": "Connect on your computer",
-  "Detect and choose on your computer": "Detect and choose on your computer",
-  "One command to choose the agent you want to connect.": "One command to choose the agent you want to connect.",
-  "Have a QR code? Scan to connect": "Have a QR code? Scan to connect",
   "Run in your computer terminal": "Run in your computer terminal",
-  "Choose an agent, then scan": "Choose an agent, then scan",
   "Scan the QR code in your terminal": "Scan the QR code in your terminal",
-  "Choose an installed agent in Terminal, then scan its QR code here.": "Choose an installed agent in Terminal, then scan its QR code here.",
   "Change platform": "Change platform",
   "Choose the platform that printed your code.": "Choose the platform that printed your code.",
-  "Enter pairing code": "Enter pairing code"
+  "Enter pairing code": "Enter pairing code",
+  "Automatically detect agents on your computer": "Automatically detect agents on your computer",
+  "Find installed platforms, then choose one to pair.": "Find installed platforms, then choose one to pair.",
+  "Select platform": "Select platform",
+  "Back to scanning": "Back to scanning"
 }

@@ -581,6 +581,23 @@ describe('OnboardingRoute', () => {
     expect(mockConnectBackendPairingCode).not.toHaveBeenCalled();
   });
 
+  it('does not claim a pasted invitation after the form scope changes during the clipboard read', async () => {
+    let resolveClipboard!: (value: string) => void;
+    mockClipboardGetString.mockImplementationOnce(() => new Promise<string>((resolve) => { resolveClipboard = resolve; }));
+    render(<OnboardingRoute {...createProps()} />);
+    let current = true;
+    let result: string | null | undefined;
+    await act(async () => {
+      const pending = mockScreenProps?.onPastePairingCode?.('hermes', () => current);
+      current = false;
+      resolveClipboard('https://clawket.ai/pair/example#test-fragment');
+      result = await pending;
+    });
+    expect(result).toBeNull();
+    expect(mockConnectBackendPairingLink).not.toHaveBeenCalled();
+    expect(mockConnectBackendPairingCode).not.toHaveBeenCalled();
+  });
+
   it('binds clipboard, official docs, modal close, and retry', async () => {
     const onDocsOpened = jest.fn();
     const onAgentPromptCopied = jest.fn();

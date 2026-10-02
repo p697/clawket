@@ -386,15 +386,13 @@
   "Pattern": "Muster",
   "Photo": "Foto",
   "Plain": "Einfarbig",
-  "Connect on your computer": "Am Computer verbinden",
-  "Detect and choose on your computer": "Am Computer erkennen und auswählen",
-  "One command to choose the agent you want to connect.": "Mit einem Befehl den gewünschten Agenten auswählen.",
-  "Have a QR code? Scan to connect": "QR-Code vorhanden? Zum Verbinden scannen",
   "Run in your computer terminal": "Im Terminal des Computers ausführen",
-  "Choose an agent, then scan": "Agenten auswählen, dann scannen",
   "Scan the QR code in your terminal": "QR-Code im Terminal scannen",
-  "Choose an installed agent in Terminal, then scan its QR code here.": "Im Terminal einen installierten Agenten auswählen, dann hier seinen QR-Code scannen.",
   "Change platform": "Plattform wechseln",
   "Choose the platform that printed your code.": "Die Plattform auswählen, die den Code ausgegeben hat.",
-  "Enter pairing code": "Kopplungscode eingeben"
+  "Enter pairing code": "Kopplungscode eingeben",
+  "Automatically detect agents on your computer": "Agents auf deinem Computer automatisch erkennen",
+  "Find installed platforms, then choose one to pair.": "Installierte Plattformen finden und eine zum Koppeln auswählen.",
+  "Select platform": "Plattform auswählen",
+  "Back to scanning": "Zurück zum Scannen"
 }

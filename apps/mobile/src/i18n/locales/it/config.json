@@ -386,15 +386,13 @@
   "Pattern": "Motivo",
   "Photo": "Foto",
   "Plain": "Tinta unita",
-  "Connect on your computer": "Connetti dal computer",
-  "Detect and choose on your computer": "Rileva e scegli sul computer",
-  "One command to choose the agent you want to connect.": "Un comando per scegliere l’agente da connettere.",
-  "Have a QR code? Scan to connect": "Hai un codice QR? Scansiona per connetterti",
   "Run in your computer terminal": "Esegui nel terminale del computer",
-  "Choose an agent, then scan": "Scegli un agente, poi scansiona",
   "Scan the QR code in your terminal": "Scansiona il codice QR nel terminale",
-  "Choose an installed agent in Terminal, then scan its QR code here.": "Scegli un agente installato nel terminale, poi scansiona qui il suo codice QR.",
   "Change platform": "Cambia piattaforma",
   "Choose the platform that printed your code.": "Scegli la piattaforma che ha generato il codice.",
-  "Enter pairing code": "Inserisci il codice di abbinamento"
+  "Enter pairing code": "Inserisci il codice di abbinamento",
+  "Automatically detect agents on your computer": "Rileva automaticamente gli agenti sul computer",
+  "Find installed platforms, then choose one to pair.": "Trova le piattaforme installate e scegli quale abbinare.",
+  "Select platform": "Scegli piattaforma",
+  "Back to scanning": "Torna alla scansione"
 }
