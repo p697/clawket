@@ -1,5 +1,10 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-02 商店第二张图「Stay in the flow」英文预览（负责人选择聊天体验方案 A，先看英文效果）。
+  - 以 `9059c185` 的聊天代码生成当前 JS bundle / assets，在已有 iPhone 17 模拟器原生壳中实拍；开启本地 Pro 预览环境开关，未修改产品源码、未重建或分发原生包。这是视觉预览，不是原生兼容或流畅度验收。
+  - 独立 Lucy 演示会话实际读取专用 `Kyoto Notes.md`，生成周六计划，再按追问保存专用 `Saturday Checklist.md`。保留真实回复及气泡内工作记录、步骤数和耗时；未使用私人对话，也未通过生图改写 UI。
+  - 沿用风格 A，主标题 `Stay in the flow.`，副标题 `Natural conversations. Clear progress.`；英文 iPhone 预览为 1206×2622。本机预览/原图/渲染器/来源记录：`evidence/store-styles-2026-09-21/public/chat-flow-en-v1/`；操作与会话证据：`evidence/store-flow-en-2026-10-02/`。
+  - 待负责人验收这张图；本轮不扩展其他语言、不修改商店、不提交审核。
 - 2026-10-02 Codex / Claude Code 新增连接缺少电脑名（负责人要求调查、修复并测试）。
   - 原来的 #91 实现仍在 main；只为全新 Bridge 配置生成名称，旧配置缺少 displayName 时直接退回产品名。本机两种 Production 设备配置均没有保存名称（只读取字段存在性，未输出凭据）。客户端认领优先采用 Registry 名称，因此仅补 QR 名称不足以修复已有配对记录。
   - 显式 pair 为旧配置的缺失/空白名称补上已实现的 macOS ComputerName / hostname 默认，并保存复用；所有非空名称保留。现有认证 access-code 刷新同时同步保存名称到 Registry，保持 gatewayId、Relay secret、旧手机凭据与项目/设备作用域。新扫码、加密邀请与配对码得到一致名称；普通 run/start/restart 不迁移，电脑改名不重算，手机已有名称/手动改名仍保留。OpenClaw / Hermes / Pi 不改。
