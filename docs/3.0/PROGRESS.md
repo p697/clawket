@@ -1313,7 +1313,7 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 
 | 编号 | 事项 | 怎么做 | 验证方法 | 状态 |
 |---|---|---|---|---|
-| HT-CODEX-TITLE-1002 | Codex 标题盾牌删除 PR 的依赖门禁范围决定 | 确认是否另开独立任务处理现有 node-forge 高危审计告警；不在纯 UI 分支升级依赖或绕过门禁。 | 修复任务通过依赖审计后，本 PR 更新至最新 main 并通过完整 CI，再合并。 | PR #103 已删除盾牌；213 项本地测试通过。源代码 CI 的所有类型检查、三组 Mobile 测试、静态检查和 v1 replay 通过，依赖审计失败；等待负责人确认独立修复范围。 |
+| HT-CODEX-TITLE-1002 | Codex 标题盾牌删除 PR 的依赖门禁范围决定 | 独立 CI 修复已在 PR #107 合并；PR #103 更新至最新 main，使用批准的有期限审计规则。 | 当前提交通过完整 CI 后合并，不改依赖锁文件或另加例外。 | 范围决定已完成；负责人 2026-10-02 要求继续合并。213 项本地测试通过，更新后的 CI 待验证。 |
 | HT-PLAY-311-1002 | Google Play 3.1.1 送审决定 | 在快速检查完成后，由负责人决定是否点击「提交 58 项更改以供审核」；包含 3.1.1/30102 和已授权的 57 项截图。 | 确認检查结果与候选版本；点击后必须看到正在审核，审核通过后仍保留自管式发布。 | 待负责人授权下一步：本轮已打包、上传并保存，未提审、未公开上线。 |
 | HT-NPM-319-1002 | Bridge 3.1.9 npm 本机认证 | 在 Chrome 的 npm 官方发布流程中解锁现有安全密钥，不在聊天中发送密码或验证码。 | npm 接受固定候选；公开 latest=3.1.9，下载包与候选逐字节一致，全新安装通过。 | 已完成：负责人解锁后发布认证成功；21:11 UTC 公开 latest=3.1.9、下载包逐字节及三项哈希通过；无凭据公开安装、CLI 帮助与 bundle 一致性通过。 |
 | HT-STORE-CHAT-1002 | 中英文聊天截图视觉验收 | 查看本机 `/chat-refresh-2026-10-02/` 的六张预览。 | 核对新聊天界面、iPad 首图双语文案、完整设备边框与文字清晰度。 | 已验收；负责人随后授权 19 种语言制作及两家商店上传保存，已完成。 |
@@ -3000,4 +3000,4 @@ The owner completed native security-key authentication; npm accepted the tested 
 
 Owner requested removing the yellow shield before the current Session title. Removed the header-only permission decoration and its unused props; permissions remain visible/selectable in the model sheet. Native confirmation, approval handling and Send guards are unchanged. Mobile instructions and design documentation now reflect the title without a permission badge. Serial focused verification passed: ThreadView 143, ModelSheet 31 and RosterPrimitives 39 cases (213 total), Mobile typecheck, UI style (243 UI files), docs (seven instruction pairs / five checker cases) and whitespace. Full gates remain CI-only; no App build, version bump or release.
 
-PR #103 source head `9f7f2c0e` passed all typechecks, all three Mobile shards, tests/static checks and v1 replay; merge is blocked by the existing `node-forge@1.4.0` dependency advisory GHSA-86w9-cpqp-85rv. The lockfile is unchanged. npm currently reports 1.4.0 as latest and audit proposes an unrelated major Expo downgrade; neither dependency changes nor bypasses were applied. HT-CODEX-TITLE-1002 records the requested owner decision on a separate remediation task.
+PR #103 initial source head `9f7f2c0e` passed all typechecks, all three Mobile shards, tests/static checks and v1 replay; its dependency audit was blocked by the existing node-forge advisory. Owner-approved CI remediation merged independently in PR #107. On 2026-10-02 the owner requested continuing the merge; this branch now includes current main and its dated audit rule, with no dependency lockfile changes or additional exceptions. HT-CODEX-TITLE-1002 is resolved; the updated head awaits full CI before merge.
