@@ -25,6 +25,18 @@ function validTime(value: number | undefined): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
 }
 
+/**
+ * A finished step's own time. OpenClaw reports a duration; the Agent
+ * backends' live events carry only the start and finish this phone saw.
+ */
+export function stepDurationMs(message: UiMessage): number | undefined {
+  const duration = message.toolDurationMs;
+  if (typeof duration === 'number' && Number.isFinite(duration) && duration >= 0) return duration;
+  const started = validTime(message.toolStartedAt);
+  const finished = validTime(message.toolFinishedAt);
+  return started !== undefined && finished !== undefined && finished >= started ? finished - started : undefined;
+}
+
 /** The tool a message actually ran, with OpenClaw's generic `tool_call` wrapper opened. */
 export function effectiveTool(message: UiMessage): { name: string; args?: string } {
   return unwrapToolCall(message.toolName?.trim() ?? '', message.toolArgs);

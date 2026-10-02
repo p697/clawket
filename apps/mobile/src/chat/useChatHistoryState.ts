@@ -35,7 +35,7 @@ import { CursorHistoryWindow } from './cursorHistoryWindow';
 import { mapAdapterSession } from './adapterChatMapping';
 import { shouldSuppressHistoryLoadError } from './historyErrorPolicy';
 import { shouldPreserveOptimisticAssistant } from './cacheHydrationPolicy';
-import { preserveApprovalRows, preserveHydratedMessageKeys, preserveMessagePresentation, preserveOptimisticAssistantMessage, prependOlderCachedMessages, retireAliasedTools } from './historyMergePolicy';
+import { preserveApprovalRows, preserveHydratedMessageKeys, preserveMessagePresentation, preserveOptimisticAssistantMessage, preserveToolTiming, prependOlderCachedMessages, retireAliasedTools } from './historyMergePolicy';
 import { shouldRestoreCacheBeforeHistoryRefresh } from './historyRefreshPolicy';
 import { ReconcileAssistantOptions, shouldAppendReconciledAssistant } from './historyReconcile';
 import { selectSessionForCurrentAgent } from './sessionSelection';
@@ -308,6 +308,8 @@ type Params = {
   currentAgentId: string;
   initialPreview?: LastOpenedSessionSnapshot | null;
   routeSessionKey?: string;
+  /** Finished live steps with the times this phone measured (`preserveToolTiming`). */
+  measuredToolsRef?: RefObject<UiMessage[]>;
 };
 
 export function useChatHistoryState({
@@ -320,6 +322,7 @@ export function useChatHistoryState({
   currentAgentId,
   initialPreview,
   routeSessionKey,
+  measuredToolsRef,
 }: Params) {
   const initialPreviewSession = buildSnapshotPreviewSession(initialPreview ?? null);
   const [messages, setMessages] = useState<UiMessage[]>([]);
@@ -1090,8 +1093,10 @@ export function useChatHistoryState({
           : prev.filter(message => !cacheHydrationMessageIdsRef.current.has(message.id)), lineageMergedMessages, historyResult.toolCallAliases);
         const reconciled = preserveMessagePresentation(preservable,
           preserveOptimisticAssistantMessage(preservable, lineageMergedMessages));
-        const mergedMessages = preserveApprovalRows(prev, allowOptimisticPreservation ? reconciled
-          : preserveHydratedMessageKeys(prev, reconciled));
+        const measured = measuredToolsRef?.current ?? [];
+        const mergedMessages = preserveToolTiming(measured.length > 0 ? [...prev, ...measured] : prev,
+          preserveApprovalRows(prev, allowOptimisticPreservation ? reconciled
+            : preserveHydratedMessageKeys(prev, reconciled)), historyResult.toolCallAliases);
         dbg(
           `history:setMessages key=${key} allowPreserve=${allowOptimisticPreservation} `
           + `currentSessionId=${currentSessionId ?? 'none'} `
@@ -1146,7 +1151,7 @@ export function useChatHistoryState({
         historyLoadInFlightRef.current.delete(requestKey);
       }
     }
-  }, [adapter, dbg, readScope, sessionKeyRef, t]);
+  }, [adapter, dbg, measuredToolsRef, readScope, sessionKeyRef, t]);
 
   const onRefresh = useCallback(async () => {
     const request = beginSessionRead('refresh');

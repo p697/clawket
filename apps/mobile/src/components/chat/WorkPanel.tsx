@@ -18,7 +18,7 @@ import { withAlpha } from '../../theme/color';
 import { createThemedShadowStyle, FontSize, FontWeight, LineHeight, Motion, Radius, Shadow, Space } from '../../theme/tokens';
 import type { UiMessage } from '../../types/chat';
 import { formatToolDisplayName, resolveQuestionExchange, resolveToolDetail, resolveToolTitle, unwrapShellCommand } from '../../utils/tool-display';
-import { effectiveTool, failureReason, formatActivityDuration } from './tool-activity-model';
+import { effectiveTool, failureReason, formatActivityDuration, stepDurationMs } from './tool-activity-model';
 import { toolIcon, useElapsed } from './ToolActivityPill';
 import type { TurnWork } from './turn-work';
 import type { TurnEntry } from './turn-work';
@@ -53,7 +53,7 @@ function StepTime({ message, color }: Readonly<{ message: UiMessage; color: stri
   const elapsed = useElapsed(running ? message.toolStartedAt ?? message.timestampMs : undefined);
   const time = running
     ? (elapsed !== undefined ? t('{{count}} s', { count: Math.floor(elapsed / 1000) }) : undefined)
-    : formatStepDuration(message.toolDurationMs, t);
+    : formatStepDuration(stepDurationMs(message), t);
   return time ? <Text style={[styles.time, { color }]}>{time}</Text> : null;
 }
 

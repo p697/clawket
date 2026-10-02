@@ -1,5 +1,5 @@
 import { UiMessage } from '../types/chat';
-import { preserveApprovalRows, preserveHydratedMessageKeys, preserveMessagePresentation, preserveOptimisticAssistantMessage, prependOlderCachedMessages, retireAliasedTools } from './historyMergePolicy';
+import { preserveApprovalRows, preserveHydratedMessageKeys, preserveMessagePresentation, preserveOptimisticAssistantMessage, preserveToolTiming, prependOlderCachedMessages, retireAliasedTools } from './historyMergePolicy';
 
 describe('preserveHydratedMessageKeys', () => {
   const cached: UiMessage = { id: 'cached-row', historyMessageId: 'server-row', renderKey: 'stable-row', role: 'assistant', text: 'Outdated text', timestampMs: 1000 };
@@ -582,5 +582,36 @@ describe('preserveApprovalRows', () => {
 
   it('puts a card with no surviving neighbour first rather than dropping it', () => {
     expect(preserveApprovalRows([card('approval_3', 'pending')], [ask]).map(message => message.id)).toEqual(['approval_3', 'ask']);
+  });
+});
+
+describe('preserveToolTiming', () => {
+  // Pi's live rows are `toolcall_<id>`; its history returns `toolresult_<id>` with only the record's clock.
+  const live: UiMessage = { id: 'toolcall_call_1', role: 'tool', text: '', toolName: 'bash', toolStatus: 'success', toolStartedAt: 10_000, toolFinishedAt: 35_000 };
+  const reloaded: UiMessage = { id: 'toolresult_call_1', role: 'tool', text: '', toolName: 'bash', toolStatus: 'success', toolFinishedAt: 7_000 };
+  const reply: UiMessage = { id: 'reply', role: 'assistant', text: 'done' };
+
+  it('keeps the times the phone measured when history has none of its own', () => {
+    expect(preserveToolTiming([live], [reply, reloaded])).toEqual([
+      reply,
+      { ...reloaded, toolStartedAt: 10_000, toolFinishedAt: 35_000, toolDurationMs: undefined },
+    ]);
+  });
+
+  it('leaves timed history, unfinished live rows and other calls alone', () => {
+    const timed = [{ ...reloaded, toolDurationMs: 2_000 }];
+    expect(preserveToolTiming([live], timed)).toBe(timed);
+    const running = { ...live, toolStatus: 'running' as const, toolFinishedAt: undefined };
+    const next = [reloaded];
+    expect(preserveToolTiming([running], next)).toBe(next);
+    const other = [{ ...reloaded, id: 'toolresult_call_2' }];
+    expect(preserveToolTiming([live], other)).toBe(other);
+    expect(preserveToolTiming([{ ...reply, toolStartedAt: 1, toolFinishedAt: 2 }], next)).toBe(next);
+  });
+
+  it('follows the snapshot alias for a call the live stream named differently', () => {
+    const aliased = { ...live, id: 'toolcall_live_7' };
+    expect(preserveToolTiming([aliased], [{ ...reloaded, id: 'toolcall_item_7' }], { live_7: 'item_7' })[0])
+      .toMatchObject({ id: 'toolcall_item_7', toolStartedAt: 10_000, toolFinishedAt: 35_000 });
   });
 });

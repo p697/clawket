@@ -6,6 +6,7 @@ import {
   describeLiveStep,
   formatActivityDuration,
   formatToolActivitySummary,
+  stepDurationMs,
   summarizeToolActivity,
   toolActivityDuration,
   toolCallFiles,
@@ -64,6 +65,14 @@ describe('toolActivityDuration', () => {
     expect(toolActivityDuration([call('exec', {}, { toolDurationMs: 400 })])).toBeUndefined();
     expect(toolActivityDuration([call('exec'), call('exec', {}, { toolDurationMs: 9_000 })])).toBeUndefined();
     expect(toolActivityDuration([])).toBeUndefined();
+  });
+
+  it('times a step by its reported duration, else by the start and finish the phone saw', () => {
+    expect(stepDurationMs(call('exec', {}, { toolDurationMs: 1_500, toolStartedAt: 1_000, toolFinishedAt: 9_000 }))).toBe(1_500);
+    expect(stepDurationMs(call('bash', {}, { toolStartedAt: 10_000, toolFinishedAt: 25_400 }))).toBe(15_400);
+    expect(stepDurationMs(call('bash', {}, { toolStartedAt: 10_000 }))).toBeUndefined();
+    expect(stepDurationMs(call('bash', {}, { toolStartedAt: 10_000, toolFinishedAt: 9_000 }))).toBeUndefined();
+    expect(stepDurationMs(call('bash', {}, { toolDurationMs: Number.NaN }))).toBeUndefined();
   });
 
   it('formats seconds, minutes and hours compactly', () => {

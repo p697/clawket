@@ -83,6 +83,40 @@ export function preserveApprovalRows(previous: UiMessage[], next: UiMessage[]): 
   return result;
 }
 
+function toolCallKey(message: UiMessage): string | undefined {
+  return message.role === 'tool' ? /^tool(?:call|result)_(.+)$/.exec(message.id)?.[1] ?? message.id : undefined;
+}
+
+function hasStepTiming(message: UiMessage): boolean {
+  return typeof message.toolDurationMs === 'number'
+    || (typeof message.toolStartedAt === 'number' && typeof message.toolFinishedAt === 'number');
+}
+
+/**
+ * Only OpenClaw's history says how long each step took; Codex, Claude Code
+ * and Pi history does not, so a reload would erase the times this phone
+ * measured while it watched the steps run. A history row without timing of
+ * its own keeps a finished live row's, matched by exact tool call ID or the
+ * snapshot's alias for it, and all three fields come from that one clock.
+ */
+export function preserveToolTiming(previous: UiMessage[], next: UiMessage[], aliases?: Readonly<Record<string, string>>): UiMessage[] {
+  const measured = new Map<string, UiMessage>();
+  for (const message of previous) {
+    const key = toolCallKey(message);
+    if (key && hasStepTiming(message)) measured.set(aliases?.[key] ?? key, message);
+  }
+  if (measured.size === 0) return next;
+  let changed = false;
+  const merged = next.map(message => {
+    const key = toolCallKey(message);
+    const live = key && !hasStepTiming(message) ? measured.get(key) : undefined;
+    if (!live) return message;
+    changed = true;
+    return { ...message, toolStartedAt: live.toolStartedAt, toolFinishedAt: live.toolFinishedAt, toolDurationMs: live.toolDurationMs };
+  });
+  return changed ? merged : next;
+}
+
 /** Carry local row identity across exact echoes; wire IDs still drive reconciliation/actions. */
 export function preserveMessagePresentation(previous: UiMessage[], next: UiMessage[]): UiMessage[] {
   const timestampForEcho = userEchoTimestamp(previous, next);

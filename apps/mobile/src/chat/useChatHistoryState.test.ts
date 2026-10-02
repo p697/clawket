@@ -1293,6 +1293,29 @@ describe('useChatHistoryState', () => {
       .toEqual(['oldest', 'middle', 'newest']);
   });
 
+  it('gives untimed history steps the times this phone measured live', async () => {
+    const key = 'agent:pi:chats';
+    // Pi history: one tool row per call, its own id, no step timing.
+    const adapter = { connection: { backendKind: 'pi' }, state: 'ready',
+      listSessions: jest.fn().mockResolvedValue([]),
+      loadSession: jest.fn().mockResolvedValue({ key, hasActiveRun: false, messages: [
+        { id: 'u1', role: 'user', text: 'Run it', timestampMs: 4_000 },
+        { id: 'call_1', role: 'tool', text: '', timestampMs: 5_000, tool: { name: 'bash', callId: 'call_1', status: 'success', output: 'ok' } },
+      ] }),
+    };
+    const { result } = renderHook(() => {
+      const sessionKeyRef = useRef<string | null>(key);
+      const measuredToolsRef = useRef([{ id: 'toolcall_call_1', role: 'tool' as const, text: '', toolName: 'bash',
+        toolStatus: 'success' as const, toolStartedAt: 10_000, toolFinishedAt: 16_000, toolDurationMs: 6_000 }]);
+      return useChatHistoryState({ adapter: adapter as any, dbg: jest.fn(), t: translate, sessionKeyRef,
+        mainSessionKey: key, routeSessionKey: key, gatewayConfigId: null, currentAgentId: 'main', measuredToolsRef });
+    });
+    await act(async () => { await result.current.loadHistory(key); });
+    expect(result.current.messages.find(row => row.role === 'tool')).toMatchObject({
+      id: 'toolresult_call_1', toolStartedAt: 10_000, toolFinishedAt: 16_000, toolDurationMs: 6_000,
+    });
+  });
+
   describe('native history cursor window', () => {
     const key = 'owned-session';
     const message = (id: string, role = 'user') => ({ id, role, text: id, timestampMs: 10_000 });

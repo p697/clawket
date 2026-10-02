@@ -89,7 +89,7 @@ import {
   SessionRunState,
 } from "./sessionRunState";
 import { shouldAdoptPendingOptimisticRunId } from "./pendingOptimisticRun";
-import { preserveMessagePresentation, preserveOptimisticAssistantMessage, retireAliasedTools } from "./historyMergePolicy";
+import { preserveApprovalRows, preserveMessagePresentation, preserveOptimisticAssistantMessage, preserveToolTiming, retireAliasedTools } from "./historyMergePolicy";
 import {
   FOREGROUND_REFRESH_AFTER_RECONNECT_TIMEOUT_MS,
   getForegroundRefreshDelayMs,
@@ -133,6 +133,9 @@ import {
   type ConnectionPairApprovalStore,
   type PairApprovalEntry,
 } from "../connection/pair-approval-store";
+
+/** Finished steps whose times this phone measured, newest last; enough for several long turns. */
+const MEASURED_TOOL_LIMIT = 200;
 
 type SilentCommandProbe = {
   sessionKey: string;
@@ -395,6 +398,9 @@ export function useChatController({
   const chatStreamRef = useRef<string | null>(null);
   const chatStreamSegmentsRef = useRef<StreamSegment[]>([]);
   const chatToolMessagesRef = useRef<UiMessage[]>([]);
+  // Outlives the live rows: Codex, Claude Code and Pi history carries no step
+  // timing, and its reloads land before and after the live rows are cleared.
+  const measuredToolsRef = useRef<UiMessage[]>([]);
   const streamStartedAtRef = useRef<number | null>(null);
   const lastRunSignalAtRef = useRef(0);
   const lastRunRecoveryProbeAtRef = useRef(0);
@@ -575,6 +581,7 @@ export function useChatController({
     currentAgentId,
     initialPreview: initialChatPreview,
     routeSessionKey,
+    measuredToolsRef,
   });
 
   const isFocused = useIsFocused();
@@ -1900,7 +1907,10 @@ export function useChatController({
         if (!cursorHistoryApplied) {
           history.setMessages((previous) => {
             const retained = retireAliasedTools(previous, update.messages, update.history.toolCallAliases);
-            return preserveMessagePresentation(retained, preserveOptimisticAssistantMessage(retained, update.messages));
+            const reconciled = preserveMessagePresentation(retained, preserveOptimisticAssistantMessage(retained, update.messages));
+            // A seq-gap reload keeps what only this phone knows, as a page load does.
+            return preserveToolTiming([...previous, ...measuredToolsRef.current],
+              preserveApprovalRows(previous, reconciled), update.history.toolCallAliases);
           });
           history.historyRawCountRef.current = update.history.messages.length;
           history.setHistoryLoaded(true);
@@ -2040,6 +2050,12 @@ export function useChatController({
         chatToolMessagesRef.current = withToolMessage(chatToolMessagesRef.current, message);
         setChatToolMessages(chatToolMessagesRef.current);
         if (update.message.toolStatus === "running") return;
+        if (durationMs !== undefined) {
+          measuredToolsRef.current = [
+            ...measuredToolsRef.current.filter((measured) => !sameLiveToolCall(measured, message)),
+            message,
+          ].slice(-MEASURED_TOOL_LIMIT);
+        }
         // A settled step stops describing the turn: a step still running takes
         // over, else the header and working pill fall back to "Thinking…".
         const settledLabel = formatToolActivity(unwrapToolCall(toolName, previousMessage?.toolArgs).name, t);

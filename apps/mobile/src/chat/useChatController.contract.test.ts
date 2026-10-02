@@ -2191,11 +2191,47 @@ describe('useChatController contract', () => {
     });
 
     expect(result.current.isSending).toBe(false);
+    // History never carries approval cards: the answered one stays beside the reconciled rows.
     expect(historyMock.messages).toEqual([
+      expect.objectContaining({ id: 'approval_approval-1', approval: expect.objectContaining({ status: 'allowed' }) }),
       expect.objectContaining({ id: 'history-assistant', text: 'Reconciled answer' }),
     ]);
     expect(historyMock.setHistoryLoaded).toHaveBeenCalledWith(true);
     expect(historyMock.setHasMoreHistory).toHaveBeenCalledWith(true);
+  });
+
+  it('keeps the step times this phone measured when reconciled history has none', async () => {
+    const adapter = createAdapter('ready');
+    renderHook(() => useChatController({ adapter: adapter as any, debugMode: false, showAgentAvatar: true } as any));
+    const eventParams = jest.mocked(useAdapterChatEvents).mock.calls.at(-1)?.[0];
+    historyMock.sessionKey = 'agent:main:main';
+    const run = { sessionKey: 'agent:main:main', runId: 'run-7', activeRunId: 'run-7', isSending: true as const };
+
+    await act(async () => {
+      eventParams!.onState?.('ready');
+      eventParams!.onUpdate?.({ type: 'run_started', ...run, startedAtMs: 9_000 });
+      eventParams!.onUpdate?.({ type: 'tool_call', ...run, toolCallId: 'call-7', merge: false, message: {
+        id: 'toolcall_call-7', role: 'tool', text: '', toolName: 'bash', toolStatus: 'running', toolStartedAt: 10_000,
+      } });
+      eventParams!.onUpdate?.({ type: 'tool_call_update', ...run, toolCallId: 'call-7', merge: true, message: {
+        id: 'toolcall_call-7', role: 'tool', text: '', toolStatus: 'success', toolFinishedAt: 16_000,
+      } });
+      await Promise.resolve();
+    });
+    // Pi history names the call `toolresult_<id>` and stamps it only with the record's own clock.
+    await act(async () => {
+      eventParams!.onUpdate?.({
+        type: 'history_reconciled',
+        sessionKey: 'agent:main:main',
+        history: { key: 'agent:main:main', hasActiveRun: false, messages: [] },
+        messages: [{ id: 'toolresult_call-7', role: 'tool', text: '', toolName: 'bash', toolStatus: 'success', toolFinishedAt: 7_000 }],
+        hasActiveRun: false,
+      });
+    });
+
+    expect(historyMock.messages).toEqual([expect.objectContaining({
+      id: 'toolresult_call-7', toolStartedAt: 10_000, toolFinishedAt: 16_000, toolDurationMs: 6_000,
+    })]);
   });
 
   it('delegates a reconciled paged head to the history window without discarding loaded older rows', async () => {
