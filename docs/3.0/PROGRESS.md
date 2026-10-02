@@ -4,7 +4,7 @@
   - 原来的 #91 实现仍在 main；只为全新 Bridge 配置生成名称，旧配置缺少 displayName 时直接退回产品名。本机两种 Production 设备配置均没有保存名称（只读取字段存在性，未输出凭据）。客户端认领优先采用 Registry 名称，因此仅补 QR 名称不足以修复已有配对记录。
   - 显式 pair 为旧配置的缺失/空白名称补上已实现的 macOS ComputerName / hostname 默认，并保存复用；所有非空名称保留。现有认证 access-code 刷新同时同步保存名称到 Registry，保持 gatewayId、Relay secret、旧手机凭据与项目/设备作用域。新扫码、加密邀请与配对码得到一致名称；普通 run/start/restart 不迁移，电脑改名不重算，手机已有名称/手动改名仍保留。OpenClaw / Hermes / Pi 不改。
   - 新回归覆盖旧配置 LAN/Relay、重复配对和电脑改名、保存名称/纯产品名保留、邀请一致性、同步失败不写配置、普通 run 无迁移；真实 Registry handler 覆盖两原生后端认证更新→新 claim 名称及旧 client token 有效。
-  - 本机 simulator 正被另一个任务用于商店素材；按资源规则不同时跑本地测试/构建。完整类型、Mobile 三分片、Bridge/Registry 回归、文档、v1 replay 与 Windows/macOS 门禁由本 PR CI 验证，结果待记录。无版本升级、分发打包、发布、生产配置修改、Worker 部署或本机 Bridge 重启；已安装 Bridge 取得修复需另行授权的发布/更新（HT-NATIVE-NAME-1002）。
+  - 本机 simulator 正被另一个任务用于商店素材；按资源规则不同时跑本地测试/构建。完整类型、Mobile 三分片、Bridge/Registry 回归、文档、v1 replay 与 Windows/macOS 门禁由 [PR #124](https://github.com/p697/clawket/pull/124) CI 验证；最终合并必须通过当前源码的全部门禁，实际结果保留在该 PR。无版本升级、分发打包、发布、生产配置修改、Worker 部署或本机 Bridge 重启；已安装 Bridge 取得修复需另行授权的发布/更新（HT-NATIVE-NAME-1002）。
 
 - 2026-10-02 Bridge 全命令审计与多 Agent 运维优化（负责人授权：逐个检查，明确正收益直接修改、自测）。
   - 全部命令/别名/作用范围记录在 `../bridge/architecture/cli-runtime.md`。确认默认 status/doctor/logs 漏掉 Codex、Claude Code、Pi；status 默认过量展示路径/ID/能力；新 Agent logs 缺过滤/跟随；Claude/Pi catch-all 把健康错误当离线；未知 backend 可落入默认 reset。
