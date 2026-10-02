@@ -43,6 +43,17 @@ it('separates the human title and duration from collapsed technical metadata', (
   expect(view.getByText(props.name)).toBeTruthy();
 });
 
+it('heads a call the Agent named with its title and keeps the tool name beside the status', () => {
+  const view = render(<ToolDetailModal {...props} name="js" stepTitle="查看当前浏览器页面"
+    args={JSON.stringify({ code: 'await cua.getState();', title: '查看当前浏览器页面' })} />);
+  const header = within(view.getByTestId('sheet-header'));
+  expect(header.getByText('查看当前浏览器页面')).toBeTruthy();
+  expect(view.getByTestId('tool-detail-tool-name').props.children).toBe('js ·');
+  expect(view.getByTestId('tool-detail-header-status').props.accessibilityLabel).toBe('js · Completed');
+  view.rerender(<ToolDetailModal {...props} />);
+  expect(view.queryByTestId('tool-detail-tool-name')).toBeNull();
+});
+
 it('does not report success when a failed or running tool has no output', () => {
   const view = render(<ToolDetailModal {...props} status="error" args={undefined} />);
   expect(view.getByText('Failed')).toBeTruthy();

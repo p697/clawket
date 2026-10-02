@@ -117,7 +117,7 @@ import { SlashSuggestions } from '../../components/chat/SlashSuggestions';
 import { shortModelLabel } from '../../components/chat/model-label';
 import { ToolDetailModal } from '../../components/chat/ToolDetailModal';
 import { cronSessionName } from '../../utils/chat-message';
-import { unwrapToolCall } from '../../utils/tool-display';
+import { resolveToolTitle, unwrapToolCall } from '../../utils/tool-display';
 import {
   CHAT_MARKDOWN_BREAK_STRATEGY,
   createChatMarkdownStyle,
@@ -1591,6 +1591,7 @@ export function ThreadView({
         onClose={() => setSelectedToolMessageId(null)}
         stackBehavior="push"
         name={(selectedToolMessage ? unwrapToolCall(selectedToolMessage.toolName?.trim() ?? '', selectedToolMessage.toolArgs).name : '') || copy.tool}
+        stepTitle={selectedToolMessage ? resolveToolTitle(unwrapToolCall(selectedToolMessage.toolName?.trim() ?? '', selectedToolMessage.toolArgs).args) : undefined}
         status={selectedToolMessage?.toolStatus ?? 'success'}
         args={selectedToolMessage?.toolArgs}
         detail={selectedToolMessage?.toolDetail}

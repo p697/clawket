@@ -3,9 +3,31 @@ import {
   formatToolDisplayName,
   formatToolOneLiner,
   formatToolOneLinerLocalized,
+  resolveToolDetail,
+  resolveToolTitle,
   stripToolStatusPrefix,
   unwrapToolCall,
 } from './tool-display';
+
+describe('resolveToolTitle', () => {
+  it('reads what the Agent says a call is for: a Codex js title, a Claude Code description', () => {
+    expect(resolveToolTitle(JSON.stringify({ code: 'await cua.getState();', title: '查看当前浏览器页面' }))).toBe('查看当前浏览器页面');
+    expect(resolveToolTitle({ command: 'npm test', description: 'Run the unit tests' })).toBe('Run the unit tests');
+    expect(resolveToolTitle({ summary: '  Status\n check  ' })).toBe('Status check');
+    expect(resolveToolTitle({ title: ' ', description: 'Second choice' })).toBe('Second choice');
+  });
+
+  it('keeps one line and stays absent for inputs without one', () => {
+    const long = resolveToolTitle({ title: 'x'.repeat(200) });
+    expect(long).toHaveLength(120);
+    expect(long?.endsWith('…')).toBe(true);
+    expect(resolveToolTitle({ command: 'git status' })).toBeUndefined();
+    expect(resolveToolTitle({ title: 42 })).toBeUndefined();
+    expect(resolveToolTitle('not json')).toBeUndefined();
+    expect(resolveToolTitle('["title"]')).toBeUndefined();
+    expect(resolveToolTitle(undefined)).toBeUndefined();
+  });
+});
 
 describe('unwrapToolCall', () => {
   it('reads OpenClaw\'s generic tool_call wrapper as the tool it carries', () => {
@@ -151,8 +173,28 @@ describe('formatToolDisplayName', () => {
     expect(formatToolDisplayName('web_fetch', t)).toBe('[Web Fetch]');
   });
 
+  it('labels other backends\' names for the same commands, edits and web tools', () => {
+    expect(formatToolDisplayName('terminal', t)).toBe('[Command]');
+    expect(formatToolDisplayName('Bash', t)).toBe('[Command]');
+    expect(formatToolDisplayName('patch', t)).toBe('[Write file]');
+    expect(formatToolDisplayName('MultiEdit', t)).toBe('[Write file]');
+    expect(formatToolDisplayName('WebFetch', t)).toBe('[Web Fetch]');
+    expect(formatToolDisplayName('WebSearch', t)).toBe('[Web Search]');
+  });
+
   it('keeps unknown tool names readable', () => {
     expect(formatToolDisplayName('custom_tool', t)).toBe('custom tool');
+    expect(formatToolDisplayName('js', t)).toBe('js');
+  });
+});
+
+describe('resolveToolDetail for search tools', () => {
+  it('names what Grep, Glob and their kin look for before where', () => {
+    expect(resolveToolDetail('Grep', { pattern: 'useTranslation', path: '/Users/lucy/app/src' })).toBe('useTranslation');
+    expect(resolveToolDetail('Glob', { pattern: '**/*.test.ts' })).toBe('**/*.test.ts');
+    expect(resolveToolDetail('search_files', { pattern: 'TODO', path: 'src' })).toBe('TODO');
+    expect(resolveToolDetail('ls', { path: '/Users/lucy/app' })).toBe('~/app');
+    expect(resolveToolDetail('memory_search', { query: 'release' })).toBe('release');
   });
 });
 

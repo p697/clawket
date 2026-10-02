@@ -6,7 +6,7 @@ import { Sheet } from '../ui/Sheet';
 import { useAppTheme } from '../../theme';
 import type { UiMessage } from '../../types/chat';
 import { FontSize, FontWeight, IconSize, LineHeight, Motion, Radius, Space } from '../../theme/tokens';
-import { formatToolDisplayName, resolveToolDetail } from '../../utils/tool-display';
+import { formatToolDisplayName, resolveToolDetail, resolveToolTitle } from '../../utils/tool-display';
 import { effectiveTool, formatActivityDuration, toolActivityDuration } from './tool-activity-model';
 import { toolIcon } from './ToolActivityPill';
 
@@ -81,12 +81,15 @@ export function WorkRecordSheet({ visible, steps, onClose, onOpenStep }: WorkRec
           const status = failed ? t('Failed') : running ? t('Running') : message.toolStatus === 'unknown' ? t('Result unavailable') : undefined;
           const time = running ? undefined : formatStepDuration(message.toolDurationMs, t);
           const displayName = formatToolDisplayName(name, t);
+          // The Agent's own words for the call lead; the tool and its target follow.
+          const stepTitle = resolveToolTitle(tool.args);
+          const tag = stepTitle ? displayName : undefined;
           return (
             <Pressable
               key={message.renderKey ?? message.id}
               testID={`thread-run-${message.id}`}
               accessibilityRole="button"
-              accessibilityLabel={[displayName, detail, status, time].filter(Boolean).join(', ')}
+              accessibilityLabel={[stepTitle, displayName, detail, status, time].filter(Boolean).join(', ')}
               onPress={() => onOpenStep(message)}
               style={({ pressed }) => [styles.row, pressed ? styles.pressed : null]}
             >
@@ -95,11 +98,13 @@ export function WorkRecordSheet({ visible, steps, onClose, onOpenStep }: WorkRec
                   : <Icon size={IconSize.md} strokeWidth={1.75} color={failed ? colors.bad : colors.inkSecondary} />}
               </View>
               <View style={styles.copy}>
-                <Text numberOfLines={1} style={styles.name}>{displayName}</Text>
-                {status || detail ? (
+                <Text numberOfLines={stepTitle ? 2 : 1} style={styles.name}>{stepTitle ?? displayName}</Text>
+                {status || tag || detail ? (
                   <Text numberOfLines={1} style={styles.detail}>
                     {status ? <Text style={failed ? { color: colors.bad } : undefined}>{status}</Text> : null}
-                    {status && detail ? ' · ' : null}
+                    {status && (tag || detail) ? ' · ' : null}
+                    {tag ?? null}
+                    {tag && detail ? ' · ' : null}
                     {detail ? <Text style={styles.code}>{detail}</Text> : null}
                   </Text>
                 ) : null}

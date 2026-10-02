@@ -74,7 +74,7 @@ iOS 用系统 SF Pro，Android 用 Roboto，中文走系统 CJK；不引入第�
 | `Bubble` | 颜色来自 `useChatSurfaces()`（线程底面）：Agent 左对齐白底 `ink` 字，用户右对齐实色白字；`joinsOlder` / `joinsNewer` 由时间线给出，挂靠侧合并圆角，组末一条带尾巴（描边材质不画尾巴）；消息自己的附件跟在气泡后时气泡按「后面还有」处理；Markdown 渲染沿用现有 `chatMarkdown` |
 | `ServicePill` | 居中半透明胶囊（`components/chat`）：`caption`、白字、上下 3 / 左右 10、全圆；日期用 600；可点的末尾带 14 右箭头；`busy` 在图标位转圈，`trailing` 放较淡的用时；`bad` 为失败红 |
 | `ToolActivityPill` | 工具过程只有三种胶囊：运行中（转圈 +「正在运行 `命令`」+ 用时，每秒刷新）、完成摘要（「运行了 6 个命令，读了 1 个文件 · 38 秒」，最多两类，否则「用了 N 个工具」）、失败（红色「`命令` 失败」，单独一颗）；点任一颗打开 `WorkRecordSheet` |
-| `WorkRecordSheet` | 「工作记录」弹层：本轮提示词下的全部工具调用，一步一行（36 图标井、名称、等宽的命令 / 路径 / 查询、状态、用时），标题下写总用时 · 步数；点一步推入 `ToolDetailModal` 看完整输入输出，关掉回到记录 |
+| `WorkRecordSheet` | 「工作记录」弹层：本轮提示词下的全部工具调用，一步一行（36 图标井、名称、等宽的命令 / 路径 / 查询、状态、用时），标题下写总用时 · 步数；点一步推入 `ToolDetailModal` 看完整输入输出，关掉回到记录。输入里写了这一步做什么（`title` / `description` / `summary`，如 Codex `js` 的 title、Claude Code Bash 的 description）时，这句话当主行，工具名和命令 / 路径放到下面一行；详情弹层标题、没有命令或路径可显示的运行中 / 失败胶囊也用它（2026-10-02 负责人反馈：Codex 工具全叫「js」） |
 | `SystemEventRow` | 居中，`caption inkSecondary`，前置 Lucide 14；可点带右箭头；线程里只剩消息附件的文件条（卡片色底） |
 | `RunCard` | `surface` 底（线程里为卡片色，壁纸上即白色）、圆角 16、标题 `secondary 600`、说明 `caption`、右箭头；线程里只剩子 Agent 运行 |
 | `CronDigest` | 相邻的定时任务结果合成一条 Agent 气泡（A+）：强调色日历图标 +「定时任务」，一任务一行（绿勾 / 红色警示 + 红字状态 / 灰色跳过，右侧 12 号时间），点一行打开执行记录；有失败时气泡下挂「看日志 / 重跑」；同一天的结果之间不插时间胶囊 |

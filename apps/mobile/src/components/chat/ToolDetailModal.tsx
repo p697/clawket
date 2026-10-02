@@ -28,6 +28,8 @@ type Props = {
   startedAtMs?: number;
   finishedAtMs?: number;
   usage?: MessageUsage;
+  /** What the Agent said the call is for (`resolveToolTitle`); heads the sheet over the tool's name. */
+  stepTitle?: string;
   /** `push` rises over the work record sheet and returns to it on close. */
   stackBehavior?: 'push' | 'replace' | 'switch';
 };
@@ -78,7 +80,9 @@ export function ToolDetailModal(props: Props): React.JSX.Element {
   const s = visible ? props : snapshot.current;
   const [expanded, setExpanded] = useState(false);
   useEffect(() => { if (visible) setExpanded(false); }, [visible, s.name, s.startedAtMs]);
-  const title = formatToolDisplayName(s.name, t);
+  const toolLabel = formatToolDisplayName(s.name, t);
+  const title = s.stepTitle ?? toolLabel;
+  const tag = s.stepTitle ? toolLabel : undefined;
   const duration = s.status === 'running' ? undefined : formatToolDuration(s.durationMs);
   const statusLabel = s.status === 'running' ? t('Running') : s.status === 'error' ? t('Failed') : s.status === 'unknown' ? t('Result unavailable') : t('Completed');
   const StateIcon = s.status === 'error' || s.status === 'unknown' ? CircleAlert : Check;
@@ -96,7 +100,8 @@ export function ToolDetailModal(props: Props): React.JSX.Element {
     titleContent={<View style={styles.heading}>
       <Text accessibilityRole="header" numberOfLines={1} style={styles.title}>{title}</Text>
       <View style={styles.statusRow} testID="tool-detail-header-status" accessible
-        accessibilityLabel={[statusLabel, duration].filter(Boolean).join(' · ')} accessibilityLiveRegion="polite">
+        accessibilityLabel={[tag, statusLabel, duration].filter(Boolean).join(' · ')} accessibilityLiveRegion="polite">
+        {tag ? <Text numberOfLines={1} style={styles.caption} testID="tool-detail-tool-name">{`${tag} ·`}</Text> : null}
         <View style={styles.state}>
           {s.status === 'running' ? <ActivityIndicator size="small" color={stateColor} /> : <StateIcon size={IconSize.sm} color={stateColor} />}
           <Text style={[styles.caption, styles.stateLabel, { color: stateColor }]}>{statusLabel}</Text>

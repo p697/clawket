@@ -3,7 +3,7 @@ import { Text } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Brain, CalendarClock, CircleAlert, FilePenLine, FileSearch, Globe, Layers, MessageSquare, Search, Terminal, Wrench, type LucideIcon } from 'lucide-react-native';
 import type { UiMessage } from '../../types/chat';
-import { formatToolActivity, formatToolDisplayName, toolCategory } from '../../utils/tool-display';
+import { formatToolActivity, formatToolDisplayName, resolveToolTitle, toolCategory } from '../../utils/tool-display';
 import { ServicePill, servicePillCodeStyle } from './ServicePill';
 import {
   describeFailedStep,
@@ -69,9 +69,11 @@ export function ToolActivityPill({ messages, onPress, testID }: Readonly<{
   const running = messages.find((message) => message.toolStatus === 'running');
   const elapsed = useElapsed(running ? running.toolStartedAt ?? running.timestampMs : undefined);
   if (running) {
-    const name = effectiveTool(running).name || t('Tool');
+    const tool = effectiveTool(running);
     const live = describeLiveStep(running, t);
-    const label = live ? `${live.before}${live.value}${live.after}` : formatToolActivity(name, t);
+    // A call with no known target reads as what the Agent said it is for.
+    const label = live ? `${live.before}${live.value}${live.after}`
+      : resolveToolTitle(tool.args) ?? formatToolActivity(tool.name || t('Tool'), t);
     const time = elapsed !== undefined && elapsed >= ELAPSED_TICK_MS ? formatActivityDuration(elapsed, t) : undefined;
     return (
       <ServicePill
@@ -88,7 +90,8 @@ export function ToolActivityPill({ messages, onPress, testID }: Readonly<{
   }
   const only = messages.length === 1 ? messages[0]! : null;
   if (only?.toolStatus === 'error') {
-    const failed = describeFailedStep(only, formatToolDisplayName(effectiveTool(only).name || t('Tool'), t), t);
+    const tool = effectiveTool(only);
+    const failed = describeFailedStep(only, resolveToolTitle(tool.args) ?? formatToolDisplayName(tool.name || t('Tool'), t), t);
     return (
       <ServicePill
         testID={testID}

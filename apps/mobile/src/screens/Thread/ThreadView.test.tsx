@@ -2241,6 +2241,28 @@ it('folds tool activity into one pill that opens the turn work record and each s
   });
 });
 
+it('names Codex js calls by their titles in the pill, the work record and the step details', () => {
+  const prompt: UiMessage = { id: 'ask', role: 'user', text: '再帮我看一眼现在状态怎么样了？' };
+  const js = (id: string, title: string, toolStatus: UiMessage['toolStatus']): UiMessage => ({
+    id, role: 'tool', text: '', toolName: 'js', toolStatus,
+    toolArgs: JSON.stringify({ code: 'await cua.getState();', title }),
+  });
+  const props = createProps({ messages: [js('b', '刷新审核状态', 'running'), js('a', '查看当前浏览器页面', 'success'), prompt] });
+  const view = render(<ThreadView {...props} />);
+  // A running call with no known target reads as its title, not "Using js".
+  expect(view.getByText('刷新审核状态')).toBeTruthy();
+  expect(view.queryByText('Using js')).toBeNull();
+
+  view.rerender(<ThreadView {...props} messages={[js('b', '刷新审核状态', 'success'), js('a', '查看当前浏览器页面', 'success'), prompt]} />);
+  fireEvent.press(view.getByTestId('tools:a'));
+  const row = within(view.getByTestId('thread-run-a'));
+  expect(row.getByText('查看当前浏览器页面')).toBeTruthy();
+  expect(row.getByText('js')).toBeTruthy();
+  expect(view.getByTestId('thread-run-a').props.accessibilityLabel).toBe('查看当前浏览器页面, js');
+  fireEvent.press(view.getByTestId('thread-run-a'));
+  expect(view.getByTestId('thread-tool-detail').props).toMatchObject({ name: 'js', stepTitle: '查看当前浏览器页面' });
+});
+
 it('gives a failed call its own red pill and keeps it in the work record', () => {
   const prompt: UiMessage = { id: 'ask', role: 'user', text: 'Check CI' };
   const ok: UiMessage = { id: 'a', role: 'tool', text: '', toolName: 'exec', toolArgs: JSON.stringify({ command: 'gh pr view 50' }), toolStatus: 'success' };
