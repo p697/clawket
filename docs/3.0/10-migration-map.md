@@ -20,9 +20,9 @@
 | `ChannelsScreen.tsx`、`DevicesScreen.tsx`、`NodesScreen.tsx`、`NodeDetailScreen.tsx` | 迁移合并为 `AgentSettings/ChannelsDevices` | |
 | `LogScreen.tsx` | 迁移 `AgentSettings/Logs` | |
 | `DocsScreen.tsx` | 删除 | 帮助页链接 |
-| `YouMindBoard*.tsx`、`components/console/YouMind*`、`components/youmind/*`（登录面板除外） | 删除 | |
+| `YouMindBoard*.tsx`、`components/console/YouMind*`、`components/youmind/*` | 删除 | |
 | `screens/ProfileScreen/*` | 删除 | |
-| `screens/ChatScreen/YouMindChatTab.tsx`、`components/YouMindSkill*`、`youmind-skill-picker-data.ts`、`generatedYouMindSkillIconXml.ts`、`hooks/youMindMessageMapping.ts` | 删除；chunk 解析迁到 `connection/adapters/youmind-sprite.ts` | |
+| `screens/ChatScreen/YouMindChatTab.tsx`、`components/YouMindSkill*`、`youmind-skill-picker-data.ts`、`generatedYouMindSkillIconXml.ts`、`hooks/youMindMessageMapping.ts` | 删除 | |
 | `screens/ChatScreen/index.tsx`、`ChatTab.tsx`、`ChatScreenLayout.tsx` | 重写为 `screens/Thread` | |
 | `screens/ChatScreen/hooks/*` | 迁移到 `src/chat/`（运行时不变，删除 YouMind 分支） | |
 | `screens/ConfigScreen/ConfigScreenLayout.tsx`（2,162 行）、`ConfigTab.tsx`、`index.tsx` | 重写为 `AccountSettings`（描述符驱动，≤ 500 行） | |
@@ -39,8 +39,8 @@
 | 现有 | 处理 |
 |---|---|
 | `services/gateway.ts`、`gateway-relay.ts`、`gateway-shared.ts`、`gateway-backend-operations.ts`、`gateway-backends.ts`、`gateway-hermes-*.ts`、`gateway-console-dashboard.ts`、`gateway-hermes-console-dashboard.ts`、`gateway-agent-detail.ts`、`hermes-console-entry-descriptors.ts`、`console-entry-descriptors.ts`、`live-dashboard.ts`、`hermes-connect-debug.ts` | 删除（逻辑按 `01` / `03` 迁入 `connection/`） |
-| `services/youmind.ts`（3,032 行）、`youmind-response.ts`、`youmind-chat-attachment-cache.ts`、`youmind-skill-background.ts` | 删除；登录与刷新逻辑迁入 `connection/adapters/youmind-sprite.ts`（≤ 900 行） |
-| `services/storage.ts` | 精简：删除 YouMind Board / 素材 / 技能相关 key、Office / Live 相关 key、`activeGatewayConfigId`；新增连接注册表与水位线 key；写迁移函数把旧 `GatewayConfig[]`（url、token、password、bootstrap、relay、hermes、mode、debugMode）逐字段转成 `ConnectionRecord[]`（`01` §3.1），**必须保留全部凭据**。迁移必须：原子（先写新 key 再删旧 key，任一步失败保留旧数据并下次重试）、幂等（重复执行无副作用）、有回滚（保留旧 key 一个版本）；测试用从 2.1.x 真实 SecureStore / AsyncStorage 导出的脱敏 fixture |
+| `services/youmind.ts`（3,032 行）、`youmind-response.ts`、`youmind-chat-attachment-cache.ts`、`youmind-skill-background.ts` | 删除 |
+| `services/storage.ts` | 精简：删除 YouMind Board / 素材 / 技能相关 key、Office / Live 相关 key、`activeGatewayConfigId`；新增连接注册表与水位线 key；写迁移函数把旧 `GatewayConfig[]`（url、token、password、bootstrap、relay、hermes、mode、debugMode）逐字段转成 `ConnectionRecord[]`（`01` §3.1），**必须保留全部凭据**；YouMind 配置不迁移。迁移必须：原子（先写新 key 再删旧 key，任一步失败保留旧数据并下次重试）、幂等（重复执行无副作用）、有回滚（保留旧 key 一个版本）；测试用从 2.1.x 真实 SecureStore / AsyncStorage 导出的脱敏 fixture |
 | `services/chat-cache.ts` | 保留；增加按连接清理 |
 | `services/node-*.ts`、`node-capabilities.ts` | 保留（节点能力属于渠道与设备页） |
 | `services/analytics/*` | 按 `07` 重写事件表 |
@@ -80,7 +80,7 @@
 | `SELF_HOSTING_MODEL.md`（根） | 并入 `docs/self-hosting.md` 后删除 |
 | `docs/relay/HERMES-RELAY-DESIGN.md` | 重写为「Hermes 实例」一节并入 `docs/relay/ARCHITECTURE.md`，原文件删除 |
 | `docs/openclaw-connection-compatibility.md` | 保留，加入能力字符串一节 |
-| 根 `README.md` / `README.zh-CN.md` | 同步更新：定位、工作区表、隐私承诺、YouMind 精灵说明；删除 Office 相关段落 |
+| 根 `README.md` / `README.zh-CN.md` | 同步更新：定位、工作区表、隐私承诺；删除 Office 相关段落 |
 | 根 `AGENTS.md` | 更新工作区表（删两个 Hermes 目录、加 agent-protocol）、删除 Preview Service Environment 之外已不成立的规则、加「3.0 规格位置」一节；根 `CLAUDE.md` 是符号链接不动 |
 | `apps/mobile/AGENTS.md` | 重写：删除 Chat Runtime 双运行时、Console 菜单分屏、YouMind 相关规则；加连接层 v2 与视觉规则。`CLAUDE.md` 是相对符号链接，不动、不复制（`check:docs` 会校验） |
 | `packages/bridge-runtime/AGENTS.md` | 按新目录重写 |

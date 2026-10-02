@@ -14,8 +14,6 @@ The repository includes:
 
 Public product endpoints and app identifiers appear in official release profiles and compatibility code. They are not secrets. Deployment templates use placeholders; supply your own account, service endpoints and credentials in ignored local overrides. Bring your own direct connection or Relay infrastructure and enable only the optional integrations you operate. Historical operator metadata is documented in the audit report; no promise of a metadata-free Git history is made.
 
-YouMind Sprite uses its own optional HTTPS adapter and account flow. It is not deployed by the Relay workspaces and is not a Relay transport kind.
-
 ## What You Need
 
 - Node.js 22.x and npm
@@ -155,8 +153,6 @@ When adding a mobile environment variable, add it to `.env.example`, expose it t
 - Message caches stay on the device and deleting a connection clears that connection's cache.
 - Analytics must not include message text, prompts, raw identifiers, credentials, invitation material, or secret-bearing URLs.
 - Keep operator account/namespace IDs, service credentials, signing material and private release configuration in ignored files. Public endpoint names and public SDK identifiers alone do not grant administrative access.
-
-The optional YouMind integration currently uses a client HMAC value. Do not supply a server secret through `EXPO_PUBLIC_YOUMIND_APP_SECRET`; all client configuration is extractable. YouMind account/service access is independent of self-hosted OpenClaw/Hermes operation.
 
 Store private values in your environment, ignored local config, or release pipeline.
 

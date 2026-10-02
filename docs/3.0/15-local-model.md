@@ -1,7 +1,7 @@
 # Local model connections
 
-The owner authorized this additive backend on 2026-09-11. Existing OpenClaw,
-Hermes and YouMind contracts stay compatible. Implementation is on
+The owner authorized this additive backend on 2026-09-11. Existing OpenClaw
+and Hermes contracts stay compatible. Implementation is on
 `feat/local-model-bridge`; it is not an npm or app-store release.
 
 ## Architecture

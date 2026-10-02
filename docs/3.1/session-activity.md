@@ -12,7 +12,6 @@ Activity is presentation evidence, never proof of backend health, session owners
 | Codex | Owned App Server runs; Desktop IPC v11 fresh snapshots for visible, authorized catalog entries | App Server `thread/list` does not prove Desktop activity; unknown/unsupported native versions remain unknown |
 | Claude Code | Owned SDK runs; official read-only `claude agents --json --all` roster | Busy / idle / waiting / unknown; idle owners still own their sessions |
 | Local model | Clawket conversation's live `running` state | No history download or model inference for activity reads |
-| YouMind | Existing service status and scoped live run events | Preserve its existing mapping |
 
 ## Additive wire contract
 

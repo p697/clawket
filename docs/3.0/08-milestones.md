@@ -93,23 +93,23 @@
 
 ## M4 · App 连接层 v2（轨道 A1）
 
-**目的**：一个连接注册表、三种传输、三个适配器；删除 `gateway.ts` 与 `youmind.ts`。
+**目的**：一个连接注册表、两种传输、两个适配器；删除 `gateway.ts` 与 `youmind.ts`。
 
 1. 新建 `apps/mobile/src/connection/`：
-   - `transports/relay-ws.ts`、`transports/direct-ws.ts`（从 `gateway.ts` / `gateway-relay.ts` / `gateway-shared.ts` 抽出握手、探活、退避、心跳协商）、`transports/http-stream.ts`（从 `youmind.ts` 的 `streamRequest` 抽出，XHR 增量读取）。
-   - `adapters/openclaw.ts`、`adapters/hermes.ts`、`adapters/youmind-sprite.ts`（规格见 `03-adapters.md`）。
+   - `transports/relay-ws.ts`、`transports/direct-ws.ts`（从 `gateway.ts` / `gateway-relay.ts` / `gateway-shared.ts` 抽出握手、探活、退避、心跳协商）。
+   - `adapters/openclaw.ts`、`adapters/hermes.ts`（规格见 `03-adapters.md`）。
    - `registry/connection-store.ts`（多连接持久化，替代 `activeGatewayConfigId`）、`registry/unread-watermarks.ts`、`registry/roster-cache.ts`（第 0 档缓存）。
    - `index.ts`：`useConnections()`、`useAdapter(connectionId)`、`useRoster()`。
 2. 绞杀式迁移，顺序固定：
-   - 第一步：适配器先包装现有 `GatewayClient` / `YouMindClient`，把事件翻成 `SessionUpdate`；`useChatController` 改为只消费适配器事件。此时 App 行为不变，全部测试仍绿。
+   - 第一步：适配器先包装现有 `GatewayClient`，把事件翻成 `SessionUpdate`；`useChatController` 改为只消费适配器事件。此时 App 行为不变，全部测试仍绿。
    - 第二步：把传输代码搬进 `transports/`，适配器改用传输；删除 `GatewayClient` 内的 Hermes 特判（`HERMES_*` 常量、`hermesIdleProbe*`）。
-   - 第三步：删除 `services/gateway.ts`、`gateway-relay.ts`、`gateway-shared.ts`、`gateway-backend-operations.ts`、`gateway-backends.ts`、`youmind.ts`、`youmind-*.ts`、`gateway-hermes-*.ts`、`hermes-relay-pairing.ts` 中已迁移的部分；`storage.ts` 里 YouMind 会话存储只保留邮箱登录会话。
+   - 第三步：删除 `services/gateway.ts`、`gateway-relay.ts`、`gateway-shared.ts`、`gateway-backend-operations.ts`、`gateway-backends.ts`、`youmind.ts`、`youmind-*.ts`、`gateway-hermes-*.ts`、`hermes-relay-pairing.ts` 中已迁移的部分。
 3. 连接注册表：同一时刻只有一个连接的传输在线；切换连接 = 关旧开新；其余连接读缓存。
 4. 未读水位线与「需要你」聚合（规格见 `04-app-screens.md` §花名册）。
 5. 连接遥测事件（`07-analytics.md`）。
 6. 测试：每个适配器用 `tests/fixtures/` 里录制的真实报文；传输重连状态机、水位线、注册表切换都是纯函数测试。
 
-**验证**：`npm run mobile:typecheck && npm run mobile:test && npm run check:required`；三个适配器各有一条 Node 环境的集成测试（`tests/integration/adapters/`，对 Preview 端点或录制报文：连接、发一条消息、中止一次）；iOS 模拟器构建与 Android debug 构建通过。
+**验证**：`npm run mobile:typecheck && npm run mobile:test && npm run check:required`；两个适配器各有一条 Node 环境的集成测试（`tests/integration/adapters/`，对 Preview 端点或录制报文：连接、发一条消息、中止一次）；iOS 模拟器构建与 Android debug 构建通过。
 
 **完成标准**：`useChatController` 不再 import `services/gateway`；`grep -rn "backendKind ===" apps/mobile/src` 在 `connection/` 之外为 0；`10` 里列出的连接层旧文件已删除。目标（非门槛）：连接层总行数 ≤ 5,000（原 `gateway.ts + gateway-relay.ts + gateway-shared.ts + youmind.ts` ≈ 7,300），超出则在 `PROGRESS.md` 说明。
 

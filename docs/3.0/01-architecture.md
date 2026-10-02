@@ -19,12 +19,12 @@
 └──────────────────────────────────────────────┬──────────────────────────────────────────────┘
                                                │ AgentAdapter · Capabilities · SessionUpdate
 ┌──────────────────────────── 适配器层 src/connection/adapters ────────────────────────────────┐
-│  OpenClawAdapter        HermesAdapter          YouMindSpriteAdapter                            │
-│  Gateway JSON-RPC       Bridge 协议            HTTPS + CompletionStreamChunk                   │
+│  OpenClawAdapter        HermesAdapter                                                          │
+│  Gateway JSON-RPC       Bridge 协议                                                            │
 └──────────────────────────────────────────────┬──────────────────────────────────────────────┘
                                                │ Transport（send / onMessage / state）
 ┌──────────────────────────── 传输层 src/connection/transports ────────────────────────────────┐
-│  RelayWsTransport        DirectWsTransport      HttpStreamTransport                            │
+│  RelayWsTransport        DirectWsTransport                                                     │
 │  握手、探活、退避、心跳协商；不含任何后端语义                                                    │
 └──────────────────────────────────────────────┬──────────────────────────────────────────────┘
                                                │
@@ -55,24 +55,23 @@ export type ConnectionRecord = {
   label: string;
   environment?: 'production' | 'preview';
   createdAt: number;
-  url: string;                          // 直连 / Bridge / YouMind base URL
+  url: string;                          // 直连 / Bridge base URL
   auth?: { token?: string; password?: string };
   bootstrap?: OpenClawBootstrapConfig;  // 现有类型原样迁移
   relay?: RelayGatewayConfig;           // 现有类型原样迁移
   hermes?: HermesGatewayConfig;         // 现有类型原样迁移
-  youmind?: { authScopeKey: string };   // 邮箱登录会话的存储 key
   debugMode?: boolean;
 };
 
 // 脱敏视图：UI 与协议层只见这个
-export type BackendKind = 'openclaw' | 'hermes' | 'youmind';
-export type TransportKind = 'relay' | 'local' | 'tailscale' | 'cloudflare' | 'custom' | 'https';
+export type BackendKind = 'openclaw' | 'hermes';
+export type TransportKind = 'relay' | 'local' | 'tailscale' | 'cloudflare' | 'custom';
 
 export type ConnectionDescriptor = {
   id: string;                 // 本地生成的稳定 id
   backendKind: BackendKind;
   transportKind: TransportKind;
-  label: string;              // 用户可见名，如 lucy / hermes / YouMind
+  label: string;              // 用户可见名，如 lucy / hermes
   environment?: 'production' | 'preview';
   createdAt: number;
   bridgeOutdated?: boolean;   // Bridge 未声明所需能力（如 hermes.multi-session.v2）
@@ -81,10 +80,10 @@ export type ConnectionDescriptor = {
 
 export type AgentDescriptor = {
   connectionId: string;
-  agentId: string;            // OpenClaw agent id；Hermes 固定 'hermes'；YouMind 为 spriteId
+  agentId: string;            // OpenClaw agent id；Hermes 固定 'hermes'
   name: string;
   emoji?: string;             // OpenClaw identity emoji
-  avatarUrl?: string;         // YouMind 精灵头像
+  avatarUrl?: string;         // OpenClaw identity 头像
   isMain: boolean;            // 免费额度判定：连接内 isMain 的那一个免费
   mainSessionKey: string;
 };
@@ -132,7 +131,7 @@ export type ApprovalRequest =
   | { kind: 'pair'; id: string; target: 'device' | 'node'; displayName: string | null; platform: string | null; receivedAtMs: number };
 ```
 
-`allowedActions` 的规则：OpenClaw 的 main 会话不可删除、可重置；渠道会话可重命名不可删除（删除由渠道侧决定）；Hermes 原生会话（`source = native`）只读：不可重命名、重置、删除，只能打开与置顶；Bridge 创建的 Hermes 会话全可用；YouMind 只有一个会话，全部为 false 除 pin。UI 按 `allowedActions` 显隐长按菜单，不再看后端级布尔值。
+`allowedActions` 的规则：OpenClaw 的 main 会话不可删除、可重置；渠道会话可重命名不可删除（删除由渠道侧决定）；Hermes 原生会话（`source = native`）只读：不可重命名、重置、删除，只能打开与置顶；Bridge 创建的 Hermes 会话全可用。UI 按 `allowedActions` 显隐长按菜单，不再看后端级布尔值。
 
 ### 3.2 能力矩阵
 
@@ -156,7 +155,7 @@ export type Capabilities = {
 export const CAPABILITY_MATRIX: Record<BackendKind, Capabilities>;
 ```
 
-矩阵值：OpenClaw 全 true。`attachments` 精确表示图片附件；`fileAttachments` 是非图片文件的 additive 细化能力，缺省按 false。Hermes：chat / abort / history / attachments / sessions / sessionCreate / sessionRename / sessionReset / sessionDelete / agents（只读单 Agent）/ models / thinkingLevels / skills / skillDiscover / skillInstall / cron / cronCreate / files / fileEdit / usage / cost 为 true，`fileAttachments` 与其余能力为 false，因此仍可选图、拍照和粘贴图片，但不显示任意文件入口。YouMind：chat / abort / history 为 true，其余 false。适配器可以在运行时按 Bridge 声明的能力字符串把 true 降为 false（例如老 Bridge 没有 `hermes.multi-session.v2` 时 `sessions*` 降级），不能反向升级。
+矩阵值：OpenClaw 全 true。`attachments` 精确表示图片附件；`fileAttachments` 是非图片文件的 additive 细化能力，缺省按 false。Hermes：chat / abort / history / attachments / sessions / sessionCreate / sessionRename / sessionReset / sessionDelete / agents（只读单 Agent）/ models / thinkingLevels / skills / skillDiscover / skillInstall / cron / cronCreate / files / fileEdit / usage / cost 为 true，`fileAttachments` 与其余能力为 false，因此仍可选图、拍照和粘贴图片，但不显示任意文件入口。适配器可以在运行时按 Bridge 声明的能力字符串把 true 降为 false（例如老 Bridge 没有 `hermes.multi-session.v2` 时 `sessions*` 降级），不能反向升级。
 
 ### 3.3 适配器接口（ACP 形状）
 

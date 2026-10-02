@@ -28,7 +28,7 @@ export function canCreateAgent(e: Entitlement) { return e.isPro; }
 - Pro 到期：按同一规则上锁，`freeConnectionId` 若为空则取当时的活动连接；恢复购买或续订即全部解锁。
 - 重装：连接需要重新配对，`freeConnectionId` 随第一次配对确定；宽限标记随设备 identity 保存，不重发。iOS Keychain 不随删 App 清除，所以首启用 AsyncStorage 里的安装标记（`clawket.installMarker.v1`）判定全新安装：无标记且沙盒无 `clawket.*` 键 → 清掉连接、凭据与本地偏好，保留 identity 与宽限记录，再走首启引导。
 
-- `isMain`：OpenClaw 为 `agentId === 'main'`（或 Gateway 配置的 mainKey）；Hermes 与 YouMind 恒为 true。
+- `isMain`：OpenClaw 为 `agentId === 'main'`（或 Gateway 配置的 mainKey）；Hermes 恒为 true。
 - 锁定的 Agent：花名册可见（去饱和 + 锁），点开 → 付费墙情境版 `agents`；置顶会话若属于锁定 Agent 同样锁定。
 - **宽限期**：首次以 3.0 启动时，若该设备非 Pro，且（已保存的连接数 > 1，或本地 `chat-cache` 里存在任一非 main Agent 的会话），则写 `graceUntil = now + 14 天`（`StorageService`），花名册顶部横幅显示剩余天数；到期后横幅消失并按上面的规则上锁。宽限只计算一次，重装不重置（存于 SecureStore 的设备 identity 旁）。
 - 免费用户的 `agentCreate` 入口（花名册「+」→ 新建 Agent、设置身份页）保留可见，点击即付费墙。

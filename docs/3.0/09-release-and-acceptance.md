@@ -33,7 +33,6 @@
 - [x] **AUTO 完成；HUMAN 待人：真机相机与相册。** 二维码扫描（折叠入口）→ 配对成功
 - [x] **AUTO 完成；HUMAN 待人：真实 LAN / Tailscale。** 直连 / Tailscale URL 配对 → 成功
 - [x] **AUTO 完成；HUMAN 待人：真实双 transport 与旧 Bridge。** Hermes 配对（Relay 与本地各一次）→ 成功；老 Bridge 时显示升级提示
-- [x] **AUTO 完成；HUMAN 待人：真实既有账户。** YouMind 新建入口按 09-14 决策隐藏；既有连接仍可恢复并聊天。标志重新开启时再验收邮箱验证码与新建流程。
 - [x] **AUTO 完成；HUMAN 待人：真实故障复现。** 配对码过期 / Bridge 未运行 / 无网络三种失败分别显示对应文案与动作
 - [x] **AUTO 完成；HUMAN 待人：真机打开链接。** 「还没有 Agent」链接只指向官方文档
 
@@ -49,12 +48,11 @@
 ### 3.3 线程
 
 - [x] **AUTO 完成；HUMAN 待人：长名称与实时布局。** 头部胶囊：名字、模型、上下文剩余；运行中变「正在用 …」；离线变灰
-- [x] **AUTO 完成；HUMAN 待人：三后端真机响应。** 发送、流式、停止键中止（三种后端各一次）
-- [x] **AUTO 完成；HUMAN 待人：照片选择/相机与真实交付。** 附件：OpenClaw 与 Hermes 发图成功；YouMind 无附件入口
+- [x] **AUTO 完成；HUMAN 待人：双后端真机响应。** 发送、流式、停止键中止（两种后端各一次）
+- [x] **AUTO 完成；HUMAN 待人：照片选择/相机与真实交付。** 附件：OpenClaw 与 Hermes 发图成功
 - [x] **AUTO 完成；HUMAN 待人：真实任务与日志。** 子 Agent 运行卡出现并可打开；Cron 结果卡出现；失败带查看日志（Pro）
 - [x] **AUTO 完成；HUMAN 待人：真实审批生命周期。** exec 审批卡：允许 / 拒绝 / 长按总是允许；配对请求卡
 - [x] **AUTO 完成；HUMAN 待人：长实时历史。** 上拉加载更早历史；压缩系统事件行
-- [x] **AUTO 完成；HUMAN 待人：真实 Sprite 账户与网络。** YouMind：首次进入自动开场（不显示 WakeUp）；中止；断网后恢复对账
 - [x] **AUTO 完成；HUMAN 待人：真实命令。** Hermes：斜杠命令回执为系统事件行
 - [x] **AUTO 完成；HUMAN 待人：OS 辅助功能视觉检查。** 减动效开启时无位移动画，且跳过会话交叉淡入
 
@@ -67,7 +65,7 @@
 
 ### 3.5 设置
 
-- [x] **AUTO 完成；HUMAN 待人：真实值与视觉。** Agent 设置：Agent 组 5 行、连接组 5 行按能力显隐；Hermes 7 行；YouMind 只读身份 + 连接状态，邮箱只在私有 route-scoped Agent Settings 显示
+- [x] **AUTO 完成；HUMAN 待人：真实值与视觉。** Agent 设置：Agent 组 5 行、连接组 5 行按能力显隐；Hermes 7 行
 - [x] **AUTO 完成；HUMAN 待人：真实 OpenClaw/Hermes 各保存一次。** 每个二级页可打开并保存一次：模型、技能（已安装 / 发现 / 安装）、定时（含心跳、创建、运行）、文件（编辑保存 Pro）、用量、OpenClaw 管理四分段（Pro）、工具、渠道与设备（配对请求）、日志（Pro）
 - [x] **AUTO 完成；HUMAN 待人：OS 图标/语音/通知。** 账户设置：Pro 状态、连接增删、主题 / 强调色 / 聊天外观 / 图标（Pro）、语音、通知、帮助链接、社区、关于、开发者（Debug、Preview、设计系统、重置）
 

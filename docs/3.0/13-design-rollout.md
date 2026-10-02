@@ -34,12 +34,12 @@ Future acceptance includes large text, light/dark content legibility, keyboard t
 |---|---|---|---|
 | Shared language | Buttons, headers, fields, rows, switches, banners, sheets | Consumer audit; state/theme checks; required gate | Pending rollout |
 | Chat core | Roster, thread header/history/composer, sessions, search, message actions | Real navigation and send/stream/stop/retry; keyboard and long-content visual review | Pending |
-| Connection and first run | Welcome, platform chooser, pairing, YouMind sign-in, connection lifecycle | Initial/recovery states, all three platform paths, visible disconnect/reconnect | Reference approved; remaining surfaces pending |
+| Connection and first run | Welcome, platform chooser, pairing, connection lifecycle | Initial/recovery states, OpenClaw and Hermes platform paths, visible disconnect/reconnect | Reference approved; remaining surfaces pending |
 | Settings and Agent management | Account categories, Agent profile and capability-gated detail pages | Every reachable page/empty/error state, small screen and translated copy | Pending |
 | Theme consolidation | Global appearance versus unified chat-theme entry | Existing preferences preserved; preview agrees with real chat | Pending |
 | Finish | Remove temporary review shortcut, keep developer gallery, document exact coverage | Release simulator evidence; appropriate Android checks; full required gate | Pending |
 
-The original engineering acceptance remains open: OpenClaw/Lucy, Hermes, and YouMind functional completeness; reconnect stability; Release responsiveness; and final owner real-device acceptance. UI approval does not replace these gates. Production deployment and store release are not implied by approval of the design reference.
+The original engineering acceptance remains open: OpenClaw/Lucy and Hermes functional completeness; reconnect stability; Release responsiveness; and final owner real-device acceptance. UI approval does not replace these gates. Production deployment and store release are not implied by approval of the design reference.
 
 ## In-progress implementation checkpoint
 
@@ -60,7 +60,7 @@ Signed Release restored all three existing connections. YouMind loaded its real 
 
 The inspection also led to: a smaller keyboard/control gap (home-indicator clearance no longer counted twice), accessible assistant message content, recorded per-message model labels instead of relabeling history with the current model, and shared glass-surface shadow behavior. Wallpaper persistence now awaits storage before replacing live appearance or removing the old image; failed writes preserve the old background and clean up the staged copy. Focused regressions cover these storage and presentation behaviors. The keyboard adjustment still requires its final rendered screenshot.
 
-Still required before owner-wide acceptance: recapture revised Help Center/App icon/theme pages; all Agent management sections and nested sheets; live OpenClaw/Hermes regression, YouMind resume/cold-start; light/dark and small-screen translated/keyboard checks; final performance observations and screenshot matrix. A locked computer must never be replaced with fabricated screenshots or marked as visual acceptance.
+Still required before owner-wide acceptance: recapture revised Help Center/App icon/theme pages; all Agent management sections and nested sheets; live OpenClaw/Hermes regression; light/dark and small-screen translated/keyboard checks; final performance observations and screenshot matrix. A locked computer must never be replaced with fabricated screenshots or marked as visual acceptance.
 
 
 ### Per-page evidence ledger
@@ -72,13 +72,11 @@ All paths below are local `evidence/rollout/` PNGs. A screenshot proves only the
 | Welcome | `welcome-light`; hierarchy, action priority and spacing reviewed | Small screen / dark |
 | Platform chooser | `platform-chooser-light`; official marks and separated setup reviewed | Dark |
 | OpenClaw pairing | `pairing-light`; two steps and recovery return reviewed | Signed save, final recovery revision |
-| Hermes pairing / YouMind login | Approved shared setup primitives | Current complete native flow |
+| Hermes pairing | Approved shared setup primitives | Current complete native flow |
 | Roster | `roster-light`; four real Agents, neutral header and unread badge | Dark, search and add actions |
-| YouMind thread | `youmind-chat-keyboard-light`; real history and new Chinese reply | Revised keyboard gap, stop and cold start |
 | OpenClaw / Hermes thread | Conversation preferences now share preview implementation | Real send/stream/history/actions regression |
 | Session panel | Shared tabs/sheet/header migrated | Groups/list/search/actions |
 | Global search / message detail | Shared input, rows and message palette migrated | Native result, empty, favorites and detail |
-| YouMind profile | `youmind-profile-light`; identity, chat and connection hierarchy reviewed | Dark |
 | OpenClaw / Hermes profile | Stat-card profile (header chat button, Cron jobs / Cost today heroes, Models / Skills / Files tiles) rendered in light/dark render tests | Real counts, heartbeat line and advanced sheet on device |
 | Models / providers | Shared search, tabs, settings rows | Both backend sections |
 | Skills / discovery / detail | Shared search, lists and sheets | Long content, permissions and search |
