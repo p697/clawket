@@ -597,11 +597,9 @@ if (!globalThis.crypto.getRandomValues) {
 // Metro resolves official platform artwork to numeric native asset handles.
 jest.mock('./assets/brands/openclaw.png', () => 301);
 jest.mock('./assets/brands/hermes.png', () => 302);
-jest.mock('./assets/brands/youmind.png', () => 303);
 jest.mock('./assets/brands/pi.png', () => 307);
 jest.mock('./assets/brands/codex.png', () => 308);
 jest.mock('./assets/brands/claude-code.png', () => 309);
-jest.mock('./assets/avatars/youmind-sprite-default.png', () => 306);
 
 jest.mock('./assets/icon.png', () => 304);
 jest.mock('./assets/app-icons/black/app-icon-black-1024.png', () => 305);

@@ -152,13 +152,6 @@ export const APP_UPDATE_RELEASES: AppUpdateRelease[] = [
     releasedAt: '2026-04-17',
     entries: [
       {
-        id: 'youmind-connection',
-        icon: 'brain',
-        title: 'YouMind Connection',
-        subtitle: 'You now can connect your YouMind account.',
-        action: { type: 'none' },
-      },
-      {
         id: 'hermes-full-support',
         icon: 'feather',
         title: 'Hermes Connection',

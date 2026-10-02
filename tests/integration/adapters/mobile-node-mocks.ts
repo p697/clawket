@@ -26,10 +26,3 @@ vi.mock('../../../apps/mobile/src/features/discover', () => ({
 vi.mock('../../../apps/mobile/src/i18n', () => ({
   default: { language: 'en' },
 }));
-
-vi.mock('../../../apps/mobile/src/connection/adapters/youmind-sprite-api', () => ({
-  YouMindSpriteApiClient: class NodeIntegrationYouMindApiClient {},
-  mapYouMindSpriteApiError: (error: unknown) => ({
-    message: error instanceof Error ? error.message : String(error ?? 'Request failed'),
-  }),
-}));

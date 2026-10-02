@@ -54,7 +54,6 @@ describe('canonical capability contract', () => {
       'cost',
       'execApproval',
     ]);
-    expect(enabled('youmind')).toEqual(['chat', 'abort', 'history']);
   });
 
   it('advertises only implemented Claude operations', () => {
@@ -69,7 +68,7 @@ describe('canonical capability contract', () => {
       chat: false,
       logs: false,
     });
-    expect(resolveCapabilities('youmind', { chat: true, files: true })).toMatchObject({
+    expect(resolveCapabilities('local-model', { chat: true, files: true })).toMatchObject({
       chat: true,
       files: false,
     });
@@ -89,7 +88,7 @@ describe('canonical capability contract', () => {
     expect(resolveCapabilities('openclaw').channelManage).toBe(true);
     expect(resolveCapabilities('openclaw', { channelManage: false }).channelManage).toBe(false);
     expect(resolveCapabilities('hermes', { channelManage: true }).channelManage).toBe(false);
-    expect(resolveCapabilities('youmind', { channelManage: true }).channelManage).toBe(false);
+    expect(resolveCapabilities('local-model', { channelManage: true }).channelManage).toBe(false);
   });
 
   it('permits negotiated Hermes documents while rejecting arbitrary files', () => {
@@ -108,7 +107,7 @@ describe('canonical capability contract', () => {
     expect(supportsFileAttachments(undefined)).toBe(false);
     expect(supportsAttachmentMimeType(CAPABILITY_MATRIX.openclaw, 'application/pdf')).toBe(true);
     expect(supportsFileAttachments(CAPABILITY_MATRIX.openclaw)).toBe(true);
-    expect(supportsAttachmentMimeType(CAPABILITY_MATRIX.youmind, 'image/png')).toBe(false);
+    expect(supportsAttachmentMimeType(resolveCapabilities('local-model', { attachments: false }), 'image/png')).toBe(false);
     expect(supportsPromptAttachment(CAPABILITY_MATRIX.hermes, {
       type: 'image',
       mimeType: ' Image/PNG ',

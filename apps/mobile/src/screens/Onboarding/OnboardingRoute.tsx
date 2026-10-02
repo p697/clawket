@@ -15,15 +15,12 @@ import {
   connectBackendPairingCode,
   connectBackendPairingLink,
   connectBackendPairingPayload,
-  createYouMindOnboardingConnection,
   getConnectionRuntime,
   resolvePairingPayloadBackend,
   resolvePairingValidationReason,
   type BackendPairingPayload,
   type BackendPairingResult,
   type PairingValidationReason,
-  type YouMindOnboardingAuthSession,
-  type YouMindOnboardingConnection,
   useConnections,
 } from '../../connection';
 import { useAppContext } from '../../contexts/AppContext';
@@ -34,7 +31,6 @@ import type { RelayServiceEnvironment } from '../../types';
 import { showNoticeAlert } from '../../utils/notice-alert';
 import { OnboardingScreen } from './OnboardingScreen';
 import { WelcomeScreen } from './WelcomeScreen';
-import { YouMindOnboardingScreen } from './YouMindOnboardingScreen';
 import type {
   OnboardingConnectionPhase,
   PairableBackendKind,
@@ -60,7 +56,6 @@ export type OnboardingConnectedResult = Readonly<{
 
 export type OnboardingRouteProps = NavigationProps & Readonly<{
   onConnected?: (result: OnboardingConnectedResult) => void;
-  onOpenYouMind?: () => void;
   onViewed?: () => void;
   onDocsOpened?: (backendKind: BackendKind) => void;
   onAgentPromptCopied?: (backendKind: PairableBackendKind) => void;
@@ -93,7 +88,6 @@ export function OnboardingRoute({
   navigation,
   route,
   onConnected,
-  onOpenYouMind,
   onViewed,
   onDocsOpened,
   onAgentPromptCopied,
@@ -119,7 +113,6 @@ export function OnboardingRoute({
     ...INITIAL_OPERATION,
     backendKind: initialBackend,
   }));
-  const [youMindDraft, setYouMindDraft] = useState<YouMindOnboardingConnection | null>(null);
   const requestIdRef = useRef(0);
   const pairingRequestInFlightRef = useRef(false);
   const handledPairingUrlRef = useRef<string | null>(null);
@@ -430,46 +423,8 @@ export function OnboardingRoute({
     void Linking.openURL(ONBOARDING_WEBSITE_URLS[backendKind]);
   }, [onDocsOpened]);
 
-  const openYouMind = useCallback(() => {
-    const perform = () => {
-      onOpenYouMind?.();
-      setYouMindDraft(createYouMindOnboardingConnection({
-        runtime: getConnectionRuntime(),
-        debugMode,
-      }));
-    };
-    if (!canBeginPairing(perform)) return;
-    perform();
-  }, [canBeginPairing, debugMode, onOpenYouMind]);
-
-  const closeYouMind = useCallback(() => {
-    const draft = youMindDraft;
-    setYouMindDraft(null);
-    if (draft) void draft.discard();
-  }, [youMindDraft]);
-
-  const finishYouMindSignIn = useCallback(async (
-    session: YouMindOnboardingAuthSession,
-  ) => {
-    const draft = youMindDraft;
-    if (!draft) throw new Error('YouMind sign-in session is no longer active.');
-    const result = await draft.finish(session);
-    setYouMindDraft(null);
-    onConnected?.(result);
-  }, [onConnected, youMindDraft]);
-
   const close = onClose
     ?? (route.params?.presentation === 'modal' ? navigation.goBack : undefined);
-
-  if (youMindDraft) {
-    return (
-      <YouMindOnboardingScreen
-        client={youMindDraft.client}
-        onBack={closeYouMind}
-        onSignedIn={finishYouMindSignIn}
-      />
-    );
-  }
 
   if (!setupVisible && !operation.active && !operation.errorCode && !route.params?.pairingUrl) {
     return <WelcomeScreen onSettings={() => navigation.navigate('AccountSettings')} onConnect={() => setSetupVisible(true)} onClose={close} />;
@@ -507,7 +462,6 @@ export function OnboardingRoute({
       onScanAnyQr={() => scanAnyQr()}
       onImportAnyQr={() => scanAnyQr(true)}
       onImportQr={(backend) => scanQr(backend, true)}
-      onOpenYouMind={openYouMind}
       onOpenWebsite={openWebsite}
       onErrorAction={(code) => {
         if (code === 'bridge_offline') {

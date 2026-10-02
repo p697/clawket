@@ -216,7 +216,7 @@ jest.mock('../services/analytics/events', () => ({
 }));
 
 function createAdapter(backendKind: BackendKind = 'openclaw', transportKind?: string) {
-  const transportKinds = { openclaw: 'relay', hermes: 'relay', 'local-model': 'relay', pi: 'relay', codex: 'relay', 'claude-code': 'relay', youmind: 'https' } as const;
+  const transportKinds = { openclaw: 'relay', hermes: 'relay', 'local-model': 'relay', pi: 'relay', codex: 'relay', 'claude-code': 'relay' } as const;
   let promptSeq = 0;
   return {
     state: 'ready',
@@ -1103,7 +1103,7 @@ describe('useChatController message queue', () => {
     expect(result.current.isSending).toBe(true);
   });
 
-  it.each(['openclaw', 'hermes', 'youmind'] as const)(
+  it.each(['openclaw', 'hermes', 'pi'] as const)(
     'queues a message sent during a %s run and delivers it once the turn ends',
     async (backendKind) => {
       const { result, adapter, handlers } = renderController(backendKind);

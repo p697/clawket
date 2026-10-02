@@ -8,7 +8,7 @@ describe('session preview policy', () => {
     ['agent:lucy:main', undefined, undefined, true],
     ['main', undefined, undefined, true],
     ['hermes-main-id', 'hermes-main-id', undefined, true],
-    ['sprite-default', undefined, 'main', true],
+    ['local-default', undefined, 'main', true],
     ['agent:lucy:slack:channel:one', undefined, 'channel', false],
     ['agent:lucy:cron:job', undefined, 'cron', false],
     ['hermes-session', 'hermes-main', 'direct', false],

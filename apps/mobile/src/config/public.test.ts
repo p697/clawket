@@ -4,7 +4,6 @@ import {
   resolvePublicAppLinks,
   resolvePublicPaywallSocialProof,
   resolvePublicRevenueCatConfig,
-  resolvePublicYouMindAuthConfig,
 } from './public';
 
 describe('resolvePublicAppLinks', () => {
@@ -121,21 +120,5 @@ describe('buildSupportEmailUrl', () => {
   it('builds a mailto link when an email is present', () => {
     expect(buildSupportEmailUrl('support@example.com')).toBe('mailto:support@example.com');
     expect(buildSupportEmailUrl(null)).toBeNull();
-  });
-});
-
-describe('resolvePublicYouMindAuthConfig', () => {
-  it('returns null for every field when no env overrides are provided', () => {
-    expect(resolvePublicYouMindAuthConfig({} as NodeJS.ProcessEnv)).toEqual({
-      appSecret: null,
-    });
-  });
-
-  it('reads the OTP request signing secret from env', () => {
-    expect(resolvePublicYouMindAuthConfig({
-      EXPO_PUBLIC_YOUMIND_APP_SECRET: 'app-secret',
-    } as unknown as NodeJS.ProcessEnv)).toEqual({
-      appSecret: 'app-secret',
-    });
   });
 });

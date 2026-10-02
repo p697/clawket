@@ -16,7 +16,6 @@ export type RosterDisplayRow = Readonly<{
   emoji?: string;
   avatarUrl?: string;
   preview?: string;
-  subtitle?: RosterConnectionGroup['agents'][number]['subtitle'];
   sessionKind?: SessionDescriptor['kind'];
   /** A conversation row's platform and project, which pick its badge glyph. */
   sessionChannel?: string;
@@ -157,9 +156,7 @@ export function buildRosterRows(
       avatarName: agent.name,
       ...(agent.emoji ? { emoji: agent.emoji } : {}),
       ...(agent.avatarUrl ? { avatarUrl: agent.avatarUrl } : {}),
-      ...(summary.subtitle
-        ? { subtitle: summary.subtitle }
-        : optionalPreview(summary.preview)),
+      ...optionalPreview(summary.preview),
       lastActivityAt: summary.lastActivityAt,
       syncedAt: cached ? group.syncedAt : null,
       unreadCount: cached ? 0 : summary.unreadCount,
@@ -196,7 +193,6 @@ export function resolveRosterBackendMarks(rows: ReadonlyArray<Pick<RosterDisplay
 const BACKEND_NAMES: Readonly<Record<BackendKind, string | null>> = {
   openclaw: 'OpenClaw',
   hermes: 'Hermes',
-  youmind: 'YouMind',
   pi: 'Pi',
   codex: 'Codex',
   'claude-code': 'Claude Code',

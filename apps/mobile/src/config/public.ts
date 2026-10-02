@@ -20,8 +20,7 @@ type PublicEnv = Partial<Record<
   | 'EXPO_PUBLIC_REVENUECAT_PRO_ENTITLEMENT_ID'
   | 'EXPO_PUBLIC_REVENUECAT_PRO_OFFERING_ID'
   | 'EXPO_PUBLIC_REVENUECAT_PRO_PACKAGE_ID'
-  | 'EXPO_PUBLIC_REVENUECAT_TEST_API_KEY'
-  | 'EXPO_PUBLIC_YOUMIND_APP_SECRET',
+  | 'EXPO_PUBLIC_REVENUECAT_TEST_API_KEY',
   string | undefined
 >> & Partial<NodeJS.ProcessEnv>;
 
@@ -44,7 +43,6 @@ const STATIC_PUBLIC_ENV: PublicEnv = {
   EXPO_PUBLIC_REVENUECAT_PRO_OFFERING_ID: process.env.EXPO_PUBLIC_REVENUECAT_PRO_OFFERING_ID,
   EXPO_PUBLIC_REVENUECAT_PRO_PACKAGE_ID: process.env.EXPO_PUBLIC_REVENUECAT_PRO_PACKAGE_ID,
   EXPO_PUBLIC_REVENUECAT_TEST_API_KEY: process.env.EXPO_PUBLIC_REVENUECAT_TEST_API_KEY,
-  EXPO_PUBLIC_YOUMIND_APP_SECRET: process.env.EXPO_PUBLIC_YOUMIND_APP_SECRET,
 };
 
 function parseBooleanEnv(value: string | undefined | null): boolean | null {
@@ -95,10 +93,6 @@ export type PublicRevenueCatConfig = {
   offeringId: string | null;
   packageId: string | null;
   testApiKey: string | null;
-};
-
-export type PublicYouMindAuthConfig = {
-  appSecret: string | null;
 };
 
 export type PublicPaywallSocialProof = Readonly<{
@@ -178,12 +172,6 @@ export function resolvePublicRevenueCatConfig(env: PublicEnv = STATIC_PUBLIC_ENV
   };
 }
 
-export function resolvePublicYouMindAuthConfig(env: PublicEnv = STATIC_PUBLIC_ENV): PublicYouMindAuthConfig {
-  return {
-    appSecret: readOptionalEnv('EXPO_PUBLIC_YOUMIND_APP_SECRET', env),
-  };
-}
-
 export function buildSupportEmailUrl(email: string | null): string | null {
   if (!email) return null;
   return `mailto:${email}`;
@@ -193,4 +181,3 @@ export const publicAppLinks = resolvePublicAppLinks();
 export const publicAnalyticsConfig = resolvePublicAnalyticsConfig();
 export const publicPaywallSocialProof = resolvePublicPaywallSocialProof();
 export const publicRevenueCatConfig = resolvePublicRevenueCatConfig();
-export const publicYouMindAuthConfig = resolvePublicYouMindAuthConfig();

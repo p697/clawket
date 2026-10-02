@@ -12,11 +12,6 @@ export function resolveSavedGatewayName(input: {
   const trimmedName = input.name.trim();
   const relayDisplayName = input.relayDisplayName?.trim();
   const hermesDisplayName = input.hermesDisplayName?.trim();
-  if (input.backendKind === 'youmind') {
-    if (trimmedName) return trimmedName;
-    const host = parseHost(input.url);
-    return host ? `YouMind (${host})` : 'YouMind';
-  }
   if (hermesDisplayName && input.backendKind === 'hermes') {
     if (!trimmedName) return hermesDisplayName;
     if (trimmedName === hermesDisplayName) return hermesDisplayName;

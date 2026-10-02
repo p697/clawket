@@ -1,5 +1,4 @@
 import {
-  getGatewayBackendDescriptor,
   HUMAN_SESSION_KINDS,
   sessionActivityAt,
   type AgentDescriptor,
@@ -15,11 +14,6 @@ import {
   summarizeSessionSignals,
   type SessionWatermarks,
 } from './unread-watermarks';
-
-export type RosterAgentSubtitle = Readonly<{
-  kind: 'backend';
-  label: string;
-}>;
 
 const ROSTER_CACHE_VERSION = 1;
 const ROSTER_SCOPE_PREFIX = 'connection-registry:roster-cache:v1:';
@@ -67,7 +61,6 @@ export type RosterSnapshotInput = Readonly<{
 export type RosterAgentSummary = Readonly<{
   agent: AgentDescriptor;
   sessions: ReadonlyArray<SessionDescriptor>;
-  subtitle?: RosterAgentSubtitle;
   preview?: string;
   /** Latest activity a person took part in across this Agent's human sessions; orders the roster. */
   lastActivityAt: number | null;
@@ -274,22 +267,11 @@ function compareConnectionGroups(a: RosterConnectionGroup, b: RosterConnectionGr
     || a.connection.id.localeCompare(b.connection.id);
 }
 
-function resolveRosterAgentSubtitle(
-  connection: ConnectionDescriptor,
-): RosterAgentSubtitle | undefined {
-  if (connection.backendKind !== 'youmind') return undefined;
-  return Object.freeze({
-    kind: 'backend',
-    label: getGatewayBackendDescriptor(connection.backendKind).label,
-  });
-}
-
 function buildAgentSummary(
   agent: AgentDescriptor,
   sessions: ReadonlyArray<SessionDescriptor>,
   watermarks: SessionWatermarks,
   liveSignalsEnabled: boolean,
-  subtitle: RosterAgentSubtitle | undefined,
 ): RosterAgentSummary {
   const agentSessions = sessions.filter((session) => (
     session.connectionId === agent.connectionId && session.agentId === agent.agentId
@@ -317,7 +299,6 @@ function buildAgentSummary(
   return Object.freeze({
     agent,
     sessions: Object.freeze(agentSessions),
-    ...(subtitle ? { subtitle } : {}),
     ...(preview ? { preview } : {}),
     lastActivityAt: signals.lastActivityAt,
     unreadCount: mainUnreadCount,
@@ -335,7 +316,6 @@ export function aggregateRoster(
   const groups = inputs.map((input): RosterConnectionGroup => {
     const liveSignalsEnabled = input.source === 'live'
       && input.connection.id === activeConnectionId;
-    const subtitle = resolveRosterAgentSubtitle(input.connection);
     const watermarks = input.watermarks ?? {};
     const agents = input.agents
       .filter((agent) => agent.connectionId === input.connection.id)
@@ -344,7 +324,6 @@ export function aggregateRoster(
         input.sessions,
         watermarks,
         liveSignalsEnabled,
-        subtitle,
       ))
       .sort(compareAgentSummaries);
     const unreadCount = agents.reduce((total, agent) => total + agent.unreadCount, 0);

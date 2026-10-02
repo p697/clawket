@@ -76,7 +76,6 @@ function translateConfig(t: AccountSettingsTranslator, key: string): string {
   if (key === 'Unknown') return t('Unknown', { ns: 'config' });
   if (key === 'OpenClaw') return t('OpenClaw', { ns: 'config' });
   if (key === 'Hermes') return t('Hermes', { ns: 'config' });
-  if (key === 'YouMind Sprite') return t('YouMind Sprite', { ns: 'config' });
   if (key === 'Local model') return t('Local model', { ns: 'config' });
   if (key === 'Local') return t('Local', { ns: 'config' });
   if (key === 'Tailscale') return t('Tailscale', { ns: 'config' });

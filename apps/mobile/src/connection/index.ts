@@ -26,10 +26,7 @@ import { ChatCacheService } from '../services/chat-cache';
 import { CronFailureAckService } from '../services/cron-failure-acks';
 import { ThreadActivityCacheService } from '../services/thread-activity-cache';
 import { SessionPreferencesService } from '../services/session-preferences';
-import {
-  StorageService,
-  type YouMindAuthSession,
-} from '../services/storage';
+import { StorageService } from '../services/storage';
 
 import {
   ConnectionNotFoundError,
@@ -121,7 +118,7 @@ type ConnectionCronFailureAcksPort = Pick<typeof CronFailureAckService, 'clearCo
 type ConnectionThreadActivityCachePort = Pick<typeof ThreadActivityCacheService, 'clearConnection'>;
 type ConnectionCredentialStorePort = Pick<
   typeof StorageService,
-  'clearYouMindAuthSession' | 'deleteDeviceToken' | 'getIdentity'
+  'deleteDeviceToken' | 'getIdentity'
 >;
 type UnreadWatermarksPort = Pick<
   UnreadWatermarks,
@@ -156,15 +153,6 @@ export interface ConnectionTelemetry {
   ): void;
   reconnect(connection: ConnectionDescriptor, reason: ReconnectReason, diagnostic?: ReconnectDiagnostic): void;
 }
-
-type ConnectionIdentityDetailDependencies = Readonly<{
-  getRuntimeConnectionRecord: (connectionId: string) => Promise<ConnectionRecord>;
-  getYouMindAuthSession: (
-    url: string,
-    scopeKey?: string | null,
-    options?: { allowLegacyFallback?: boolean },
-  ) => Promise<YouMindAuthSession | null>;
-}>;
 
 type ConnectReason = 'launch' | 'switch' | 'foreground' | 'manual' | 'retry';
 type ReconnectReason = 'tick_timeout' | 'socket_close' | 'probe_failed' | 'seq_gap' | 'foreground';
@@ -605,27 +593,15 @@ export class ConnectionCoordinator {
 
   /**
    * Fresh-install reset, called before `start()`. Every connection takes the
-   * normal removal path (device tokens, caches, watermarks, queues), a YouMind
-   * record also drops its stored session, and finally the persisted registry
-   * — rollback copy included — is deleted so no credential outlives the app
-   * bundle. Device identity and the Pro entitlement record beside it are
+   * normal removal path (device tokens, caches, watermarks, queues), and
+   * finally the persisted registry — rollback copy included — is deleted so
+   * no credential outlives the app bundle. Device identity and the Pro entitlement record beside it are
    * deliberately untouched (docs/3.0/06-paywall-and-growth.md §宽限期).
    */
   async removeAllConnections(): Promise<number> {
     const { connections } = await this.store.load();
     let removed = 0;
     for (const { id } of connections) {
-      let record: ConnectionRecord | null = null;
-      try {
-        record = await this.store.getRuntimeRecord(id);
-      } catch {
-        record = null;
-      }
-      if (record?.backendKind === 'youmind') {
-        await this.credentialStore
-          .clearYouMindAuthSession(record.url, record.youmind?.authScopeKey ?? null)
-          .catch(() => undefined);
-      }
       if (await this.removeConnection(id)) removed += 1;
     }
     await this.store.clearPersisted();
@@ -633,8 +609,6 @@ export class ConnectionCoordinator {
   }
 
   private async clearConnectionDeviceTokens(record: ConnectionRecord): Promise<void> {
-    // HTTP-stream connections do not use Gateway device identities.
-    if (record.transportKind === 'https') return;
     const identity = await this.credentialStore.getIdentity();
     if (!identity) return;
     const baseScope = record.transportKind === 'relay'
@@ -1587,7 +1561,6 @@ const defaultAdapterFactory: ConnectionAdapterFactory = (
   context?: ConnectionAdapterFactoryContext,
 ) => createConnectionAdapter(record, descriptor, {
   onReconnect: context?.onReconnect,
-  onSpriteGreetingSent: () => analyticsEvents.spriteGreetingSent(),
 });
 
 let defaultCoordinator = ownConnectionRuntime(new ConnectionCoordinator({
@@ -1596,43 +1569,6 @@ let defaultCoordinator = ownConnectionRuntime(new ConnectionCoordinator({
 
 export function getConnectionRuntime(): ConnectionCoordinator {
   return defaultCoordinator;
-}
-
-/**
- * Reads the private, account-scoped identity detail needed by a mounted UI
- * route without adding it to the public connection or Agent descriptors.
- */
-export async function loadConnectionIdentityDetail(
-  connection: ConnectionDescriptor,
-  dependencies: ConnectionIdentityDetailDependencies = {
-    getRuntimeConnectionRecord: (connectionId) => (
-      getConnectionRuntime().getRuntimeConnectionRecord(connectionId)
-    ),
-    getYouMindAuthSession: (url, scopeKey, options) => (
-      StorageService.getYouMindAuthSession(url, scopeKey, options)
-    ),
-  },
-): Promise<string | undefined> {
-  if (connection.backendKind !== 'youmind') return undefined;
-
-  try {
-    const record = await dependencies.getRuntimeConnectionRecord(connection.id);
-    const authScopeKey = record.youmind?.authScopeKey.trim();
-    if (
-      record.id !== connection.id
-      || record.backendKind !== connection.backendKind
-      || !authScopeKey
-    ) {
-      return undefined;
-    }
-    const session = await dependencies.getYouMindAuthSession(
-      record.url,
-      authScopeKey,
-    );
-    return session?.user?.email?.trim() || undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 export function configureConnectionRuntime(
@@ -1710,13 +1646,6 @@ export type {
   BackendPayloadPairingInput,
   PairingBackendKind,
 } from './pairing/backend-pairing-profile';
-export { createYouMindOnboardingConnection } from './pairing/youmind-onboarding-profile';
-export type {
-  YouMindEmailAuthClient,
-  YouMindOnboardingAuthSession,
-  YouMindOnboardingConnection,
-  YouMindOnboardingResult,
-} from './pairing/youmind-onboarding-profile';
 
 function disposeAdapter(adapter: AgentAdapter): void {
   const disposable = adapter as AgentAdapter & { dispose?: () => void };

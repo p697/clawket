@@ -485,7 +485,7 @@ export function RosterView({
           : !activeConnectionOffline && item.working
           ? item.activity === 'thinking' ? t('Thinking…', { ns: 'chat' })
             : item.activity === 'tool' ? t('Using tool', { ns: 'chat' }) : t('Working')
-          : item.subtitle?.label ?? item.preview ?? t('No activity yet')}
+          : item.preview ?? t('No activity yet')}
         pinned={item.kind === 'agent' && item.agentPinned}
         platform={item.backendKind}
         platformBadge={backendMarks && item.kind === 'agent'}

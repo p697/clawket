@@ -62,6 +62,6 @@ describe('skill-discover-model', () => {
     ].join('\n'));
     expect(buildClawHubInstallPrompt('hermes', skill)).toContain('Command: hermes skills install skill-vetter');
     expect(buildClawHubInstallPrompt('hermes', skill)).not.toContain('openclaw');
-    expect(buildClawHubInstallPrompt('youmind', skill)).not.toContain('Command:');
+    expect(buildClawHubInstallPrompt('pi', skill)).not.toContain('Command:');
   });
 });

@@ -31,7 +31,6 @@ export type OnboardingWebsiteBackendKind = Exclude<BackendKind, 'local-model'>;
 export const ONBOARDING_WEBSITE_URLS: Readonly<Record<OnboardingWebsiteBackendKind, string>> = Object.freeze({
   openclaw: 'https://openclaw.ai',
   hermes: 'https://hermes-agent.nousresearch.com',
-  youmind: 'https://youmind.com',
   pi: 'https://pi.dev',
   codex: 'https://learn.chatgpt.com/codex',
   'claude-code': 'https://code.claude.com/docs/en/overview',
@@ -66,7 +65,6 @@ export function normalizePairableBackendKind(
   const normalized: Readonly<Record<BackendKind, PairableBackendKind>> = {
     openclaw: 'openclaw',
     hermes: 'hermes',
-    youmind: 'openclaw',
     'local-model': 'local-model',
     pi: 'pi',
     codex: 'codex',

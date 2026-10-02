@@ -1,12 +1,11 @@
-export type BackendKind = 'openclaw' | 'hermes' | 'youmind' | 'local-model' | 'pi' | 'codex' | 'claude-code';
+export type BackendKind = 'openclaw' | 'hermes' | 'local-model' | 'pi' | 'codex' | 'claude-code';
 
 export type TransportKind =
   | 'relay'
   | 'local'
   | 'tailscale'
   | 'cloudflare'
-  | 'custom'
-  | 'https';
+  | 'custom';
 
 export type ServiceEnvironment = 'production' | 'preview';
 
@@ -47,7 +46,6 @@ export interface ConnectionRecord {
   bootstrap?: OpenClawBootstrapConfig;
   relay?: RelayGatewayConfig;
   hermes?: HermesGatewayConfig;
-  youmind?: { authScopeKey: string };
   debugMode?: boolean;
 }
 

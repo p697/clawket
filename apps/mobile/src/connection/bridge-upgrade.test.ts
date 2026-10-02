@@ -11,7 +11,7 @@ it('classifies authenticated old and current Bridge handshakes for both backends
 });
 it('never asks direct OpenClaw, other backends, or unverified saved connections to upgrade', () => {
   for (const transportKind of ['local', 'tailscale', 'cloudflare', 'custom'] as const) expect(classifyBridge({ ...old, transportKind }, '0.7.0', [])).toBeUndefined();
-  for (const backendKind of ['youmind', 'local-model'] as const) expect(classifyBridge({ ...old, backendKind }, null, [])).toBeUndefined();
+  for (const backendKind of ['local-model'] as const) expect(classifyBridge({ ...old, backendKind }, null, [])).toBeUndefined();
   expect(bridgeUpgradeIds([old], {}, {})).toEqual([]);
 });
 it('keeps verified old offline connections but clears upgraded and removed ones', () => {

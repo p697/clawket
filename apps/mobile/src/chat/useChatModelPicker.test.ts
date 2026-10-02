@@ -35,7 +35,7 @@ type ModelOpsFixture = {
 
 function createAdapter(fixture: ModelOpsFixture = {}) {
   const backendKind = fixture.backendKind ?? 'openclaw';
-  const transportKinds = { openclaw: 'relay', hermes: 'relay', 'local-model': 'relay', pi: 'relay', codex: 'relay', 'claude-code': 'relay', youmind: 'https' } as const;
+  const transportKinds = { openclaw: 'relay', hermes: 'relay', 'local-model': 'relay', pi: 'relay', codex: 'relay', 'claude-code': 'relay' } as const;
   const modelOps = {
     ...(fixture.list ? { list: fixture.list } : {}),
     ...(fixture.getSelection ? { getSelection: fixture.getSelection } : {}),

@@ -183,9 +183,6 @@ export const ANALYTICS_EVENT_PROPERTY_WHITELIST = Object.freeze({
   release_notes_opened: ['release_count'],
   grace_banner_viewed: ['days_left'],
   grace_expired: ['days_left'],
-  youmind_sign_in_tapped: ['method', 'source'],
-  youmind_sign_in_resolved: ['method', 'result', 'source'],
-  sprite_greeting_sent: [],
   app_rating_tapped: ['source', 'result'],
 
   // Existing, still-supported product telemetry referenced by 04-app-screens.
@@ -283,7 +280,6 @@ function buildPaywallPackageProperties(pkg: PaywallPackageSummary): AnalyticsPro
 
 function legacyBackend(mode: string | undefined): AnalyticsBackend | undefined {
   if (mode === 'hermes') return 'hermes';
-  if (mode === 'https') return 'youmind';
   if (mode === 'relay' || mode === 'local' || mode === 'tailscale' || mode === 'cloudflare' || mode === 'custom') {
     return 'openclaw';
   }
@@ -291,7 +287,7 @@ function legacyBackend(mode: string | undefined): AnalyticsBackend | undefined {
 }
 
 function legacyTransport(mode: string | undefined): AnalyticsTransport | undefined {
-  if (mode === 'relay' || mode === 'local' || mode === 'tailscale' || mode === 'cloudflare' || mode === 'custom' || mode === 'https') {
+  if (mode === 'relay' || mode === 'local' || mode === 'tailscale' || mode === 'cloudflare' || mode === 'custom') {
     return mode;
   }
   return undefined;
@@ -655,22 +651,6 @@ export const analyticsEvents = {
 
   graceExpired(properties: { days_left: number }): void {
     captureAnalyticsEvent('grace_expired', properties);
-  },
-
-  youMindSignInTapped(properties: { method: 'email'; source: string }): void {
-    captureAnalyticsEvent('youmind_sign_in_tapped', properties);
-  },
-
-  youMindSignInResolved(properties: {
-    method: 'email';
-    result: 'success' | 'failure' | 'cancel';
-    source: string;
-  }): void {
-    captureAnalyticsEvent('youmind_sign_in_resolved', properties);
-  },
-
-  spriteGreetingSent(): void {
-    captureAnalyticsEvent('sprite_greeting_sent');
   },
 
   appRatingTapped(properties: {

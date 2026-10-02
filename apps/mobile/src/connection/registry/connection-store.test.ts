@@ -44,11 +44,11 @@ class MemorySecureStorage implements SecureConnectionStorage {
 
 function legacyStorage(state: GatewayConfigsState = { activeId: null, configs: [] }): LegacyConnectionStorage & {
   readLegacyGatewayConfigsState: jest.Mock<Promise<GatewayConfigsState>, []>;
-  migrateLegacyYouMindState: jest.Mock<Promise<void>, [string, string]>;
+  clearRetiredYouMindState: jest.Mock<Promise<void>, [string, string]>;
 } {
   return {
     readLegacyGatewayConfigsState: jest.fn(async () => state),
-    migrateLegacyYouMindState: jest.fn(async (_url: string, _scopeKey: string) => undefined),
+    clearRetiredYouMindState: jest.fn(async (_url: string, _scopeKey: string) => undefined),
   };
 }
 
@@ -69,152 +69,113 @@ function openClawInput(label: string, token = `${label}-token`) {
   };
 }
 
-function youMindRecord(id: string, label: string): ConnectionRecord {
+function openClawRecord(id: string): ConnectionRecord {
+  return {
+    id,
+    backendKind: 'openclaw',
+    transportKind: 'local',
+    label: id,
+    createdAt: 1,
+    url: 'ws://127.0.0.1:18789',
+  };
+}
+
+/** A YouMind connection saved before support ended (2026-10-02); the record type no longer admits it. */
+function retiredYouMindRecord(id: string): Record<string, unknown> {
   return {
     id,
     backendKind: 'youmind',
     transportKind: 'https',
-    label,
+    label: 'YouMind',
     createdAt: 1,
     url: 'https://youmind.com',
-    youmind: { authScopeKey: id },
+    youmind: { authScopeKey: `scope-${id}` },
   };
 }
 
 function persistedRegistry(
-  records: ReadonlyArray<ConnectionRecord>,
+  records: ReadonlyArray<ConnectionRecord | Record<string, unknown>>,
   revision = 1,
+  pointers: Readonly<{ active?: string | null; free?: string | null }> = {},
 ): string {
-  const activeConnectionId = records[0]?.id ?? null;
+  const first = (records[0]?.id as string | undefined) ?? null;
+  const activeConnectionId = pointers.active === undefined ? first : pointers.active;
   return JSON.stringify({
     version: 1,
     revision,
     state: {
       activeConnectionId,
-      freeConnectionId: activeConnectionId,
+      freeConnectionId: pointers.free === undefined ? activeConnectionId : pointers.free,
       records,
     },
   });
 }
 
 describe('ConnectionStore', () => {
-  it('sanitizes only the exact legacy YouMind email label in current records and re-pairs', async () => {
+  it('drops saved YouMind connections, moves the pointers as removal does, and deletes their sign-ins once', async () => {
     const secureStorage = new MemorySecureStorage();
-    const records: ConnectionRecord[] = [
-      youMindRecord('auto-email', 'YouMind (owner+one@example.com)'),
-      youMindRecord('custom-name', 'YouMind (Studio)'),
-      youMindRecord('custom-local-address', 'YouMind (owner@local)'),
-      youMindRecord('custom-suffix', 'YouMind (owner@example.com) personal'),
-      {
-        id: 'other-backend',
-        backendKind: 'openclaw',
-        transportKind: 'local',
-        label: 'YouMind (owner@example.com)',
-        createdAt: 1,
-        url: 'ws://127.0.0.1:18789',
-      },
-    ];
-    secureStorage.values.set(CURRENT_KEY, persistedRegistry(records, 7));
-    const store = new ConnectionStore({
-      secureStorage,
-      legacyStorage: legacyStorage(),
-    });
+    secureStorage.values.set(CURRENT_KEY, persistedRegistry([
+      retiredYouMindRecord('sprite'),
+      openClawRecord('alpha'),
+      // The HTTPS stream transport existed only for YouMind, so it retires on its own too.
+      { ...retiredYouMindRecord('sprite-2'), backendKind: 'openclaw' },
+      openClawRecord('beta'),
+    ], 7, { active: 'sprite', free: 'sprite' }));
+    const legacy = legacyStorage();
+    const store = new ConnectionStore({ secureStorage, legacyStorage: legacy });
 
-    await expect(store.load()).resolves.toMatchObject({
-      revision: 7,
-      connections: [
-        expect.objectContaining({ id: 'auto-email', label: 'YouMind' }),
-        expect.objectContaining({ id: 'custom-name', label: 'YouMind (Studio)' }),
-        expect.objectContaining({ id: 'custom-local-address', label: 'YouMind (owner@local)' }),
-        expect.objectContaining({ id: 'custom-suffix', label: 'YouMind (owner@example.com) personal' }),
-        expect.objectContaining({ id: 'other-backend', label: 'YouMind (owner@example.com)' }),
-      ],
-    });
+    const loaded = await store.load();
 
-    const repaired = await store.upsert({
-      id: 'auto-email',
-      backendKind: 'youmind',
-      transportKind: 'https',
-      label: 'YouMind',
-      url: 'https://youmind.com',
-      youmind: { authScopeKey: 'replacement-scope' },
-    });
-    expect(repaired).toMatchObject({
-      created: false,
-      connection: { id: 'auto-email', label: 'YouMind' },
-    });
-    const persisted = JSON.parse(secureStorage.values.get(CURRENT_KEY) ?? '{}');
-    expect(persisted.state.records[0]).toMatchObject({
-      id: 'auto-email',
-      label: 'YouMind',
-      youmind: { authScopeKey: 'replacement-scope' },
-    });
+    expect(loaded).toMatchObject({ revision: 8, activeConnectionId: 'alpha', freeConnectionId: 'alpha' });
+    expect(loaded.connections.map((connection) => connection.id)).toEqual(['alpha', 'beta']);
+    expect(loaded.connections[0]?.isFreeSlot).toBe(true);
+    expect(legacy.clearRetiredYouMindState.mock.calls).toEqual([
+      ['https://youmind.com', 'scope-sprite'],
+      ['https://youmind.com', 'scope-sprite-2'],
+    ]);
+    for (const key of [CURRENT_KEY, ROLLBACK_KEY]) {
+      const persisted = JSON.parse(secureStorage.values.get(key) ?? '{}');
+      expect(persisted.state.records.map((record: ConnectionRecord) => record.id)).toEqual(['alpha', 'beta']);
+      expect(secureStorage.values.get(key)).not.toContain('youmind');
+    }
+
+    const repeatLegacy = legacyStorage();
+    repeatLegacy.clearRetiredYouMindState.mockRejectedValue(new Error('YouMind cleanup must not repeat'));
+    const restarted = new ConnectionStore({ secureStorage, legacyStorage: repeatLegacy });
+    await expect(restarted.load()).resolves.toEqual(loaded);
+    expect(repeatLegacy.clearRetiredYouMindState).not.toHaveBeenCalled();
   });
 
-  it('sanitizes an exact legacy YouMind email label restored from rollback', async () => {
+  it('leaves an empty registry when YouMind was the only connection, even if its sign-in cannot be deleted', async () => {
     const secureStorage = new MemorySecureStorage();
-    secureStorage.values.set(
-      CURRENT_KEY,
-      persistedRegistry([youMindRecord('current', 'Current Sprite')], 2),
-    );
-    secureStorage.values.set(
-      ROLLBACK_KEY,
-      persistedRegistry([youMindRecord('previous', 'YouMind (previous@example.com)')]),
-    );
-    const store = new ConnectionStore({
-      secureStorage,
-      legacyStorage: legacyStorage(),
+    secureStorage.values.set(CURRENT_KEY, persistedRegistry([retiredYouMindRecord('only')], 3));
+    const legacy = legacyStorage();
+    legacy.clearRetiredYouMindState.mockRejectedValue(new Error('keychain unavailable'));
+    const store = new ConnectionStore({ secureStorage, legacyStorage: legacy });
+
+    await expect(store.load()).resolves.toMatchObject({
+      revision: 4,
+      activeConnectionId: null,
+      freeConnectionId: null,
+      connections: [],
     });
+    expect(legacy.clearRetiredYouMindState).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(secureStorage.values.get(CURRENT_KEY) ?? '{}').state.records).toEqual([]);
+  });
+
+  it('never restores a YouMind connection from the rollback copy', async () => {
+    const secureStorage = new MemorySecureStorage();
+    secureStorage.values.set(CURRENT_KEY, persistedRegistry([openClawRecord('current')], 2));
+    secureStorage.values.set(ROLLBACK_KEY, persistedRegistry([retiredYouMindRecord('previous'), openClawRecord('beta')]));
+    const store = new ConnectionStore({ secureStorage, legacyStorage: legacyStorage() });
     await store.load();
 
     const rolledBack = await store.rollback();
 
-    expect(rolledBack.connections).toEqual([
-      expect.objectContaining({ id: 'previous', label: 'YouMind' }),
-    ]);
-    const persisted = JSON.parse(secureStorage.values.get(CURRENT_KEY) ?? '{}');
-    expect(persisted.state.records[0]).toMatchObject({ id: 'previous', label: 'YouMind' });
-  });
-
-  it('sanitizes an exact legacy YouMind email label before persisting migration', async () => {
-    const secureStorage = new MemorySecureStorage();
-    const legacy = legacyStorage({
-      activeId: 'legacy-email',
-      configs: [
-        {
-          id: 'legacy-email',
-          name: 'YouMind (legacy@example.com)',
-          backendKind: 'youmind',
-          transportKind: 'custom',
-          mode: 'custom',
-          url: 'https://youmind.com',
-          createdAt: 1,
-          updatedAt: 1,
-        },
-        {
-          id: 'legacy-custom',
-          name: 'My YouMind (legacy@example.com)',
-          backendKind: 'youmind',
-          transportKind: 'custom',
-          mode: 'custom',
-          url: 'https://youmind.com',
-          createdAt: 2,
-          updatedAt: 2,
-        },
-      ],
-    });
-    const store = new ConnectionStore({ secureStorage, legacyStorage: legacy });
-
-    const migrated = await store.load();
-
-    expect(migrated.connections).toEqual([
-      expect.objectContaining({ id: 'legacy-email', label: 'YouMind' }),
-      expect.objectContaining({ id: 'legacy-custom', label: 'My YouMind (legacy@example.com)' }),
-    ]);
-    const persisted = JSON.parse(secureStorage.values.get(CURRENT_KEY) ?? '{}');
-    expect(persisted.state.records.map((record: ConnectionRecord) => record.label)).toEqual([
-      'YouMind',
-      'My YouMind (legacy@example.com)',
+    expect(rolledBack.connections.map((connection) => connection.id)).toEqual(['beta']);
+    expect(rolledBack.activeConnectionId).toBe('beta');
+    expect(JSON.parse(secureStorage.values.get(CURRENT_KEY) ?? '{}').state.records).toEqual([
+      expect.objectContaining({ id: 'beta' }),
     ]);
   });
 
@@ -250,11 +211,6 @@ describe('ConnectionStore', () => {
         environment: 'preview',
         isFreeSlot: true,
       }),
-      expect.objectContaining({
-        id: 'youmind-default',
-        backendKind: 'youmind',
-        transportKind: 'https',
-      }),
     ]);
     expect(JSON.stringify(first)).not.toContain('sanitized-openclaw-token');
     expect(JSON.stringify(first)).not.toContain('gct_sanitized_openclaw');
@@ -272,12 +228,10 @@ describe('ConnectionStore', () => {
       hermes: { bridgeUrl: 'ws://127.0.0.1:8789/v1/hermes/ws' },
       debugMode: true,
     });
-    expect(persisted.state.records[2]).toMatchObject({
-      transportKind: 'https',
-      youmind: { authScopeKey: 'youmind:sanitized@example.invalid' },
-    });
-    expect(legacy.migrateLegacyYouMindState).toHaveBeenCalledTimes(1);
-    expect(legacy.migrateLegacyYouMindState).toHaveBeenCalledWith(
+    // The released 2.1 data still carries a YouMind configuration: it is dropped and its sign-in deleted.
+    expect(persisted.state.records).toHaveLength(2);
+    expect(legacy.clearRetiredYouMindState).toHaveBeenCalledTimes(1);
+    expect(legacy.clearRetiredYouMindState).toHaveBeenCalledWith(
       'https://youmind.com',
       'youmind:sanitized@example.invalid',
     );
@@ -288,8 +242,8 @@ describe('ConnectionStore', () => {
       readLegacyGatewayConfigsState: jest.fn(async () => {
         throw new Error('legacy migration must not repeat');
       }),
-      migrateLegacyYouMindState: jest.fn(async () => {
-        throw new Error('YouMind migration must not repeat');
+      clearRetiredYouMindState: jest.fn(async () => {
+        throw new Error('YouMind cleanup must not repeat');
       }),
     };
     const restarted = new ConnectionStore({ secureStorage, legacyStorage: forbiddenLegacy });
@@ -297,44 +251,41 @@ describe('ConnectionStore', () => {
     expect(forbiddenLegacy.readLegacyGatewayConfigsState).not.toHaveBeenCalled();
   });
 
-  it('retries the initial registry migration when legacy YouMind auth migration fails', async () => {
+  it('drops pre-3.0 YouMind configurations from migration and deletes their sign-ins', async () => {
     const secureStorage = new MemorySecureStorage();
-    const legacy = legacyStorage({
+    const state: GatewayConfigsState = {
       activeId: 'legacy-sprite',
       configs: [{
         id: 'legacy-sprite',
         name: 'Legacy sprite',
-        backendKind: 'youmind',
+        backendKind: 'youmind' as never,
         transportKind: 'custom',
         mode: 'custom',
         url: 'https://youmind.example.test',
         createdAt: 10,
         updatedAt: 20,
+      }, {
+        id: 'legacy-local',
+        name: 'Studio',
+        backendKind: 'openclaw',
+        transportKind: 'local',
+        mode: 'local',
+        url: 'ws://studio.local:18789',
+        createdAt: 30,
+        updatedAt: 40,
       }],
-    });
-    legacy.migrateLegacyYouMindState
-      .mockRejectedValueOnce(new Error('legacy auth copy failed'))
-      .mockResolvedValue(undefined);
+    };
+    secureStorage.values.set(LEGACY_KEY, JSON.stringify(state));
+    const legacy = legacyStorage(state);
     const store = new ConnectionStore({ secureStorage, legacyStorage: legacy });
 
-    await expect(store.load()).rejects.toThrow('legacy auth copy failed');
-    expect(secureStorage.values.has(CURRENT_KEY)).toBe(false);
-    expect(secureStorage.values.has(ROLLBACK_KEY)).toBe(false);
-
     await expect(store.load()).resolves.toMatchObject({
-      activeConnectionId: 'legacy-sprite',
-      connections: [expect.objectContaining({
-        id: 'legacy-sprite',
-        backendKind: 'youmind',
-      })],
+      activeConnectionId: 'legacy-local',
+      freeConnectionId: 'legacy-local',
+      connections: [expect.objectContaining({ id: 'legacy-local', backendKind: 'openclaw' })],
     });
-    expect(legacy.migrateLegacyYouMindState).toHaveBeenCalledTimes(2);
-    expect(legacy.migrateLegacyYouMindState).toHaveBeenLastCalledWith(
-      'https://youmind.example.test',
-      'cfg:legacy-sprite',
-    );
-    expect(secureStorage.values.has(CURRENT_KEY)).toBe(true);
-    expect(secureStorage.values.has(ROLLBACK_KEY)).toBe(true);
+    expect(legacy.clearRetiredYouMindState).toHaveBeenCalledWith('https://youmind.example.test', 'cfg:legacy-sprite');
+    expect(secureStorage.values.get(CURRENT_KEY)).not.toContain('youmind');
   });
 
   it('keeps exactly one active connection while preserving the independently selected free slot', async () => {

@@ -118,19 +118,6 @@ export type DeviceTokenRecord = {
   updatedAtMs: number;
 };
 
-export type YouMindAuthSession = {
-  accessToken: string;
-  refreshToken: string;
-  expiresIn: number;
-  createdAtMs: number;
-  user?: {
-    id?: string;
-    email?: string;
-    name?: string;
-    avatarUrl?: string;
-  } | null;
-};
-
 type ProSubscriptionCacheEntry = {
   snapshot: ProSubscriptionSnapshot;
   cachedAtMs: number;
@@ -192,6 +179,8 @@ function cachedAgentIdentityStorageKey(scopeId: string, agentId: string): string
   return `${KEYS.cachedAgentIdentityPrefix}.${scopeId}::${agentId}`;
 }
 
+// YouMind support ended (owner decision 2026-10-02). Only its storage keys
+// remain, so an upgrade can delete the sign-ins its connections left behind.
 function normalizeYouMindScope(url: string): string {
   const trimmed = url.trim();
   if (!trimmed) return 'default';
@@ -323,44 +312,6 @@ function normalizeLastOpenedSessionSnapshot(value: unknown): LastOpenedSessionSn
     agentName: agentName || undefined,
     agentEmoji: agentEmoji || undefined,
     agentAvatarUri: agentAvatarUri || undefined,
-  };
-}
-
-function normalizeYouMindAuthSession(value: unknown): YouMindAuthSession | null {
-  if (!value || typeof value !== 'object') return null;
-  const record = value as Record<string, unknown>;
-  const accessToken = typeof record.accessToken === 'string' ? record.accessToken.trim() : '';
-  const refreshToken = typeof record.refreshToken === 'string' ? record.refreshToken.trim() : '';
-  const expiresIn = typeof record.expiresIn === 'number' && Number.isFinite(record.expiresIn)
-    ? record.expiresIn
-    : 0;
-  const createdAtMs = typeof record.createdAtMs === 'number' && Number.isFinite(record.createdAtMs)
-    ? record.createdAtMs
-    : 0;
-  if (!accessToken || !refreshToken || expiresIn <= 0 || createdAtMs <= 0) return null;
-  const rawUser = record.user;
-  const user = rawUser && typeof rawUser === 'object'
-    ? {
-      id: typeof (rawUser as Record<string, unknown>).id === 'string'
-        ? ((rawUser as Record<string, unknown>).id as string).trim() || undefined
-        : undefined,
-      email: typeof (rawUser as Record<string, unknown>).email === 'string'
-        ? ((rawUser as Record<string, unknown>).email as string).trim() || undefined
-        : undefined,
-      name: typeof (rawUser as Record<string, unknown>).name === 'string'
-        ? ((rawUser as Record<string, unknown>).name as string).trim() || undefined
-        : undefined,
-      avatarUrl: typeof (rawUser as Record<string, unknown>).avatarUrl === 'string'
-        ? ((rawUser as Record<string, unknown>).avatarUrl as string).trim() || undefined
-        : undefined,
-    }
-    : undefined;
-  return {
-    accessToken,
-    refreshToken,
-    expiresIn,
-    createdAtMs,
-    user: user ?? null,
   };
 }
 
@@ -522,6 +473,8 @@ function normalizeProfiles(value: unknown): GatewayProfilesConfig | null {
 function normalizeSavedGatewayConfig(value: unknown): SavedGatewayConfig | null {
   if (!value || typeof value !== 'object') return null;
   const record = value as Record<string, unknown>;
+  // Retired YouMind configurations would otherwise read as OpenClaw.
+  if (record.backendKind === 'youmind') return null;
   const id = typeof record.id === 'string' ? record.id.trim() : '';
   const name = typeof record.name === 'string' ? record.name.trim() : '';
   const mode = normalizeMode(record.mode);
@@ -692,82 +645,13 @@ export const StorageService = {
     await SecureStore.deleteItemAsync(KEYS.gatewayConfigsState, SECURE_OPTIONS);
   },
 
-  async setYouMindAuthSession(url: string, session: YouMindAuthSession, scopeKey?: string | null): Promise<void> {
-    await setJson(youmindAuthStorageKey(url, scopeKey), session);
-  },
-
-  async getYouMindAuthSession(
-    url: string,
-    scopeKey?: string | null,
-    options?: { allowLegacyFallback?: boolean },
-  ): Promise<YouMindAuthSession | null> {
-    const primaryKey = youmindAuthStorageKey(url, scopeKey);
-    const value = await getJson<unknown>(primaryKey);
-    if (value != null) {
-      return normalizeYouMindAuthSession(value);
-    }
-
-    const prefixedScopeKey = youmindPrefixedScopeAuthStorageKey(url, scopeKey);
-    if (prefixedScopeKey) {
-      const prefixedValue = await getJson<unknown>(prefixedScopeKey);
-      const normalizedPrefixed = normalizeYouMindAuthSession(prefixedValue);
-      if (normalizedPrefixed) {
-        await setJson(primaryKey, normalizedPrefixed);
-        return normalizedPrefixed;
-      }
-    }
-
-    if (options?.allowLegacyFallback && scopeKey?.trim()) {
-      const legacyValue = await getJson<unknown>(youmindLegacyAuthStorageKey(url));
-      return normalizeYouMindAuthSession(legacyValue);
-    }
-    return null;
-  },
-
-  async clearYouMindAuthSession(url: string, scopeKey?: string | null): Promise<void> {
-    await SecureStore.deleteItemAsync(youmindAuthStorageKey(url, scopeKey), SECURE_OPTIONS);
-    const prefixedScopeKey = youmindPrefixedScopeAuthStorageKey(url, scopeKey);
-    if (prefixedScopeKey) {
-      await SecureStore.deleteItemAsync(prefixedScopeKey, SECURE_OPTIONS);
-    }
-  },
-
-  async migrateLegacyYouMindState(url: string, scopeKey: string): Promise<void> {
-    const normalizedScope = scopeKey.trim();
-    if (!normalizedScope) return;
-
-    const scopedSessionKey = youmindAuthStorageKey(url, normalizedScope);
-    const prefixedScopedSessionKey = youmindPrefixedScopeAuthStorageKey(url, normalizedScope);
-    const legacySessionKey = youmindLegacyAuthStorageKey(url);
-    const [scopedSession, prefixedScopedSession, legacySession] = await Promise.all([
-      getJson<unknown>(scopedSessionKey),
-      prefixedScopedSessionKey ? getJson<unknown>(prefixedScopedSessionKey) : Promise.resolve(null),
-      getJson<unknown>(legacySessionKey),
-    ]);
-    if (scopedSession == null && prefixedScopedSession != null) {
-      await setJson(scopedSessionKey, prefixedScopedSession);
-    } else if (scopedSession == null && legacySession != null) {
-      await setJson(scopedSessionKey, legacySession);
-    }
-
-  },
-
-  async setYouMindDeviceId(deviceId: string): Promise<void> {
-    const normalized = deviceId.trim();
-    if (!normalized) {
-      await AsyncStorage.removeItem(KEYS.youmindDeviceId);
-      return;
-    }
-    await AsyncStorage.setItem(KEYS.youmindDeviceId, normalized);
-  },
-
-  async getYouMindDeviceId(): Promise<string | null> {
-    const value = await AsyncStorage.getItem(KEYS.youmindDeviceId);
-    const normalized = value?.trim();
-    return normalized || null;
-  },
-
-  async clearYouMindDeviceId(): Promise<void> {
+  async clearRetiredYouMindState(url: string, scopeKey: string): Promise<void> {
+    const keys = [
+      youmindAuthStorageKey(url, scopeKey),
+      youmindPrefixedScopeAuthStorageKey(url, scopeKey),
+      youmindLegacyAuthStorageKey(url),
+    ].filter((key): key is string => key !== null);
+    for (const key of new Set(keys)) await SecureStore.deleteItemAsync(key, SECURE_OPTIONS);
     await AsyncStorage.removeItem(KEYS.youmindDeviceId);
   },
 

@@ -631,42 +631,6 @@ describe('RosterScreen', () => {
     expect(view.getByTestId('roster-row-agent:cc:main').props.accessibilityLabel).not.toContain('Claude Code, Claude Code');
   });
 
-  it('renders the registry-provided semantic subtitle instead of the latest session preview', () => {
-    const source = group('sprite');
-    mockRoster = [{
-      ...source,
-      connection: {
-        ...source.connection,
-        backendKind: 'youmind',
-        transportKind: 'https',
-      },
-      agents: source.agents.map((summary, index) => index === 0
-        ? {
-            ...summary,
-            agent: {
-              ...summary.agent,
-              emoji: undefined,
-              avatarUrl: 'https://cdn.example.invalid/sprite.png',
-            },
-            subtitle: { kind: 'backend' as const, label: 'YouMind' },
-          }
-        : summary),
-    }];
-    mockConnections = snapshot({
-      connections: [mockRoster[0].connection],
-      activeConnectionId: 'sprite',
-      roster: mockRoster,
-    });
-
-    const view = render(<RosterScreen {...props()} />);
-
-    expect(view.getByText('YouMind')).toBeTruthy();
-    expect(view.getByTestId('roster-row-agent:sprite:main-avatar-image').props.source).toEqual({
-      uri: 'https://cdn.example.invalid/sprite.png',
-    });
-    expect(view.queryByText('Needs approval')).toBeNull();
-  });
-
   it('keeps cached activity time visible and localizes sync metadata for accessibility', () => {
     const now = Date.now();
     mockCommonTranslations = {

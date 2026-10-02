@@ -4,7 +4,6 @@ import {
   type AgentAdapter,
   type AgentDescriptor,
   type ConnectionDescriptor,
-  type ConnectionRecord,
   type ConnectionState,
   type SessionDescriptor,
 } from '@clawket/agent-protocol';
@@ -18,7 +17,6 @@ import { RosterCache, type RosterCacheStorage } from './registry/roster-cache';
 import { UnreadWatermarks } from './registry/unread-watermarks';
 import {
   ConnectionCoordinator,
-  loadConnectionIdentityDetail,
   type ConnectionCoordinatorOptions,
   type ConnectionTelemetry,
 } from './index';
@@ -69,7 +67,7 @@ const legacyStorage: LegacyConnectionStorage = {
   async readLegacyGatewayConfigsState() {
     return { activeId: null, configs: [] };
   },
-  async migrateLegacyYouMindState() {},
+  async clearRetiredYouMindState() {},
 };
 
 function connectionInput(id: string) {
@@ -735,69 +733,6 @@ describe('ConnectionCoordinator', () => {
     ).rejects.toBeInstanceOf(Error);
   });
 
-  it('reads only the authenticated YouMind email for runtime identity detail', async () => {
-    const descriptor: ConnectionDescriptor = {
-      id: 'youmind-account',
-      backendKind: 'youmind',
-      transportKind: 'https',
-      label: 'YouMind',
-      createdAt: 1,
-      isFreeSlot: true,
-    };
-    const record: ConnectionRecord = {
-      ...descriptor,
-      url: 'https://youmind.example.invalid',
-      youmind: { authScopeKey: 'account-scope' },
-    };
-    const getRuntimeConnectionRecord = jest.fn(async () => record);
-    const getYouMindAuthSession = jest.fn(async () => ({
-      accessToken: 'private-access-token',
-      refreshToken: 'private-refresh-token',
-      expiresIn: 3_600,
-      createdAtMs: 1,
-      user: {
-        id: 'private-user-id',
-        email: '  owner@example.com  ',
-        name: 'Private name',
-      },
-    }));
-
-    await expect(loadConnectionIdentityDetail(descriptor, {
-      getRuntimeConnectionRecord,
-      getYouMindAuthSession,
-    })).resolves.toBe('owner@example.com');
-    expect(getRuntimeConnectionRecord).toHaveBeenCalledWith('youmind-account');
-    expect(getYouMindAuthSession).toHaveBeenCalledWith(
-      'https://youmind.example.invalid',
-      'account-scope',
-    );
-    expect(descriptor).not.toHaveProperty('email');
-    expect(JSON.stringify(descriptor)).not.toContain('owner@example.com');
-  });
-
-  it.each(['openclaw', 'hermes'] as const)(
-    'does not read private identity state for %s',
-    async (backendKind) => {
-      const descriptor: ConnectionDescriptor = {
-        id: `${backendKind}-account`,
-        backendKind,
-        transportKind: 'relay',
-        label: backendKind,
-        createdAt: 1,
-        isFreeSlot: true,
-      };
-      const getRuntimeConnectionRecord = jest.fn();
-      const getYouMindAuthSession = jest.fn();
-
-      await expect(loadConnectionIdentityDetail(descriptor, {
-        getRuntimeConnectionRecord,
-        getYouMindAuthSession,
-      })).resolves.toBeUndefined();
-      expect(getRuntimeConnectionRecord).not.toHaveBeenCalled();
-      expect(getYouMindAuthSession).not.toHaveBeenCalled();
-    },
-  );
-
   it('keeps real adapter credentials out of the published runtime snapshot', async () => {
     const { store } = await createStoreHarness();
     await store.update('alpha', {
@@ -1136,7 +1071,6 @@ describe('ConnectionCoordinator', () => {
     const deleteDeviceToken = jest.fn(async () => undefined);
     const harness = await createHarness(true, {}, {
       credentialStore: {
-        clearYouMindAuthSession: async () => undefined,
         getIdentity: async () => ({
           deviceId: 'device-1',
           publicKeyHex: 'public',
@@ -1166,7 +1100,6 @@ describe('ConnectionCoordinator', () => {
     const deleteDeviceToken = jest.fn(async () => undefined);
     const harness = await createHarness(true, {}, {
       credentialStore: {
-        clearYouMindAuthSession: async () => undefined,
         getIdentity: async () => ({
           deviceId: 'device-1',
           publicKeyHex: 'public',
@@ -1196,10 +1129,8 @@ describe('ConnectionCoordinator', () => {
 
   it('removeAllConnections forgets every record, its credentials and the persisted registry before start', async () => {
     const deleteDeviceToken = jest.fn(async () => undefined);
-    const clearYouMindAuthSession = jest.fn(async () => undefined);
     const harness = await createHarness(true, {}, {
       credentialStore: {
-        clearYouMindAuthSession,
         getIdentity: async () => ({
           deviceId: 'device-1',
           publicKeyHex: 'public',
@@ -1209,28 +1140,18 @@ describe('ConnectionCoordinator', () => {
         deleteDeviceToken,
       },
     });
-    await harness.store.add({
-      id: 'youmind-account',
-      backendKind: 'youmind',
-      transportKind: 'https',
-      label: 'YouMind',
-      url: 'https://youmind.example.invalid',
-      youmind: { authScopeKey: 'account-scope' },
-    });
     await harness.cache.set('alpha', [agent('alpha')], []);
     expect(harness.secureStorage.has('clawket.connectionRegistry.v1')).toBe(true);
 
-    await expect(harness.coordinator.removeAllConnections()).resolves.toBe(3);
+    await expect(harness.coordinator.removeAllConnections()).resolves.toBe(2);
 
-    // Operator + node tokens for both Relay records; the HTTPS record has none.
+    // Operator + node tokens for both Relay records.
     expect(deleteDeviceToken).toHaveBeenCalledTimes(4);
     expect(deleteDeviceToken).toHaveBeenCalledWith('device-1', {
       serverUrl: 'https://alpha.example',
       gatewayId: 'gw_alpha',
       role: 'node',
     });
-    expect(clearYouMindAuthSession).toHaveBeenCalledTimes(1);
-    expect(clearYouMindAuthSession).toHaveBeenCalledWith('https://youmind.example.invalid', 'account-scope');
     expect(harness.secureStorage.has('clawket.connectionRegistry.v1')).toBe(false);
     expect(harness.secureStorage.has('clawket.connectionRegistry.rollback.v1')).toBe(false);
     await expect(harness.cache.getMany(['alpha'])).resolves.toEqual([]);
@@ -1248,7 +1169,6 @@ describe('ConnectionCoordinator', () => {
   it('keeps a committed removal and reports device-token cleanup failure', async () => {
     const harness = await createHarness(true, {}, {
       credentialStore: {
-        clearYouMindAuthSession: async () => undefined,
         getIdentity: async () => ({
           deviceId: 'device-1',
           publicKeyHex: 'public',

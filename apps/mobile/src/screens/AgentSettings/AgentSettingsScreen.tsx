@@ -88,7 +88,6 @@ export type AgentSettingsViewProps = Readonly<{
    */
   summaryLoading?: boolean;
   quotaCard?: React.ReactNode;
-  identityDetail?: string;
   /** Agents on the connection; the shared Gateway heartbeat line shows only for a lone Agent. */
   agentCount?: number;
   errorMessage?: string;
@@ -114,49 +113,6 @@ export type AgentSettingsScreenProps = Omit<
   initialSummary?: AgentSettingsSummary;
   permissionDenied?: boolean;
 }>;
-
-type AgentSettingsRuntimeScreenProps = Omit<
-  AgentSettingsScreenProps,
-  'identityDetail'
-> & Readonly<{
-  loadIdentityDetail: (connection: ConnectionDescriptor) => Promise<string | undefined>;
-}>;
-
-export function AgentSettingsRuntimeScreen({
-  connection,
-  loadIdentityDetail,
-  ...screenProps
-}: AgentSettingsRuntimeScreenProps): React.JSX.Element {
-  const [loadedIdentity, setLoadedIdentity] = useState<Readonly<{
-    connectionId: string;
-    detail?: string;
-  }> | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    setLoadedIdentity(null);
-    void loadIdentityDetail(connection)
-      .then((detail) => {
-        if (active) setLoadedIdentity({ connectionId: connection.id, detail });
-      })
-      .catch(() => {
-        if (active) setLoadedIdentity({ connectionId: connection.id });
-      });
-    return () => {
-      active = false;
-    };
-  }, [connection, loadIdentityDetail]);
-
-  return (
-    <AgentSettingsScreen
-      {...screenProps}
-      connection={connection}
-      identityDetail={loadedIdentity?.connectionId === connection.id
-        ? loadedIdentity.detail
-        : undefined}
-    />
-  );
-}
 
 export function AgentSettingsRouteLoading({
   onBack,
@@ -324,7 +280,6 @@ export function AgentSettingsScreen({
       quotaCard={accessibleAdapter?.capabilities.profileManagement && accessibleAdapter.management?.profile ? <NativeQuotaCard profile={accessibleAdapter.management.profile} online={connectionState === 'ready'} refreshing={refreshing} onPress={() => viewProps.onNavigate('AgentSettingsSection', { connectionId: connection.id, agentId: agent?.agentId ?? '', section: 'usage' })} /> : undefined}
       summary={summary}
       summaryLoading={summaryPendingKey !== null && summaryPendingKey === summaryKey}
-      identityDetail={viewProps.identityDetail}
       errorMessage={errorMessage}
       refreshing={refreshing}
       onRefresh={() => { void refresh(); }}
@@ -342,7 +297,6 @@ export function AgentSettingsView({
   summary,
   summaryLoading = false,
   quotaCard,
-  identityDetail,
   agentCount,
   errorMessage,
   reconnecting = false,
@@ -372,7 +326,6 @@ export function AgentSettingsView({
     connectionState,
     isPro,
     permissionDenied: state === 'permission',
-    identityDetail,
     summary,
     agentCount,
     now: Date.now(),
@@ -382,7 +335,6 @@ export function AgentSettingsView({
     capabilities,
     connection,
     connectionState,
-    identityDetail,
     isPro,
     state,
     summary,
@@ -409,11 +361,11 @@ export function AgentSettingsView({
   };
 
   // The hero has no static line: the backend is the avatar's corner mark, so the grey text only
-  // appears when it carries something live (heartbeat age) or account-specific (YouMind email).
+  // appears when it carries something live (the heartbeat age).
   const identityDetailLabel = (() => {
     if (!model) return undefined;
     const minutes = model.identity.activeMinutesAgo;
-    if (minutes === null) return model.identity.detail;
+    if (minutes === null) return undefined;
     const formatted = formatConsoleHeartbeatAge(minutes, i18n?.resolvedLanguage ?? i18n?.language ?? 'en');
     const age = formatted.compactText
       ?? (formatted.count === undefined

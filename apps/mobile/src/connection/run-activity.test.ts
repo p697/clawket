@@ -1,6 +1,6 @@
 import { updateRunActivities } from './run-activity';
 
-describe.each(['openclaw', 'hermes', 'youmind'])('%s live activity', (connectionId) => {
+describe.each(['openclaw', 'hermes', 'pi'])('%s live activity', (connectionId) => {
   it('retains working phase without republishing every token and finishes only the matching run', () => {
     const base = { sessionKey: 'main', runId: 'run1' };
     const thinking = updateRunActivities([], connectionId, { ...base, type: 'run_started' });

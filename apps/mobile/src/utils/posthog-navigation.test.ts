@@ -156,7 +156,7 @@ describe('posthog navigation tracking', () => {
   });
 
   it('builds the manual Session Panel screen view without manufacturing a route', () => {
-    expect(getManualTrackedScreen('SessionPanel', { backend: 'youmind' })).toEqual({
+    expect(getManualTrackedScreen('SessionPanel', { backend: 'pi' })).toEqual({
       name: 'SessionPanel',
       routeName: 'SessionPanel',
       area: 'thread',
@@ -165,7 +165,7 @@ describe('posthog navigation tracking', () => {
       properties: {
         screen_area: 'thread',
         screen_kind: 'modal',
-        backend: 'youmind',
+        backend: 'pi',
       },
     });
   });

@@ -20,7 +20,6 @@ import {
   ScanLine,
   Terminal,
 } from 'lucide-react-native';
-import { YOUMIND_SPRITE_ENTRY_VISIBLE } from '../../config/features';
 import { CLAWKET_GITHUB_REPO_URL } from '../../config/app-links';
 import { openExternalUrl } from '../../utils/openExternalUrl';
 import { useAppTheme } from '../../theme';
@@ -81,7 +80,6 @@ export type OnboardingScreenProps = Readonly<{
   onScanAnyQr?: () => void;
   onImportAnyQr?: () => void;
   onImportQr?: (expectedBackendKind: PairableBackendKind) => void;
-  onOpenYouMind: () => void;
   onOpenWebsite: (backendKind: OnboardingWebsiteBackendKind) => void;
   onErrorAction?: (status: Extract<OnboardingStatus, { kind: 'error' }>['code']) => void;
   onRetry?: () => void;
@@ -142,7 +140,6 @@ export function OnboardingScreen({
   onScanAnyQr,
   onImportAnyQr,
   onImportQr,
-  onOpenYouMind,
   onOpenWebsite,
   onErrorAction,
   onRetry,
@@ -199,20 +196,18 @@ export function OnboardingScreen({
   ] as const, [t]);
   // Chooser order (owner decision 2026-09-26): OpenClaw, Hermes, Codex, Claude Code, Pi,
   // then the model server the user already runs (2026-09-19: installable products first).
-  const chooserRows = useMemo((): ReadonlyArray<{ kind: PairableBackendKind | 'youmind'; label: string }> => [
+  const chooserRows = useMemo((): ReadonlyArray<{ kind: PairableBackendKind; label: string }> => [
     backendOptions[0],
     backendOptions[1],
     backendOptions[4],
     backendOptions[5],
     backendOptions[3],
-    ...(YOUMIND_SPRITE_ENTRY_VISIBLE ? [{ kind: 'youmind' as const, label: t('YouMind Sprite') }] : []),
     backendOptions[2],
   ], [backendOptions, t]);
   // "No agent yet?" links follow the chooser order.
   const websiteOptions = useMemo((): ReadonlyArray<{ kind: OnboardingWebsiteBackendKind; label: string }> => [
-    ...chooserRows.flatMap((row) => row.kind === 'local-model' || row.kind === 'youmind' ? [] : [{ kind: row.kind, label: row.label }]),
-    ...(YOUMIND_SPRITE_ENTRY_VISIBLE ? [{ kind: 'youmind' as const, label: t('YouMind') }] : []),
-  ], [chooserRows, t]);
+    ...chooserRows.flatMap((row) => row.kind === 'local-model' ? [] : [{ kind: row.kind, label: row.label }]),
+  ], [chooserRows]);
   const styles = useMemo(
     () => createStyles(theme.colors),
     [theme.colors],
@@ -367,7 +362,6 @@ export function OnboardingScreen({
           <View testID="onboarding-chooser" style={styles.chooser}>
             <View testID="onboarding-backends">
               {chooserRows.map((row) => {
-                if (row.kind === 'youmind') return <ChoiceRow key={row.kind} testID="onboarding-youmind" leading={<PlatformMark platform="youmind" balanced />} title={row.label} onPress={onOpenYouMind} />;
                 const kind = row.kind;
                 return <ChoiceRow key={kind} testID={`onboarding-backend-${kind}`} leading={<PlatformMark platform={kind} balanced />} title={row.label} onPress={() => chooseBackend(kind)} />;
               })}

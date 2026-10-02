@@ -192,7 +192,8 @@ describe('createMockAdapter', () => {
 
   it('supports fixed probe outcomes, initial state, empty fixtures, and empty timelines', async () => {
     const adapter = createMockAdapter({
-      connection: { ...connection, backendKind: 'youmind', transportKind: 'https' },
+      connection: { ...connection, backendKind: 'local-model', transportKind: 'local' },
+      capabilities: { attachments: false, models: false },
       initialState: 'offline',
       probeResult: false,
     });

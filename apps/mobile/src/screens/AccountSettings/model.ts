@@ -157,7 +157,6 @@ export type BuildAccountSettingsGroupsInput = Readonly<{
 const BACKEND_LABELS: Readonly<Record<BackendKind, string>> = Object.freeze({
   openclaw: 'OpenClaw',
   hermes: 'Hermes',
-  youmind: 'YouMind Sprite',
   'local-model': 'Local model',
   pi: 'Pi',
   codex: 'Codex',

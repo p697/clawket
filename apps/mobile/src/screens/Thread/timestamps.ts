@@ -1,4 +1,4 @@
-/** YouMind-style quiet time groups; all values are local-device milliseconds. */
+/** Quiet time groups for the thread; all values are local-device milliseconds. */
 export const THREAD_TIME_GAP_MS = 3 * 60_000;
 
 const formatters = new Map<string, Intl.DateTimeFormat>();

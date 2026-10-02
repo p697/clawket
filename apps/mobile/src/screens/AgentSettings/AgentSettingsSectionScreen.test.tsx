@@ -446,7 +446,7 @@ describe('AgentSettingsSectionView', () => {
         {...viewProps('models', {
           model: buildAgentSettingsSectionModel({
             section: 'models',
-            capabilities: { ...CAPABILITY_MATRIX.youmind },
+            capabilities: { ...CAPABILITY_MATRIX['local-model'], attachments: false, models: false },
             management,
             connection,
             connectionState: 'ready',

@@ -621,27 +621,27 @@ describe('AgentAvatar states and motion', () => {
   it('renders an image avatar with initials as its fallback and preserves an explicit emoji', () => {
     const image = render(
       <AgentAvatar
-        testID="sprite-avatar"
-        agentId="sprite"
-        name="Sprite"
-        avatarUrl=" https://cdn.example.invalid/sprite.png "
+        testID="atlas-avatar"
+        agentId="atlas"
+        name="Atlas"
+        avatarUrl=" https://cdn.example.invalid/atlas.png "
       />,
     );
-    expect(image.getByTestId('sprite-avatar-image').props.source).toEqual({
-      uri: 'https://cdn.example.invalid/sprite.png',
+    expect(image.getByTestId('atlas-avatar-image').props.source).toEqual({
+      uri: 'https://cdn.example.invalid/atlas.png',
     });
-    expect(image.getByText('SP')).toBeTruthy();
+    expect(image.getByText('AT')).toBeTruthy();
 
     image.rerender(
       <AgentAvatar
-        testID="sprite-avatar"
-        agentId="sprite"
-        name="Sprite"
+        testID="atlas-avatar"
+        agentId="atlas"
+        name="Atlas"
         emoji="✨"
-        avatarUrl="https://cdn.example.invalid/sprite.png"
+        avatarUrl="https://cdn.example.invalid/atlas.png"
       />,
     );
-    expect(image.queryByTestId('sprite-avatar-image')).toBeNull();
+    expect(image.queryByTestId('atlas-avatar-image')).toBeNull();
     expect(image.getByText('✨')).toBeTruthy();
   });
 
@@ -754,8 +754,8 @@ describe('AgentAvatar states and motion', () => {
       expect(other.getByTestId('p-face')).toBeTruthy();
       other.unmount();
     }
-    // OpenClaw Agents and YouMind Sprites keep their own faces.
-    for (const platform of ['openclaw', 'youmind'] as const) {
+    // OpenClaw Agents keep their own faces.
+    for (const platform of ['openclaw'] as const) {
       const own = render(<AgentAvatar testID="own" agentId="main" name="Main" emoji="C" platform={platform} />);
       expect(own.queryByTestId('own-face')).toBeNull();
       expect(own.getByText('C')).toBeTruthy();

@@ -146,9 +146,6 @@ const SPEC_EVENT_PROPERTIES: Readonly<Record<string, ReadonlyArray<string>>> = {
   release_notes_opened: ['release_count'],
   grace_banner_viewed: ['days_left'],
   grace_expired: ['days_left'],
-  youmind_sign_in_tapped: ['method', 'source'],
-  youmind_sign_in_resolved: ['method', 'result', 'source'],
-  sprite_greeting_sent: [],
   app_rating_tapped: ['source', 'result'],
 };
 
@@ -234,6 +231,8 @@ describe('analytics event privacy boundary', () => {
       'discover_search_changed',
       'clawhub_install_tapped',
       'youmind_material_opened',
+      'youmind_sign_in_tapped',
+      'sprite_greeting_sent',
       'lifetime_upgrade_announcement_shown',
       'chat_exec_approval_resolved',
       'pair_request_resolved',
@@ -241,7 +240,7 @@ describe('analytics event privacy boundary', () => {
     expect(names.some((name) => name.startsWith('office_'))).toBe(false);
     expect(names.some((name) => name.startsWith('discover_'))).toBe(false);
     expect(names.some((name) => name.startsWith('clawhub_'))).toBe(false);
-    expect(names.some((name) => name.startsWith('youmind_material_'))).toBe(false);
+    expect(names.some((name) => name.startsWith('youmind_'))).toBe(false);
 
     const allProperties = new Set(Object.values(ANALYTICS_EVENT_PROPERTY_WHITELIST).flat());
     expect([...allProperties]).not.toEqual(expect.arrayContaining([
@@ -321,11 +320,11 @@ describe('analytics event privacy boundary', () => {
 
   it('converts legacy connection inputs to the canonical backend and transport properties', () => {
     analyticsEvents.gatewayConnectSaved({
-      mode: 'https',
+      mode: 'tailscale',
       is_editing: false,
       has_password: false,
       has_token: true,
-      source: 'onboarding_youmind',
+      source: 'onboarding',
     });
 
     expect(mockedPostHogClient.capture).toHaveBeenCalledWith('gateway_connect_saved', {
@@ -334,9 +333,9 @@ describe('analytics event privacy boundary', () => {
       subscription_tenure_bucket: 'none',
       is_pro: false,
       is_premium: false,
-      backend: 'youmind',
-      transport: 'https',
-      source: 'onboarding_youmind',
+      backend: 'openclaw',
+      transport: 'tailscale',
+      source: 'onboarding',
     });
   });
 

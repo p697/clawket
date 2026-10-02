@@ -18,18 +18,17 @@ describe('Onboarding route model', () => {
     expect(ONBOARDING_WEBSITE_URLS).toEqual({
       openclaw: 'https://openclaw.ai',
       hermes: 'https://hermes-agent.nousresearch.com',
-      youmind: 'https://youmind.com',
       pi: 'https://pi.dev',
       codex: 'https://learn.chatgpt.com/codex',
       'claude-code': 'https://code.claude.com/docs/en/overview',
     });
   });
 
-  it('normalizes non-pairable route backends without treating YouMind as a transport', () => {
+  it('normalizes route backends to the pairable ones', () => {
     expect(normalizePairableBackendKind('hermes')).toBe('hermes');
     expect(normalizePairableBackendKind('local-model')).toBe('local-model');
     expect(normalizePairableBackendKind('openclaw')).toBe('openclaw');
-    expect(normalizePairableBackendKind('youmind')).toBe('openclaw');
+    expect(normalizePairableBackendKind(undefined)).toBe('openclaw');
   });
 
   it('maps transport failures to stable adapter errors', () => {

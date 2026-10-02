@@ -191,22 +191,6 @@ describe('Roster model', () => {
     expect(rows.filter((row) => row.connectionId !== 'one').every((row) => !row.working)).toBe(true);
   });
 
-  it('projects registry-provided semantic subtitles without inspecting the backend', () => {
-    const source = group('sprite');
-    const rows = buildRosterRows([{
-      ...source,
-      agents: source.agents.map((summary, index) => index === 0
-        ? { ...summary, subtitle: { kind: 'backend' as const, label: 'YouMind' } }
-        : summary),
-    }]);
-
-    expect(rows[0]).toMatchObject({
-      kind: 'agent',
-      subtitle: { kind: 'backend', label: 'YouMind' },
-    });
-    expect(rows[0]).not.toHaveProperty('preview');
-  });
-
   it('locks inaccessible Agents and their pinned sessions without hiding them', () => {
     const rows = buildRosterRows([group('one')], {
       pinnedSessionKeys: { 'one:main': ['agent:main:channel:general'] },

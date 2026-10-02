@@ -103,14 +103,14 @@ describe('3.0 quota policy', () => {
     expect(canUseAgent(mainAgent, workConnection, free)).toBe(false);
   });
 
-  it('uses descriptor isMain for Hermes and YouMind instead of backend branches', () => {
+  it('uses descriptor isMain for Hermes and local models instead of backend branches', () => {
     expect(canUseAgent(
       { agentId: 'hermes', isMain: true },
       homeConnection,
       entitlement(),
     )).toBe(true);
     expect(canUseAgent(
-      { agentId: 'sprite', isMain: true },
+      { agentId: 'local', isMain: true },
       homeConnection,
       entitlement(),
     )).toBe(true);

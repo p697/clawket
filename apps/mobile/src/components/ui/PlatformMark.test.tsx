@@ -59,7 +59,7 @@ describe('PlatformMark', () => {
     for (const platform of ['hermes', 'codex'] as const) expect(widthOf(<PlatformMark platform={platform} />)).toBe(ControlSize.settingsRow);
     for (const platform of ['openclaw', 'claude-code', 'pi'] as const) expect(widthOf(<PlatformMark platform={platform} />)).toBe(ControlSize.pill);
     // Balanced (owner request 2026-09-27): tiles drawn below bare glyphs, Pi's wide safe area compensated.
-    const balanced = { openclaw: 36, 'claude-code': 39, hermes: 46, codex: 45, pi: 50, youmind: 36 } as const;
+    const balanced = { openclaw: 36, 'claude-code': 39, hermes: 46, codex: 45, pi: 50 } as const;
     for (const [platform, width] of Object.entries(balanced)) {
       expect(widthOf(<PlatformMark platform={platform as keyof typeof balanced} balanced />)).toBe(width);
     }
@@ -71,8 +71,8 @@ describe('PlatformMark', () => {
     for (const platform of ['hermes', 'codex', 'claude-code', 'pi', 'local-model'] as const) {
       expect(isProductFacePlatform(platform)).toBe(true);
     }
-    // OpenClaw Agents and YouMind Sprites have identities of their own.
-    for (const platform of ['openclaw', 'youmind', null, undefined] as const) {
+    // OpenClaw Agents have identities of their own.
+    for (const platform of ['openclaw', null, undefined] as const) {
       expect(isProductFacePlatform(platform)).toBe(false);
     }
   });
@@ -86,7 +86,7 @@ describe('PlatformMark', () => {
     };
     // App artwork covers 81% of its box, so the tile is drawn past the circle to hide its corners and shadow.
     expect(imageOf(<PlatformDisc platform="codex" size={56} glyph={0.54} />).width).toBeCloseTo((56 / 0.81) * 1.02);
-    expect(imageOf(<PlatformDisc platform="youmind" size={20} glyph={0.72} />).width).toBeCloseTo(20 * 1.02);
+    expect(imageOf(<PlatformDisc platform="hermes" size={20} glyph={0.72} />).width).toBeCloseTo((20 / 0.79) * 1.02);
     // A bare mark's visible part spans the glyph share of the diameter, with optical corrections.
     expect(imageOf(<PlatformDisc platform="claude-code" size={56} glyph={0.54} />).width * 0.85).toBeCloseTo(56 * 0.54);
     expect(imageOf(<PlatformDisc platform="openclaw" size={20} glyph={0.72} />).width * 0.92).toBeCloseTo(20 * 0.72 * 1.08);

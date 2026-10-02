@@ -25,50 +25,23 @@ const SECURE_OPTIONS: SecureStore.SecureStoreOptions = {
   keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
 };
 
-const BACKEND_KINDS = new Set<BackendKind>(['openclaw', 'hermes', 'youmind', 'local-model', 'pi', 'codex', 'claude-code']);
+const BACKEND_KINDS = new Set<BackendKind>(['openclaw', 'hermes', 'local-model', 'pi', 'codex', 'claude-code']);
 const TRANSPORT_KINDS = new Set<TransportKind>([
   'relay',
   'local',
   'tailscale',
   'cloudflare',
   'custom',
-  'https',
 ]);
 
 const LEGACY_TRANSPORT_NORMALIZERS: Record<BackendKind, (value: TransportKind) => TransportKind> = {
   openclaw: (value) => value,
   hermes: (value) => value,
-  youmind: () => 'https',
   'local-model': value => value,
   pi: value => value,
   codex: value => value,
   'claude-code': value => value,
 };
-
-const LEGACY_YOUMIND_METADATA: Record<BackendKind, (id: string) => ConnectionRecord['youmind']> = {
-  openclaw: () => undefined,
-  hermes: () => undefined,
-  youmind: (id) => ({ authScopeKey: `cfg:${id}` }),
-  'local-model': () => undefined,
-  pi: () => undefined,
-  codex: () => undefined,
-  'claude-code': () => undefined,
-};
-
-// Before 3.0, onboarding generated `YouMind (<email>)`. Keep the matcher
-// deliberately narrow so names, host labels, and user-authored variants stay
-// untouched: exact casing/spacing, one local-part separator, and a dotted
-// domain with no whitespace or parentheses.
-const LEGACY_YOUMIND_EMAIL_LABEL = /^YouMind \([^@()\s]+@[^@().\s]+(?:\.[^@().\s]+)+\)$/u;
-
-function sanitizeLegacyYouMindEmailLabel(
-  backendKind: BackendKind,
-  label: string,
-): string {
-  return backendKind === 'youmind' && LEGACY_YOUMIND_EMAIL_LABEL.test(label)
-    ? 'YouMind'
-    : label;
-}
 
 type RegistryState = {
   activeConnectionId: string | null;
@@ -82,7 +55,7 @@ type PersistedRegistrySnapshot = {
   state: RegistryState;
 };
 
-type LegacyConnectionSupplement = Pick<ConnectionRecord, 'environment' | 'debugMode' | 'youmind'>;
+type LegacyConnectionSupplement = Pick<ConnectionRecord, 'environment' | 'debugMode'>;
 
 export type NewConnectionRecord = Omit<ConnectionRecord, 'id' | 'createdAt'> & {
   id?: string;
@@ -104,7 +77,6 @@ export type ConnectionRecordPatch = Partial<
   bootstrap?: ConnectionRecord['bootstrap'] | null;
   relay?: ConnectionRecord['relay'] | null;
   hermes?: ConnectionRecord['hermes'] | null;
-  youmind?: ConnectionRecord['youmind'] | null;
   debugMode?: boolean | null;
 };
 
@@ -140,7 +112,7 @@ export interface SecureConnectionStorage {
 
 export interface LegacyConnectionStorage {
   readLegacyGatewayConfigsState(): Promise<GatewayConfigsState>;
-  migrateLegacyYouMindState(url: string, scopeKey: string): Promise<void>;
+  clearRetiredYouMindState(url: string, scopeKey: string): Promise<void>;
 }
 
 export interface ConnectionStoreOptions {
@@ -234,12 +206,6 @@ function normalizeHermes(value: unknown): ConnectionRecord['hermes'] {
   return { bridgeUrl, ...(displayName ? { displayName } : {}) };
 }
 
-function normalizeYouMind(value: unknown): ConnectionRecord['youmind'] {
-  if (!isObject(value)) return undefined;
-  const authScopeKey = readNonEmptyString(value.authScopeKey);
-  return authScopeKey ? { authScopeKey } : undefined;
-}
-
 function normalizeConnectionRecord(value: unknown): ConnectionRecord | null {
   if (!isObject(value)) return null;
   const id = readNonEmptyString(value.id);
@@ -263,7 +229,6 @@ function normalizeConnectionRecord(value: unknown): ConnectionRecord | null {
   const bootstrap = normalizeBootstrap(value.bootstrap);
   const relay = normalizeRelay(value.relay);
   const hermes = normalizeHermes(value.hermes);
-  const youmind = normalizeYouMind(value.youmind);
   const invalidAuth = value.auth !== undefined && (
     !isObject(value.auth)
     || (value.auth.token !== undefined && !readOptionalString(value.auth.token))
@@ -275,7 +240,6 @@ function normalizeConnectionRecord(value: unknown): ConnectionRecord | null {
     || (value.bootstrap !== undefined && !bootstrap)
     || (value.relay !== undefined && !relay)
     || (value.hermes !== undefined && !hermes)
-    || (value.youmind !== undefined && !youmind)
     || (value.debugMode !== undefined && typeof value.debugMode !== 'boolean')
   ) {
     return null;
@@ -292,7 +256,6 @@ function normalizeConnectionRecord(value: unknown): ConnectionRecord | null {
     ...(bootstrap ? { bootstrap } : {}),
     ...(relay ? { relay } : {}),
     ...(hermes ? { hermes } : {}),
-    ...(youmind ? { youmind } : {}),
     ...(typeof value.debugMode === 'boolean' ? { debugMode: value.debugMode } : {}),
   };
 }
@@ -301,10 +264,7 @@ function normalizeRegistryState(value: unknown): RegistryState | null {
   if (!isObject(value) || !Array.isArray(value.records)) return null;
   const records = value.records.map(normalizeConnectionRecord);
   if (records.some((record) => record === null)) return null;
-  const normalizedRecords = (records as ConnectionRecord[]).map((record) => {
-    const label = sanitizeLegacyYouMindEmailLabel(record.backendKind, record.label);
-    return label === record.label ? record : { ...record, label };
-  });
+  const normalizedRecords = records as ConnectionRecord[];
   const ids = new Set(normalizedRecords.map((record) => record.id));
   if (ids.size !== normalizedRecords.length) return null;
   const activeConnectionId = value.activeConnectionId === null
@@ -321,7 +281,62 @@ function normalizeRegistryState(value: unknown): RegistryState | null {
   return { activeConnectionId, freeConnectionId, records: normalizedRecords };
 }
 
-function parsePersistedSnapshot(raw: string | null): PersistedRegistrySnapshot | null {
+/** Where a retired YouMind connection kept its sign-in, so an upgrade can delete it. */
+type RetiredYouMindConnection = Readonly<{ url: string; scopeKey: string }>;
+
+function isRetiredYouMindRecord(value: Record<string, unknown>): boolean {
+  return value.backendKind === 'youmind' || value.transportKind === 'https';
+}
+
+function readRetiredYouMindConnection(
+  value: Record<string, unknown>,
+  defaultScopeKey: string | undefined,
+): RetiredYouMindConnection | null {
+  const url = readNonEmptyString(value.url);
+  const scopeKey = (isObject(value.youmind) ? readNonEmptyString(value.youmind.authScopeKey) : undefined)
+    ?? defaultScopeKey;
+  return url && scopeKey ? { url, scopeKey } : null;
+}
+
+/**
+ * YouMind support ended (owner decision 2026-10-02). Its saved connections
+ * (backend `youmind`, transport `https`) leave before validation so they
+ * cannot invalidate the registry, and the active and free pointers move as
+ * `remove` moves them.
+ */
+function retireYouMindRecords(value: unknown): {
+  state: unknown;
+  retired: RetiredYouMindConnection[];
+} {
+  if (!isObject(value) || !Array.isArray(value.records)) return { state: value, retired: [] };
+  let records: unknown[] = value.records;
+  let { activeConnectionId, freeConnectionId } = value;
+  const retired: RetiredYouMindConnection[] = [];
+  for (let index = 0; index < records.length;) {
+    const record = records[index];
+    if (!isObject(record) || !isRetiredYouMindRecord(record)) {
+      index += 1;
+      continue;
+    }
+    records = records.filter((_, candidate) => candidate !== index);
+    const fallback = records[Math.min(index, Math.max(records.length - 1, 0))];
+    const fallbackId = isObject(fallback) ? readNonEmptyString(fallback.id) ?? null : null;
+    if (record.id !== undefined && activeConnectionId === record.id) activeConnectionId = fallbackId;
+    if (record.id !== undefined && freeConnectionId === record.id) freeConnectionId = activeConnectionId ?? fallbackId;
+    const connection = readRetiredYouMindConnection(record, readNonEmptyString(record.id));
+    if (connection) retired.push(connection);
+  }
+  return records.length === value.records.length
+    ? { state: value, retired }
+    : { state: { ...value, records, activeConnectionId, freeConnectionId }, retired };
+}
+
+type ParsedRegistrySnapshot = PersistedRegistrySnapshot & {
+  retired: ReadonlyArray<RetiredYouMindConnection>;
+  changed: boolean;
+};
+
+function parsePersistedSnapshot(raw: string | null): ParsedRegistrySnapshot | null {
   if (!raw) return null;
   try {
     const value: unknown = JSON.parse(raw);
@@ -331,12 +346,36 @@ function parsePersistedSnapshot(raw: string | null): PersistedRegistrySnapshot |
       && value.revision >= 0
       ? value.revision
       : undefined;
-    const state = normalizeRegistryState(value.state);
+    const retirement = retireYouMindRecords(value.state);
+    const state = normalizeRegistryState(retirement.state);
     return revision === undefined || !state
       ? null
-      : { version: STORAGE_VERSION, revision, state };
+      : {
+        version: STORAGE_VERSION,
+        revision,
+        state,
+        retired: retirement.retired,
+        changed: retirement.state !== value.state,
+      };
   } catch {
     return null;
+  }
+}
+
+/** YouMind configurations in a pre-3.0 configuration list, which migration no longer carries. */
+function readRetiredLegacyYouMindConnections(raw: string | null): RetiredYouMindConnection[] {
+  if (!raw) return [];
+  try {
+    const value: unknown = JSON.parse(raw);
+    if (!isObject(value) || !Array.isArray(value.configs)) return [];
+    return value.configs.flatMap((item) => {
+      if (!isObject(item) || item.backendKind !== 'youmind') return [];
+      const id = readNonEmptyString(item.id);
+      const connection = readRetiredYouMindConnection(item, id ? `cfg:${id}` : undefined);
+      return connection ? [connection] : [];
+    });
+  } catch {
+    return [];
   }
 }
 
@@ -366,11 +405,9 @@ function readLegacySupplements(raw: string | null): Map<string, LegacyConnection
       const id = readNonEmptyString(item.id);
       if (!id) continue;
       const environment = normalizeEnvironment(item.environment);
-      const youmind = normalizeYouMind(item.youmind);
       supplements.set(id, {
         ...(environment ? { environment } : {}),
         ...(typeof item.debugMode === 'boolean' ? { debugMode: item.debugMode } : {}),
-        ...(youmind ? { youmind } : {}),
       });
     }
   } catch {
@@ -390,12 +427,11 @@ function migrateLegacyConfig(
   const auth = config.token || config.password
     ? { token: config.token, password: config.password }
     : undefined;
-  const youmind = supplement?.youmind ?? LEGACY_YOUMIND_METADATA[backendKind](config.id);
   return {
     id: config.id,
     backendKind,
     transportKind,
-    label: sanitizeLegacyYouMindEmailLabel(backendKind, config.name),
+    label: config.name,
     ...(environment ? { environment } : {}),
     createdAt: config.createdAt,
     url: config.url,
@@ -403,7 +439,6 @@ function migrateLegacyConfig(
     ...(config.bootstrap ? { bootstrap: config.bootstrap } : {}),
     ...(config.relay ? { relay: config.relay } : {}),
     ...(config.hermes ? { hermes: config.hermes } : {}),
-    ...(youmind ? { youmind } : {}),
     ...(supplement?.debugMode !== undefined ? { debugMode: supplement.debugMode } : {}),
   };
 }
@@ -412,7 +447,9 @@ function migrateLegacyState(
   value: GatewayConfigsState,
   supplements: ReadonlyMap<string, LegacyConnectionSupplement>,
 ): RegistryState {
-  const records = value.configs.map((config) => migrateLegacyConfig(config, supplements.get(config.id)));
+  // A retired YouMind configuration would otherwise migrate as OpenClaw.
+  const configs = value.configs.filter((config) => !isRetiredYouMindRecord(config as unknown as Record<string, unknown>));
+  const records = configs.map((config) => migrateLegacyConfig(config, supplements.get(config.id)));
   const ids = new Set(records.map((record) => record.id));
   const activeConnectionId = value.activeId && ids.has(value.activeId)
     ? value.activeId
@@ -431,7 +468,7 @@ function cloneRecord(record: ConnectionRecord): ConnectionRecord {
 function patchRecord(record: ConnectionRecord, patch: ConnectionRecordPatch): ConnectionRecord | null {
   const next: Record<string, unknown> = { ...cloneRecord(record) };
   const requiredFields = ['backendKind', 'transportKind', 'label', 'url'] as const;
-  const optionalFields = ['environment', 'auth', 'bootstrap', 'relay', 'hermes', 'youmind', 'debugMode'] as const;
+  const optionalFields = ['environment', 'auth', 'bootstrap', 'relay', 'hermes', 'debugMode'] as const;
   for (const field of requiredFields) {
     if (patch[field] !== undefined) next[field] = patch[field];
   }
@@ -557,7 +594,6 @@ function mergeConnectionRecord(
     bootstrap: input.bootstrap ?? existing.bootstrap,
     relay: mergeConnectionRelay(existing.relay, input.relay),
     hermes: mergeConnectionHermes(existing.hermes, input.hermes),
-    youmind: input.youmind ?? existing.youmind,
     debugMode: input.debugMode ?? existing.debugMode,
     id: existing.id,
     createdAt: existing.createdAt,
@@ -573,7 +609,7 @@ function createDescriptor(
     id: record.id,
     backendKind: record.backendKind,
     transportKind: record.transportKind,
-    label: sanitizeLegacyYouMindEmailLabel(record.backendKind, record.label),
+    label: record.label,
     ...(record.environment ? { environment: record.environment } : {}),
     createdAt: record.createdAt,
     ...(bridgeOutdated ? { bridgeOutdated: true } : {}),
@@ -930,23 +966,16 @@ export class ConnectionStore {
   private async readOrMigrate(): Promise<PersistedRegistrySnapshot> {
     const currentRaw = await this.secureStorage.getItemAsync(CURRENT_STORAGE_KEY, SECURE_OPTIONS);
     const current = parsePersistedSnapshot(currentRaw);
-    if (current) return current;
+    if (current) return this.settleRetiredYouMind(current);
 
     const rollbackRaw = await this.secureStorage.getItemAsync(ROLLBACK_STORAGE_KEY, SECURE_OPTIONS);
     const rollback = parsePersistedSnapshot(rollbackRaw);
-    if (rollback) return rollback;
+    if (rollback) return this.settleRetiredYouMind(rollback);
 
     const legacyRaw = await this.secureStorage.getItemAsync(LEGACY_CONFIGS_STORAGE_KEY, SECURE_OPTIONS);
     const legacy = await this.legacyStorage.readLegacyGatewayConfigsState();
     const state = migrateLegacyState(legacy, readLegacySupplements(legacyRaw));
-    for (const record of state.records) {
-      if (record.backendKind === 'youmind') {
-        await this.legacyStorage.migrateLegacyYouMindState(
-          record.url,
-          record.youmind?.authScopeKey ?? record.id,
-        );
-      }
-    }
+    await this.clearRetiredYouMind(readRetiredLegacyYouMindConnections(legacyRaw));
     const migrated: PersistedRegistrySnapshot = {
       version: STORAGE_VERSION,
       revision: 1,
@@ -956,6 +985,26 @@ export class ConnectionStore {
     await this.secureStorage.setItemAsync(ROLLBACK_STORAGE_KEY, serialized, SECURE_OPTIONS);
     await this.secureStorage.setItemAsync(CURRENT_STORAGE_KEY, serialized, SECURE_OPTIONS);
     return migrated;
+  }
+
+  /** Deletes what retired YouMind connections left behind and saves the registry without them, once. */
+  private async settleRetiredYouMind(parsed: ParsedRegistrySnapshot): Promise<PersistedRegistrySnapshot> {
+    const snapshot: PersistedRegistrySnapshot = { version: parsed.version, revision: parsed.revision, state: parsed.state };
+    if (!parsed.changed) return snapshot;
+    await this.clearRetiredYouMind(parsed.retired);
+    const revision = parsed.revision + 1;
+    await this.persist(snapshot, parsed.state, revision);
+    return { ...snapshot, revision };
+  }
+
+  private async clearRetiredYouMind(connections: ReadonlyArray<RetiredYouMindConnection>): Promise<void> {
+    for (const connection of connections) {
+      try {
+        await this.legacyStorage.clearRetiredYouMindState(connection.url, connection.scopeKey);
+      } catch {
+        // A sign-in that cannot be deleted must not keep the other connections from loading.
+      }
+    }
   }
 
   private async persist(

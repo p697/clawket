@@ -11,7 +11,7 @@ function connection(id: string, backendKind: ConnectionDescriptor['backendKind']
   return {
     id,
     backendKind,
-    transportKind: backendKind === 'youmind' ? 'https' : 'local',
+    transportKind: 'local',
     label: id,
     createdAt: 1,
     isFreeSlot: false,
@@ -87,16 +87,16 @@ describe('hasCachedNonMainAgentSession', () => {
     })).toBe(true);
   });
 
-  it('never treats Hermes, YouMind, unknown connections, or OpenClaw main as secondary', () => {
+  it('never treats Hermes, local models, unknown connections, or OpenClaw main as secondary', () => {
     const hermes = connection('hermes', 'hermes');
-    const sprite = connection('sprite', 'youmind');
+    const local = connection('local', 'local-model');
     const openclaw = connection('openclaw', 'openclaw');
     expect(hasCachedNonMainAgentSession({
-      connections: [hermes, sprite, openclaw],
+      connections: [hermes, local, openclaw],
       roster: [],
       cachedSessions: [
         cached('hermes', 'hermes'),
-        cached('sprite', 'sprite'),
+        cached('local', 'local'),
         cached('missing', 'writer'),
         cached('openclaw', 'main'),
       ],

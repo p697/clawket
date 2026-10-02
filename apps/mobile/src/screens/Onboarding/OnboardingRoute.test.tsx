@@ -2,10 +2,8 @@ import React from 'react';
 import { act, render, waitFor } from '@testing-library/react-native';
 import type { OnboardingScreenProps } from './OnboardingScreen';
 import { OnboardingRoute, type OnboardingRouteProps } from './OnboardingRoute';
-import type { YouMindOnboardingScreenProps } from './YouMindOnboardingScreen';
 
 let mockScreenProps: OnboardingScreenProps | null = null;
-let mockYouMindScreenProps: YouMindOnboardingScreenProps | null = null;
 let mockRuntime: Record<string, unknown>;
 let mockApp: {
   debugMode: boolean;
@@ -17,17 +15,9 @@ const mockCoordinator = {
   getSnapshot: jest.fn(),
   probeActive: jest.fn(async () => true),
 };
-const mockYouMindClient = {
-  sendOtp: jest.fn(),
-  verifyOtp: jest.fn(),
-  clearSession: jest.fn(),
-};
 const mockConnectBackendPairingCode: jest.Mock = jest.fn();
 const mockConnectBackendPairingLink: jest.Mock = jest.fn();
 const mockConnectBackendPairingPayload: jest.Mock = jest.fn();
-const mockCreateYouMindOnboardingConnection: jest.Mock = jest.fn();
-const mockYouMindFinish: jest.Mock = jest.fn();
-const mockYouMindDiscard: jest.Mock = jest.fn();
 const mockClipboardSetString = jest.fn(async (_value: string) => true);
 const mockClipboardGetString = jest.fn(async () => '123456');
 const mockOpenUrl = jest.fn(async (_url: string) => true);
@@ -72,9 +62,6 @@ jest.mock('../../connection', () => ({
   // The real resolver is covered in gateway-scan-flow tests; the route only forwards its answer.
   resolvePairingPayloadBackend: (payload: { backendKind?: string }) => payload.backendKind ?? null,
   resolvePairingValidationReason: jest.requireActual('../../connection/pairing/pairing-validation').resolvePairingValidationReason,
-  createYouMindOnboardingConnection: (...args: unknown[]) => (
-    mockCreateYouMindOnboardingConnection(...args)
-  ),
 }));
 
 jest.mock('../../contexts/AppContext', () => ({
@@ -100,17 +87,6 @@ jest.mock('./OnboardingScreen', () => {
   };
 });
 
-jest.mock('./YouMindOnboardingScreen', () => {
-  const ReactRuntime = require('react');
-  const { View } = require('react-native');
-  return {
-    YouMindOnboardingScreen: (props: YouMindOnboardingScreenProps) => {
-      mockYouMindScreenProps = props;
-      return ReactRuntime.createElement(View, { testID: 'youmind-onboarding-route-view' });
-    },
-  };
-});
-
 function createProps(overrides: Partial<OnboardingRouteProps> = {}): OnboardingRouteProps {
   return {
     navigation: {
@@ -128,7 +104,7 @@ function createProps(overrides: Partial<OnboardingRouteProps> = {}): OnboardingR
 
 function connectionSnapshot(input: {
   id?: string;
-  backendKind?: 'openclaw' | 'hermes' | 'youmind';
+  backendKind?: 'openclaw' | 'hermes';
   state?: 'idle' | 'ready' | 'offline';
 } = {}) {
   const id = input.id ?? 'connection-1';
@@ -147,7 +123,6 @@ describe('OnboardingRoute', () => {
 
   beforeEach(() => {
     mockScreenProps = null;
-    mockYouMindScreenProps = null;
     mockRuntime = {
       initialized: true,
       connections: [],
@@ -169,10 +144,6 @@ describe('OnboardingRoute', () => {
     mockCoordinator.getSnapshot.mockReset();
     mockCoordinator.getSnapshot.mockReturnValue(connectionSnapshot({ state: 'idle' }));
     mockCoordinator.probeActive.mockClear();
-    mockYouMindClient.sendOtp.mockReset();
-    mockYouMindClient.verifyOtp.mockReset();
-    mockYouMindClient.clearSession.mockReset();
-    mockYouMindClient.clearSession.mockResolvedValue(undefined);
     mockConnectBackendPairingCode.mockReset();
     mockConnectBackendPairingCode.mockResolvedValue({
       backendKind: 'openclaw',
@@ -187,19 +158,6 @@ describe('OnboardingRoute', () => {
     mockConnectBackendPairingPayload.mockResolvedValue({
       backendKind: 'openclaw',
       connectionId: 'connection-1',
-    });
-    mockYouMindFinish.mockReset();
-    mockYouMindFinish.mockResolvedValue({
-      backendKind: 'youmind',
-      connectionId: 'youmind-connection',
-    });
-    mockYouMindDiscard.mockReset();
-    mockYouMindDiscard.mockResolvedValue(undefined);
-    mockCreateYouMindOnboardingConnection.mockReset();
-    mockCreateYouMindOnboardingConnection.mockReturnValue({
-      client: mockYouMindClient,
-      finish: mockYouMindFinish,
-      discard: mockYouMindDiscard,
     });
     mockClipboardSetString.mockClear();
     mockClipboardGetString.mockClear();
@@ -623,8 +581,7 @@ describe('OnboardingRoute', () => {
     expect(mockConnectBackendPairingCode).not.toHaveBeenCalled();
   });
 
-  it('binds clipboard, official docs, YouMind, modal close, and retry', async () => {
-    const onOpenYouMind = jest.fn();
+  it('binds clipboard, official docs, modal close, and retry', async () => {
     const onDocsOpened = jest.fn();
     const onAgentPromptCopied = jest.fn();
     const navigation = { goBack: jest.fn(), navigate: jest.fn() };
@@ -637,7 +594,6 @@ describe('OnboardingRoute', () => {
         name: 'Onboarding',
         params: { presentation: 'modal', initialBackend: 'openclaw' },
       } as never,
-      onOpenYouMind,
       onDocsOpened,
       onAgentPromptCopied,
     });
@@ -661,18 +617,7 @@ describe('OnboardingRoute', () => {
     expect(onAgentPromptCopied).toHaveBeenCalledWith('openclaw');
     act(() => mockScreenProps?.onOpenWebsite('hermes'));
     expect(mockOpenUrl).toHaveBeenCalledWith('https://hermes-agent.nousresearch.com');
-    act(() => mockScreenProps?.onOpenWebsite('youmind'));
-    expect(mockOpenUrl).toHaveBeenCalledWith('https://youmind.com');
-    expect(onDocsOpened).toHaveBeenLastCalledWith('youmind');
-    act(() => mockScreenProps?.onOpenYouMind());
-    expect(onOpenYouMind).toHaveBeenCalledTimes(1);
-    expect(mockCreateYouMindOnboardingConnection).toHaveBeenCalledWith({
-      runtime: mockCoordinator,
-      debugMode: false,
-    });
-    expect(mockYouMindScreenProps).not.toBeNull();
-    act(() => mockYouMindScreenProps?.onBack());
-    expect(mockYouMindDiscard).toHaveBeenCalledTimes(1);
+    expect(onDocsOpened).toHaveBeenLastCalledWith('hermes');
     act(() => mockScreenProps?.onClose?.());
     expect(navigation.goBack).toHaveBeenCalledTimes(1);
     // Nothing was paired here, so retry has nothing to probe or replay.
@@ -719,29 +664,5 @@ describe('OnboardingRoute', () => {
     });
     act(() => mockScreenProps?.onRetry?.());
     expect(mockCoordinator.probeActive).toHaveBeenCalledTimes(1);
-  });
-
-  it('adds, activates, and announces a signed-in YouMind Sprite connection', async () => {
-    const onConnected = jest.fn();
-    render(<OnboardingRoute {...createProps({ onConnected })} />);
-
-    act(() => mockScreenProps?.onOpenYouMind());
-    const session = {
-      accessToken: 'access',
-      refreshToken: 'refresh',
-      expiresIn: 3600,
-      createdAtMs: 1,
-      user: { id: 'user-1', email: 'lucy@example.com' },
-    };
-    await act(async () => {
-      await mockYouMindScreenProps?.onSignedIn(session);
-    });
-
-    expect(mockYouMindFinish).toHaveBeenCalledWith(session);
-    expect(onConnected).toHaveBeenCalledWith({
-      connectionId: 'youmind-connection',
-      backendKind: 'youmind',
-    });
-    expect(mockYouMindDiscard).not.toHaveBeenCalled();
   });
 });

@@ -11,9 +11,8 @@ export type ProEntitlementBootstrapInput = Readonly<{
 
 /**
  * Detects legacy OpenClaw use that needs the one-time 3.0 grace period.
- * Hermes and YouMind deliberately do not use agent-id heuristics: their sole
- * descriptors are always main agents, even when their cached ids are not
- * literally `main`.
+ * Hermes deliberately does not use agent-id heuristics: its sole descriptor
+ * is always the main agent, even when its cached id is not literally `main`.
  */
 export function hasCachedNonMainAgentSession({
   connections,

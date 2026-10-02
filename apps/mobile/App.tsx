@@ -51,7 +51,6 @@ import { ProPaywallOverlay } from './src/components/pro/ProPaywallOverlay';
 import { loadAgentAvatars } from './src/services/agent-avatar';
 import {
   getConnectionRuntime,
-  loadConnectionIdentityDetail,
   useConnections,
 } from './src/connection';
 import {
@@ -160,7 +159,7 @@ import {
   type SessionPanelRow,
 } from './src/screens/SessionPanel';
 import {
-  AgentSettingsRuntimeScreen,
+  AgentSettingsScreen,
   AgentSettingsRouteLoading,
   AgentSettingsSectionScreen,
   type AgentSettingsSectionActionResolver,
@@ -1857,7 +1856,7 @@ function AppContent({
                       agent.agentId,
                     ));
                     return (
-                      <AgentSettingsRuntimeScreen
+                      <AgentSettingsScreen
                         adapter={adapter}
                         connection={connection}
                         agent={agent}
@@ -1865,7 +1864,6 @@ function AppContent({
                         reconnecting={adapter !== null && connections.recovering}
                         capabilities={adapter?.capabilities ?? resolveCapabilities(connection.backendKind)}
                         isPro={isPro}
-                        loadIdentityDetail={loadConnectionIdentityDetail}
                         permissionDenied={permissionDenied}
                         onBack={navigation.goBack}
                         onContinueChat={() => {

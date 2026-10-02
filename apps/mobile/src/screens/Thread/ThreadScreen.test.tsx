@@ -1328,7 +1328,7 @@ describe('ThreadScreen connection container', () => {
     expect(props.navigation.navigate).toHaveBeenCalledWith('AgentSettings', { connectionId: 'connection-1', agentId: 'atlas' });
   });
 
-  it('gates every Add sheet entry by backend capability for OpenClaw, Hermes and YouMind', () => {
+  it('gates every Add sheet entry by backend capability, down to a chat-only backend', () => {
     const props = createNavigationProps();
     adapter.capabilities = { ...CAPABILITY_MATRIX.openclaw };
     const view = render(<ThreadScreen {...props} />);
@@ -1379,7 +1379,7 @@ describe('ThreadScreen connection container', () => {
     expect(mockThreadOverlayProps?.onCreateScheduledTask).toBeDefined();
     expect(mockThreadOverlayProps?.onOpenTools).toBeUndefined();
 
-    adapter.capabilities = { ...CAPABILITY_MATRIX.youmind };
+    adapter.capabilities = { ...CAPABILITY_MATRIX['local-model'], attachments: false, models: false };
     view.rerender(<ThreadScreen {...props} />);
     expect(mockThreadViewProps?.onOpenAddMenu).toBeUndefined();
     expect(mockThreadOverlayProps?.onAttachRecentPhotos).toBeUndefined();

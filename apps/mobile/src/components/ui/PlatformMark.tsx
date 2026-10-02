@@ -10,7 +10,6 @@ const marks = {
   pi: require('../../../assets/brands/pi.png'),
   openclaw: require('../../../assets/brands/openclaw.png'),
   hermes: require('../../../assets/brands/hermes.png'),
-  youmind: require('../../../assets/brands/youmind.png'),
 } as const;
 
 type Platform = keyof typeof marks | 'local-model';
@@ -19,7 +18,7 @@ export type PlatformKind = Platform;
 /**
  * Backends whose Agent is the product itself — one Agent per connection with no identity of its own —
  * so the official mark is that Agent's face wherever it appears (owner decision 2026-09-27). OpenClaw
- * Agents and YouMind Sprites keep their own avatars and carry the mark as a corner badge instead.
+ * Agents keep their own avatars and carry the mark as a corner badge instead.
  */
 const PRODUCT_FACE_PLATFORMS: ReadonlySet<Platform> = new Set(['hermes', 'codex', 'claude-code', 'pi', 'local-model']);
 
@@ -37,7 +36,6 @@ const ARTWORK: Readonly<Record<keyof typeof marks, Readonly<{ fill: number; tile
   pi: { fill: 0.59, tile: false },
   codex: { fill: 0.81, tile: true },
   hermes: { fill: 0.79, tile: true },
-  youmind: { fill: 1, tile: true },
 };
 
 /** A dense mark reads larger than a sparse one of the same width; tuned by eye on the device roster. */
@@ -58,7 +56,6 @@ const BALANCED_SIZE: Readonly<Record<Platform, number>> = {
   hermes: 46,
   codex: 45,
   pi: 50,
-  youmind: 36,
   'local-model': 41,
 };
 

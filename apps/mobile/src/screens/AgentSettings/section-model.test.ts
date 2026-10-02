@@ -152,7 +152,7 @@ describe('AgentSettings section model', () => {
       'skills.installed',
     ]);
 
-    const none = { ...CAPABILITY_MATRIX.youmind, devices: false };
+    const none = { ...CAPABILITY_MATRIX['local-model'], attachments: false, models: false, devices: false };
     expect(isAgentSettingsSectionSupported('connection', none)).toBe(false);
     expect(isAgentSettingsSectionSupported('models', none)).toBe(false);
     expect(isAgentSettingsSectionSupported('channels-devices', none)).toBe(false);

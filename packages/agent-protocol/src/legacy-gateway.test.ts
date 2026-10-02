@@ -17,16 +17,18 @@ import {
 
 describe('temporary legacy gateway facade', () => {
   it('keeps the exact legacy backend and transport guards', () => {
-    for (const value of ['openclaw', 'hermes', 'youmind', 'local-model']) expect(isGatewayBackendKind(value)).toBe(true);
+    for (const value of ['openclaw', 'hermes', 'local-model', 'pi', 'codex', 'claude-code']) expect(isGatewayBackendKind(value)).toBe(true);
     for (const value of ['local', 'tailscale', 'cloudflare', 'custom', 'relay']) {
       expect(isGatewayTransportKind(value)).toBe(true);
     }
     expect(isGatewayBackendKind('other')).toBe(false);
+    // YouMind support ended (owner decision 2026-10-02).
+    expect(isGatewayBackendKind('youmind')).toBe(false);
     expect(isGatewayTransportKind('https')).toBe(false);
   });
 
   it('resolves explicit, transitional, and fallback identities', () => {
-    expect(resolveGatewayBackendKind({ backendKind: 'youmind' })).toBe('youmind');
+    expect(resolveGatewayBackendKind({ backendKind: 'pi' })).toBe('pi');
     expect(resolveGatewayBackendKind({ mode: 'hermes' })).toBe('hermes');
     expect(resolveGatewayBackendKind({ hermes: { bridgeUrl: 'ws://bridge' } })).toBe('hermes');
     expect(resolveGatewayBackendKind(undefined)).toBe('openclaw');
@@ -48,31 +50,28 @@ describe('temporary legacy gateway facade', () => {
 
     expect(getGatewayBackendDescriptor('openclaw')).toMatchObject({ kind: 'openclaw', label: 'OpenClaw' });
     expect(getGatewayBackendDescriptor({ backendKind: 'hermes' })).toMatchObject({ kind: 'hermes', label: 'Hermes' });
-    expect(getGatewayBackendDescriptor('youmind')).toMatchObject({ kind: 'youmind', label: 'YouMind' });
+    expect(getGatewayBackendDescriptor('pi')).toMatchObject({ kind: 'pi', label: 'Pi' });
     expect(getGatewayBackendCapabilities('hermes')).toMatchObject({
       chatAbort: false,
       chatAttachments: false,
       consoleCronCreate: false,
       consoleAgentSessionsBoard: false,
     });
-    expect(getGatewayBackendCapabilities('youmind').gatewayConnection).toBe(false);
+    expect(getGatewayBackendCapabilities('local-model').gatewayConnection).toBe(false);
     expect(Object.values(getGatewayBackendCapabilities('openclaw')).every(Boolean)).toBe(true);
   });
 
   it('preserves backend dispatch, thinking choices, and global session keys', () => {
-    const choices = { openclaw: 'o', hermes: 'h', youmind: 'y' };
+    const choices = { openclaw: 'o', hermes: 'h' };
     expect(selectByBackend('openclaw', choices)).toBe('o');
     expect(selectByBackend('hermes', choices)).toBe('h');
-    expect(selectByBackend('youmind', choices)).toBe('y');
-    expect(selectByBackend('youmind', { openclaw: 'o', hermes: 'h' })).toBe('o');
+    expect(selectByBackend('pi', choices)).toBe('o');
     expect(selectByBackend({ mode: 'hermes' }, choices)).toBe('h');
 
     expect(getGatewayThinkingLevels('openclaw')).toContain('adaptive');
     expect(getGatewayThinkingLevels('hermes')).not.toContain('adaptive');
-    expect(getGatewayThinkingLevels('youmind')).toContain('adaptive');
     expect(resolveGlobalMainSessionKey('openclaw')).toBeNull();
     expect(resolveGlobalMainSessionKey('hermes')).toBe('main');
-    expect(resolveGlobalMainSessionKey('youmind')).toBe('main');
     expect(resolveGlobalMainSessionKey('local-model')).toBe('main');
     expect(resolveGlobalMainSessionKey({ backendKind: 'local-model' })).toBe('main');
     expect(resolveGlobalMainSessionKey(null)).toBeNull();
@@ -80,7 +79,6 @@ describe('temporary legacy gateway facade', () => {
 
   it('keeps every legacy mode label', () => {
     expect(getGatewayModeLabel({ backendKind: 'hermes' })).toBe('Hermes');
-    expect(getGatewayModeLabel({ backendKind: 'youmind' })).toBe('YouMind');
     expect(getGatewayModeLabel({ transportKind: 'relay' })).toBe('Remote');
     expect(getGatewayModeLabel({ transportKind: 'local' })).toBe('Local');
     expect(getGatewayModeLabel({ transportKind: 'tailscale' })).toBe('Tailscale');
@@ -91,9 +89,6 @@ describe('temporary legacy gateway facade', () => {
   it('builds backend-aware default names with and without a parseable host', () => {
     expect(buildGatewayDefaultName({ backendKind: 'hermes', url: 'ws://bridge.test/ws', index: 1 })).toBe(
       'Hermes (bridge.test)',
-    );
-    expect(buildGatewayDefaultName({ backendKind: 'youmind', url: 'https://youmind.test', index: 1 })).toBe(
-      'YouMind (youmind.test)',
     );
     expect(buildGatewayDefaultName({ transportKind: 'relay', url: 'wss://relay.test/v1', index: 2 })).toBe(
       'Relay (relay.test)',

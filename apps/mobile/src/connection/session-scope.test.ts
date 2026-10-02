@@ -41,7 +41,7 @@ describe('connection session scope', () => {
       agentId: 'main',
       sessionKey: 'main',
     });
-    expect(resolveConnectedThreadTarget('youmind')).toEqual({
+    expect(resolveConnectedThreadTarget('local-model')).toEqual({
       agentId: 'main',
       sessionKey: 'main',
     });

@@ -394,23 +394,6 @@ describe('aggregateRoster', () => {
     expect(order('cache')).toEqual(order('live'));
   });
 
-  it('adds backend subtitle metadata at the registry boundary', () => {
-    const youmindConnection: ConnectionDescriptor = {
-      ...connection('sprite', 1),
-      backendKind: 'youmind',
-      transportKind: 'https',
-    };
-    const groups = aggregateRoster([{
-      connection: youmindConnection,
-      source: 'live',
-      syncedAt: 100,
-      agents: [agent('sprite', 'main')],
-      sessions: [session('sprite', 'main', 'main:main', 100)],
-    }], 'sprite');
-
-    expect(groups[0].agents[0].subtitle).toEqual({ kind: 'backend', label: 'YouMind' });
-  });
-
   it('suppresses unread for a cached active connection and ignores cross-connection live rows', () => {
     const groups = aggregateRoster([{
       connection: connection('a', 1),
@@ -430,7 +413,7 @@ describe('aggregateRoster', () => {
   });
 });
 
-it.each(['openclaw', 'hermes', 'youmind'] as const)('counts only canonical main-chat unread for %s', (backendKind) => {
+it.each(['openclaw', 'hermes', 'local-model'] as const)('counts only canonical main-chat unread for %s', (backendKind) => {
   const input = {
     connection: { ...connection('a', 1), backendKind },
     source: 'live' as const,

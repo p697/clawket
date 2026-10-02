@@ -39,7 +39,7 @@ const messageToolRun: CronRunLogEntry = {
   ts: 1_789_772_706_577,
   runAtMs: 1_789_772_400_041,
   jobId: '41230a62',
-  jobName: 'YouMind 日报 07:00',
+  jobName: '团队日报 07:00',
   action: 'finished',
   status: 'ok',
   summary: '已发送：2026-09-18 简报已发到褚一 Telegram 私聊，messageId 31853。',

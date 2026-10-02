@@ -107,7 +107,8 @@ const HERMES_LEGACY_CAPABILITIES: GatewayBackendCapabilities = {
   openClawConfigScreens: false,
 };
 
-const YOUMIND_LEGACY_CAPABILITIES: GatewayBackendCapabilities = {
+/** The Console surface with chat and abort only: the row the Agent backends build on. */
+const MINIMAL_LEGACY_CAPABILITIES: GatewayBackendCapabilities = {
   consoleRoot: true,
   gatewayConnection: false,
   chatAbort: true,
@@ -136,13 +137,12 @@ const YOUMIND_LEGACY_CAPABILITIES: GatewayBackendCapabilities = {
 };
 
 const LEGACY_BACKENDS: Record<GatewayBackendKind, GatewayBackendDescriptor> = {
-  codex: { kind: 'codex', label: 'Codex', capabilities: { ...YOUMIND_LEGACY_CAPABILITIES, gatewayConnection: true, modelCatalog: true, modelSelection: true, chatAttachments: true, consoleAgentSessionsBoard: true } },
-  'claude-code': { kind: 'claude-code', label: 'Claude Code', capabilities: { ...YOUMIND_LEGACY_CAPABILITIES, gatewayConnection: true, modelCatalog: true, modelSelection: true, chatAttachments: true, consoleAgentSessionsBoard: true } },
-  pi: { kind: 'pi', label: 'Pi', capabilities: { ...YOUMIND_LEGACY_CAPABILITIES, gatewayConnection: true, modelCatalog: true, modelSelection: true, chatAttachments: true, consoleAgentSessionsBoard: true } },
+  codex: { kind: 'codex', label: 'Codex', capabilities: { ...MINIMAL_LEGACY_CAPABILITIES, gatewayConnection: true, modelCatalog: true, modelSelection: true, chatAttachments: true, consoleAgentSessionsBoard: true } },
+  'claude-code': { kind: 'claude-code', label: 'Claude Code', capabilities: { ...MINIMAL_LEGACY_CAPABILITIES, gatewayConnection: true, modelCatalog: true, modelSelection: true, chatAttachments: true, consoleAgentSessionsBoard: true } },
+  pi: { kind: 'pi', label: 'Pi', capabilities: { ...MINIMAL_LEGACY_CAPABILITIES, gatewayConnection: true, modelCatalog: true, modelSelection: true, chatAttachments: true, consoleAgentSessionsBoard: true } },
   openclaw: { kind: 'openclaw', label: 'OpenClaw', capabilities: OPENCLAW_LEGACY_CAPABILITIES },
   hermes: { kind: 'hermes', label: 'Hermes', capabilities: HERMES_LEGACY_CAPABILITIES },
-  youmind: { kind: 'youmind', label: 'YouMind', capabilities: YOUMIND_LEGACY_CAPABILITIES },
-  'local-model': { kind: 'local-model', label: 'Local model', capabilities: { ...YOUMIND_LEGACY_CAPABILITIES, modelCatalog: true, modelSelection: true, chatAttachments: true } },
+  'local-model': { kind: 'local-model', label: 'Local model', capabilities: { ...MINIMAL_LEGACY_CAPABILITIES, modelCatalog: true, modelSelection: true, chatAttachments: true } },
 };
 
 const OPENCLAW_THINKING_LEVELS: ThinkingLevel[] = [
@@ -165,7 +165,7 @@ export function isGatewayTransportKind(value: unknown): value is GatewayTranspor
 }
 
 export function isGatewayBackendKind(value: unknown): value is GatewayBackendKind {
-  return value === 'openclaw' || value === 'hermes' || value === 'youmind' || value === 'local-model' || value === 'pi' || value === 'codex' || value === 'claude-code';
+  return value === 'openclaw' || value === 'hermes' || value === 'local-model' || value === 'pi' || value === 'codex' || value === 'claude-code';
 }
 
 export function resolveGatewayBackendKind(value: LegacyGatewayLike | null | undefined): GatewayBackendKind {
@@ -213,13 +213,12 @@ export function getGatewayThinkingLevels(
 
 export function selectByBackend<T>(
   input: LegacyGatewayLike | GatewayBackendKind | null | undefined,
-  options: { openclaw: T; hermes: T; youmind?: T },
+  options: { openclaw: T; hermes: T },
 ): T {
   const kind = typeof input === 'string' && isGatewayBackendKind(input)
     ? input
     : resolveGatewayBackendKind(input as LegacyGatewayLike | null | undefined);
   if (kind === 'hermes') return options.hermes;
-  if (kind === 'youmind') return options.youmind ?? options.openclaw;
   return options.openclaw;
 }
 
@@ -227,14 +226,13 @@ export function resolveGlobalMainSessionKey(
   input: LegacyGatewayLike | GatewayBackendKind | null | undefined,
 ): string | null {
   if (resolveGatewayBackendKind(typeof input === 'string' ? { backendKind: input } : input) === 'local-model') return 'main';
-  return selectByBackend(input, { openclaw: null, hermes: 'main', youmind: 'main' });
+  return selectByBackend(input, { openclaw: null, hermes: 'main' });
 }
 
 export function getGatewayModeLabel(input: LegacyGatewayLike): string {
   const backendKind = resolveGatewayBackendKind(input);
   const transportKind = resolveGatewayTransportKind(input);
   if (backendKind === 'hermes') return 'Hermes';
-  if (backendKind === 'youmind') return 'YouMind';
   switch (transportKind) {
     case 'relay':
       return 'Remote';
@@ -260,11 +258,9 @@ export function buildGatewayDefaultName(input: {
   const host = parseHost(input.url);
   const baseLabel = backendKind === 'hermes'
     ? 'Hermes'
-    : backendKind === 'youmind'
-      ? 'YouMind'
-      : transportKind === 'relay'
-        ? 'Relay'
-        : 'Custom';
+    : transportKind === 'relay'
+      ? 'Relay'
+      : 'Custom';
   if (host) return `${baseLabel} (${host})`;
   return `${baseLabel} Gateway ${input.index}`;
 }

@@ -114,13 +114,6 @@ jest.mock('../../components/ui/LoadingState', () => {
   };
 });
 
-// Read through a getter so one test can hide the YouMind Sprite entry again;
-// the screen reads the flag at render time, never at module load.
-let mockYouMindEntryVisible = true;
-jest.mock('../../config/features', () => ({
-  get YOUMIND_SPRITE_ENTRY_VISIBLE() { return mockYouMindEntryVisible; },
-}));
-
 jest.mock('../../components/ui/Banner', () => {
   const ReactRuntime = require('react');
   const { Pressable, Text, View } = require('react-native');
@@ -203,7 +196,6 @@ function createProps(overrides: Partial<OnboardingScreenProps> = {}): Onboarding
     initialBackend: 'openclaw',
     onSubmitPairing: jest.fn(),
     onScanQr: jest.fn(),
-    onOpenYouMind: jest.fn(),
     onOpenWebsite: jest.fn(),
     onCopyAgentPrompt: jest.fn(),
     ...overrides,
@@ -227,7 +219,6 @@ describe('OnboardingScreen', () => {
   beforeEach(() => {
     mockIPad = false;
     mockTheme = { scheme: 'light', colors: mockLightColors };
-    mockYouMindEntryVisible = true;
     consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation((message?: unknown) => {
       if (typeof message === 'string' && message.includes('react-test-renderer is deprecated')) return;
     });
@@ -315,7 +306,6 @@ describe('OnboardingScreen', () => {
     expect(view.queryByTestId('onboarding-pairing-code')).toBeNull();
     fireEvent.press(view.getByTestId('onboarding-backend-openclaw'));
     expect(view.getByTestId('onboarding-agent-prompt')).toBeTruthy();
-    expect(view.queryByTestId('onboarding-youmind')).toBeNull();
     fireEvent.changeText(view.getByTestId('onboarding-pairing-code'), '123456');
     fireEvent.press(view.getByTestId('onboarding-close'));
     fireEvent.press(view.getByTestId('onboarding-backend-hermes'));
@@ -345,11 +335,11 @@ describe('OnboardingScreen', () => {
     const view = render(<OnboardingScreen {...createProps({ initialBackend: undefined, onSubmitPairing, onOpenWebsite })} />);
     // Chooser order (owner decision 2026-09-26): products first, the user's own model server last.
     expect(view.getByTestId('onboarding-backends').props.children.map((row: { props: { testID: string } }) => row.props.testID))
-      .toEqual(['onboarding-backend-openclaw', 'onboarding-backend-hermes', 'onboarding-backend-codex', 'onboarding-backend-claude-code', 'onboarding-backend-pi', 'onboarding-youmind', 'onboarding-backend-local-model']);
+      .toEqual(['onboarding-backend-openclaw', 'onboarding-backend-hermes', 'onboarding-backend-codex', 'onboarding-backend-claude-code', 'onboarding-backend-pi', 'onboarding-backend-local-model']);
     // A local model is a server the user already runs; "No agent yet?" only lists products to install.
     fireEvent.press(view.getByTestId('onboarding-docs-toggle'));
     expect(view.getByTestId('onboarding-doc-options').props.children.map((link: { props: { testID: string } }) => link.props.testID))
-      .toEqual(['onboarding-doc-openclaw', 'onboarding-doc-hermes', 'onboarding-doc-codex', 'onboarding-doc-claude-code', 'onboarding-doc-pi', 'onboarding-doc-youmind']);
+      .toEqual(['onboarding-doc-openclaw', 'onboarding-doc-hermes', 'onboarding-doc-codex', 'onboarding-doc-claude-code', 'onboarding-doc-pi']);
     expect(view.queryByTestId('onboarding-doc-local-model')).toBeNull();
     fireEvent.press(view.getByTestId('onboarding-backend-local-model'));
     expect(view.queryByTestId('onboarding-agent-prompt')).toBeNull();
@@ -693,47 +683,6 @@ describe('OnboardingScreen', () => {
     view.rerender(<OnboardingScreen {...props} environment="preview" />);
     expect(view.getByTestId('onboarding-chooser')).toBeTruthy();
     expect(view.queryByText('npx @p697/clawket@latest pair choose')).toBeNull();
-  });
-
-  it('hides every YouMind Sprite entry when the entry flag is off', () => {
-    mockYouMindEntryVisible = false;
-    const onScanQr = jest.fn();
-    const onOpenYouMind = jest.fn();
-    const onOpenWebsite = jest.fn();
-    const view = render(
-      <OnboardingScreen {...createProps({ onScanQr, onOpenYouMind, onOpenWebsite, initialBackend: undefined })} />,
-    );
-
-    expect(view.queryByTestId('onboarding-youmind')).toBeNull();
-    expect(view.queryByText('YouMind Sprite')).toBeNull();
-    fireEvent.press(view.getByTestId('onboarding-backend-hermes'));
-    fireEvent.press(view.getByTestId('onboarding-scan-qr'));
-    fireEvent.press(view.getByTestId('onboarding-close'));
-    fireEvent.press(view.getByTestId('onboarding-docs-toggle'));
-    fireEvent.press(view.getByTestId('onboarding-doc-openclaw'));
-    fireEvent.press(view.getByTestId('onboarding-doc-hermes'));
-    expect(view.queryByTestId('onboarding-doc-youmind')).toBeNull();
-
-    expect(onScanQr).toHaveBeenCalledWith('hermes');
-    expect(onOpenYouMind).not.toHaveBeenCalled();
-    expect(onOpenWebsite.mock.calls).toEqual([['openclaw'], ['hermes']]);
-  });
-
-  it('renders the YouMind Sprite row and website link by default', () => {
-    const onOpenYouMind = jest.fn();
-    const onOpenWebsite = jest.fn();
-    const view = render(
-      <OnboardingScreen {...createProps({ onOpenYouMind, onOpenWebsite, initialBackend: undefined })} />,
-    );
-
-    fireEvent.press(view.getByTestId('onboarding-youmind'));
-    fireEvent.press(view.getByTestId('onboarding-docs-toggle'));
-    fireEvent.press(view.getByTestId('onboarding-doc-openclaw'));
-    fireEvent.press(view.getByTestId('onboarding-doc-hermes'));
-    fireEvent.press(view.getByTestId('onboarding-doc-youmind'));
-
-    expect(onOpenYouMind).toHaveBeenCalledTimes(1);
-    expect(onOpenWebsite.mock.calls).toEqual([['openclaw'], ['hermes'], ['youmind']]);
   });
 
   it('renders loading, offline, error, and connecting states without replacing cached form content', () => {

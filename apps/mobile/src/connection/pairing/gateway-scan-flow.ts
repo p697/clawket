@@ -163,9 +163,6 @@ export async function claimRelayPairing(
   const handler = selectByBackend<RelayClaimHandler>(payload, {
     openclaw: claimOpenClawRelay,
     hermes: claimHermesRelay,
-    // Relay pairing is not a YouMind flow. Retaining the historical OpenClaw
-    // fallback keeps malformed legacy payload handling backward compatible.
-    youmind: claimOpenClawRelay,
   });
   const task = handler(payload, claimableRelay).finally(() => {
     inFlightRef.current.delete(claimKey);

@@ -196,7 +196,7 @@ jest.mock('../services/analytics/events', () => ({
 }));
 
 function createAdapter(backendKind: BackendKind = 'openclaw') {
-  const transportKinds = { openclaw: 'relay', hermes: 'relay', 'local-model': 'relay', pi: 'relay', codex: 'relay', 'claude-code': 'relay', youmind: 'https' } as const;
+  const transportKinds = { openclaw: 'relay', hermes: 'relay', 'local-model': 'relay', pi: 'relay', codex: 'relay', 'claude-code': 'relay' } as const;
   return {
     state: 'connecting',
     capabilities: resolveCapabilities(backendKind),

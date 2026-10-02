@@ -480,7 +480,7 @@ function createStyles(colors: SheetColors) {
       paddingBottom: Space.xxl,
       gap: Space.sm,
     },
-    // YouMind-style rows with a touch more air (owner, 2026-09-12): 48-point pitch.
+    // Menu rows with a touch more air (owner, 2026-09-12): 48-point pitch.
     menuRow: {
       minHeight: HitSize.lg,
       paddingHorizontal: 0,

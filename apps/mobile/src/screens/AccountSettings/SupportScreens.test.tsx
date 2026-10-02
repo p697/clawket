@@ -398,7 +398,7 @@ describe('AccountSettings support screens', () => {
     expect(versions[versions.length - 1]).toBe('v1.1.0');
     expect(view.getByText('All your Agents on one screen')).toBeTruthy();
     expect(view.queryByText('Clawket Pro')).toBeNull();
-    expect(view.getByText('YouMind Connection')).toBeTruthy();
+    expect(view.getByText('Hermes Connection')).toBeTruthy();
     expect(view.getByText('Sessions Board')).toBeTruthy();
     expect(view.getByText('Released Apr 17, 2026')).toBeTruthy();
     expect(formatReleaseDate('not-a-date', 'en')).toBe('not-a-date');

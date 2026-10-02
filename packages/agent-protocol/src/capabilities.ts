@@ -241,7 +241,8 @@ const HERMES_CAPABILITIES: Capabilities = {
   pairRequests: false,
 };
 
-const YOUMIND_CAPABILITIES: Capabilities = {
+/** Chat with abort and history and nothing else: the row the Agent backends build on. */
+const MINIMAL_CHAT_CAPABILITIES: Capabilities = {
   chat: true,
   abort: true,
   history: true,
@@ -285,20 +286,19 @@ const YOUMIND_CAPABILITIES: Capabilities = {
 };
 
 export const CAPABILITY_MATRIX: Record<BackendKind, Capabilities> = {
-  'claude-code': { ...YOUMIND_CAPABILITIES, promptStatus: true, steer: false, sessionBranch: true, projects: true, chat: true, abort: true, history: true, attachments: true,
+  'claude-code': { ...MINIMAL_CHAT_CAPABILITIES, promptStatus: true, steer: false, sessionBranch: true, projects: true, chat: true, abort: true, history: true, attachments: true,
     sessions: true, sessionCreate: true, sessionRename: true, sessionReset: true, sessionDelete: true,
     models: true, modelPerSession: true, agentQuestions: true, execApproval: true },
-  codex: { ...YOUMIND_CAPABILITIES, profileManagement: true, promptStatus: true, projects: true, chat: true, abort: true, steer: true, history: true, attachments: true,
+  codex: { ...MINIMAL_CHAT_CAPABILITIES, profileManagement: true, promptStatus: true, projects: true, chat: true, abort: true, steer: true, history: true, attachments: true,
     sessions: true, sessionCreate: true, sessionRename: true, sessionReset: true, sessionDelete: true, sessionArchive: true, sessionPermissions: true,
     models: true, modelPerSession: true, fastMode: true, thinkingLevels: true, skills: true, agentQuestions: true, sessionBranch: true, execApproval: true },
-  pi: { ...YOUMIND_CAPABILITIES, promptStatus: true, chat: true, abort: true, steer: true, history: true, attachments: true,
+  pi: { ...MINIMAL_CHAT_CAPABILITIES, promptStatus: true, chat: true, abort: true, steer: true, history: true, attachments: true,
     sessions: true, sessionCreate: true, sessionRename: true, sessionReset: true, sessionDelete: true,
     models: true, modelPerSession: true, thinkingLevels: true, skills: true, agentQuestions: true, sessionBranch: true },
   openclaw: OPENCLAW_CAPABILITIES,
   hermes: HERMES_CAPABILITIES,
-  youmind: YOUMIND_CAPABILITIES,
   'local-model': {
-    ...YOUMIND_CAPABILITIES,
+    ...MINIMAL_CHAT_CAPABILITIES,
     chat: true, abort: true, history: true, attachments: true,
     models: true,
   },
