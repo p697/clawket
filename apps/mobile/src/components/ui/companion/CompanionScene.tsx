@@ -31,10 +31,12 @@ function useAppActive(): boolean {
  * One loading scene: the stage, its Companion and the cat's temper. Decorative:
  * hidden from assistive technology; the owning `LoadingState` carries the accessible busy label.
  */
-export function CompanionScene({ scene, phase, compact = false, testID }: Readonly<{
+export function CompanionScene({ scene, phase, compact = false, surface, testID }: Readonly<{
   scene: CompanionSceneKey;
   phase: CompanionScenePhase;
   compact?: boolean;
+  /** The page's card color, for stage furniture such as Peek's desk; see `LoadingState`. */
+  surface?: string;
   testID?: string;
 }>): React.JSX.Element {
   const { theme } = useAppTheme();
@@ -59,12 +61,12 @@ export function CompanionScene({ scene, phase, compact = false, testID }: Readon
   const colors = useMemo<SceneColors>(() => ({
     ink: theme.colors.ink,
     canvas: theme.colors.canvas,
-    surface: theme.colors.surface,
+    surface: surface ?? theme.colors.surface,
     line: theme.colors.line,
     // An ink hole merges with the ink cat in light mode; in dark mode a hole reads as an outlined opening.
     hole: theme.scheme === 'dark' ? theme.colors.canvas : theme.colors.ink,
     holeRim: theme.scheme === 'dark' ? theme.colors.line : undefined,
-  }), [theme]);
+  }), [surface, theme]);
   const shake = useAnimatedProps(() => {
     const layer = timedLayer(CLAW.shake, play.values.claw.value, REST);
     return { matrix: affine(layer.x, layer.y, 1, 1, 0, 0, 0) };

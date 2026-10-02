@@ -1572,7 +1572,7 @@ export function ThreadView({
               style={[StyleSheet.absoluteFill, styles.centeredState, { paddingTop: timelineTopClearance }]}
             >
               <LoadingState testID="thread-history-loading" phase={loaderPhase} message={loaderMessage.current}
-                pose={connectingLabel ? 'connecting' : 'loading'}
+                pose={connectingLabel ? 'connecting' : 'loading'} surface={surfaces.card}
                 slowAction={connectionFailure?.onManage ? { label: t('Manage connection', { ns: 'config' }), onPress: connectionFailure.onManage } : undefined} />
             </View>
           ) : null}

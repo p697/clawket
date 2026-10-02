@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import { ChevronLeft } from 'lucide-react-native';
@@ -14,7 +14,7 @@ import { SessionPreferencesService } from '../../services/session-preferences';
 import { useAppTheme } from '../../theme';
 import { useAppContext } from '../../contexts/AppContext';
 import { ChatBackgroundLayer } from '../../components/chat/ChatBackgroundLayer';
-import { isChatWallpaperActive } from '../../features/chat-appearance/resolver';
+import { isChatWallpaperActive, resolveChatSurfaces } from '../../features/chat-appearance/resolver';
 import { ControlSize, Space } from '../../theme/tokens';
 import { useProPaywall } from '../../contexts/ProPaywallContext';
 import type { ThreadScreenProps } from './ThreadScreen';
@@ -26,10 +26,11 @@ export function ConversationEntry({ navigation, route, locked, lockedReason = 'a
   const { connectionId, agentId } = route.params;
   const focused = useIsFocused();
   const connections = useConnections();
-  const { theme } = useAppTheme();
+  const { theme, accentId } = useAppTheme();
   const { chatAppearance } = useAppContext();
   // The thread's own wallpaper and glass controls, so opening it never swaps the page underneath.
   const wallpaperActive = isChatWallpaperActive(chatAppearance);
+  const cardSurface = useMemo(() => resolveChatSurfaces(theme, chatAppearance, accentId).card, [accentId, chatAppearance, theme]);
   const { t } = useTranslation('common');
   const insets = useSafeAreaInsets();
   const { showPaywall } = useProPaywall();
@@ -127,7 +128,7 @@ export function ConversationEntry({ navigation, route, locked, lockedReason = 'a
       </View>
       <View style={styles.headerSpacer} pointerEvents="none" />
     </View>
-    {loaderPhase ? <LoadingState testID="conversation-entry-loading" pose="connecting" phase={loaderPhase}
+    {loaderPhase ? <LoadingState testID="conversation-entry-loading" pose="connecting" phase={loaderPhase} surface={cardSurface}
       message={stage === 'connecting' ? t('Connecting') : t('Loading sessions')}
       slowAfterMs={slowAfterMs} waitKey={`${connectionId}:${stage}`}
       slowAction={{ label: t('Manage connection', { ns: 'config' }), onPress: () => navigation.navigate('Connection', { connectionId }) }} /> : null}

@@ -17,7 +17,7 @@ const mockCreate = jest.fn(async (..._args: any[]) => ({ key: 'created' }));
 jest.mock('../../connection', () => ({ useConnections: () => mockSnapshot, getConnectionRuntime: () => mockRuntime }));
 jest.mock('@react-navigation/native', () => ({ useIsFocused: () => true }));
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0 }) }));
-jest.mock('../../theme', () => ({ useAppTheme: () => ({ theme: { colors: { canvas: '#fff', inkSecondary: '#888' } } }) }));
+jest.mock('../../theme', () => ({ useAppTheme: () => ({ theme: { colors: { canvas: '#fff', surface: '#f2f2f4', inkSecondary: '#888' } } }) }));
 jest.mock('../../contexts/ProPaywallContext', () => ({ useProPaywall: () => ({ showPaywall: jest.fn() }) }));
 let mockWallpaperKind = 'pattern';
 jest.mock('../../contexts/AppContext', () => ({ useAppContext: () => ({ chatAppearance: {
@@ -109,9 +109,12 @@ it('waits on the thread\'s own wallpaper and glass header, or the plain canvas w
   const view = render(<ConversationEntry {...props} />);
   expect(mockWallpaper.appearance.background.kind).toBe('pattern');
   expect(mockPill).toMatchObject({ material: 'glass' });
+  // The cat's desk is a card of the page it waits on: white over the wallpaper, not the canvas gray.
+  expect(mockLoading.surface).toBe('#FFFFFF');
   mockWallpaperKind = 'plain';
   view.rerender(<ConversationEntry {...props} />);
   expect(mockPill).toMatchObject({ material: 'surface' });
+  expect(mockLoading.surface).toBe('#f2f2f4');
   mockWallpaperKind = 'pattern';
   await waitFor(() => expect(mockPanel.visible).toBe(true));
 });

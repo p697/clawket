@@ -46,6 +46,12 @@ type Props = {
   action?: Readonly<{ label: string; onPress: () => void }>;
   /** The label is the page's headline (the onboarding connecting stage): title size, semibold. */
   headline?: boolean;
+  /**
+   * The color cards have on the page behind the loader, so the scene's furniture (Peek's desk) reads as
+   * one of them. Defaults to the plain canvas's `surface`; a neutral gray turns muddy on a grouped page or
+   * a tinted chat wallpaper (owner feedback 2026-10-02).
+   */
+  surface?: string;
   testID?: string;
 };
 
@@ -57,7 +63,7 @@ type Props = {
  * 2026-09-27). It stays invisible for `Motion.loadingGrace` so fast loads never flash the Companion, while
  * the busy state and its label are exposed to assistive technology immediately.
  */
-export function LoadingState({ message, pose = 'loading', size = 'page', phase = 'wait', scene: pinned, slowAction, slowAfterMs = Motion.loadingSlowHint, waitKey, action, headline = false, testID }: Props): React.JSX.Element {
+export function LoadingState({ message, pose = 'loading', size = 'page', phase = 'wait', scene: pinned, slowAction, slowAfterMs = Motion.loadingSlowHint, waitKey, action, headline = false, surface, testID }: Props): React.JSX.Element {
   const { theme } = useAppTheme();
   const { t } = useTranslation('common');
   const reducedMotion = useReducedMotion();
@@ -135,7 +141,7 @@ export function LoadingState({ message, pose = 'loading', size = 'page', phase =
             <Companion pose={pose} size={compact ? COMPACT_COMPANION : undefined} />
           ) : (
             <Animated.View style={sceneStyle}>
-              <CompanionScene key={`${scene}-${round}`} scene={scene} phase={phase} compact={compact} testID={testID ? `${testID}-scene` : undefined} />
+              <CompanionScene key={`${scene}-${round}`} scene={scene} phase={phase} compact={compact} surface={surface} testID={testID ? `${testID}-scene` : undefined} />
             </Animated.View>
           )}
           {/* The label goes the moment the wait succeeds, so it never reads over the arriving content; its line stays so the cat does not jump. */}

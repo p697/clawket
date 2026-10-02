@@ -56,6 +56,16 @@ it.each(['peek', 'fetch', 'yarn', 'pounce', 'listen'] as const)('draws the %s sc
   view.unmount();
 });
 
+it('sets Peek\'s desk in the page\'s card color, defaulting to the canvas surface', () => {
+  const desk = (view: ReturnType<typeof render>) => view.UNSAFE_getAllByType('Rect' as unknown as React.ComponentType)
+    .find((rect) => rect.props.width === 164)?.props.fill;
+  const plain = render(<CompanionScene scene="peek" phase="wait" testID="scene" />);
+  expect(desk(plain)).toBe('#f2f2f4');
+  plain.unmount();
+  const loader = render(<LoadingState scene="peek" surface="#FFFFFF" />);
+  expect(desk(loader)).toBe('#FFFFFF');
+});
+
 it('answers a tap with a press, a happy flavour and a light haptic, then rests', () => {
   const view = render(<CompanionScene scene="yarn" phase="wait" testID="scene" />);
   act(() => { pressable(view).props.onPress(); });

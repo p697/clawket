@@ -618,7 +618,9 @@ export function BackupsSection({
 
 export function ManageSectionLoading({ diagnostics = false }: { diagnostics?: boolean }): React.JSX.Element {
   const { t } = useTranslation(['config', 'common']);
-  return <LoadingState testID="openclaw-manage-loading"
+  const { theme } = useAppTheme();
+  // The manage page is grouped: its cards (and the cat's desk) are the floating surface.
+  return <LoadingState testID="openclaw-manage-loading" surface={theme.colors.surfaceFloating}
     message={diagnostics ? t('Diagnosing — this may take a few seconds…') : t('Loading settings')} />;
 }
 
