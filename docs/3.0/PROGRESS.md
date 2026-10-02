@@ -1,5 +1,13 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-02 「会话已重置」不再进对话后才冒出来，位置也对了（负责人：每次从 Agent 列表进 OpenClaw 对话，这个气泡都无中生有，还把内容顶上去）。
+  - 是什么：OpenClaw 的每日重置（配置 `session.reset: daily, atHour 5`）。5 点后的第一条消息会给对话开一段新的上下文：网关在记录里写一条 reset 事件，之后只返回分界前保留的最后几条、分界行和新消息；分界线以上的聊天 Agent 不再记在当前上下文里。App 把这条系统行画成居中胶囊（上下文压缩同理）。
+  - 冒出来的原因：本地缓存只存用户、助手、工具三类消息，这两种分界行被当作系统噪音过滤掉。进入时先画缓存（没有它），网关历史回来才插入。现在只放行这两种分界行进缓存（`isTranscriptBoundaryNotice`），其它系统提示照旧不存，分界行也不会成为会话预览或搜索结果。
+  - 位置：网关按消息时间排序，你那条消息用的是手机发送时刻，分界行是网关处理时才写的，晚了 0.5 秒，于是排到了消息后面（记录序号其实是 3843 在 3844 前）。现在按 `transcriptPosition` 把分界行放回触发它的消息之前，时间戳设为那条消息减 1ms，缓存合并也照此排序；那条消息的时间标签放在分界行上面，顺序是「08:06 → 会话已重置 → 消息」。
+  - 「消息全部消失」那次：负责人 08:06 用的是 05:39 编的包，Reanimated 修复（#102）06:14 才合并，属于那个已修的问题。重置不会清空或重建列表。
+  - 真机验证（SM-A566B QA 包，Lucy 对话，只看）：第二次进入录屏，列表从淡入第一帧起就是最终排列，用户气泡位置逐帧不变，没有插入和下推。
+  - 单测逐文件串行：gateway-history 边界 11、chat-cache 44、Thread model 29、ThreadView 148、useChatController 契约 59、agentSystemNotice 14、gateway-history 嵌入工具 23、timestamps 19 等。
+
 - 2026-10-02 工作记录里的工具步骤显示 Agent 写的标题（负责人：Codex 的「Used 4 tools」点开后四步都叫「js」，太草率；详情里明明有 title）。
   - 调研（本机真实会话，只统计参数字段）：Codex 的 `js` 工具 1377 次调用全部带 `title`；Claude Code 的 Bash 99.7% 带 `description`，Agent（子任务）也带；Hermes（terminal、read_file、skill_view）和 Pi（read、bash、edit、write）没有这类字段。
   - 改法（`resolveToolTitle`）：输入里有 `title` / `description` / `summary` 时，这句话当工作记录这一行的主行，下一行是工具名和命令 / 路径。详情弹层标题改用它，工具名放到状态行。运行中和失败的胶囊在没有命令、路径或查询可显示时也用它，不再是「Using js」。没有这类字段的工具显示不变。

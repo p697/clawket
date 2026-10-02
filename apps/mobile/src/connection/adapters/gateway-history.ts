@@ -81,11 +81,53 @@ export function mapGatewayHistoryMessage(
   return message;
 }
 
+type PlacedHistoryRow = Readonly<{ value: unknown; index: number }>;
+
+/**
+ * OpenClaw sorts `chat.history` by message time, but writes a reset or
+ * compaction boundary while handling the message that triggered it, after that
+ * message's own (sender) time. Its transcript position still comes first
+ * (recorded 2026-10-02: reset rawSeq 3843, the user's message 3844). Put a
+ * boundary back before the rows that follow it in the same transcript, one
+ * millisecond ahead of them so the time-ordered history merge agrees. Rows keep
+ * their wire index for fallback IDs.
+ */
+function placeTranscriptBoundaries(values: unknown[]): PlacedHistoryRow[] {
+  const rows: PlacedHistoryRow[] = values.map((value, index) => ({ value, index }));
+  for (let current = 0; current < rows.length; current += 1) {
+    const boundary = rows[current]!.value;
+    if (!isRecord(boundary) || boundary.role !== 'system' || !readOpenClawBoundaryNotice(boundary.__openclaw)) continue;
+    const position = readTranscriptPosition(boundary);
+    if (!position) continue;
+    let target = current;
+    while (target > 0) {
+      const earlier = readTranscriptPosition(rows[target - 1]!.value);
+      if (!earlier || earlier.source !== position.source || earlier.rawSeq <= position.rawSeq) break;
+      target -= 1;
+    }
+    if (target === current) continue;
+    const following = rows[target]!.value;
+    const followingTimestamp = normalizeTimestamp(isRecord(following) ? following.timestamp : undefined);
+    const timestamp = followingTimestamp === undefined
+      ? normalizeTimestamp(boundary.timestamp)
+      : Math.min(normalizeTimestamp(boundary.timestamp) ?? Number.POSITIVE_INFINITY, followingTimestamp - 1);
+    const [moved] = rows.splice(current, 1);
+    rows.splice(target, 0, { index: moved!.index, value: timestamp === undefined ? boundary : { ...boundary, timestamp } });
+  }
+  return rows;
+}
+
+function readTranscriptPosition(value: unknown): Readonly<{ source: string; rawSeq: number }> | undefined {
+  if (!isRecord(value) || !isRecord(value.__openclaw) || !isRecord(value.__openclaw.transcriptPosition)) return undefined;
+  const { source, rawSeq } = value.__openclaw.transcriptPosition;
+  return typeof source === 'string' && typeof rawSeq === 'number' && Number.isFinite(rawSeq) ? { source, rawSeq } : undefined;
+}
+
 /** CLI history may coalesce tool calls and results inside assistant/user content. */
 export function mapGatewayHistoryMessages(sessionKey: string, values: unknown[]): ChatMessage[] {
   const messages: ChatMessage[] = [];
   const names = new Map<string, string>();
-  values.forEach((value, index) => {
+  placeTranscriptBoundaries(values).forEach(({ value, index }) => {
     if (!isRecord(value) || !Array.isArray(value.content)
         || (value.role !== 'assistant' && value.role !== 'user')) {
       const mapped = mapGatewayHistoryMessage(sessionKey, value, index);

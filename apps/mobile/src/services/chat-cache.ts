@@ -1,4 +1,5 @@
 import { normalizeMessageAttribution } from '../chat/messageAttribution';
+import { isTranscriptBoundaryNotice } from '../chat/agentSystemNotice';
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { UiMessage } from "../types/chat";
 import { sanitizeSilentPreviewText, shouldHideMessage } from "../utils/chat-message";
@@ -111,12 +112,15 @@ function makeStorageKey(
 }
 
 function isCacheableMessage(
-  message: Pick<UiMessage, "role"> | Pick<CachedMessage, "role">,
+  message: Pick<UiMessage, "role" | "text"> | Pick<CachedMessage, "role" | "text">,
 ): boolean {
   return (
     message.role === "user" ||
     message.role === "assistant" ||
-    message.role === "tool"
+    message.role === "tool" ||
+    // A transcript boundary paints with the messages on entry instead of
+    // arriving with network history and pushing the rows below it.
+    isTranscriptBoundaryNotice(message)
   );
 }
 
@@ -185,14 +189,16 @@ function buildMetaFromMessages(
   const timestamps = messages
     .map((message) => message.timestampMs)
     .filter((value): value is number => typeof value === "number" && value > 0);
+  // A boundary notice is not what the session last said.
+  const lastMessage = messages.findLast((message) => message.role !== "system");
 
   return {
     ...meta,
     messageCount: messages.length,
     firstMessageMs: timestamps.length > 0 ? Math.min(...timestamps) : undefined,
     lastMessageMs: timestamps.length > 0 ? Math.max(...timestamps) : undefined,
-    lastMessagePreview: buildPreview(messages[messages.length - 1]),
-    lastModelLabel: messages[messages.length - 1]?.modelLabel,
+    lastMessagePreview: buildPreview(lastMessage),
+    lastModelLabel: lastMessage?.modelLabel,
   };
 }
 
@@ -601,7 +607,7 @@ export const ChatCacheService = {
           params.sessionKey,
           stableSessionId,
         );
-        // Only cache user + assistant + tool messages (skip system noise)
+        // Cache user, assistant and tool messages and transcript boundaries; skip other system noise.
         const cacheable = messages
           .filter(isCacheableMessage)
           .map(message => ({ ...message, attribution: normalizeMessageAttribution(message.attribution), sentLocally: message.sentLocally === true ? true as const : undefined }))
@@ -905,11 +911,13 @@ export const ChatCacheService = {
 
       for (const meta of filtered) {
         const messages = messagesByKey.get(meta.storageKey) ?? [];
+        // Boundary notices are cached for display, not as searchable messages.
         const matches = messages.filter(
           (m) =>
-            m.text.toLowerCase().includes(lowerQuery) ||
-            (m.toolName && m.toolName.toLowerCase().includes(lowerQuery)) ||
-            (m.toolSummary && m.toolSummary.toLowerCase().includes(lowerQuery)),
+            m.role !== "system" && (
+              m.text.toLowerCase().includes(lowerQuery) ||
+              (m.toolName && m.toolName.toLowerCase().includes(lowerQuery)) ||
+              (m.toolSummary && m.toolSummary.toLowerCase().includes(lowerQuery))),
         );
         if (matches.length > 0) {
           results.push({ meta, matches });

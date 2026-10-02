@@ -156,6 +156,41 @@ describe("ChatCacheService", () => {
     unmount();
   });
 
+  it("paints a cached reset boundary on entry, where network history keeps it", async () => {
+    const key = "agent:main:main";
+    const scope = { gatewayConfigId: "gw1", agentId: "main", sessionKey: key };
+    const rows = [
+      { id: "kept-user", role: "user" as const, text: "Earlier question", timestampMs: 100_000 },
+      { id: "kept-reply", role: "assistant" as const, text: "Earlier answer", timestampMs: 101_000 },
+      { id: "reset", role: "system" as const, text: "Session reset", timestampMs: 199_999 },
+      { id: "after-user", role: "user" as const, text: "Weather tomorrow?", timestampMs: 200_000 },
+      { id: "after-reply", role: "assistant" as const, text: "Light rain.", timestampMs: 210_000 },
+    ];
+    const adapter = { connection: { backendKind: "openclaw" }, state: "ready",
+      loadSession: jest.fn().mockResolvedValue({ sessionId: "current", messages: rows }) };
+    const mount = () => renderHook(() => {
+      const sessionKeyRef = useRef<string | null>(key);
+      return useChatHistoryState({ adapter: adapter as any, dbg: jest.fn(), t: key => key, sessionKeyRef,
+        routeSessionKey: key, mainSessionKey: key, gatewayConfigId: "gw1", currentAgentId: "main" });
+    });
+    // A first visit renders network history; the thread then caches what it shows.
+    const first = mount();
+    await act(async () => { await first.result.current.loadHistory(key); });
+    const shown = first.result.current.messages;
+    expect(shown.map(message => message.text)).toEqual(rows.map(row => row.text));
+    await ChatCacheService.saveMessages({ ...scope, sessionId: "current" }, shown);
+    first.unmount();
+    // The next entry paints the boundary from the cache, before network history.
+    const next = mount();
+    await act(async () => { await next.result.current.restoreCachedMessages(key, { sessionId: "current" }); });
+    expect(next.result.current.messages.map(message => message.text)).toEqual(rows.map(row => row.text));
+    const renderKeys = next.result.current.messages.map(message => message.renderKey ?? message.id);
+    await act(async () => { await next.result.current.loadHistory(key); });
+    expect(next.result.current.messages.map(message => message.text)).toEqual(rows.map(row => row.text));
+    expect(next.result.current.messages.map(message => message.renderKey ?? message.id)).toEqual(renderKeys);
+    next.unmount();
+  });
+
   describe("saveMessages + getMessages", () => {
     it("caches stable artifact references without tickets or bytes", async () => {
       const scope = { gatewayConfigId: "gw1", agentId: "main", sessionKey: "agent:main:main" };
@@ -297,13 +332,14 @@ describe("ChatCacheService", () => {
       expect(result).toEqual([]);
     });
 
-    it("does not cache system messages while preserving user, assistant, and tool messages", async () => {
+    it("caches transcript boundaries but no other system messages, alongside user, assistant, and tool messages", async () => {
       const messages: UiMessage[] = [
         makeMsg({
           id: "sys_1",
           role: "system",
           text: "Connection Setup Required",
         }),
+        makeMsg({ id: "system_history_reset", historyMessageId: "reset", role: "system", text: "Session reset" }),
         makeMsg({ id: "1", role: "user", text: "Hello" }),
         makeMsg({ id: "2", role: "assistant", text: "Hi there" }),
         makeMsg({
@@ -335,12 +371,26 @@ describe("ChatCacheService", () => {
         "agent1",
         "agent:agent1:main",
       );
-      expect(result.map((message) => message.id)).toEqual(["1", "2", "3"]);
+      expect(result.map((message) => message.id)).toEqual(["system_history_reset", "1", "2", "3"]);
       expect(result.map((message) => message.role)).toEqual([
+        "system",
         "user",
         "assistant",
         "tool",
       ]);
+      expect(result[0].historyMessageId).toBe("reset");
+    });
+
+    it("previews the last message, never a boundary notice after it", async () => {
+      const scope = { gatewayConfigId: "gw1", agentId: "agent1", sessionKey: "agent:agent1:main" };
+      await ChatCacheService.saveMessages(scope, [
+        makeMsg({ id: "1", role: "assistant", text: "Done.", modelLabel: "Opus 5.5" }),
+        makeMsg({ id: "system_history_compaction", role: "system", text: "Context compacted" }),
+      ]);
+      const meta = await ChatCacheService.getSessionMeta("gw1", "agent1", "agent:agent1:main");
+      expect(meta?.lastMessagePreview).toBe("Done.");
+      expect(meta?.lastModelLabel).toBe("Opus 5.5");
+      expect(await ChatCacheService.search("compacted")).toEqual([]);
     });
 
     it("does not cache hidden user messages that match transcript suppression rules", async () => {

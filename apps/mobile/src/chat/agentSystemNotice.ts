@@ -1,3 +1,14 @@
+// OpenClaw transcript boundaries, normalized by `mapGatewayHistoryMessage`.
+const TRANSCRIPT_BOUNDARY_NOTICES: ReadonlySet<string> = new Set(['Session reset', 'Context compacted']);
+
+/**
+ * A transcript boundary is part of the conversation: unlike other system
+ * notices it is cached with the messages, so it paints with them on entry.
+ */
+export function isTranscriptBoundaryNotice(message: Readonly<{ role: string; text: string }>): boolean {
+  return message.role === 'system' && TRANSCRIPT_BOUNDARY_NOTICES.has(message.text);
+}
+
 // Call only for normalized system notices. User/assistant text stays verbatim.
 // Keep literal keys and namespaces visible to the locale-pruning check.
 export function localizeAgentSystemNotice(

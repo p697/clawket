@@ -386,6 +386,27 @@ describe('Thread model', () => {
     );
   });
 
+  it('puts the time label of the message a transcript boundary opened above that boundary', () => {
+    const at = (hour: number, minute: number) => new Date(2026, 9, 2, hour, minute).getTime();
+    const messages: UiMessage[] = [
+      { id: 'reply', role: 'assistant', text: 'Light rain.', timestampMs: at(8, 7) },
+      { id: 'question', role: 'user', text: 'Weather?', timestampMs: at(8, 6) },
+      { id: 'system_history_reset', role: 'system', text: 'Session reset', timestampMs: at(8, 6) - 1 },
+      // Other notices stay with the block they report on.
+      { id: 'notice', role: 'system', text: 'The model is rate limited. Try again shortly.', timestampMs: at(4, 55) },
+      { id: 'earlier', role: 'user', text: 'Test', timestampMs: at(4, 54) },
+    ];
+    expect(buildThreadTimelineItems({ messages, runs: [], locale: 'en-US' }).map((item) => item.key)).toEqual([
+      'message:reply',
+      'message:question',
+      'message:system_history_reset',
+      'date:message:question',
+      'message:notice',
+      'message:earlier',
+      'date:message:earlier',
+    ]);
+  });
+
   it('spaces rows by voice: joined within a speaker group, apart across turns, sectioned by time labels', () => {
     const at = (minute: number) => new Date(2026, 8, 5, 12, minute).getTime();
     const timeline = groupThreadTools(buildThreadTimelineItems({
@@ -413,10 +434,11 @@ describe('Thread model', () => {
       ['message:ask', 'none', false, false],
       ['date:message:ask', 'section', false, false],
       ['message:again', 'joined', true, false],
-      ['message:first', 'none', false, true],
-      ['date:message:first', 'section', false, false],
-      // An untimed system notice gets no time label and sits under the list inset.
+      ['message:first', 'turn', false, true],
+      // A boundary notice opens the rows after it: their time label sits above
+      // it, and the oldest label under the list inset.
       ['message:notice', 'none', false, false],
+      ['date:message:first', 'none', false, false],
     ]);
   });
 

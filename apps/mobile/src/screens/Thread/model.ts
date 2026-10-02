@@ -1,4 +1,5 @@
 import { isIncomingParticipant, messageParticipantKey } from '../../chat/messageAttribution';
+import { isTranscriptBoundaryNotice } from '../../chat/agentSystemNotice';
 import type {
   AdapterErrorCode,
   Capabilities,
@@ -334,10 +335,17 @@ export function buildThreadTimelineItems(params: Readonly<{
 
   const timeline: ThreadTimelineItem[] = [];
   let previousTimestamp: number | undefined;
+  // A transcript boundary opens the rows after it, so it waits for the next row:
+  // that row's time label lands above the boundary, not between them.
+  let pendingBoundaries: ThreadTimelineItem[] = [];
   // Walk oldest-first to compare adjacent timed rows, never elapsed time since
   // the last separator. Preserve source order and ignore untimed/system rows.
   for (let index = merged.length - 1; index >= 0; index -= 1) {
     const current = merged[index]!;
+    if (current.item.type === 'message' && isTranscriptBoundaryNotice(current.item.message)) {
+      pendingBoundaries.push(current.item);
+      continue;
+    }
     const timestamp = current.item.type === 'message' && current.item.message.role === 'system'
       ? undefined : current.timestampMs;
     // A scheduled result carries its own time inside the digest, so it only
@@ -357,8 +365,10 @@ export function buildThreadTimelineItems(params: Readonly<{
       }
       previousTimestamp = timestamp;
     }
-    timeline.push(current.item);
+    timeline.push(...pendingBoundaries, current.item);
+    pendingBoundaries = [];
   }
+  timeline.push(...pendingBoundaries);
   timeline.reverse();
   return timeline;
 }
