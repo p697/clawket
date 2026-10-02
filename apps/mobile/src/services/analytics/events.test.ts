@@ -230,9 +230,6 @@ describe('analytics event privacy boundary', () => {
       'console_entry_tapped',
       'discover_search_changed',
       'clawhub_install_tapped',
-      'youmind_material_opened',
-      'youmind_sign_in_tapped',
-      'sprite_greeting_sent',
       'lifetime_upgrade_announcement_shown',
       'chat_exec_approval_resolved',
       'pair_request_resolved',
@@ -240,7 +237,6 @@ describe('analytics event privacy boundary', () => {
     expect(names.some((name) => name.startsWith('office_'))).toBe(false);
     expect(names.some((name) => name.startsWith('discover_'))).toBe(false);
     expect(names.some((name) => name.startsWith('clawhub_'))).toBe(false);
-    expect(names.some((name) => name.startsWith('youmind_'))).toBe(false);
 
     const allProperties = new Set(Object.values(ANALYTICS_EVENT_PROPERTY_WHITELIST).flat());
     expect([...allProperties]).not.toEqual(expect.arrayContaining([

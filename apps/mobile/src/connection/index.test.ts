@@ -67,7 +67,6 @@ const legacyStorage: LegacyConnectionStorage = {
   async readLegacyGatewayConfigsState() {
     return { activeId: null, configs: [] };
   },
-  async clearRetiredYouMindState() {},
 };
 
 function connectionInput(id: string) {

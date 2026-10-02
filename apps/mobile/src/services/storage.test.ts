@@ -229,34 +229,6 @@ describe('StorageService legacy connections and config backups', () => {
     expect(mockedSecureStore.deleteItemAsync).not.toHaveBeenCalled();
   });
 
-  it('drops retired YouMind configurations instead of reading them as OpenClaw', async () => {
-    secureStoreValues['clawket.gatewayConfigsState.v1'] = JSON.stringify({
-      activeId: 'youmind-default',
-      configs: [
-        { id: 'youmind-default', name: 'Sprite', backendKind: 'youmind', mode: 'custom', url: 'https://youmind.com', createdAt: 1, updatedAt: 1 },
-        { id: 'local_1', name: 'Studio', mode: 'local', url: 'ws://studio.local:18789', createdAt: 2, updatedAt: 2 },
-      ],
-    });
-
-    await expect(StorageService.readLegacyGatewayConfigsState()).resolves.toEqual({
-      activeId: 'local_1',
-      configs: [expect.objectContaining({ id: 'local_1', backendKind: 'openclaw' })],
-    });
-  });
-
-  it('deletes every sign-in key a retired YouMind connection could have left, and its device id', async () => {
-    const scoped = `clawket.youmind.auth.v1.scope.${sha256('default-sprite')}`;
-    const byUrl = `clawket.youmind.auth.v1.${sha256('https://youmind.com')}`;
-    secureStoreValues[scoped] = '{"accessToken":"a"}';
-    secureStoreValues[byUrl] = '{"accessToken":"b"}';
-    secureStoreValues['clawket.connectionRegistry.v1'] = 'kept';
-
-    await StorageService.clearRetiredYouMindState('https://youmind.com/', 'cfg:default-sprite');
-
-    expect(secureStoreValues).toEqual({ 'clawket.connectionRegistry.v1': 'kept' });
-    expect(mockedAsyncStorage.removeItem).toHaveBeenCalledWith('clawket.youmind.deviceId.v1');
-  });
-
   it('clears all retained legacy connection keys only during an explicit device reset', async () => {
     secureStoreValues['clawket.gatewayConfig.v1'] = '{"url":"ws://legacy"}';
     secureStoreValues['clawket.gatewayProfilesConfig.v1'] = '{"activeMode":"local"}';

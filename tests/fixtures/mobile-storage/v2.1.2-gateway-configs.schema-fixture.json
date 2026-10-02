@@ -54,19 +54,6 @@
           "debugMode": true,
           "createdAt": 1778198400000,
           "updatedAt": 1778198450000
-        },
-        {
-          "id": "youmind-default",
-          "name": "Sanitized Sprite",
-          "backendKind": "youmind",
-          "transportKind": "custom",
-          "mode": "custom",
-          "url": "https://youmind.com",
-          "youmind": {
-            "authScopeKey": "youmind:sanitized@example.invalid"
-          },
-          "createdAt": 1778198500000,
-          "updatedAt": 1778198550000
         }
       ]
     }

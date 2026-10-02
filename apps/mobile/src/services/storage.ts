@@ -148,8 +148,6 @@ const KEYS = {
   proSubscriptionSnapshot: 'clawket.proSubscriptionSnapshot.v1',
   lifetimeUpgradeAnnouncementShown: 'clawket.lifetimeUpgradeAnnouncementShown.v1',
   autoAppReviewState: 'clawket.autoAppReviewState.v1',
-  youmindAuthPrefix: 'clawket.youmind.auth.v1',
-  youmindDeviceId: 'clawket.youmind.deviceId.v1',
 } as const;
 
 const NODE_INVOKE_AUDIT_KEY = 'clawket.nodeInvokeAudit.v1';
@@ -177,45 +175,6 @@ function lastOpenedSessionSnapshotStorageKey(scopeId: string, agentId?: string):
 
 function cachedAgentIdentityStorageKey(scopeId: string, agentId: string): string {
   return `${KEYS.cachedAgentIdentityPrefix}.${scopeId}::${agentId}`;
-}
-
-// YouMind support ended (owner decision 2026-10-02). Only its storage keys
-// remain, so an upgrade can delete the sign-ins its connections left behind.
-function normalizeYouMindScope(url: string): string {
-  const trimmed = url.trim();
-  if (!trimmed) return 'default';
-  return sha256(trimmed.replace(/\/+$/, '').toLowerCase());
-}
-
-function normalizeYouMindScopeKey(scopeKey?: string | null): string | null {
-  const trimmed = scopeKey?.trim();
-  if (!trimmed) return null;
-  if (trimmed.startsWith('cfg:')) {
-    return trimmed.slice(4).trim() || null;
-  }
-  return trimmed;
-}
-
-function normalizeYouMindScopedStorageKey(url: string, scopeKey?: string | null): string {
-  const normalizedScope = normalizeYouMindScopeKey(scopeKey);
-  if (normalizedScope) {
-    return `scope.${sha256(normalizedScope)}`;
-  }
-  return normalizeYouMindScope(url);
-}
-
-function youmindAuthStorageKey(url: string, scopeKey?: string | null): string {
-  return `${KEYS.youmindAuthPrefix}.${normalizeYouMindScopedStorageKey(url, scopeKey)}`;
-}
-
-function youmindPrefixedScopeAuthStorageKey(url: string, scopeKey?: string | null): string | null {
-  const trimmed = scopeKey?.trim();
-  if (!trimmed || trimmed.startsWith('cfg:')) return null;
-  return `${KEYS.youmindAuthPrefix}.${normalizeYouMindScopedStorageKey(url, `cfg:${trimmed}`)}`;
-}
-
-function youmindLegacyAuthStorageKey(url: string): string {
-  return `${KEYS.youmindAuthPrefix}.${normalizeYouMindScope(url)}`;
 }
 
 function normalizeDeviceTokenScopePart(value: string | null | undefined): string {
@@ -473,8 +432,6 @@ function normalizeProfiles(value: unknown): GatewayProfilesConfig | null {
 function normalizeSavedGatewayConfig(value: unknown): SavedGatewayConfig | null {
   if (!value || typeof value !== 'object') return null;
   const record = value as Record<string, unknown>;
-  // Retired YouMind configurations would otherwise read as OpenClaw.
-  if (record.backendKind === 'youmind') return null;
   const id = typeof record.id === 'string' ? record.id.trim() : '';
   const name = typeof record.name === 'string' ? record.name.trim() : '';
   const mode = normalizeMode(record.mode);
@@ -643,16 +600,6 @@ export const StorageService = {
     await SecureStore.deleteItemAsync(KEYS.gatewayConfig, SECURE_OPTIONS);
     await SecureStore.deleteItemAsync(KEYS.gatewayProfilesConfig, SECURE_OPTIONS);
     await SecureStore.deleteItemAsync(KEYS.gatewayConfigsState, SECURE_OPTIONS);
-  },
-
-  async clearRetiredYouMindState(url: string, scopeKey: string): Promise<void> {
-    const keys = [
-      youmindAuthStorageKey(url, scopeKey),
-      youmindPrefixedScopeAuthStorageKey(url, scopeKey),
-      youmindLegacyAuthStorageKey(url),
-    ].filter((key): key is string => key !== null);
-    for (const key of new Set(keys)) await SecureStore.deleteItemAsync(key, SECURE_OPTIONS);
-    await AsyncStorage.removeItem(KEYS.youmindDeviceId);
   },
 
   async saveGatewayConfigBackup(config: Record<string, unknown>): Promise<GatewayConfigBackupSummary> {

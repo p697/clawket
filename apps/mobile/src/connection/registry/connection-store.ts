@@ -112,7 +112,6 @@ export interface SecureConnectionStorage {
 
 export interface LegacyConnectionStorage {
   readLegacyGatewayConfigsState(): Promise<GatewayConfigsState>;
-  clearRetiredYouMindState(url: string, scopeKey: string): Promise<void>;
 }
 
 export interface ConnectionStoreOptions {
@@ -281,62 +280,7 @@ function normalizeRegistryState(value: unknown): RegistryState | null {
   return { activeConnectionId, freeConnectionId, records: normalizedRecords };
 }
 
-/** Where a retired YouMind connection kept its sign-in, so an upgrade can delete it. */
-type RetiredYouMindConnection = Readonly<{ url: string; scopeKey: string }>;
-
-function isRetiredYouMindRecord(value: Record<string, unknown>): boolean {
-  return value.backendKind === 'youmind' || value.transportKind === 'https';
-}
-
-function readRetiredYouMindConnection(
-  value: Record<string, unknown>,
-  defaultScopeKey: string | undefined,
-): RetiredYouMindConnection | null {
-  const url = readNonEmptyString(value.url);
-  const scopeKey = (isObject(value.youmind) ? readNonEmptyString(value.youmind.authScopeKey) : undefined)
-    ?? defaultScopeKey;
-  return url && scopeKey ? { url, scopeKey } : null;
-}
-
-/**
- * YouMind support ended (owner decision 2026-10-02). Its saved connections
- * (backend `youmind`, transport `https`) leave before validation so they
- * cannot invalidate the registry, and the active and free pointers move as
- * `remove` moves them.
- */
-function retireYouMindRecords(value: unknown): {
-  state: unknown;
-  retired: RetiredYouMindConnection[];
-} {
-  if (!isObject(value) || !Array.isArray(value.records)) return { state: value, retired: [] };
-  let records: unknown[] = value.records;
-  let { activeConnectionId, freeConnectionId } = value;
-  const retired: RetiredYouMindConnection[] = [];
-  for (let index = 0; index < records.length;) {
-    const record = records[index];
-    if (!isObject(record) || !isRetiredYouMindRecord(record)) {
-      index += 1;
-      continue;
-    }
-    records = records.filter((_, candidate) => candidate !== index);
-    const fallback = records[Math.min(index, Math.max(records.length - 1, 0))];
-    const fallbackId = isObject(fallback) ? readNonEmptyString(fallback.id) ?? null : null;
-    if (record.id !== undefined && activeConnectionId === record.id) activeConnectionId = fallbackId;
-    if (record.id !== undefined && freeConnectionId === record.id) freeConnectionId = activeConnectionId ?? fallbackId;
-    const connection = readRetiredYouMindConnection(record, readNonEmptyString(record.id));
-    if (connection) retired.push(connection);
-  }
-  return records.length === value.records.length
-    ? { state: value, retired }
-    : { state: { ...value, records, activeConnectionId, freeConnectionId }, retired };
-}
-
-type ParsedRegistrySnapshot = PersistedRegistrySnapshot & {
-  retired: ReadonlyArray<RetiredYouMindConnection>;
-  changed: boolean;
-};
-
-function parsePersistedSnapshot(raw: string | null): ParsedRegistrySnapshot | null {
+function parsePersistedSnapshot(raw: string | null): PersistedRegistrySnapshot | null {
   if (!raw) return null;
   try {
     const value: unknown = JSON.parse(raw);
@@ -346,36 +290,12 @@ function parsePersistedSnapshot(raw: string | null): ParsedRegistrySnapshot | nu
       && value.revision >= 0
       ? value.revision
       : undefined;
-    const retirement = retireYouMindRecords(value.state);
-    const state = normalizeRegistryState(retirement.state);
+    const state = normalizeRegistryState(value.state);
     return revision === undefined || !state
       ? null
-      : {
-        version: STORAGE_VERSION,
-        revision,
-        state,
-        retired: retirement.retired,
-        changed: retirement.state !== value.state,
-      };
+      : { version: STORAGE_VERSION, revision, state };
   } catch {
     return null;
-  }
-}
-
-/** YouMind configurations in a pre-3.0 configuration list, which migration no longer carries. */
-function readRetiredLegacyYouMindConnections(raw: string | null): RetiredYouMindConnection[] {
-  if (!raw) return [];
-  try {
-    const value: unknown = JSON.parse(raw);
-    if (!isObject(value) || !Array.isArray(value.configs)) return [];
-    return value.configs.flatMap((item) => {
-      if (!isObject(item) || item.backendKind !== 'youmind') return [];
-      const id = readNonEmptyString(item.id);
-      const connection = readRetiredYouMindConnection(item, id ? `cfg:${id}` : undefined);
-      return connection ? [connection] : [];
-    });
-  } catch {
-    return [];
   }
 }
 
@@ -447,9 +367,7 @@ function migrateLegacyState(
   value: GatewayConfigsState,
   supplements: ReadonlyMap<string, LegacyConnectionSupplement>,
 ): RegistryState {
-  // A retired YouMind configuration would otherwise migrate as OpenClaw.
-  const configs = value.configs.filter((config) => !isRetiredYouMindRecord(config as unknown as Record<string, unknown>));
-  const records = configs.map((config) => migrateLegacyConfig(config, supplements.get(config.id)));
+  const records = value.configs.map((config) => migrateLegacyConfig(config, supplements.get(config.id)));
   const ids = new Set(records.map((record) => record.id));
   const activeConnectionId = value.activeId && ids.has(value.activeId)
     ? value.activeId
@@ -966,16 +884,15 @@ export class ConnectionStore {
   private async readOrMigrate(): Promise<PersistedRegistrySnapshot> {
     const currentRaw = await this.secureStorage.getItemAsync(CURRENT_STORAGE_KEY, SECURE_OPTIONS);
     const current = parsePersistedSnapshot(currentRaw);
-    if (current) return this.settleRetiredYouMind(current);
+    if (current) return current;
 
     const rollbackRaw = await this.secureStorage.getItemAsync(ROLLBACK_STORAGE_KEY, SECURE_OPTIONS);
     const rollback = parsePersistedSnapshot(rollbackRaw);
-    if (rollback) return this.settleRetiredYouMind(rollback);
+    if (rollback) return rollback;
 
     const legacyRaw = await this.secureStorage.getItemAsync(LEGACY_CONFIGS_STORAGE_KEY, SECURE_OPTIONS);
     const legacy = await this.legacyStorage.readLegacyGatewayConfigsState();
     const state = migrateLegacyState(legacy, readLegacySupplements(legacyRaw));
-    await this.clearRetiredYouMind(readRetiredLegacyYouMindConnections(legacyRaw));
     const migrated: PersistedRegistrySnapshot = {
       version: STORAGE_VERSION,
       revision: 1,
@@ -985,31 +902,6 @@ export class ConnectionStore {
     await this.secureStorage.setItemAsync(ROLLBACK_STORAGE_KEY, serialized, SECURE_OPTIONS);
     await this.secureStorage.setItemAsync(CURRENT_STORAGE_KEY, serialized, SECURE_OPTIONS);
     return migrated;
-  }
-
-  /** Deletes what retired YouMind connections left behind and saves the registry without them, once. */
-  private async settleRetiredYouMind(parsed: ParsedRegistrySnapshot): Promise<PersistedRegistrySnapshot> {
-    const snapshot: PersistedRegistrySnapshot = { version: parsed.version, revision: parsed.revision, state: parsed.state };
-    if (!parsed.changed) return snapshot;
-    await this.clearRetiredYouMind(parsed.retired);
-    const revision = parsed.revision + 1;
-    try {
-      await this.persist(snapshot, parsed.state, revision);
-    } catch {
-      // Reading never fails on this write (a locked keychain refuses it); the next read retires them again.
-      return snapshot;
-    }
-    return { ...snapshot, revision };
-  }
-
-  private async clearRetiredYouMind(connections: ReadonlyArray<RetiredYouMindConnection>): Promise<void> {
-    for (const connection of connections) {
-      try {
-        await this.legacyStorage.clearRetiredYouMindState(connection.url, connection.scopeKey);
-      } catch {
-        // A sign-in that cannot be deleted must not keep the other connections from loading.
-      }
-    }
   }
 
   private async persist(

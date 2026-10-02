@@ -22,8 +22,6 @@ describe('temporary legacy gateway facade', () => {
       expect(isGatewayTransportKind(value)).toBe(true);
     }
     expect(isGatewayBackendKind('other')).toBe(false);
-    // YouMind support ended (owner decision 2026-10-02).
-    expect(isGatewayBackendKind('youmind')).toBe(false);
     expect(isGatewayTransportKind('https')).toBe(false);
   });
 
