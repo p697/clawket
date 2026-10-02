@@ -7,7 +7,7 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "postinstall": "node ./scripts/patch-android-native-deps.mjs && node ./scripts/patch-paste-input-podspec.mjs && node ./scripts/patch-expo-permissions.mjs && node ./scripts/patch-enriched-markdown-tail-fade.mjs && node ./scripts/patch-enriched-markdown-android-width.mjs && node ./scripts/patch-enriched-markdown-list-indent.mjs && node ./scripts/patch-expo-sharing.mjs && node ./scripts/patch-expo-camera-barcodes.mjs",
+    "postinstall": "node ./scripts/patch-android-native-deps.mjs && node ./scripts/patch-paste-input-podspec.mjs && node ./scripts/patch-expo-permissions.mjs && node ./scripts/patch-enriched-markdown-tail-fade.mjs && node ./scripts/patch-enriched-markdown-android-width.mjs && node ./scripts/patch-enriched-markdown-list-indent.mjs && node ./scripts/patch-expo-sharing.mjs && node ./scripts/patch-expo-camera-barcodes.mjs && node ./scripts/patch-react-native-svg-group-opacity.mjs",
     "eas-build-pre-install": "./scripts/eas-validate-public-config.sh",
     "eas:env:sync": "node scripts/sync-eas-env-from-local.mjs",
     "prebuild:clean": "npx expo prebuild --clean",
