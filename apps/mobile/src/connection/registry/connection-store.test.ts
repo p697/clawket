@@ -163,6 +163,22 @@ describe('ConnectionStore', () => {
     expect(JSON.parse(secureStorage.values.get(CURRENT_KEY) ?? '{}').state.records).toEqual([]);
   });
 
+  it('still loads without YouMind when the cleaned registry cannot be written', async () => {
+    const secureStorage = new MemorySecureStorage();
+    secureStorage.values.set(CURRENT_KEY, persistedRegistry([retiredYouMindRecord('sprite'), openClawRecord('alpha')], 5));
+    secureStorage.failNextCurrentWrite = true;
+    const store = new ConnectionStore({ secureStorage, legacyStorage: legacyStorage() });
+
+    await expect(store.load()).resolves.toMatchObject({
+      revision: 5,
+      activeConnectionId: 'alpha',
+      connections: [expect.objectContaining({ id: 'alpha' })],
+    });
+    // The next read retires the same record again and this time saves the result.
+    await expect(store.load()).resolves.toMatchObject({ revision: 6, activeConnectionId: 'alpha' });
+    expect(secureStorage.values.get(CURRENT_KEY)).not.toContain('youmind');
+  });
+
   it('never restores a YouMind connection from the rollback copy', async () => {
     const secureStorage = new MemorySecureStorage();
     secureStorage.values.set(CURRENT_KEY, persistedRegistry([openClawRecord('current')], 2));

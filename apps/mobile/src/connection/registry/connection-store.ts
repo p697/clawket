@@ -993,7 +993,12 @@ export class ConnectionStore {
     if (!parsed.changed) return snapshot;
     await this.clearRetiredYouMind(parsed.retired);
     const revision = parsed.revision + 1;
-    await this.persist(snapshot, parsed.state, revision);
+    try {
+      await this.persist(snapshot, parsed.state, revision);
+    } catch {
+      // Reading never fails on this write (a locked keychain refuses it); the next read retires them again.
+      return snapshot;
+    }
     return { ...snapshot, revision };
   }
 
