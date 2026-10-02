@@ -74,7 +74,7 @@ function artC(context){return svgRoot(`
   <circle cx="75" cy="64" r="5" fill="#f7ffff" fill-opacity=".65" stroke="#bcd0e8" stroke-width=".5"/>
   `)+`<div class="hero-annotation">${context==='history'?'THE WHOLE PICTURE':'YOUR AGENTS. CLOSER.'}</div>`}
 function artD(context){let first='Slack · #设计',second='每天的灵感整理',third='Telegram · 产品讨论',body='今天的讨论，我已经整理好了。',reply='关键结论和下一步都在这里。';
-  if(context==='connections'){first='OpenClaw';second='Hermes';third='YouMind 精灵';body='三个世界，一个熟悉的入口。';reply='你的 Agent，都在身边。'}
+  if(context==='connections'){first='OpenClaw';second='Hermes';third='Codex';body='三个世界，一个熟悉的入口。';reply='你的 Agent，都在身边。'}
   if(context==='agents'){first='研究助手';second='编程搭档';third='Lucy · 新的伙伴';body='给每个想法，找到合适的伙伴。';reply='在 OpenClaw 创建你的 Agent。'}
   return `<div class="thread-card back"><div class="thread-top"><span class="channel-icon">${icon('hash')}</span>${first}</div><div class="type-line"></div><div class="type-line short"></div></div><div class="thread-card middle"><div class="thread-top"><span class="channel-icon">${icon('clock')}</span>${second}</div><div class="type-line"></div><div class="type-line short"></div></div><div class="thread-card front float-card"><div class="thread-top"><span class="channel-icon">${icon('chat')}</span>${third}<small>刚刚</small></div><p>${body}</p><div class="reply-line"><span class="mini-cat">${catLogo()}</span><em>${reply}</em></div></div><div class="hero-annotation">${context==='connections'?'连接示意':context==='agents'?'Agent 示意':'会话示意 · 非真实消息'}</div>`}
 function heroArt(design,context){return ({a:artA,b:artB,c:artC,d:artD})[design](context)}

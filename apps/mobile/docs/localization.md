@@ -4,7 +4,7 @@ Canonical engineering guide for Clawket mobile localization. Product copy rules 
 
 ## Supported languages
 
-The app ships 19 locales, the same set as YouMind Mobile. `src/i18n/supported-locales.js` is the only place the list is authored; everything below derives from it.
+The app ships 19 locales. `src/i18n/supported-locales.js` is the only place the list is authored; everything below derives from it.
 
 | Language | Locale | Notes |
 | --- | --- | --- |

@@ -22,10 +22,9 @@
 ## 凭据与隐私发现
 
 - 当前源码扫描的 4 项初始告警为配对字符表和测试消息幂等键，均非凭据。规则只豁免这几个精确的合成常量。
-- 历史扫描 8 项初始告警包括上述合成常量及初始导入里的 PostHog 客户端 ingestion token。精确比对还找到旧 RevenueCat Apple public SDK key 的历史源码/测试；没有发现本机 YouMind HMAC 值出现在扫描的历史里。
+- 历史扫描 8 项初始告警包括上述合成常量及初始导入里的 PostHog 客户端 ingestion token。精确比对还找到旧 RevenueCat Apple public SDK key 的历史源码/测试。
 - PostHog ingestion token 与 RevenueCat public SDK key 设计上可在客户端使用，不等同于管理 API key；仍不应将维护者值作为社区默认值，以免混入数据或依赖官方账号。参考 [PostHog API](https://posthog.com/docs/api) 与 [RevenueCat API keys](https://www.revenuecat.com/docs/projects/authentication)。
 - Git 历史仍含上述公开 SDK key、旧账号/项目标识、电脑路径及运维记录。清理当前文件不会抹除历史。没有证据支持为了这些非秘密标识擅自重写公共历史。
-- **需要单独确认 YouMind 客户端 HMAC 的权限边界**：本机设置了 `EXPO_PUBLIC_YOUMIND_APP_SECRET`，该值会随 App 分发，可以被提取。它未进 Git 不等于它在分发后仍保密。应由服务端确认它仅是公开客户端标识、不能授权特权操作；若它实际承担保密认证，需要独立的协议改造与凭据处置。当前未改动外部 YouMind 服务或破坏既有登录流程。
 - Speech 的设备签名、防重放和配额不等于付费账号授权；公开客户端可实现相同协议。官方托管服务的费用边界需要服务端准入机制，不能依赖隐藏 URL 或不开源客户端。
 - GitHub 只读检查：仓库公开、许可证为 AGPL-3.0；secret scanning 与 push protection 已开启，当前 secret-scanning alerts 为空。非供应商模式扫描和 private vulnerability reporting 未启用，Dependabot 自动安全更新未启用。公开的邮件渠道仍可报告漏洞；本次未改变设置。
 

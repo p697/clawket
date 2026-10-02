@@ -117,7 +117,7 @@ iOS 用系统 SF Pro，Android 用 Roboto，中文走系统 CJK；不引入第�
 
 - `scripts/check-ui-style.mjs` 新规则：业务文件不得含 `borderWidth` 于列表行组件；不得出现 emoji 字面量作为图标；不得引用被删除的 token。
 - `ui-style-baseline.json` 在 M5 结束时应显著低于基线且只允许下降。
-- `apps/mobile/docs/design-system.md` 按本章重写（删除 YouMind 借鉴段落）。
+- `apps/mobile/docs/design-system.md` 按本章重写。
 
 ## 9. 文案与层级预算（硬规则，M5 完成标准之一）
 
@@ -151,13 +151,13 @@ Grok Bot 清爽的根源不是留白，而是**每个界面只有两层字**：�
 
 ## 10. 样张（风格参照，不是像素依据）
 
-`docs/3.0/mockups/index.html` 是花名册、线程、会话面板、Agent 设置四屏的网页草图，用来传达整体气质：白底、浮动控件、方块头像、两层字、颜色只在头像上。**它是手写的 HTML，有简化和错误，不要照着它的 CSS 抄。** 尺寸、圆角、阴影、字号一律以 §2–§5 的 token 表和 §11 的 youmind-mobile 组件为准；两者冲突时以 token 与组件为准。
+`docs/3.0/mockups/index.html` 是花名册、线程、会话面板、Agent 设置四屏的网页草图，用来传达整体气质：白底、浮动控件、方块头像、两层字、颜色只在头像上。**它是手写的 HTML，有简化和错误，不要照着它的 CSS 抄。** 尺寸、圆角、阴影、字号一律以 §2–§5 的 token 表和 §11 的组件为准；两者冲突时以 token 与组件为准。
 
-## 11. 自绘导航与组件：从 youmind-mobile 抄什么
+## 11. 自绘导航与组件
 
-原则：**页面级的返回、关闭、标题、Tab、弹层、搜索框全部自绘，不用系统原生控件**（不用原生导航栏按钮、不用系统 `Alert` 以外的原生弹窗、不用系统 segmented control）。youmind-mobile（`/Users/developer/Desktop/youmind/youmind-mobile/apps/mobile`）已经有一套经过打磨的实现与规范，直接移植，改 token 不改结构。先读它的 `docs/design-system.md` §4–§11 与 `AGENTS.md` 的组件决策表。
+原则：**页面级的返回、关闭、标题、Tab、弹层、搜索框全部自绘，不用系统原生控件**（不用原生导航栏按钮、不用系统 `Alert` 以外的原生弹窗、不用系统 segmented control）。下表组件按一套经过打磨的参考实现移植，改 token 不改结构。
 
-| Clawket 3.0 组件 | 移植自 youmind-mobile | 要点 |
+| Clawket 3.0 组件 | 来源组件 | 要点 |
 |---|---|---|
 | `FloatingButton`（44 圆形按钮） | `src/components/ui/ActionButton.tsx`（`variant="icon"`，44×44，22pt 图标） | 页面头部的返回 / 关闭 / 会话按钮、弹层头部的关闭与右侧按钮、页头右侧动作（聊天、新建、分享）一律 `appearance="plain"` 纯图标，与首页左上用户、右上搜索同一大小和风格（2026-09-27 负责人决定，取代 2026-09-19 的白底浮起圆钮和弹层灰底圆钮）；壁纸上用 `glass`；按下态保留；阴影换成 `shadowFloating`；返回箭头用 `DirectionalChevronLeft`，不用系统返回 |
 | 页面头部 | `ScreenHeader` 的对称 44 槽位契约 + 我们的浮动布局 | 所有页面头部由内容拥有且只用 `ScreenHeader`（2026-09-19 统一）：安全区 + 8 / 44 高控件行、左右距屏幕边 16 / 下方 8，内容再空 16；左 44 槽是纯白（暗色为浮起面）的 44 圆形返回或关闭，中标题（或替换标题的连接状态胶囊）以屏幕居中，右 44 槽放唯一的尾部动作；`native-stack` 的 `headerShown: false`，永远不用系统 header。线程页的浮动头部带、搜索页的输入行与引导页 `FlowHeader` 共用同一边距、行高和圆钮 |
@@ -170,11 +170,10 @@ Grok Bot 清爽的根源不是留白，而是**每个界面只有两层字**：�
 | 抬升表面的阴影 | `createThemedShadowStyle(colors, scheme, Shadow.tier)` | 浅色柔影、深色发丝线，一处实现，不在业务文件里手写 |
 | 主按钮 / 次按钮 | `Button`（`md` 44 高全圆胶囊；`sm` 紧凑；一律不带描边，灰底页面上的次按钮用 `card` 白色胶囊，2026-09-30 负责人决定） | 付费墙、引导、审批卡按钮 |
 | 状态页 | `EmptyState`、`LoadErrorState`、`SkeletonPulse` | 一句话 + 一个动作；骨架屏用 `SkeletonPulse` |
-| 样式护栏 | `scripts/check-ui-style.mjs` 的规则集与 baseline 机制 | 我们已有同源脚本，按 youmind-mobile 当前版本补齐规则（数值 `borderRadius` / `fontSize` / 非零 `borderWidth` / 硬编码颜色 / `FontSize` 算术 / 错误的 `KeyboardAvoidingView` 来源） |
+| 样式护栏 | `scripts/check-ui-style.mjs` 的规则集与 baseline 机制 | 我们已有同源脚本，补齐规则（数值 `borderRadius` / `fontSize` / 非零 `borderWidth` / 硬编码颜色 / `FontSize` 算术 / 错误的 `KeyboardAvoidingView` 来源） |
 
 移植规则：
 
 1. 组件文件整体复制到 `apps/mobile/src/components/ui/`，把它们引用的 token 名映射到 §2 的 token（`surfaceBg → surface`、`raisedBg → surfaceFloating`、`hover → surface`、`subtleBorder → line`、`primary → accent`），不改组件结构与尺寸。
-2. youmind-mobile 的 `Radius` 值（`full: 9999`、`sheet: 36`、`bottomSheet: 28`、`xl: 22`）直接采用；我们 §4 里的气泡 20、卡片 16、设置卡 14 是内容圆角，与控件圆角并存。
-3. 不移植 YouMind 业务组件（Board、Skill、Task 相关）。
-4. 移植后跑 youmind-mobile 同名组件的测试（若有），再跑我们的 `check:design-system`。
+2. 控件 `Radius` 值（`full: 9999`、`sheet: 36`、`bottomSheet: 28`、`xl: 22`）直接采用；我们 §4 里的气泡 20、卡片 16、设置卡 14 是内容圆角，与控件圆角并存。
+3. 移植后跑我们的 `check:design-system`。

@@ -138,7 +138,7 @@ Typography uses matching `FontSize` and `LineHeight` entries:
 
 `FontWeight` exposes only `regular` 400 and `semibold` 600. A page's default UI uses two visible type steps; a third is allowed only for a page title, expanded detail, onboarding, or paywall. User content is excluded from that count.
 
-`Radius` contains named 3.0 shapes: bubble 20, card 16, settings group 14, the four avatar sizes, YouMind-derived sheet radii, and `full` for controls. `BorderWidth` may be used only for documented status rings, dark raised-surface hairlines, settings-group separators, and presentation framing—not list-row cards.
+`Radius` contains named 3.0 shapes: bubble 20, card 16, settings group 14, the four avatar sizes, sheet radii, and `full` for controls. `BorderWidth` may be used only for documented status rings, dark raised-surface hairlines, settings-group separators, and presentation framing—not list-row cards.
 
 `ControlSize` owns the 40-point pill, 44-point floating button, 52-point settings row, and the 88-point two-line row minimum (described choice rows, skill and cron rows, the Pro card). The roster Agent row itself is `ROSTER_ROW_MIN_HEIGHT` (84: four points under that minimum, 14 above and below the 56-point avatar; owner decision 2026-09-27 after trying 80). `HitSize` provides accessible touch targets. Icons use `IconSize` or the component-owned recipe. `StatusSize` owns the 6-point list status dot and 12-point attention marker.
 
@@ -265,7 +265,7 @@ On iPhone, screens that must keep one region just above the keyboard (Onboarding
 
 ### Triage for "placeholder / text sits low" reports (2026-09-11)
 
-A single device screenshot is not evidence of a layout defect. The YouMind email field was reported with a low Chinese placeholder on a phone; the same build on a clean simulator install measured 18.67 / 18.33 points above / below the glyphs inside the 52-point field (centered), in light and dark, and a plain UIKit probe with the identical configuration (system 15, inset `textRectForBounds`, `defaultTextAttributes`, CJK and Latin `attributedPlaceholder`, RN prop order) centered every variant. The phone rendered correctly after a reinstall. Before changing `FormTextInput`, `CompositionSafeTextInput`, or any input typography:
+A single device screenshot is not evidence of a layout defect. A form text field was reported with a low Chinese placeholder on a phone; the same build on a clean simulator install measured 18.67 / 18.33 points above / below the glyphs inside the 52-point field (centered), in light and dark, and a plain UIKit probe with the identical configuration (system 15, inset `textRectForBounds`, `defaultTextAttributes`, CJK and Latin `attributedPlaceholder`, RN prop order) centered every variant. The phone rendered correctly after a reinstall. Before changing `FormTextInput`, `CompositionSafeTextInput`, or any input typography:
 
 1. Reproduce on a clean build, not a Fast Refresh / hot-reloaded session or a stale install; a stale `UITextField` placeholder frame disappears on the next full layout and is not a code bug.
 2. Pixel-measure a simulator screenshot (`xcrun simctl io booted screenshot` and count field rows against glyph rows) rather than judging by eye; report the field height and the above/below space.
@@ -355,7 +355,7 @@ Codex conversation entry uses the same waiting surface with a 12-second slow-hin
 
 ### Message actions (long press)
 
-Long-pressing a user or assistant message uses the Telegram-style focus pattern from YouMind Mobile, rebuilt on the 3.0 tokens with a different menu form. The row measures itself in window coordinates; `ThreadMessageActionsOverlay` opens a transparent `Modal` with the shared 40% `scrim`, renders a clone of the message block through the same `ThreadMessageRowContent` (identity chrome dropped, bottom-aligned to the measured row so it covers the original from the first frame), and drops a capsule action bar below the bubble edge (left for assistant, right for user).
+Long-pressing a user or assistant message uses the Telegram-style focus pattern, rebuilt on the 3.0 tokens with a different menu form. The row measures itself in window coordinates; `ThreadMessageActionsOverlay` opens a transparent `Modal` with the shared 40% `scrim`, renders a clone of the message block through the same `ThreadMessageRowContent` (identity chrome dropped, bottom-aligned to the measured row so it covers the original from the first frame), and drops a capsule action bar below the bubble edge (left for assistant, right for user).
 
 The bar is one horizontal `overlay` surface with `Radius.full`, 4-point padding and no dividers. Cells are equal 80-point columns (44-point minimum height, 4-point padding, 4-point gap): a 20-point Lucide icon in `ink` above a caption label in `inkSecondary`, single line, with a `Radius.full` `surface` press highlight. Equal cells keep the capsule the same size in every locale and during confirmations, so the anchored edge never moves. Standard cells are Copy, Favorite and Share; Favorite is a toggle whose filled star (`accent`) shows the current state while the visible label stays short and the accessibility label reads Unfavorite. Locally queued messages replace them with Send now (when the queue is paused), Edit, Remove (`bad` tint) and Copy.
 
@@ -394,7 +394,7 @@ The owner asked for a conversation that feels like messaging a person. The recip
 
 ## Thread time separators
 
-The shared Thread timeline uses the YouMind Mobile three-minute inactivity rule: show time above the first timed item, after an adjacent timed-item gap of at least three minutes, and at local midnight. Continuous activity does not gain periodic labels. System/unknown timestamps do not reset the interval. Keep source ordering, tool grouping and message-identity separator keys through streaming and history pagination.
+The shared Thread timeline uses a three-minute inactivity rule: show time above the first timed item, after an adjacent timed-item gap of at least three minutes, and at local midnight. Continuous activity does not gain periodic labels. System/unknown timestamps do not reset the interval. Keep source ordering, tool grouping and message-identity separator keys through streaming and history pagination.
 
 Use centered caption text without an icon, `inkSecondary` on a small canvas backing for wallpaper readability. Today shows 24-hour time; yesterday adds the localized day; the previous six days use weekdays; older dates include month/day and a year when needed. Future dates stay explicit. Use local calendar arithmetic, refresh on day changes, and reuse Intl date/time formatters across rows. Yesterday comes from the existing i18next catalog; native Hermes does not guarantee `Intl.RelativeTimeFormat`.
 

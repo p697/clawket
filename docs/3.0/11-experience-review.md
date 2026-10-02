@@ -12,13 +12,13 @@
 - 当前 Production 配对只输出旧二维码，没有安全邀请或六位码；首启表单仅接受 OpenClaw 六位数字，扫描页没有照片导入控件。尚未查明 Production 邀请失败是旧服务、网络还是其他原因，不将它直接归因为某个服务版本。
 - Hermes 源码目录存在，但 Clawket-owned bridge 日志为 `spawn hermes ENOENT`，本机可执行命令缺失，bridge 健康等待超时。尚未安装/更新 Hermes，也未将其视为可用后端。
 - 模拟器 Safari 跳转 `clawket://config` 的系统确认框无法由当前 UI 自动化操作：AX 只暴露 sheet，坐标点击返回 `noWindowsAvailable`；已请求用户点“打开”。因此尚未在 App 内完成配对、聊天或设置子页遍历。
-- YouMind 邮箱登录与真实聊天尚未执行。三后端端到端、长连接稳定性、Release 性能及六语言逐页验收均未完成。
+- 两后端端到端、长连接稳定性、Release 性能及六语言逐页验收均未完成。
 
 ## 基线工程发现
 
 | 优先级 | 发现 | 证据与把握 | 后续处理 |
 |---|---|---|---|
-| P0 | 主会话别名导致聊天停在加载态 | 真实 `agents.list.mainKey = main`，真实 `sessions.list` 的主会话 key 为 `agent:main:main`。`OpenClawAdapter.listAgents` 原样使用 mainKey，Roster 把它作为路由目标；`selectSessionForCurrentAgent` 选中完整 key，`ThreadScreen` 却严格比较两个字符串。直接运行当前选择器和状态函数，得到历史已加载、有消息、连接 ready 仍为 loading；完整 key 对照组为 ready。代码级复现，未完成 App 内复现。 | 在连接/Agent 作用域内统一会话标识；不要将所有 Agent 的 main 粗暴等同。覆盖默认 Agent、自定义 mainKey、第二 Agent、Hermes 与 YouMind。 |
+| P0 | 主会话别名导致聊天停在加载态 | 真实 `agents.list.mainKey = main`，真实 `sessions.list` 的主会话 key 为 `agent:main:main`。`OpenClawAdapter.listAgents` 原样使用 mainKey，Roster 把它作为路由目标；`selectSessionForCurrentAgent` 选中完整 key，`ThreadScreen` 却严格比较两个字符串。直接运行当前选择器和状态函数，得到历史已加载、有消息、连接 ready 仍为 loading；完整 key 对照组为 ready。代码级复现，未完成 App 内复现。 | 在连接/Agent 作用域内统一会话标识；不要将所有 Agent 的 main 粗暴等同。覆盖默认 Agent、自定义 mainKey、第二 Agent 与 Hermes。 |
 | P0 待运行确认 | 弹层主题上下文可能丢失，影响加号与其他 sheet | `AppProviders` 将 `AppThemeProvider` 放在 `BottomSheetModalProvider` 内；真实 `@gorhom/portal` 将 PortalHost 渲染为 children 的兄弟节点。`ThemedFullWindowOverlay` 在 portal 端读取 ThemeContext，读到的可能为 null；SheetHeader、SheetDragHandle、SettingsRow 均调用会抛错的 `useAppTheme`。当前测试广泛替换了 theme、BottomSheet 与原生宿主。 | 在真实 provider + portal 组合复现；修复 provider 层级或在源端正确传递上下文，验证关闭、再次打开、手势、主题切换及子弹层。 |
 | P1 | Agent 设置首页被可选摘要请求阻塞 | `loadAgentSettingsSummary` 同时获取模型、技能、Cron、费用、工具、设备及节点审批，`Promise.all` 全结束才返回；首页在 summary 缺失时只显示骨架。agent 对象变化还会触发重新加载。 | 导航行先显示；可选摘要独立更新，按连接与 Agent 缓存，并避免对象身份变化引起重复请求。 |
 | P1 | “重连”只是 activate + probe，没有明确暂停语义 | App 路由动作与连接页只有 reconnect/remove；已活动且健康的连接不一定会重建。用户找不到可理解的断开/恢复入口。 | 建立暂停、恢复、主动重连、移除四种独立语义，明确连接内所有 Agent 的影响；暂停不得被自动恢复逻辑立即抵消。 |
@@ -57,10 +57,9 @@ Grok Bot 值得借鉴的是持久身份、可感知的工作状态和按需展�
 - 首启拆为品牌欢迎与实际配对两步；账号设置收为五类入口；Agent 资料聚合身份与常用能力，高级管理保留原有功能。连接管理提供明确的暂停、恢复、重新连接和移除动作。
 - Agent 高级管理先完成弹层关闭再进入子页；连接高级信息只保留当前连接，避免重复生命周期入口。暂停后的聊天提示明确显示恢复连接。
 - 修复 OpenClaw 主会话别名、跨 Agent 首帧历史污染、聊天页头部遮挡、弹层上下文与首开/关闭生命周期。会话列表改为虚拟列表；模型状态刷新合并重复请求；发送后定位最新消息，底部附近跟随增量。停止操作直接中止当前运行。
-- 发送失败显示可理解的提示并恢复空草稿，保护新输入；本地缓存分页不再重新引入已被服务器确认的乐观消息。YouMind 的运行 ID 在 task/generation/message 事件间保持不变。
+- 发送失败显示可理解的提示并恢复空草稿，保护新输入；本地缓存分页不再重新引入已被服务器确认的乐观消息。
 - OpenClaw 与 Hermes Relay 的 Durable Object 休眠恢复现在保留活动客户端路由；心跳调度不再被持续流量不断后推。握手更新不会覆盖刚写入的活动路由标记。两种后端均有丢弃内存后恢复的回归测试。
 - Hermes 官方当前安装位于 `~/.local/share/hermes-agent`，版本 0.21.0；旧源码只读保留。Clawket 统一发现新旧路径和可执行命令，处理 spawn 失败，使用稳定且隔离的 API 认证，使用受保护的 `/v1/models` 验证就绪。运行中的 API 拒绝凭据时不自动替换进程。
-- YouMind 使用其签名原生客户端所要求的结构化 User-Agent，并明确保留 Clawket 身份。已通过 App 请求验证码、Gmail 获取本次验证码及 App 登录，没有绕过验证或修改服务端。
 - 配对粘贴支持旧 OpenClaw 12 字符加密码及链接；非法/超长输入不再通过丢字符和截断变成另一个有效码。二维码图片导入回到原有安全 claim 路径。
 - 原生崩溃日志确认 ExpoModulesCore 权限表并发写入导致内存错误。增加三处共享访问同步补丁，两条安装路径均执行，包含缺失/损坏输入与幂等验证；已重新生成原生项目并构建。
 
@@ -71,7 +70,6 @@ Grok Bot 值得借鉴的是持久身份、可感知的工作状态和按需展�
 | OpenClaw / Lucy | 真实 Preview 聊天回复 `Received.` | Release 下完整闲置、前后台、暂停/恢复矩阵 |
 | OpenClaw / Codex UI Operator | 独立会话回复 `Connection confirmed.`，不再带入 Lucy 历史 | 完整资料与管理子页 |
 | Hermes | Preview 配对及真实回复 `Hermes connected.`；已修正过期模型凭据和 API 认证；最新测试 Relay 持续在线 | 最新构建的中止、再次发送、闲置恢复与各功能页 |
-| YouMind | 邮箱验证码登录成功；真实回复 `YouMind connected.` 在重新打开后可见 | 稳定 run ID 修复后的完整实时展示与中止复测 |
 | 原生构建 | clean prebuild / CocoaPods / Android Debug 成功；最终 JS 修订后的 iOS Release arm64 构建成功并安装 | Release 手感与完整交互实测 |
 | 自动化 | 整仓 required 通过：Mobile 228 套 / 2,073 项，Relay 112、Bridge Runtime 155、CLI 61；另行兼容回放 35 项通过 | 后续如有修订，复跑相关门禁 |
 | UI / 性能 | Debug 实机模拟已覆盖欢迎、配对、首页、聊天、会话弹层、部分设置与资料；发现的问题持续修复 | Release 帧/延迟测量、所有三级页、六语言、深色、大字与小屏 |

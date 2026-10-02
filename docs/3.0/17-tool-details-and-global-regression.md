@@ -35,7 +35,6 @@ The saved Hermes QA connection uses the existing isolated Preview runtime. The t
 | Hermes chat | Real reconnect reply, pause/resume, background reply and latest-build cold-start history; `hermes-recovery-reply.png`, `hermes-paused.png` | Real-device network transitions and prolonged idle |
 | Hermes profile/skills | 58 skills loaded; latest-build cleaned skill detail; Continue chat returns existing Thread, Back reaches roster; `hermes-skills-after.png`, `hermes-skill-detail-after.png` | Dark detail and other skill actions requiring intentional mutations |
 | Hermes cron/files | Empty Cron state and creation drawer inspected, cancelled without creation; missing MEMORY/USER files shown honestly; `hermes-cron.png`, `hermes-cron-editor.png` | Actual cron execution and file editing |
-| YouMind | Real send/reply, manual reconnect returned online, original reply retained after returning; `youmind-reply.png` | Latest-build background/cold chat re-entry and long idle |
 | Other pages | Earlier native evidence retained in documents 13–16 | Remaining per-page ledger in document 13 is still open |
 | Android | Prior native build evidence retained | No installed emulator; keyboard/visual acceptance remains unverified |
 
@@ -83,9 +82,9 @@ Final required gate: 230 Mobile suites / 2,133 tests and all workspace checks. B
 
 ### Final native connection checkpoint
 
-On the latest installed Release after the local Bridge update, Hermes retained its history and returned the exact new reply “Final recovery verified.” Its usage page loaded 80.5K tokens / 15 messages / one session (`usage-hermes-after.png`). YouMind retained the previous test exchange and returned the new reply “Final YouMind recovery verified.” The composer cleared normally and the reply remained visible in the subsequent screenshot (`youmind-final-reply.png`). These observations close the latest-build YouMind re-entry/reply gap above; OpenClaw post-reconnect history was also verified during the third walkthrough.
+On the latest installed Release after the local Bridge update, Hermes retained its history and returned the exact new reply “Final recovery verified.” Its usage page loaded 80.5K tokens / 15 messages / one session (`usage-hermes-after.png`). OpenClaw post-reconnect history was also verified during the third walkthrough.
 
-This is successful native recovery and request/reply evidence for the three saved QA connections, not certification of prolonged mobile idle, real-device weak-network transitions, Android keyboard animation or every page. Native long-content dragging remains unverified because the automation did not reliably produce drag gestures. Final documentation checks and `git diff --check` passed.
+This is successful native recovery and request/reply evidence for the saved QA connections, not certification of prolonged mobile idle, real-device weak-network transitions, Android keyboard animation or every page. Native long-content dragging remains unverified because the automation did not reliably produce drag gestures. Final documentation checks and `git diff --check` passed.
 
 
 ## Owner-reported Hermes timeout — 18:45 follow-up
@@ -103,5 +102,5 @@ Regression cases cover healthy local Bridge + missing cloud pong, unrelated pong
 
 - Final required gate passed: 230 Mobile suites / 2,133 tests; Runtime self-contained 19 files / 169 tests; all workspace checks. Focused Hermes Relay suite: 16 tests. Historical compatibility: 5 files / 35 tests. Bridge build and local service restart succeeded; no cloud deployment or App timeout change.
 - Updated the existing QA process, preserving its pairing, and gave its local harness a stable instance identity for later restarts. Replacement briefly received owner-lease 409 responses before normal admission; this was during the deliberate process update, separate from the original owner-reported timeout.
-- With no active Hermes App connection, 12 cloud pongs arrived over roughly three minutes. Returned from the home screen via YouMind to Hermes at 18:54:42: its fresh health request reached the runtime and obtained a local reply, then history loaded. The native App sent a fresh test message and visibly received “Idle reconnect confirmed.” without the timeout banner at 18:55. Screenshot: `hermes-idle-recovery-after.png`; privacy-minimized timing evidence: `hermes-cloud-liveness.json`.
+- With no active Hermes App connection, 12 cloud pongs arrived over roughly three minutes. Returned from the home screen to Hermes at 18:54:42: its fresh health request reached the runtime and obtained a local reply, then history loaded. The native App sent a fresh test message and visibly received “Idle reconnect confirmed.” without the timeout banner at 18:55. Screenshot: `hermes-idle-recovery-after.png`; privacy-minimized timing evidence: `hermes-cloud-liveness.json`.
 - These checks verify this specific idle/re-entry scenario and the deterministic half-open recovery tests. They do not establish the original network failure mechanism or certify long idle/real-device network switching. The original reported failure remains valid evidence against the earlier broad stability inference.

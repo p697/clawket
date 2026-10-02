@@ -32,7 +32,7 @@ Final `npm run check:required` passes: Mobile 229 suites / 2,109 tests, Relay 11
 
 Hermes QA was paired to an isolated Preview service while the existing managed runtime served Production. Restored its existing private Preview pairing and deployed only Hermes Preview version `1801183a-e546-45fe-8bb2-b3a705001fe6`; no Production Worker deploy or Production pairing change. The Clawket-owned local Hermes Bridge was rebuilt/restarted; external Hermes source was not changed. Simulator appearance was restored to light. QA Pro override is local to the Simulator build.
 
-The reported permanently blocked overlay was not reproduced in every original circumstance; Add → Prompts failing to open was reproduced, fixed, and retested along with related handoffs. Physical camera capture, long-duration background/weak-network operation, and final device feel still require device acceptance. No new YouMind integration change was made in this iteration, and no new full YouMind acceptance is claimed. These limits do not replace the concrete native chat checks above.
+The reported permanently blocked overlay was not reproduced in every original circumstance; Add → Prompts failing to open was reproduced, fixed, and retested along with related handoffs. Physical camera capture, long-duration background/weak-network operation, and final device feel still require device acceptance. These limits do not replace the concrete native chat checks above.
 
 ## Roster state and feature review — 2026-09-06
 
@@ -49,11 +49,11 @@ Native signed iPhone 17 Simulator Release checks: Lucy main-chat open → back c
 
 Evidence: `evidence/roster-state-acceptance/` contains `working-roster-light.png`, `roster-read-light.png`, `avatar-sizes-light.png`, `avatar-sizes-dark.png`, `composer-model-light.png`, and `chat-settings-light.png`.
 
-`check:required` passed 229 Mobile suites / 2,115 tests and all workspace/design/i18n/docs gates. Subsequent gallery-only additions passed TypeScript, 2 focused suites / 26 tests, UI-style and six-locale checks. Signed Release built and installed. Backend-neutral unread fixtures cover OpenClaw, Hermes, and YouMind, including 120 channel sessions and a failed scheduled task; no transport, service deployment, or backend capability change was made in this iteration. This is not a new full cross-backend messaging certification.
+`check:required` passed 229 Mobile suites / 2,115 tests and all workspace/design/i18n/docs gates. Subsequent gallery-only additions passed TypeScript, 2 focused suites / 26 tests, UI-style and six-locale checks. Signed Release built and installed. Backend-neutral unread fixtures cover OpenClaw and Hermes, including 120 channel sessions and a failed scheduled task; no transport, service deployment, or backend capability change was made in this iteration. This is not a new full cross-backend messaging certification.
 
 ### PostHog evidence and product recommendation
 
-Queried the owner's browser-authenticated **Clawket / Default project 337268**, not the separately connected YouMind MCP project. Read-only aggregate queries through PostHog AI; no person profiles or prompt contents were inspected. Source: https://us.posthog.com/project/337268/ai?chat=282dcaec-eb60-48a9-b69b-c32851cd5645 . Rolling 30-day window queried on 2026-09-06 (approximately August 7–September 6; project timezone Asia/Shanghai).
+Queried the owner's browser-authenticated **Clawket / Default project 337268**, not another connected MCP project. Read-only aggregate queries through PostHog AI; no person profiles or prompt contents were inspected. Source: https://us.posthog.com/project/337268/ai?chat=282dcaec-eb60-48a9-b69b-c32851cd5645 . Rolling 30-day window queried on 2026-09-06 (approximately August 7–September 6; project timezone Asia/Shanghai).
 
 | Event | Events | Distinct `person_id` |
 | --- | ---: | ---: |

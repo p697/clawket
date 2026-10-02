@@ -5,11 +5,10 @@
 | 位置 | 行数 | 问题 |
 |---|---|---|
 | `apps/mobile/src/services/gateway.ts` | 3,005 | 传输（Relay / 直连）、握手、重连、OpenClaw 与 Hermes 请求语义混在一个类；Hermes 探活、Hermes Cron 方法直接长在上面 |
-| `apps/mobile/src/services/youmind.ts` | 3,032 | 独立世界，不经过连接层；聊天 UI 因此分叉成 `YouMindChatTab` |
 | `apps/mobile/src/screens/ChatScreen/hooks/useChatController.ts` | 2,555 | 编排绑定 OpenClaw 事件形状，Hermes 靠特判 |
 | `packages/bridge-runtime/src/hermes.ts` | 5,878 | 会话存储、用量账本、命令、流转换、HTTP 服务塞在一个文件 |
 | `apps/relay-worker` 与 `apps/hermes-relay-worker`；两套 Registry | 2 × ~2,000 | 六成逐行相同，按后端复制而不是按配置部署 |
-| 后端分支 | 36 处 `backendKind ===`、13 处 `mode === 'hermes'`、23 处 youmind 特判 | 能力矩阵存在但没人只靠它 |
+| 后端分支 | 36 处 `backendKind ===`、13 处 `mode === 'hermes'` | 能力矩阵存在但没人只靠它 |
 
 ## 2. 目标：四层，每层只认一个接口
 

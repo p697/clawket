@@ -47,7 +47,7 @@ Worker 使用只读导出的实际 Production bundle，不是假设的旧实现�
 
 修复后 App 使用现有 `connect.params.caps` 字符串数组，新 Bridge 同时识别 caps 和预发布 meta 格式。旧 Bridge 可透明转发，Gateway 不需要修改；Bridge 不返回能力时仍按 legacy 处理。后续握手继续安全声明 caps，避免缓存的 legacy 状态让已升级的 Bridge 永远无法被识别。协商不增加请求、轮询或额外连接。原有能力缓存为 v2 时的显式 schema 拒绝也允许一次兼容重试，网络/鉴权错误不触发该路径。
 
-回归先在旧代码上失败（Mobile 1 项），修改后通过；历史 Bridge 实测已包含新 caps 格式。另修正一条过时的 YouMind 集成断言，使用实际 run ID 而不是流消息 ID，并验证只产生一次 run_started；没有改 YouMind 产品逻辑。
+回归先在旧代码上失败（Mobile 1 项），修改后通过；历史 Bridge 实测已包含新 caps 格式。
 
 ## 发布前仍需完成
 

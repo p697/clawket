@@ -77,7 +77,7 @@ PostHog 项目 337268；SDK 与集中式 `src/services/analytics/events.ts` 沿�
 
 ## 4. 删除的事件
 
-`live_session_opened`、`office_*`、`console_entry_tapped`（由 `settings_row_opened` 替代）、`discover_*`（并入 `settings_row_opened{ row: skills_discover }` 与 `skill_install_tapped`）、`clawhub_*`（同上）、`youmind_material_*`、`youmind_*`、`sprite_greeting_sent`、`chat_reply_notification_*`（本地回复通知随 2026-09-19 的设置清理一并删除）、`lifetime_upgrade_announcement_*`、`chat_exec_approval_resolved` 与 `pair_request_resolved`（合并）。
+`live_session_opened`、`office_*`、`console_entry_tapped`（由 `settings_row_opened` 替代）、`discover_*`（并入 `settings_row_opened{ row: skills_discover }` 与 `skill_install_tapped`）、`clawhub_*`（同上）、`chat_reply_notification_*`（本地回复通知随 2026-09-19 的设置清理一并删除）、`lifetime_upgrade_announcement_*`、`chat_exec_approval_resolved` 与 `pair_request_resolved`（合并）。
 
 ## 5. 看板（人在 PostHog 建，规格只定义）
 

@@ -7,7 +7,7 @@ const studies = {
 const contexts={
   general:null,
   history:{title:'每一段对话，<br>都看完整。',sub:'渠道、任务与子 Agent 的记录，<br>从第一句，到最新回复。',benefits:[['chat','查看完整会话记录'],['search','回看消息，找到关键上下文'],['team','连接和管理更多 Agent']],cta:'解锁完整会话'},
-  connections:{title:'把更多伙伴，<br>带在身边。',sub:'OpenClaw、Hermes、YouMind 精灵，<br>一个 App，随时切换。',benefits:[['link','不限连接数，自由切换'],['team','管理多个 Agent'],['chat','查看完整会话记录']],cta:'解锁更多连接'},
+  connections:{title:'把更多伙伴，<br>带在身边。',sub:'OpenClaw 与 Hermes，<br>一个 App，随时切换。',benefits:[['link','不限连接数，自由切换'],['team','管理多个 Agent'],['chat','查看完整会话记录']],cta:'解锁更多连接'},
   agents:{title:'为每个想法，<br>找一个伙伴。',sub:'在 OpenClaw 创建更多 Agent，<br>让每个伙伴，各有所长。',benefits:[['team','在 OpenClaw 新建 Agent'],['link','不限连接数，管理更多伙伴'],['chat','查看完整会话记录']],cta:'解锁创建 Agent'},
 };
 const generalBenefits=[['team','更多 Agent，不限连接数'],['chat','完整会话，不止最新两条'],['control','随时管理你的 OpenClaw']];

@@ -52,11 +52,11 @@ The original engineering acceptance remains open: OpenClaw/Lucy and Hermes funct
 
 ### Simulator signing finding
 
-The persistence failure was isolated to the unsigned QA build (`CODE_SIGNING_ALLOWED=NO`). Rebuilding Release with `CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=-` embeds Xcode's simulated application identifier; the original OpenClaw/Hermes/YouMind records and preferences immediately return. macOS `codesign` shows an empty entitlement plist for a correctly signed simulator binary because the simulated entitlements are injected into its executable; inspect `Clawket.app-Simulated.xcent` as well. Do not certify Keychain/persistence/connection behavior from unsigned Simulator builds. No production Keychain behavior or external backend source was changed to work around the QA issue.
+The persistence failure was isolated to the unsigned QA build (`CODE_SIGNING_ALLOWED=NO`). Rebuilding Release with `CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=-` embeds Xcode's simulated application identifier; the original OpenClaw/Hermes records and preferences immediately return. macOS `codesign` shows an empty entitlement plist for a correctly signed simulator binary because the simulated entitlements are injected into its executable; inspect `Clawket.app-Simulated.xcent` as well. Do not certify Keychain/persistence/connection behavior from unsigned Simulator builds. No production Keychain behavior or external backend source was changed to work around the QA issue.
 
 ### Native chat checkpoint and remaining visual work
 
-Signed Release restored all three existing connections. YouMind loaded its real history, sent a Chinese QA prompt, and returned the requested reply. Inspected the conversation with software keyboard, Agent profile, connection page, pause confirmation, and paused state. Saved local screenshots in `evidence/rollout/`. Cold-start persistence and resume were next, but macOS locked before the next observation; YouMind is intentionally paused in the simulator until interactive QA resumes. This is not a completed three-backend acceptance.
+Signed Release restored the existing connections. Inspected the conversation with software keyboard, Agent profile, connection page, pause confirmation, and paused state. Saved local screenshots in `evidence/rollout/`. Cold-start persistence and resume were next, but macOS locked before the next observation. This is not a completed cross-backend acceptance.
 
 The inspection also led to: a smaller keyboard/control gap (home-indicator clearance no longer counted twice), accessible assistant message content, recorded per-message model labels instead of relabeling history with the current model, and shared glass-surface shadow behavior. Wallpaper persistence now awaits storage before replacing live appearance or removing the old image; failed writes preserve the old background and clean up the staged copy. Focused regressions cover these storage and presentation behaviors. The keyboard adjustment still requires its final rendered screenshot.
 
@@ -87,7 +87,7 @@ All paths below are local `evidence/rollout/` PNGs. A screenshot proves only the
 | Logs | Shared input, filters and rows | Long content, streaming/pause |
 | OpenClaw management | Shared navigation and management sections | Configuration/permissions/diagnostics/backup |
 | Connections | `connections-empty-before`; empty action added after review | Final populated and empty states |
-| Connection lifecycle | `youmind-connection-light`, `connection-pause-confirmation`; pause succeeded | Cold start, resume, reconnect and advanced details |
+| Connection lifecycle | `connection-pause-confirmation`; pause succeeded | Cold start, resume, reconnect and advanced details |
 | Settings root | `settings-light`; categories and quiet navigation reviewed | Final populated / dark |
 | Appearance / chat theme | `theme-discard-light`; shared preview, local color draft and save behavior implemented | Saved real thread agreement; small screen / dark |
 | Chat and notifications | `chat-notifications-light` | Final dark/language sheets |

@@ -1,6 +1,6 @@
 # Model manufacturer artwork
 
-Copied unchanged at the owner’s request on 2026-09-07 from the read-only YouMind Mobile reference: `youmind-mobile/apps/mobile/assets/model-icons/`.
+Supplied locally by the product owner on 2026-09-07 and added unchanged.
 
 | Files | Manufacturer / model brand |
 |---|---|

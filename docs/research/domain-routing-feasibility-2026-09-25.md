@@ -87,7 +87,7 @@ Registry 当前返回的 Relay URL、邀请链接公共 origin 也有独立配�
 
 官方 Registry、Relay、配对、健康查询、语音、官方分析代理可以纳入统一选择。生产、Preview、Pi、本地模型需逐项列明映射，不留下某一类请求仍偷偷走 workers.dev。
 
-源码中还存在 YouMind 登录/API、Apple/Google 商店与 RevenueCat SDK、GitHub 更新检查、ClawHub、skills.sh、头像与用户自行配置的服务地址。它们不是 Clawket 自有入口，不能通过替换域名获得等价服务。若确实要求其中的可代理 HTTP 也走新域名，要分别设计代理与认证、缓存、内容大小限制；商店原生支付等无法用一般自有域名代理替代。自托管、局域网、Tailscale 和自定义服务应保持用户配置。
+源码中还存在 Apple/Google 商店与 RevenueCat SDK、GitHub 更新检查、ClawHub、skills.sh、头像与用户自行配置的服务地址。它们不是 Clawket 自有入口，不能通过替换域名获得等价服务。若确实要求其中的可代理 HTTP 也走新域名，要分别设计代理与认证、缓存、内容大小限制；商店原生支付等无法用一般自有域名代理替代。自托管、局域网、Tailscale 和自定义服务应保持用户配置。
 
 `echo.clawket.ai` 要在分析代理服务侧确认新 hostname 和证书接入，不能只复制 DNS CNAME 并假设可用。App 的分析客户端初始化也要考虑切换时已有队列与实例的生命周期。
 
