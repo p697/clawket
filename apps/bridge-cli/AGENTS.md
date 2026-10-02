@@ -109,7 +109,7 @@ Claude first-time detached pairing must carry the resolved device scope into the
 
 ## 3.1 release
 
-The authorized Bridge patch release is `3.1.9`. Keep the publish guard and bundled workspace versions aligned. Preserve the existing OpenClaw/Hermes pair behavior for old clients. `pair choose` is interactive and read-only until selection; explicit `--backend` is required for agent/script prompts. Client distribution is a separate release stage.
+The authorized Bridge patch release is `3.1.10`. Keep the publish guard and bundled workspace versions aligned. Preserve the existing OpenClaw/Hermes pair behavior for old clients. `pair choose` is interactive and read-only until selection; explicit `--backend` is required for agent/script prompts. Client distribution is a separate release stage.
 
 New Codex and Claude Code configurations save a `Product · Device name` default via `src/device-connection-name.ts`: prefer the bounded macOS ComputerName lookup, then hostname, then the plain product name. Reuse the saved label for Registry registration, encrypted invitations and Relay/local QR output; existing configurations without a label retain plain product defaults. Refresh must not rename existing Registry records. Project/device scope and connection identity never come from the display name; keep device labels out of diagnostics and persistent logs.
 
