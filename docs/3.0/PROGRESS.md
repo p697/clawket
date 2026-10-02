@@ -1,5 +1,11 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-02 用户长消息自动折叠（负责人：长消息影响整体阅读，要求简单、合理、优雅的展开交互）。
+  - 共享用户气泡按实际排版超过 6 行时默认显示 6 行及省略号，气泡内增加同色轻量「展开 / 收起」与上下箭头，44-point 点击区；时间 / 送达标记独立放在按钮旁。短消息保留原来的行内时间，恰好 6 行正文仍允许时间另起一行；附件和助手回复保持完整。
+  - 原生测量跟随手机 / iPad 分栏宽度、聊天字号和系统字体缩放，不按字符数猜测。状态按会话及稳定 render key 保存，保留列表复用、历史回声换 ID 和长按浮起克隆的一致几何；点击前暂停底部跟随，防止长文展开把读者带到页尾。测量只通知对应行，隐藏测量文字不参与触摸或无障碍；按钮公开展开状态，正文保留无障碍长按操作。
+  - 不改变消息正文、缓存、发送、全文复制 / 分享或各后端协议；两条文案补齐 19 语言。新增组件回归 9 项、ThreadView 166 项逐文件 in-band 通过（包含 OpenClaw / Hermes / Codex / Claude Code / Pi / local-model、附件、回声、长按与阅读位置）。Mobile 类型、设计系统和 i18n 检查通过；完整门禁交给 PR CI。
+  - 真机视觉 / 手感按现行规则由负责人验收（HT-USER-FOLD-1002）；本轮不升版本、不打分发包、不发布或部署。
+
 - 2026-10-02 Hermes 重新配对后 gateway 拒绝新 API key，App 一直「正在连接」（10-01 安卓 QA 拆出的独立任务，#69）。
   - 原因：bridge token 变了（`~/.clawket` 被清空或 `clawket reset` 后重新配对），按 token 派生的 API key 随之变化，而此前由 Clawket 启动的 `hermes gateway run --replace` 仍用旧 key；bridge 只报凭据不匹配、不替换，配对却打印「confirmed cloud bridge attachment」。
   - 改法：bridge 每次启动 gateway 时写 `~/.clawket/hermes-gateway-owner.json`（pid、`ps` 读出的进程启动时间、API 地址、Hermes home，不含凭据）。API 返回 401/403 时，只有这份记录证明同一作用域里那个仍在运行的 `gateway run` 进程正是 Clawket 启动的，才再起一个 `gateway run --replace`，由 Hermes 自己的接管流程停掉旧实例；不看环境变量、不按端口猜、不直接给旧 pid 发信号；读不到进程启动时间的平台（Windows）一律不自动替换。
@@ -1333,6 +1339,7 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 
 | 编号 | 事项 | 怎么做 | 验证方法 | 状态 |
 |---|---|---|---|---|
+| HT-USER-FOLD-1002 | 用户消息折叠的双端体验验收 | 在包含本轮代码的开发 App 或后续授权更新中，查看中英文长消息、连续换行、带图片 / 文件的消息；调整字号并在 iPad 分栏查看。 | 默认 6 行，展开 / 收起可达且阅读不被拉向页尾；时间和送达标记不盖文字；长按状态一致、复制 / 分享保留全文；短消息及助手回复照旧。 | 定向自动化已通过；待负责人真机视觉 / 手感验收，本轮未打包或发布。 |
 | HT-HERMES-GATEWAY-KEY-1002 | Hermes gateway 所有权恢复（#69）的发布决定 | 3.1.10 从 `accfe2f4` 起，不含本修复；由负责人决定随哪个 Bridge 版本发布 | 升级后用 `clawket pair --backend hermes --restart-hermes` 让新 bridge 启动并记录 gateway，再 `clawket reset` 后重新配对：手机应直接连上，`hermes-bridge.log` 出现 `owner=clawket`；没有记录的旧 gateway 应在配对时失败并提示 `--restart-hermes` | 待负责人决定；本轮不打包、不发布。 |
 | HT-NPM-3110-1002 | Bridge 3.1.10 npm 本机认证 | 在 npm 官方登录与独立发布认证页解锁现有安全密钥；不在聊天中发送密码或验证码。 | npm 接受固定候选，公开 latest=3.1.10，下载包逐字节/三项哈希与全新安装通过。 | 负责人已完成两次本机认证；npm 接受固定候选，公开 registry 仍在处理，下载与公开安装待验证。 |
 | HT-SVG-RESTORE-1002 | 安卓等待动画闪退修复的出包决定 | 决定已上传未提审的 Play 3.1.1/30102 是否换成含本修复的新包（新 versionCode）；线上 3.1.0 同样受影响。 | 新包在设计系统 → Clawket → 场景 2（Fetch）连续播放 10 分钟以上不闪退，`adb logcat -b crash` 无新的 `GroupView.drawGroup`。 | 待负责人决定：代码修复与真机验证见本条 PR，本轮不打正式包、不上传、不提审。 |

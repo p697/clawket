@@ -213,6 +213,8 @@
   "Copy failed": "คัดลอกไม่สำเร็จ",
   "Copy {{section}}": "คัดลอก {{section}}",
   "Show more": "แสดงเพิ่มเติม",
+  "Expand message": "แสดงทั้งหมด",
+  "Collapse message": "ย่อข้อความ",
   "Input tokens": "โทเค็นอินพุต",
   "Output tokens": "โทเค็นเอาต์พุต",
   "Total tokens": "โทเค็นทั้งหมด",

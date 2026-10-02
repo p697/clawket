@@ -156,6 +156,8 @@ Trailing swipe trays use `SwipeableRow` (owner-requested 2026-09-17): at most th
 
 Business UI consumes semantic theme values and shared primitives; it does not assemble local palettes, type scales, shadows, or sheet chrome.
 
+User message text folds after six native visual lines through `UserMessageText`; keep the preview clamped from its first frame and measure at the bubble's maximum content width with matching typography. Conversation-scoped disclosure follows the stable render key through recycling and exact history echoes; the lifted selection clone shares its geometry. Expand/collapse pauses bottom following, uses a 44-point localized text control and places time/delivery in its footer. Short messages retain inline metadata; attachments and assistant replies stay complete. Never truncate the stored, sent, copied or shared message.
+
 Canonical structural families are `Space`, `FontSize`, `LineHeight`, `FontWeight`, `Radius`, `BorderWidth`, `ControlSize`, `StatusSize`, `PresentationColor`, and `Shadow`. `createSurfaceStyle` is transitional shared surface plumbing. Do not add aliases or revive removed token members.
 
 Canonical colors are `canvas`, `canvasGrouped`, `surface`, `surfaceFloating`, `ink`, `inkSecondary`, `inkTertiary`, `line`, `accent`, `accentSoft`, `onAccent`, `scrim`, `good`, `goodSoft`, `warn`, `warnSoft`, `bad`, and `badSoft`. Ordinary UI must not hardcode colors. Use `PresentationColor` only for media, exported artifacts, and charts.

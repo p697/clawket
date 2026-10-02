@@ -213,6 +213,8 @@
   "Copy failed": "复制失败",
   "Copy {{section}}": "复制{{section}}",
   "Show more": "显示更多",
+  "Expand message": "展开",
+  "Collapse message": "收起",
   "Input tokens": "输入 Token",
   "Output tokens": "输出 Token",
   "Total tokens": "总 Token",

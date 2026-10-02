@@ -213,6 +213,8 @@
   "Copy failed": "複製失敗",
   "Copy {{section}}": "複製{{section}}",
   "Show more": "顯示更多",
+  "Expand message": "展開",
+  "Collapse message": "收合",
   "Input tokens": "輸入 Token",
   "Output tokens": "輸出 Token",
   "Total tokens": "總 Token",

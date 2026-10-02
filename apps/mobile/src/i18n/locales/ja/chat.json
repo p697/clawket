@@ -213,6 +213,8 @@
   "Copy failed": "コピーできませんでした",
   "Copy {{section}}": "{{section}}をコピー",
   "Show more": "さらに表示",
+  "Expand message": "全文を表示",
+  "Collapse message": "折りたたむ",
   "Input tokens": "入力トークン",
   "Output tokens": "出力トークン",
   "Total tokens": "合計トークン",

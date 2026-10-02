@@ -213,6 +213,8 @@
   "Copy failed": "Kopyalanamadı",
   "Copy {{section}}": "{{section}} kopyala",
   "Show more": "Daha fazla göster",
+  "Expand message": "Devamını göster",
+  "Collapse message": "Daralt",
   "Input tokens": "Girdi token'ları",
   "Output tokens": "Çıktı token'ları",
   "Total tokens": "Toplam token",

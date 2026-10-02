@@ -213,6 +213,8 @@
   "Copy failed": "فشل النسخ",
   "Copy {{section}}": "نسخ {{section}}",
   "Show more": "عرض المزيد",
+  "Expand message": "عرض المزيد",
+  "Collapse message": "طي الرسالة",
   "Input tokens": "رموز الإدخال",
   "Output tokens": "رموز الإخراج",
   "Total tokens": "إجمالي الرموز",

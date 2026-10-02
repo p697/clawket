@@ -213,6 +213,8 @@
   "Copy failed": "Sao chép thất bại",
   "Copy {{section}}": "Sao chép {{section}}",
   "Show more": "Hiện thêm",
+  "Expand message": "Xem thêm",
+  "Collapse message": "Thu gọn",
   "Input tokens": "Token đầu vào",
   "Output tokens": "Token đầu ra",
   "Total tokens": "Tổng token",

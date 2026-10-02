@@ -213,6 +213,8 @@
   "Copy failed": "कॉपी नहीं हो सका",
   "Copy {{section}}": "{{section}} कॉपी करें",
   "Show more": "और दिखाएँ",
+  "Expand message": "पूरा दिखाएँ",
+  "Collapse message": "समेटें",
   "Input tokens": "इनपुट टोकन",
   "Output tokens": "आउटपुट टोकन",
   "Total tokens": "कुल टोकन",

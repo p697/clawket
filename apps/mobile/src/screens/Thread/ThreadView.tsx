@@ -67,6 +67,7 @@ import { ChatMessageIdentity } from '../../components/chat/ChatMessageIdentity';
 import { MessageAttachmentAlbum } from '../../components/chat/MessageAttachmentAlbum';
 import { MessageEntrance } from '../../components/chat/MessageEntrance';
 import { MessageMeta, messageMetaSpacer } from '../../components/chat/MessageMeta';
+import { UserMessageDisclosureProvider, UserMessageText } from '../../components/chat/UserMessageText';
 import { ChatBackgroundLayer } from '../../components/chat/ChatBackgroundLayer';
 import { ChatWallpaperScrim } from '../../components/chat/ChatWallpaperScrim';
 import { chatWallpaperDriftPosition, chatWallpaperDriftScrims } from '../../theme/chat-wallpaper';
@@ -1364,6 +1365,13 @@ export function ThreadView({
     </View>
   ) : null), [compactionNotice, testID]);
   const previewUpgrade = sessionPreview?.hasHiddenHistory ? sessionPreview.onUpgrade : undefined;
+  const pauseMessageFollow = useCallback(() => {
+    cancelReaderSettle();
+    cancelBottomFollow();
+    endFollowGlide();
+    returningToBottomRef.current = false;
+    followNewMessagesRef.current = false;
+  }, [cancelBottomFollow, cancelReaderSettle, endFollowGlide]);
   const pauseHistoryFollow = useCallback((manual: boolean) => {
     // A short conversation keeps its top in view, so FlashList asks for older
     // history on any layout change (the work dock rising, the keyboard): a
@@ -1423,6 +1431,7 @@ export function ThreadView({
     <ChatPresentationProvider value={presentation}>
     <ArtifactProvider operations={artifactOperations} sessionKey={sessionKey}>
     <ThreadLiveActivityContext.Provider value={liveActivity}>
+    <UserMessageDisclosureProvider scope={historyScope ?? readableScope} onToggle={pauseMessageFollow}>
     <View ref={screenRef} collapsable={false} testID={testID} style={[styles.screen, { backgroundColor: theme.colors.canvas }]}
       onLayout={({ nativeEvent }) => {
         const { width, height } = nativeEvent.layout;
@@ -1829,6 +1838,7 @@ export function ThreadView({
       onOpenStep={(message) => setSelectedToolMessageId(message.id)}
     />
     </View>
+    </UserMessageDisclosureProvider>
     </ThreadLiveActivityContext.Provider>
     </ArtifactProvider>
     </ChatPresentationProvider>
@@ -2090,6 +2100,7 @@ const ThreadMessageTimelineItem = React.memo(function ThreadMessageTimelineItem(
         ref={rowRef}
         testID={`thread-message-${message.id}`}
         accessibilityRole={actionable ? 'button' : undefined}
+        accessible={message.role === 'user' ? false : undefined}
         accessibilityLabel={[isIncomingParticipant(message) && message.attribution ? messageSenderLabel(message.attribution) : '', message.text, spokenState].filter(Boolean).join(' · ') || undefined}
         accessibilityActions={actionable ? MESSAGE_ROW_ACCESSIBILITY_ACTIONS : undefined}
         onAccessibilityAction={actionable ? (event) => {
@@ -2202,7 +2213,7 @@ function ThreadMessageRowContent({
             joinsOlder={joinsOlder} joinsNewer={bubbleJoinsNewer} receipt={receipt} onOpenReceipt={onOpenReceipt} />
         ) : (
           <UserBubble message={message} status={status} copy={copy} selectable={selectable}
-            joinsOlder={joinsOlder} joinsNewer={bubbleJoinsNewer} />
+            joinsOlder={joinsOlder} joinsNewer={bubbleJoinsNewer} onLongPress={onLongPress} />
         )
       ) : null}
       {fileAttachments.map((file, index) => (
@@ -2256,6 +2267,7 @@ function UserBubble({
   selectable = false,
   joinsOlder = false,
   joinsNewer = false,
+  onLongPress,
 }: Readonly<{
   message: UiMessage;
   status: UserMessageStatus | null;
@@ -2263,9 +2275,17 @@ function UserBubble({
   selectable?: boolean;
   joinsOlder?: boolean;
   joinsNewer?: boolean;
+  onLongPress?: () => void;
 }>): React.JSX.Element {
   const incoming = isIncomingParticipant(message);
   const typography = useBubbleTypography(incoming ? 'assistant' : 'user');
+  const { width: windowWidth, fontScale } = useWindowDimensions();
+  const workspace = useWorkspaceLayout();
+  const surfaces = useChatSurfaces();
+  const surface = incoming ? surfaces.incoming : surfaces.outgoing;
+  const paneWidth = Math.min(workspace.tablet ? workspace.paneWidth : windowWidth, IPAD_CHAT_MAX_WIDTH);
+  const contentWidth = Math.max(0, (paneWidth - THREAD_ROW_INSET * 2) * (incoming ? 0.92 : 0.82)
+    - Space.md * 2 - surface.borderWidth * 2);
   // Android leaves CJK lines low in their line box (`chat/textCentering`):
   // the words rise, the clock keeps its place at the bubble's corner.
   const textStyle = useMemo(() => {
@@ -2277,22 +2297,19 @@ function UserBubble({
   const hasMeta = Boolean(time) || Boolean(status);
   return (
     <Bubble testID={`thread-bubble-${message.id}`} role={incoming ? "assistant" : "user"} joinsOlder={joinsOlder} joinsNewer={joinsNewer}>
-      <View style={stylesStatic.userBody}>
-        <Text selectable={selectable} style={textStyle}>
-          {message.text}
-          {hasMeta ? <Text style={stylesStatic.metaSpacer}>{messageMetaSpacer(time, Boolean(status))}</Text> : null}
-        </Text>
-        {hasMeta ? (
+      <UserMessageText id={message.renderKey ?? message.id} text={message.text} width={contentWidth}
+        fontSize={typography.fontSize ?? FontSize.body} fontScale={fontScale} color={surface.textColor}
+        textStyle={textStyle} selectable={selectable} onLongPress={onLongPress}
+        metaSpacer={hasMeta ? <Text style={stylesStatic.metaSpacer}>{messageMetaSpacer(time, Boolean(status))}</Text> : null}
+        meta={hasMeta ? (
           <MessageMeta
             testID={`thread-meta-${message.id}`}
             time={time}
             tone={incoming ? "neutral" : "accent"}
             status={status}
             statusLabel={statusCopy(status, copy)}
-            style={stylesStatic.metaOverlay}
           />
-        ) : null}
-      </View>
+        ) : null} />
     </Bubble>
   );
 }
@@ -2760,20 +2777,12 @@ const stylesStatic = StyleSheet.create({
   deliveryFrame: {
     gap: Space.xs,
   },
-  userBody: {
-    position: 'relative',
-  },
   // Same glyphs as the visible meta, painted invisibly, so the last text line
   // leaves exactly enough room for the overlay.
   metaSpacer: {
     color: 'transparent',
     fontSize: FontSize.meta,
     fontVariant: ['tabular-nums'],
-  },
-  metaOverlay: {
-    position: 'absolute',
-    right: 0,
-    bottom: 0,
   },
   metaRowAssistant: {
     alignSelf: 'flex-end',

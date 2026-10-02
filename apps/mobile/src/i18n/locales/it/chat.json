@@ -213,6 +213,8 @@
   "Copy failed": "Copia non riuscita",
   "Copy {{section}}": "Copia {{section}}",
   "Show more": "Mostra altro",
+  "Expand message": "Mostra tutto",
+  "Collapse message": "Mostra meno",
   "Input tokens": "Token in input",
   "Output tokens": "Token in output",
   "Total tokens": "Token totali",

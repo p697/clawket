@@ -213,6 +213,8 @@
   "Copy failed": "Не вдалося скопіювати",
   "Copy {{section}}": "Копіювати: {{section}}",
   "Show more": "Показати більше",
+  "Expand message": "Розгорнути",
+  "Collapse message": "Згорнути",
   "Input tokens": "Вхідні токени",
   "Output tokens": "Вихідні токени",
   "Total tokens": "Усього токенів",

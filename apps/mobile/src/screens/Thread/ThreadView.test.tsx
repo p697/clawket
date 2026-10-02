@@ -88,6 +88,7 @@ it('reserves the user clock with nonbreaking whitespace, never another visible t
 let mockScheme: 'light' | 'dark' = 'light';
 let mockReducedMotion = false;
 let mockPacedText: string | undefined;
+let mockRenderMessageClone = false;
 const mockScrollToEnd = jest.fn();
 /** Geometry the FlashList mock reports from its imperative handle. */
 const mockListLayout = { content: 0, viewport: 0 };
@@ -359,7 +360,8 @@ jest.mock('./components/ThreadMessageActionsOverlay', () => {
   const { View } = require('react-native');
   return {
     ThreadMessageActionsOverlay: (props: Record<string, unknown>) => props.selection
-      ? ReactRuntime.createElement(View, { ...props, testID: 'thread-message-actions' })
+      ? ReactRuntime.createElement(View, { ...props, testID: 'thread-message-actions' },
+        mockRenderMessageClone ? (props.renderMessage as Function)(props.message, 393) : null)
       : null,
   };
 });
@@ -498,6 +500,7 @@ describe('ThreadView', () => {
     mockScheme = 'light';
     mockPacedText = undefined;
     mockReducedMotion = false;
+    mockRenderMessageClone = false;
     require('react-native').Linking.openURL.mockClear();
     consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation((message?: unknown) => {
       if (typeof message === 'string' && message.includes('react-test-renderer is deprecated')) return;
@@ -1655,6 +1658,64 @@ describe('ThreadView', () => {
 
     act(() => markdown.props.onLinkPress({ url: 'https://example.com/docs' }));
     expect(Linking.openURL).toHaveBeenCalledWith('https://example.com/docs');
+  });
+
+  it.each(['openclaw', 'hermes', 'codex', 'claude-code', 'pi', 'local-model'] as const)(
+    'folds only user text on %s, retaining attachments, delivery metadata and the native full message', backend => {
+      const message: UiMessage = { id: 'long-prompt', renderKey: 'local-prompt', role: 'user', text: 'A wrapped long prompt. '.repeat(100), timestampMs: 1_700_000_000_000,
+        imageUris: ['file://photo.jpg'], fileAttachments: [{ uri: 'file://notes.txt', fileName: 'notes.txt', mimeType: 'text/plain' }] };
+      const props = createProps({ capabilities: { ...CAPABILITY_MATRIX[backend] }, messages: [message, { id: 'long-reply', role: 'assistant', text: message.text }] });
+      const view = render(<ThreadView {...props} />);
+      fireEvent(view.getByTestId('user-message-measure-local-prompt', { includeHiddenElements: true }), 'textLayout', { nativeEvent: { lines: new Array(7).fill({}) } });
+      expect(view.getByTestId('user-message-text-local-prompt').props.numberOfLines).toBe(6);
+      expect(view.getByTestId('thread-meta-long-prompt')).toBeTruthy();
+      expect(view.getByTestId('thread-file-long-prompt-0')).toBeTruthy();
+      expect(view.getByTestId('thread-attachments-long-prompt')).toBeTruthy();
+      expect(view.getByTestId('thread-markdown-long-reply').props.markdown).toBe(message.text);
+      expect(props.messages[0].text).toBe(message.text);
+      fireEvent.press(view.getByTestId('user-message-toggle-local-prompt'), { stopPropagation: jest.fn() });
+      expect(view.getByTestId('user-message-text-local-prompt').props.numberOfLines).toBeUndefined();
+      view.rerender(<ThreadView {...props} messages={[{ ...message, id: 'backend-echo' }, props.messages[1]]} />);
+      expect(view.getByTestId('user-message-text-local-prompt').props.numberOfLines).toBeUndefined();
+      view.unmount();
+    },
+  );
+
+  it('keeps the lifted user clone in the current disclosure state, with full-text actions and accessible expansion', () => {
+    mockRenderMessageClone = true;
+    const message: UiMessage = { id: 'long-lift', role: 'user', text: 'Full original prompt. '.repeat(100) };
+    const messageActions = { onCopy: jest.fn(), onToggleFavorite: jest.fn(), onShare: jest.fn() };
+    const view = render(<ThreadView {...createProps({ messages: [message], messageActions })} />);
+    fireEvent(view.getByTestId('user-message-measure-long-lift', { includeHiddenElements: true }), 'textLayout', { nativeEvent: { lines: new Array(7).fill({}) } });
+    expect(view.getByTestId('thread-message-long-lift').props.accessible).toBe(false);
+    fireEvent(view.getByTestId('user-message-text-long-lift'), 'accessibilityAction', { nativeEvent: { actionName: 'longpress' } });
+    let overlay = view.getByTestId('thread-message-actions');
+    expect(within(overlay).getByTestId('user-message-text-long-lift').props.numberOfLines).toBe(6);
+    expect(within(overlay).getByTestId('user-message-text-long-lift').props.selectable).toBe(true);
+    expect(overlay.props.message.text).toBe(message.text);
+    act(() => overlay.props.onClosed());
+    fireEvent.press(view.getByTestId('user-message-toggle-long-lift'), { stopPropagation: jest.fn() });
+    fireEvent(view.getByTestId('thread-message-long-lift'), 'longPress');
+    overlay = view.getByTestId('thread-message-actions');
+    expect(within(overlay).getByTestId('user-message-text-long-lift').props.numberOfLines).toBeUndefined();
+    expect(within(overlay).getByTestId('user-message-toggle-long-lift').props.disabled).toBe(true);
+    view.unmount();
+  });
+
+  it('pauses automatic bottom following before the reader expands a prompt', () => {
+    jest.useFakeTimers();
+    const message: UiMessage = { id: 'reading-long', role: 'user', text: 'Reading a long prompt. '.repeat(100) };
+    const view = render(<ThreadView {...createProps({ messages: [message] })} />);
+    act(() => jest.advanceTimersByTime(1000));
+    mockScrollToEnd.mockClear();
+    fireEvent(view.getByTestId('user-message-measure-reading-long', { includeHiddenElements: true }), 'textLayout', { nativeEvent: { lines: new Array(7).fill({}) } });
+    fireEvent.press(view.getByTestId('user-message-toggle-reading-long'), { stopPropagation: jest.fn() });
+    const list = view.UNSAFE_getByType(require('@shopify/flash-list').FlashList);
+    act(() => list.props.onContentSizeChange(393, 2000));
+    act(() => jest.advanceTimersByTime(1000));
+    expect(mockScrollToEnd).not.toHaveBeenCalled();
+    expect(view.getByTestId('user-message-text-reading-long').props.numberOfLines).toBeUndefined();
+    view.unmount();
   });
 
   it('keeps an attachment-only message visible and clickable', () => {

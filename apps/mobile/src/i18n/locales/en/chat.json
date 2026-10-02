@@ -213,6 +213,8 @@
   "Copy failed": "Copy failed",
   "Copy {{section}}": "Copy {{section}}",
   "Show more": "Show more",
+  "Expand message": "Expand message",
+  "Collapse message": "Collapse message",
   "Input tokens": "Input tokens",
   "Output tokens": "Output tokens",
   "Total tokens": "Total tokens",
