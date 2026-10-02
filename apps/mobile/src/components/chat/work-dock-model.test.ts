@@ -65,5 +65,7 @@ describe('formatWorkDockCaption', () => {
       approval: { id: '1', kind: 'exec', command: 'rm -rf\n  build', status: 'pending', expiresAtMs: null },
     };
     expect(formatWorkDockCaption({ phase: { kind: 'approval', request: approval }, work, t })).toBe('rm -rf build');
+    const wrapped = { ...approval, approval: { ...approval.approval!, command: "/bin/zsh -lc 'curl --head https://example.com'" } } as UiMessage;
+    expect(formatWorkDockCaption({ phase: { kind: 'approval', request: wrapped }, work, t })).toBe('curl --head https://example.com');
   });
 });

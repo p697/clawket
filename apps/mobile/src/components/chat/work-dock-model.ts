@@ -1,4 +1,5 @@
 import type { UiMessage } from '../../types/chat';
+import { unwrapShellCommand } from '../../utils/tool-display';
 
 type Translate = (key: string, options?: Record<string, unknown>) => string;
 import { opensTurn, type TurnWork } from './turn-work';
@@ -80,7 +81,8 @@ export function formatWorkDockCaption({ phase, work, elapsed, detail, t }: Reado
   if (phase.kind === 'offline') return t('The Agent may still be working on your computer', { ns: 'chat' });
   if (phase.kind === 'approval') {
     const approval = phase.request.approval;
-    return approval && approval.kind !== 'pair' ? approval.command.replace(/\s+/g, ' ').trim() : '';
+    // The card keeps the exact command; the dock's summary drops a shell wrapper.
+    return approval && approval.kind !== 'pair' ? unwrapShellCommand(approval.command.replace(/\s+/g, ' ').trim()) : '';
   }
   if (phase.kind === 'question') return detail?.replace(/\s+/g, ' ').trim() ?? '';
   const parts: string[] = [];

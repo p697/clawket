@@ -35,7 +35,7 @@ import { CursorHistoryWindow } from './cursorHistoryWindow';
 import { mapAdapterSession } from './adapterChatMapping';
 import { shouldSuppressHistoryLoadError } from './historyErrorPolicy';
 import { shouldPreserveOptimisticAssistant } from './cacheHydrationPolicy';
-import { preserveHydratedMessageKeys, preserveMessagePresentation, preserveOptimisticAssistantMessage, prependOlderCachedMessages, retireAliasedTools } from './historyMergePolicy';
+import { preserveApprovalRows, preserveHydratedMessageKeys, preserveMessagePresentation, preserveOptimisticAssistantMessage, prependOlderCachedMessages, retireAliasedTools } from './historyMergePolicy';
 import { shouldRestoreCacheBeforeHistoryRefresh } from './historyRefreshPolicy';
 import { ReconcileAssistantOptions, shouldAppendReconciledAssistant } from './historyReconcile';
 import { selectSessionForCurrentAgent } from './sessionSelection';
@@ -1090,8 +1090,8 @@ export function useChatHistoryState({
           : prev.filter(message => !cacheHydrationMessageIdsRef.current.has(message.id)), lineageMergedMessages, historyResult.toolCallAliases);
         const reconciled = preserveMessagePresentation(preservable,
           preserveOptimisticAssistantMessage(preservable, lineageMergedMessages));
-        const mergedMessages = allowOptimisticPreservation ? reconciled
-          : preserveHydratedMessageKeys(prev, reconciled);
+        const mergedMessages = preserveApprovalRows(prev, allowOptimisticPreservation ? reconciled
+          : preserveHydratedMessageKeys(prev, reconciled));
         dbg(
           `history:setMessages key=${key} allowPreserve=${allowOptimisticPreservation} `
           + `currentSessionId=${currentSessionId ?? 'none'} `

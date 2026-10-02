@@ -1,5 +1,5 @@
 import { UiMessage } from '../types/chat';
-import { preserveHydratedMessageKeys, preserveMessagePresentation, preserveOptimisticAssistantMessage, prependOlderCachedMessages, retireAliasedTools } from './historyMergePolicy';
+import { preserveApprovalRows, preserveHydratedMessageKeys, preserveMessagePresentation, preserveOptimisticAssistantMessage, prependOlderCachedMessages, retireAliasedTools } from './historyMergePolicy';
 
 describe('preserveHydratedMessageKeys', () => {
   const cached: UiMessage = { id: 'cached-row', historyMessageId: 'server-row', renderKey: 'stable-row', role: 'assistant', text: 'Outdated text', timestampMs: 1000 };
@@ -544,4 +544,43 @@ it('keeps a local extension command before its newer canonical result notices', 
     expect(preserveOptimisticAssistantMessage([before, command], [before, unknown]).map(row => row.id))
       .toEqual(['ast-before', 'notice', 'usr_123']);
   }
+});
+
+describe('preserveApprovalRows', () => {
+  const card = (id: string, status: 'pending' | 'allowed' = 'allowed'): UiMessage => ({
+    id, role: 'system', text: '', timestampMs: 9_999_999,
+    approval: { id, kind: 'exec', command: 'curl --head https://example.com', status, expiresAtMs: null },
+  });
+  const ask: UiMessage = { id: 'ask', role: 'user', text: 'Fetch it' };
+  const said: UiMessage = { id: 'live-said', renderKey: 'said', role: 'assistant', text: 'I will use curl.' };
+  const call: UiMessage = { id: 'toolcall_1', role: 'tool', text: '', toolName: 'exec', toolStatus: 'running' };
+
+  it('keeps an answered card beside the row it followed when history drops it', () => {
+    const approval = card('approval_1');
+    // Newest first: the card arrived after the Agent's words.
+    const previous = [approval, call, said, ask];
+    const next: UiMessage[] = [
+      { id: 'answer', role: 'assistant', text: 'HTTP/2 200' },
+      { ...call, id: 'toolresult_1', toolStatus: 'success' },
+      { id: 'history-said', renderKey: 'said', role: 'assistant', text: 'I will use curl.' },
+      ask,
+    ];
+    expect(preserveApprovalRows(previous, next).map(message => message.id))
+      .toEqual(['answer', 'toolresult_1', 'approval_1', 'history-said', 'ask']);
+  });
+
+  it('returns the same list when nothing is missing and never keeps pairing requests', () => {
+    const next = [card('approval_2'), ask];
+    expect(preserveApprovalRows([card('approval_2'), ask], next)).toBe(next);
+    const pairing: UiMessage = {
+      id: 'approval_pair_device_1', role: 'system', text: '',
+      approval: { id: '1', kind: 'pair', target: 'device', displayName: null, platform: null, receivedAtMs: 1, status: 'pending' },
+    };
+    const plain = [ask];
+    expect(preserveApprovalRows([pairing, ask], plain)).toBe(plain);
+  });
+
+  it('puts a card with no surviving neighbour first rather than dropping it', () => {
+    expect(preserveApprovalRows([card('approval_3', 'pending')], [ask]).map(message => message.id)).toEqual(['approval_3', 'ask']);
+  });
 });
