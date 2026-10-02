@@ -2171,6 +2171,26 @@ describe('ThreadView', () => {
       expect(view.getByTestId('thread-screen-composer-input')).toBe(input);
     });
 
+  it('keeps following when a short conversation reaches its top on a layout change while the reader rests at the end', () => {
+    jest.useFakeTimers();
+    const props = createProps({ messages: [{ id: 'newest', role: 'user', text: 'Run the tests' }] });
+    const view = render(<ThreadView {...props} />);
+    const timeline = view.getByTestId('thread-screen-timeline');
+    mockListLayout.content = 300;
+    mockListLayout.viewport = 600;
+    fireEvent(timeline, 'load', { elapsedTimeInMs: 5 });
+    act(() => timeline.props.onCommitLayoutEffect());
+    // The work dock rising moves the viewport; FlashList reports its top again.
+    act(() => { timeline.props.onStartReached(); });
+    expect(props.onLoadMoreHistory).toHaveBeenCalledTimes(1);
+    mockScrollToEnd.mockClear();
+    view.rerender(<ThreadView {...props} messages={[{ id: 'reply', role: 'assistant', text: 'All green.' }, ...props.messages]} />);
+    mockListLayout.content = 700;
+    act(() => { timeline.props.onContentSizeChange(393, 700); timeline.props.onCommitLayoutEffect(); });
+    act(() => jest.advanceTimersByTime(50));
+    expect(mockScrollToEnd).toHaveBeenCalled();
+  });
+
   it('does not resume bottom following when a pull settles before a slow page reaches a short list', () => {
     jest.useFakeTimers();
     const props = createProps({ loadingMoreHistory: true });

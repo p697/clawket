@@ -7,7 +7,8 @@ type Options = {
   failed: boolean;
   load?: () => void | Promise<unknown>;
   retry?: () => void | Promise<unknown>;
-  onReadEarlier: () => void;
+  /** `manual` is a tap or pull; an automatic page is FlashList reaching the top. */
+  onReadEarlier: (manual: boolean) => void;
 };
 
 /** One visible request per conversation, including a pull made during a head refresh. */
@@ -30,7 +31,7 @@ export function useOlderHistoryPaging(options: Options) {
     const load = manual && current.failed ? current.retry : current.load;
     if (!load) return;
     if (pulled) setPulledScope(current.scope);
-    current.onReadEarlier();
+    current.onReadEarlier(manual);
     if (current.blocked) {
       queued.current = { scope: current.scope, manual: manual || Boolean(queued.current?.manual) };
       setPendingScope(current.scope);

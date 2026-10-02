@@ -22,10 +22,13 @@ it('makes a slow automatic page visible at once and coalesces repeated pulls and
   expect(result.current.loading).toBe(true);
   expect(props.load).toHaveBeenCalledTimes(1);
   expect(props.onReadEarlier).toHaveBeenCalledTimes(1);
+  // FlashList reaching the top is automatic; the view decides whether that is reading earlier.
+  expect(props.onReadEarlier).toHaveBeenLastCalledWith(false);
   await act(async () => { page.resolve(); await page.promise; });
   expect(result.current.loading).toBe(false);
   await act(async () => { result.current.manual(); });
   expect(props.load).toHaveBeenCalledTimes(2);
+  expect(props.onReadEarlier).toHaveBeenLastCalledWith(true);
 });
 
 it('keeps one visible pull during a head refresh and runs the latest cursor callback when it ends', async () => {

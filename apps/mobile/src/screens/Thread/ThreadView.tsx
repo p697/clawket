@@ -1364,7 +1364,11 @@ export function ThreadView({
     </View>
   ) : null), [compactionNotice, testID]);
   const previewUpgrade = sessionPreview?.hasHiddenHistory ? sessionPreview.onUpgrade : undefined;
-  const pauseHistoryFollow = useCallback(() => {
+  const pauseHistoryFollow = useCallback((manual: boolean) => {
+    // A short conversation keeps its top in view, so FlashList asks for older
+    // history on any layout change (the work dock rising, the keyboard): a
+    // reader resting at the end has not left it and keeps following.
+    if (!manual && !readerScrollingRef.current && distanceFromBottomRef.current <= Space.lg) return;
     cancelReaderSettle();
     cancelBottomFollow();
     endFollowGlide();

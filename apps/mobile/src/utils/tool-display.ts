@@ -43,9 +43,11 @@ export function toolCategory(name: string): ToolCategory {
  * name the command itself; the detail sheet keeps the raw input.
  */
 export function unwrapShellCommand(command: string): string {
-  const match = /^(?:\/usr)?(?:\/bin\/)?(?:ba|z)?sh\s+-l?c\s+(["'])([\s\S]*)\1\s*$/.exec(command.trim());
+  const match = /^(?:\/usr)?(?:\/bin\/)?(?:ba|z)?sh\s+-l?c\s+(?:(["'])([\s\S]*)\1|([^\s"']+))\s*$/.exec(command.trim());
   if (!match) return command;
-  const [, quote, inner] = match;
+  const [, quote, inner, bare] = match;
+  // A one-word command needs no quotes: `/bin/zsh -lc pwd`.
+  if (bare !== undefined) return bare;
   return quote === '"' ? inner!.replace(/\\(["\\$`])/g, '$1') : inner!.replace(/'\\''/g, "'");
 }
 

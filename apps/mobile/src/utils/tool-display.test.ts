@@ -197,6 +197,9 @@ describe('unwrapShellCommand', () => {
       .toBe('git ls-files -z | python3 -c "print(1)"');
     expect(unwrapShellCommand("bash -lc 'echo it'\\''s done'")).toBe("echo it's done");
     expect(unwrapShellCommand('/usr/bin/sh -c "ls -la"')).toBe('ls -la');
+    // Codex leaves a one-word command unquoted.
+    expect(unwrapShellCommand('/bin/zsh -lc pwd')).toBe('pwd');
+    expect(unwrapShellCommand('/bin/zsh -lc ls -la')).toBe('/bin/zsh -lc ls -la');
     expect(resolveToolDetail('exec', { command: '/bin/zsh -lc "git status"' })).toBe('git status');
     expect(resolveToolDetail('terminal', { command: '/bin/zsh -lc "npm test"' })).toBe('npm test');
   });
