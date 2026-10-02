@@ -342,6 +342,8 @@ Native default/light and alternate/dark launcher assets, adaptive foreground and
 
 Agent identity refinement: all shared `AgentAvatar` variants use `Radius.full`. Roster, header, profile, sheets and message signatures share the circular silhouette for emoji, images and initials; loading placeholders follow that shape. Preserve existing sizes, spacing and status indicators. Platform logos, App icons and non-identity controls keep their own shapes; a product Agent's face is its official mark fitted into the identity circle (see Backend identity).
 
+Codex conversation entry uses the same waiting surface with a 12-second slow-hint budget for each real `Connecting` / `Loading sessions` stage. Readiness changes the label immediately; ordinary renders do not reset the timer. Generic loading surfaces and other backend entries retain the six-second default.
+
 ### Message actions (long press)
 
 Long-pressing a user or assistant message uses the Telegram-style focus pattern from YouMind Mobile, rebuilt on the 3.0 tokens with a different menu form. The row measures itself in window coordinates; `ThreadMessageActionsOverlay` opens a transparent `Modal` with the shared 40% `scrim`, renders a clone of the message block through the same `ThreadMessageRowContent` (identity chrome dropped, bottom-aligned to the measured row so it covers the original from the first frame), and drops a capsule action bar below the bubble edge (left for assistant, right for user).

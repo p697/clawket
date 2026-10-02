@@ -25,6 +25,101 @@ function deferred() {
 }
 
 describe('negotiated session catalog', () => {
+  it('reads at most three indexed pages together, assembles their order and never exposes a partial list', async () => {
+    const pending = new Map<number, ReturnType<typeof deferred>>();
+    let active = 0, peak = 0, finished = false;
+    const request = jest.fn(async (_method: string, params: any) => {
+      if (!params.page) return full([session('0')], { total: 7, nextOffset: 1, pageOffsets: [1, 2, 3, 4, 5, 6] });
+      active++; peak = Math.max(peak, active);
+      const wait = deferred(); pending.set(params.page.offset, wait);
+      try { return await wait.promise; } finally { active--; }
+    });
+    const catalog = new SessionCatalogConsumer(request); catalog.configure(1, 1);
+    const listing = catalog.list().then(rows => { finished = true; return rows; });
+    const flush = async () => { for (let i = 0; i < 10; i++) await Promise.resolve(); };
+    const reply = (offset: number) => pending.get(offset)!.resolve(full([session(String(offset))], { offset, total: 7, nextOffset: offset < 6 ? offset + 1 : null }));
+    await flush();
+    expect(request.mock.calls[0][1]).toEqual({ pageIndex: true });
+    expect([...pending.keys()]).toEqual([1, 2, 3]);
+    reply(3); reply(2); await flush(); expect(finished).toBe(false); expect(request).toHaveBeenCalledTimes(4);
+    reply(1); await flush(); expect([...pending.keys()]).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(finished).toBe(false); reply(6); reply(5); reply(4);
+    await expect(listing).resolves.toEqual(Array.from({ length: 7 }, (_, i) => session(String(i))));
+    expect(peak).toBe(3);
+  });
+
+  it.each([[], [2], [1, 1], [1, 0], [1, 2.5], [1, 4], 'invalid', Array(513).fill(1)])(
+    'rejects a corrupted page index before continuation requests (case %#)', async pageOffsets => {
+      const { catalog, request } = setup(full([session('a')], { total: 4, nextOffset: 1, pageOffsets }));
+      catalog.configure(1, 1);
+      await expect(catalog.list()).rejects.toMatchObject({ code: 'server' });
+      expect(request).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('checks indexed page boundaries and retains the last complete baseline on a failed batch', async () => {
+    const { catalog, request } = setup(full([session('original')]),
+      full([session('a')], { total: 3, nextOffset: 1, revision: updated, pageOffsets: [1, 2] }),
+      full([session('b')], { offset: 1, total: 3, nextOffset: 2, revision: updated }),
+      full([session('b')], { offset: 2, total: 3, revision: updated }),
+      { kind: 'unchanged', epoch, revision });
+    catalog.configure(1, 1); await catalog.list();
+    await expect(catalog.list()).rejects.toMatchObject({ code: 'server' });
+    await expect(catalog.list()).resolves.toEqual([session('original')]);
+    expect(request).toHaveBeenLastCalledWith('sessions.sync', { base: { epoch, revision }, pageIndex: true });
+  });
+
+  it('settles the whole page window after one fast failure before admitting a retry', async () => {
+    const waits = [deferred(), deferred()];
+    const failure = new Error('page rejected');
+    const request = jest.fn(async (_method: string, params: any) => {
+      if (!params.page) return full([session('a')], { total: 4, nextOffset: 1, pageOffsets: [1, 2, 3] });
+      if (params.page.offset === 1) throw failure;
+      return waits[params.page.offset - 2].promise;
+    });
+    const catalog = new SessionCatalogConsumer(request); catalog.configure(1, 1);
+    let finished = false;
+    const listing = catalog.list().catch(error => { finished = true; return error; });
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    expect(finished).toBe(false);
+    const joined = catalog.list().catch(error => error);
+    expect(request).toHaveBeenCalledTimes(4);
+    waits.forEach((wait, i) => wait.resolve(full([session(String(i))], { offset: i + 2, total: 4, nextOffset: i === 0 ? 3 : null })));
+    await expect(listing).resolves.toBe(failure); await expect(joined).resolves.toBe(failure);
+  });
+
+  it('discards an expired indexed batch and restarts the full read only once', async () => {
+    const first = full([session('a')], { total: 4, nextOffset: 1, pageOffsets: [1, 2, 3] });
+    const batch = () => [full([session('b')], { total: 4, offset: 1, nextOffset: 2 }), { kind: 'expired', epoch },
+      full([session('d')], { total: 4, offset: 3 })];
+    const { catalog, request } = setup(first, ...batch(), full([session('fresh')], { revision: updated, pageOffsets: [] }));
+    catalog.configure(1, 1);
+    await expect(catalog.list()).resolves.toEqual([session('fresh')]);
+    expect(request).toHaveBeenLastCalledWith('sessions.sync', { pageIndex: true });
+    const repeated = setup(first, ...batch(), first, ...batch()); repeated.catalog.configure(1, 1);
+    await expect(repeated.catalog.list()).rejects.toMatchObject({ code: 'server' });
+    expect(repeated.request).toHaveBeenCalledTimes(8);
+  });
+
+  it('fences every outstanding indexed page when the socket retires', async () => {
+    const waits = [deferred(), deferred(), deferred()];
+    const request = jest.fn(async (_method: string, params: any) => !params.page
+      ? full([session('a')], { total: 4, nextOffset: 1, pageOffsets: [1, 2, 3] }) : waits[params.page.offset - 1].promise);
+    const catalog = new SessionCatalogConsumer(request); catalog.configure(1, 1);
+    const listing = catalog.list().catch(error => error);
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    expect(request).toHaveBeenCalledTimes(4); catalog.retire();
+    waits.forEach((wait, i) => wait.resolve(full([session(String(i))], { offset: i + 1, total: 4, nextOffset: i < 2 ? i + 2 : null })));
+    await expect(listing).resolves.toBeInstanceOf(SessionCatalogSupersededError);
+  });
+
+  it('keeps serial pagination if an optional index is absent or not exactly negotiated', async () => {
+    for (const version of [undefined, true, '1', 2, 1]) {
+      const { catalog, request } = setup(full([session('a')], { total: 2, nextOffset: 1 }), full([session('b')], { offset: 1, total: 2 }));
+      catalog.configure(1, version); await expect(catalog.list()).resolves.toHaveLength(2);
+      expect(request.mock.calls[0]).toEqual(['sessions.sync', version === 1 ? { pageIndex: true } : {}]);
+    }
+  });
   it.each([undefined, false, true, '1', 0, 2])('preserves sessions.list for version %p', async version => {
     const rows = [session('legacy')];
     const { catalog, request } = setup(rows);

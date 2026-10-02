@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { SessionCatalogSyncResponse, SessionDescriptor } from '@clawket/agent-protocol';
 import { SessionCatalogSync, SESSION_CATALOG_PAGE_BYTES } from './session-catalog.js';
+import { SessionCatalogConsumer } from '../../../apps/mobile/src/connection/adapters/session-catalog';
 
 const row = (key: string, title = key): SessionDescriptor => ({ connectionId: '', agentId: 'codex', key, kind: 'direct', title, updatedAt: 1,
   hasActiveRun: false, allowedActions: { rename: false, reset: false, delete: false, pin: true } });
@@ -25,6 +26,59 @@ async function full(catalog: SessionCatalogSync, first: SessionCatalogSyncRespon
 }
 
 describe('bounded immutable conversation catalog sync', () => {
+  it('indexes exact frozen continuation offsets only on request, without rescanning', async () => {
+    const rows = Array.from({ length: 1023 }, (_, i) => row(String(i), '目录🙂'.repeat(70)));
+    const load = vi.fn(() => rows), catalog = new SessionCatalogSync(load);
+    const legacy = await catalog.reply({});
+    expect(legacy).not.toHaveProperty('pageOffsets');
+    const first = await catalog.reply({ pageIndex: true });
+    if (first.kind !== 'full') throw new Error('Expected full');
+    const assembled = [...first.sessions];
+    let nextOffset = first.nextOffset;
+    for (const offset of first.pageOffsets!) {
+      expect(offset).toBe(nextOffset);
+      const next = await catalog.reply({ page: { ...base(first), offset } });
+      if (next.kind !== 'full') throw new Error('Expected frozen page');
+      expect(Buffer.byteLength(JSON.stringify(next))).toBeLessThanOrEqual(SESSION_CATALOG_PAGE_BYTES);
+      assembled.push(...next.sessions); nextOffset = next.nextOffset;
+    }
+    expect(nextOffset).toBeNull(); expect(assembled).toEqual(rows);
+    expect(Buffer.byteLength(JSON.stringify(first))).toBeLessThanOrEqual(SESSION_CATALOG_PAGE_BYTES);
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(await catalog.reply({ base: base(first), pageIndex: true })).toEqual({ kind: 'unchanged', ...base(first) });
+  });
+  it('keeps a valid near-limit first row on serial pages when an index cannot fit', async () => {
+    const rows = [row('large', 'x'.repeat(SESSION_CATALOG_PAGE_BYTES - 1024)), row('small')];
+    const catalog = new SessionCatalogSync(() => rows), first = await catalog.reply({ pageIndex: true });
+    expect(first).not.toHaveProperty('pageOffsets');
+    expect((await full(catalog, first)).rows).toEqual(rows);
+    expect(await new SessionCatalogSync(() => []).reply({ pageIndex: true })).toMatchObject({ sessions: [], nextOffset: null, pageOffsets: [] });
+  });
+  it('reduces full catalog network waits with the real Mobile consumer and a fixed 300ms RPC latency', async () => {
+    vi.useFakeTimers();
+    try {
+      const rows = Array.from({ length: 1023 }, (_, i) => row(String(i), 'x'.repeat(420)));
+      const measurements: Array<{ ms: number; requests: number; peak: number }> = [];
+      for (const indexed of [false, true]) {
+        const service = new SessionCatalogSync(() => rows);
+        let requests = 0, active = 0, peak = 0;
+        const consumer = new SessionCatalogConsumer(async (_method, params) => {
+          requests++; active++; peak = Math.max(peak, active);
+          await new Promise(resolve => setTimeout(resolve, 300));
+          try { return await service.reply(params); } finally { active--; }
+        });
+        consumer.configure(1, indexed ? 1 : undefined);
+        const started = Date.now(), listing = consumer.list();
+        await vi.runAllTimersAsync();
+        expect(await listing).toEqual(rows);
+        measurements.push({ ms: Date.now() - started, requests, peak });
+      }
+      expect(measurements[0].peak).toBe(1); expect(measurements[1].peak).toBe(3);
+      expect(measurements[1].ms).toBe(300 * (1 + Math.ceil((measurements[1].requests - 1) / 3)));
+      expect(measurements[1].ms).toBeLessThan(measurements[0].ms / 2);
+      console.info('Catalog RPC latency simulation (300ms per exchange):', measurements);
+    } finally { vi.useRealTimers(); }
+  });
   it('joins one fresh scan after an acknowledged management change without publishing the older result', async () => {
     const pending: Array<(rows: SessionDescriptor[]) => void> = [];
     const load = vi.fn(() => new Promise<SessionDescriptor[]>(resolve => pending.push(resolve)));
@@ -124,7 +178,8 @@ describe('bounded immutable conversation catalog sync', () => {
     expect(first).toMatchObject({ kind: 'full', offset: 0, total: 0, sessions: [], nextOffset: null });
     await full(catalog, first);
   });
-  it.each([null, [], { base: null }, { page: null }, { other: true }, { base: {} },
+  it.each([null, [], { base: null }, { page: null }, { other: true }, { base: {} }, { pageIndex: false }, { pageIndex: 1 },
+    { pageIndex: true, page: { epoch: 'a'.repeat(32), revision: 'b'.repeat(32), offset: 0 } },
     { page: { epoch: 'a'.repeat(32), revision: 'b'.repeat(32), offset: -1 } },
     { page: { epoch: 'a'.repeat(32), revision: 'b'.repeat(32), offset: 0.5 } },
     { base: { epoch: 'a'.repeat(32), revision: 'b'.repeat(32), offset: 0 } },

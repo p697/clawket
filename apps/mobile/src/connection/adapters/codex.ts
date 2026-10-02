@@ -139,11 +139,11 @@ export class CodexAdapter implements AgentAdapter {
     try {
       // Relay authenticates its socket; only direct connections need connect/token.
       // A Relay connect request starts OpenClaw's challenge lifecycle.
-      const health = await this.rpc<{ sessionActivity?: unknown; profileVersion?: unknown; artifacts?: boolean; promptStatus?: boolean; sessionCatalogSync?: unknown; backend: string; vision: boolean; model: string; projects?: boolean; fastMode?: boolean; sessionPermissions?: boolean; sessionArchive?: boolean }>(this.record.transportKind === 'relay' ? 'health' : 'connect', { token: this.record.auth?.token });
+      const health = await this.rpc<{ sessionActivity?: unknown; profileVersion?: unknown; artifacts?: boolean; promptStatus?: boolean; sessionCatalogSync?: unknown; sessionCatalogPageIndex?: unknown; backend: string; vision: boolean; model: string; projects?: boolean; fastMode?: boolean; sessionPermissions?: boolean; sessionArchive?: boolean }>(this.record.transportKind === 'relay' ? 'health' : 'connect', { token: this.record.auth?.token });
       if (epoch !== this.epoch) return;
       if (health.backend !== 'codex') throw new AdapterError('unsupported', 'Endpoint is not a Codex Bridge');
       this.activityEnabled = health.sessionActivity === 1;
-      this.sessionCatalog.configure(health.sessionCatalogSync);
+      this.sessionCatalog.configure(health.sessionCatalogSync, health.sessionCatalogPageIndex);
       this.artifactsEnabled = health.artifacts === true;
       this.capabilities.profileManagement = health.profileVersion === 1;
       this.capabilities.promptStatus = health.promptStatus === true;
@@ -199,10 +199,10 @@ export class CodexAdapter implements AgentAdapter {
   async probe(timeoutMs = 5_000): Promise<boolean> {
     const epoch = this.epoch;
     try {
-      const health = await this.rpc<{ sessionActivity?: unknown; profileVersion?: unknown; artifacts?: boolean; promptStatus?: boolean; sessionCatalogSync?: unknown; backend: string; vision: boolean; model: string; projects?: boolean; fastMode?: boolean; sessionPermissions?: boolean; sessionArchive?: boolean }>('health', {}, timeoutMs);
+      const health = await this.rpc<{ sessionActivity?: unknown; profileVersion?: unknown; artifacts?: boolean; promptStatus?: boolean; sessionCatalogSync?: unknown; sessionCatalogPageIndex?: unknown; backend: string; vision: boolean; model: string; projects?: boolean; fastMode?: boolean; sessionPermissions?: boolean; sessionArchive?: boolean }>('health', {}, timeoutMs);
       if (epoch !== this.epoch || health.backend !== 'codex') return false;
       this.activityEnabled = health.sessionActivity === 1;
-      this.sessionCatalog.configure(health.sessionCatalogSync);
+      this.sessionCatalog.configure(health.sessionCatalogSync, health.sessionCatalogPageIndex);
       this.artifactsEnabled = health.artifacts === true;
       this.capabilities.profileManagement = health.profileVersion === 1;
       this.capabilities.promptStatus = health.promptStatus === true;

@@ -5,6 +5,8 @@ export const SESSION_CATALOG_PAGE_BYTES = 64 * 1024;
 export const SESSION_CATALOG_MAX_BYTES = 8 * 1024 * 1024;
 export const SESSION_CATALOG_MAX_ROWS = 10_000;
 const TOKEN = /^[a-f0-9]{32}$/;
+// The 8 MiB catalog and greedy 64 KiB pages require fewer than 512 offsets.
+const INDEX_BYTES = 4096;
 type Row = { key: string; json: string; bytes: number };
 type Snapshot = { revision: string; rows: Row[]; byKey: Map<string, Row>; bytes: number };
 
@@ -13,10 +15,12 @@ function object(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 function request(value: unknown): SessionCatalogSyncRequest {
-  if (!object(value) || Object.keys(value).some(key => key !== 'base' && key !== 'page')) invalid();
+  if (!object(value) || Object.keys(value).some(key => !['base', 'page', 'pageIndex'].includes(key))) invalid();
   if (value.base !== undefined && value.page !== undefined) invalid();
+  if (value.pageIndex !== undefined && (value.pageIndex !== true || value.page !== undefined)) invalid();
+  const indexed = value.pageIndex === true ? { pageIndex: true as const } : {};
   const ref = value.page !== undefined ? value.page : value.base;
-  if (ref === undefined) return {};
+  if (ref === undefined) return indexed;
   if (!object(ref) || typeof ref.epoch !== 'string' || !TOKEN.test(ref.epoch)
     || typeof ref.revision !== 'string' || !TOKEN.test(ref.revision)
     || Object.keys(ref).some(key => !['epoch', 'revision', ...(value.page !== undefined ? ['offset'] : [])].includes(key))) invalid();
@@ -24,7 +28,7 @@ function request(value: unknown): SessionCatalogSyncRequest {
     if (!Number.isInteger(ref.offset) || (ref.offset as number) < 0 || (ref.offset as number) > SESSION_CATALOG_MAX_ROWS) invalid();
     return { page: { epoch: ref.epoch, revision: ref.revision, offset: ref.offset as number } };
   }
-  return { base: { epoch: ref.epoch, revision: ref.revision } };
+  return { base: { epoch: ref.epoch, revision: ref.revision }, ...indexed };
 }
 
 function canonical(value: unknown, depth = 0): unknown {
@@ -71,7 +75,20 @@ export class SessionCatalogSync {
         if (bytes <= SESSION_CATALOG_PAGE_BYTES && bytes < snapshot.bytes) return delta;
       }
     }
-    return this.page(snapshot, 0);
+    if (!input.pageIndex) return this.page(snapshot, 0);
+    const first = this.page(snapshot, 0, INDEX_BYTES);
+    // A near-limit first row leaves no room for the optional index.
+    if (!first.sessions.length && snapshot.rows.length) return this.page(snapshot, 0);
+    const pageOffsets: number[] = [];
+    let offset = first.nextOffset;
+    while (offset !== null) {
+      if (pageOffsets.length >= 512) throw new Error('Conversation catalog page index exceeds its size limit');
+      pageOffsets.push(offset);
+      offset = this.pageEnd(snapshot, offset);
+    }
+    const indexed = { ...first, pageOffsets };
+    if (Buffer.byteLength(JSON.stringify(indexed)) > SESSION_CATALOG_PAGE_BYTES) throw new Error('Conversation catalog page index exceeds its size limit');
+    return indexed;
   }
 
   private refresh(retried = false): Promise<Snapshot> {
@@ -118,21 +135,27 @@ export class SessionCatalogSync {
     return work;
   }
 
-  private page(snapshot: Snapshot, offset: number): SessionCatalogSyncResponse {
-    if (offset > 0 && offset >= snapshot.rows.length) invalid();
-    const response: Extract<SessionCatalogSyncResponse, { kind: 'full' }> = {
-      kind: 'full', epoch: this.epoch, revision: snapshot.revision,
-      offset, total: snapshot.rows.length, sessions: [], nextOffset: SESSION_CATALOG_MAX_ROWS,
-    };
-    let bytes = Buffer.byteLength(JSON.stringify(response));
+  private pageEnd(snapshot: Snapshot, offset: number, reserve = 0): number | null {
+    let bytes = Buffer.byteLength(JSON.stringify(this.envelope(snapshot, offset))) + reserve;
     let end = offset;
     while (end < snapshot.rows.length) {
-      const row = snapshot.rows[end];
-      const extra = row.bytes + (response.sessions.length ? 1 : 0);
+      const extra = snapshot.rows[end].bytes + (end > offset ? 1 : 0);
       if (bytes + extra > SESSION_CATALOG_PAGE_BYTES) break;
-      bytes += extra; response.sessions.push(JSON.parse(row.json)); end++;
+      bytes += extra; end++;
     }
-    response.nextOffset = end < snapshot.rows.length ? end : null;
+    return end < snapshot.rows.length ? end : null;
+  }
+
+  private envelope(snapshot: Snapshot, offset: number): Extract<SessionCatalogSyncResponse, { kind: 'full' }> {
+    return { kind: 'full', epoch: this.epoch, revision: snapshot.revision,
+      offset, total: snapshot.rows.length, sessions: [], nextOffset: SESSION_CATALOG_MAX_ROWS };
+  }
+
+  private page(snapshot: Snapshot, offset: number, reserve = 0): Extract<SessionCatalogSyncResponse, { kind: 'full' }> {
+    if (offset > 0 && offset >= snapshot.rows.length) invalid();
+    const response = this.envelope(snapshot, offset);
+    response.nextOffset = this.pageEnd(snapshot, offset, reserve);
+    response.sessions = snapshot.rows.slice(offset, response.nextOffset ?? snapshot.rows.length).map(row => JSON.parse(row.json));
     return response;
   }
 }

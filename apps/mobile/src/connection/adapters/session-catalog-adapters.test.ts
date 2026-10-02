@@ -34,9 +34,20 @@ describe.each([
     adapter = new Adapter(record, { webSocketFactory: () => { const socket = new Socket(); sockets.push(socket); return socket; } });
   });
   afterEach(() => { adapter.disconnect(); jest.clearAllTimers(); jest.useRealTimers(); });
-  async function connect(version?: unknown) {
-    const connected = adapter.connect(); sockets.at(-1)!.open(); sockets.at(-1)!.reply({ backend: backendKind, sessionCatalogSync: version }); await connected;
+  async function connect(version?: unknown, pageIndexVersion?: unknown) {
+    const connected = adapter.connect(); sockets.at(-1)!.open(); sockets.at(-1)!.reply({ backend: backendKind, sessionCatalogSync: version, sessionCatalogPageIndex: pageIndexVersion }); await connected;
   }
+
+  it('enables page indexing only for an explicitly negotiated Codex socket and drops it on downgrade', async () => {
+    await connect(1, 1);
+    const listing = adapter.listSessions();
+    expect(sockets[0].latest().params).toEqual(backendKind === 'codex' ? { pageIndex: true } : {});
+    sockets[0].reply({ ...full, pageOffsets: [] }); await listing;
+    const probe = adapter.probe(); sockets[0].reply({ backend: backendKind, sessionCatalogSync: 1 }); await probe;
+    const next = adapter.listSessions();
+    expect(sockets[0].latest().params).toEqual({ base: { epoch, revision } });
+    sockets[0].reply({ kind: 'unchanged', epoch, revision }); await next;
+  });
 
   it('keeps old peers on the original list and enables only an exact health version', async () => {
     await connect(true);

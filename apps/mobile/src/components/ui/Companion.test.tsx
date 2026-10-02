@@ -74,6 +74,28 @@ it('explains a long wait and offers one reachable action outside the progress gr
   jest.useRealTimers();
 });
 
+it('allows a connection budget and resets it only on real stage/scope progress', () => {
+  jest.useFakeTimers();
+  const props = { testID: 'loading', slowAction: { label: 'Manage connection', onPress: jest.fn() }, slowAfterMs: 12_000 };
+  const view = render(<LoadingState {...props} message="Connecting" waitKey="codex:connecting" />);
+  act(() => { jest.advanceTimersByTime(9_000); });
+  expect(view.queryByTestId('loading-slow')).toBeNull();
+  view.rerender(<LoadingState {...props} message="Loading sessions" waitKey="codex:sessions" />);
+  act(() => { jest.advanceTimersByTime(9_000); });
+  expect(view.queryByTestId('loading-slow')).toBeNull();
+  // Ordinary renders and new callback objects do not postpone the deadline.
+  view.rerender(<LoadingState {...props} message="Loading sessions" waitKey="codex:sessions" slowAction={{ ...props.slowAction }} />);
+  act(() => { jest.advanceTimersByTime(3_000); });
+  expect(view.getByTestId('loading-slow')).toBeTruthy();
+  view.rerender(<LoadingState {...props} message="Connecting" waitKey="other:connecting" />);
+  expect(view.queryByTestId('loading-slow')).toBeNull();
+  act(() => { jest.advanceTimersByTime(12_000); });
+  expect(view.getByTestId('loading-slow')).toBeTruthy();
+  view.rerender(<LoadingState {...props} waitKey="other:connecting" phase="ready" />);
+  expect(view.queryByTestId('loading-slow')).toBeNull();
+  view.unmount(); jest.useRealTimers();
+});
+
 it('keeps a readable loading state without motion and never animates errors', () => {
   mockReducedMotion = true;
   const view = render(<LoadingState message="Loading history" testID="loading" />);

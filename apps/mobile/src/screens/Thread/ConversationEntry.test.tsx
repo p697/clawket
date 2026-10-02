@@ -39,8 +39,8 @@ const navigation = { replace: jest.fn(), goBack: jest.fn(), navigate: jest.fn() 
 const props = { navigation, route: { params: { connectionId: 'c', agentId: 'codex', sessionKey: '', from: 'roster' } } } as any;
 beforeEach(() => {
   jest.clearAllMocks(); mockLoading = null; mockPill = null;
-  Object.assign(mockSnapshot, { initialized: true, activeConnectionId: 'c', activeAdapter: mockAdapter, activeState: 'connecting',
-    roster: [{ connection: { id: 'c' }, source: 'live', agents: [{ agent: { agentId: 'codex', name: 'Codex' }, sessions: [{ key: 'existing' }] }] }] });
+  Object.assign(mockSnapshot, { initialized: true, activeConnectionId: 'c', activeAdapter: mockAdapter, activeState: 'connecting', error: null,
+    roster: [{ connection: { id: 'c', backendKind: 'codex' }, source: 'live', agents: [{ agent: { agentId: 'codex', name: 'Codex' }, sessions: [{ key: 'existing' }] }] }] });
   mockRuntime.activate.mockReset().mockImplementation(async () => {
     mockSnapshot.activeState = 'ready';
     return { ...mockSnapshot };
@@ -50,18 +50,20 @@ beforeEach(() => {
 });
 
 it('waits with the chat header and the shared Companion loading state, following the real stage', async () => {
+  mockSnapshot.roster[0].source = 'cache';
   let finishActivate!: (snapshot: any) => void;
   let finishRoster!: () => void;
   mockRuntime.activate.mockReturnValueOnce(new Promise(resolve => { finishActivate = resolve; }));
   mockRuntime.refreshRoster.mockReturnValueOnce(new Promise<void>(resolve => { finishRoster = resolve; }));
   const view = render(<ConversationEntry {...props} />);
   expect(mockPill).toMatchObject({ agentId: 'codex', name: 'Codex', subtitle: '' });
-  expect(mockLoading).toMatchObject({ pose: 'connecting', message: 'Connecting' });
+  expect(mockLoading).toMatchObject({ pose: 'connecting', message: 'Connecting', slowAfterMs: 12_000, waitKey: 'c:connecting' });
   // A long wait offers the connection page, where status and reconnect live.
   mockLoading.slowAction.onPress();
   expect(navigation.navigate).toHaveBeenCalledWith('Connection', { connectionId: 'c' });
   await act(async () => { mockSnapshot.activeState = 'ready'; finishActivate({ ...mockSnapshot }); });
-  expect(mockLoading).toMatchObject({ message: 'Loading sessions' });
+  view.rerender(<ConversationEntry {...props} />);
+  expect(mockLoading).toMatchObject({ message: 'Loading sessions', waitKey: 'c:sessions' });
   await act(async () => { finishRoster(); });
   await waitFor(() => expect(mockPanel.visible).toBe(true));
   // The loading state leaves once the picker opens; the header stays behind the sheet.
@@ -69,6 +71,38 @@ it('waits with the chat header and the shared Companion loading state, following
   view.rerender(<ConversationEntry {...props} />);
   expect(mockLoading).toBeNull();
   expect(mockPill).toMatchObject({ name: 'Codex' });
+});
+
+it('shows catalog progress as soon as the handshake is ready, while activation still awaits its list', async () => {
+  mockRuntime.activate.mockReturnValueOnce(new Promise(() => {}));
+  const view = render(<ConversationEntry {...props} />);
+  mockSnapshot.activeState = 'ready';
+  view.rerender(<ConversationEntry {...props} />);
+  expect(mockLoading).toMatchObject({ message: 'Loading sessions', waitKey: 'c:sessions', slowAfterMs: 12_000 });
+  view.unmount();
+});
+
+it('opens the picker from a cold activation catalog without a duplicate read even with no last conversation', async () => {
+  render(<ConversationEntry {...props} />);
+  await waitFor(() => expect(mockPanel.visible).toBe(true));
+  expect(mockRuntime.activate).toHaveBeenCalledWith('c');
+  expect(mockRuntime.refreshRoster).not.toHaveBeenCalled();
+  expect(mockCreate).not.toHaveBeenCalled();
+});
+
+it('retries a failed activation catalog instead of treating its retained live rows as a fresh read', async () => {
+  mockSnapshot.error = { operation: 'roster' };
+  render(<ConversationEntry {...props} />);
+  await waitFor(() => expect(mockPanel.visible).toBe(true));
+  expect(mockRuntime.refreshRoster).toHaveBeenCalledTimes(1);
+});
+
+it.each(['openclaw', 'hermes', 'pi', 'claude-code'])('preserves the ordinary slow-hint budget for %s', async backendKind => {
+  mockSnapshot.roster[0].connection.backendKind = backendKind;
+  mockRuntime.activate.mockReturnValueOnce(new Promise(() => {}));
+  const view = render(<ConversationEntry {...props} />);
+  expect(mockLoading.slowAfterMs).toBe(6_000);
+  view.unmount();
 });
 
 it('waits on the thread\'s own wallpaper and glass header, or the plain canvas when chosen', async () => {
@@ -225,7 +259,7 @@ it.each(['cached', 'archived', 'missing', 'other-agent', 'other-connection', 'no
     });
     render(<ConversationEntry {...props} />);
     await waitFor(() => expect(mockPanel.visible).toBe(true));
-    expect(mockRuntime.refreshRoster).toHaveBeenCalledTimes(1);
+    expect(mockRuntime.refreshRoster).toHaveBeenCalledTimes(['archived', 'missing'].includes(kind) ? 0 : 1);
     expect(navigation.replace).not.toHaveBeenCalled();
   },
 );

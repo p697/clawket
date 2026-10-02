@@ -158,7 +158,7 @@ describe('Codex owned sessions', () => {
     });
     const first = await request('sessions.sync'), base = { epoch: first.epoch, revision: first.revision };
     expect(first).toMatchObject({ kind: 'full', total: 2, nextOffset: null });
-    expect(await service.health()).toMatchObject({ sessionCatalogSync: 1 });
+    expect(await service.health()).toMatchObject({ sessionCatalogSync: 1, sessionCatalogPageIndex: 1 });
     expect(await request('sessions.list')).toEqual(first.sessions);
     expect(await request('sessions.sync', { base })).toEqual({ kind: 'unchanged', ...base });
     failure = true;

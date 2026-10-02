@@ -38,6 +38,10 @@ type Props = {
   scene?: CompanionSceneKey;
   /** After `Motion.loadingSlowHint` the wait explains itself and offers this one action. */
   slowAction?: Readonly<{ label: string; onPress: () => void }>;
+  /** A connection may allow more time for its first catalog than a generic page. */
+  slowAfterMs?: number;
+  /** Real progress to a new stage starts a fresh slow-wait clock. */
+  waitKey?: string;
   /** Offered under the label from the start, such as a manual reconnect beside the automatic one. */
   action?: Readonly<{ label: string; onPress: () => void }>;
   /** The label is the page's headline (the onboarding connecting stage): title size, semibold. */
@@ -53,7 +57,7 @@ type Props = {
  * 2026-09-27). It stays invisible for `Motion.loadingGrace` so fast loads never flash the Companion, while
  * the busy state and its label are exposed to assistive technology immediately.
  */
-export function LoadingState({ message, pose = 'loading', size = 'page', phase = 'wait', scene: pinned, slowAction, action, headline = false, testID }: Props): React.JSX.Element {
+export function LoadingState({ message, pose = 'loading', size = 'page', phase = 'wait', scene: pinned, slowAction, slowAfterMs = Motion.loadingSlowHint, waitKey, action, headline = false, testID }: Props): React.JSX.Element {
   const { theme } = useAppTheme();
   const { t } = useTranslation('common');
   const reducedMotion = useReducedMotion();
@@ -104,14 +108,14 @@ export function LoadingState({ message, pose = 'loading', size = 'page', phase =
   }, [phase, pinned, reducedMotion, sceneOpacity, size]);
   const sceneStyle = useAnimatedStyle(() => ({ opacity: sceneOpacity.value }));
 
-  const [slow, setSlow] = useState(false);
+  const [slow, setSlow] = useState<{ waitKey?: string; afterMs: number } | null>(null);
   const hasSlowAction = Boolean(slowAction);
   useEffect(() => {
-    setSlow(false);
+    setSlow(null);
     if (!hasSlowAction || phase !== 'wait') return undefined;
-    const timer = setTimeout(() => setSlow(true), Motion.loadingSlowHint);
+    const timer = setTimeout(() => setSlow({ waitKey, afterMs: slowAfterMs }), slowAfterMs);
     return () => clearTimeout(timer);
-  }, [hasSlowAction, phase]);
+  }, [hasSlowAction, phase, slowAfterMs, waitKey]);
 
   return (
     <View style={compact ? styles.compactRoot : styles.root}>
@@ -149,7 +153,7 @@ export function LoadingState({ message, pose = 'loading', size = 'page', phase =
           <View style={[styles.slow, phase === 'ready' && styles.gone]} pointerEvents={phase === 'ready' ? 'none' : 'auto'}>
             <Button testID={testID ? `${testID}-action` : undefined} label={action.label} variant="text" size="sm" disabled={phase === 'ready'} onPress={action.onPress} />
           </View>
-        ) : slow && slowAction && phase === 'wait' ? (
+        ) : slow?.waitKey === waitKey && slow?.afterMs === slowAfterMs && slowAction && phase === 'wait' ? (
           <View style={styles.slow}>
             <Text testID={testID ? `${testID}-slow` : undefined} style={[styles.slowText, { color: theme.colors.inkSecondary }]}>
               {t('Taking longer than usual')}
