@@ -1,5 +1,10 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-02 依赖审计加一条有期限的例外，恢复所有 PR 的合并（负责人选定方案 1）。
+  - 起因：GHSA-86w9-cpqp-85rv（node-forge ≤1.4.0，高危，没有修复版本）进入 npm 审计库，经 `expo → @expo/cli → @expo/code-signing-certificates` 带入两份 lockfile。必需检查「Typecheck and dependency audit」因此对所有 PR 失败（#103–#106 都被卡住）。这条依赖只在打包的电脑上用到，App 和 Bridge 都不含它。
+  - 改法：CI 改跑 `scripts/ci/dependency-audit.mjs`。两份 lockfile 里任何高危 / 严重公告照样失败，只放过例外清单里写明的“编号 + 包名”。每条例外必须有原因和到期日；过期或已经不再出现都会失败；审计结果读不出来也按失败处理。当前唯一的例外：GHSA-86w9-cpqp-85rv / node-forge，到 2026-11-01。
+  - 验证：本地真实审计两份 lockfile 均为 0 阻塞、1 例外；去掉例外或日期到 2026-11-02 时判失败。dependency-audit 单测 7 项（含损坏输入）。
+
 - 2026-10-02 用户气泡跑到左下角变半透明、切回会话后整页空白（负责人在 iOS 上用 Codex 时遇到，偶发）。
   - 原因：不是 Codex 协议或连接问题，是 Reanimated 4.5.1 的已知 bug，4.5.3 已修。动画结束后，Reanimated 每 500ms 把最终值同步回 React，但会先删掉超过 2 秒的记录、不先同步。只要 JS 卡了约 1 秒以上（发消息后 Codex 开跑、切会话挂载长列表、App 进后台），这一步就被跳过；之后这个视图再被 React 渲染一次，就退回动画第 0 帧。
     - 发送飞行动画的第 0 帧是左移 118pt、下移 148pt、透明度 0.35，就是截图里的气泡。

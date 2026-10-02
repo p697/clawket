@@ -155,6 +155,7 @@ When implementation, architecture, or release behavior changes, update the close
 4. New check logic should expose testable validation functions and include a corrupted-input regression test.
 5. `test:release:compat` is the explicit release integration matrix: read-only production Worker exports are supplied through `CLAWKET_RELEASE_SNAPSHOTS`, exercised locally with historical and candidate Bridges. Missing snapshots must fail. Local code rollback is not proof of Cloudflare migration rollback.
 6. Tests that require an external checkout or live service must have an explicit integration command and must not make the CI-safe gate depend on a developer's home directory. Keep the ordinary `npm test` command as the broader local suite.
+7. `scripts/ci/dependency-audit.mjs` (CI job `Typecheck and dependency audit`) fails on any high or critical npm advisory in the root or Mobile lockfile. An exception needs owner approval and names one advisory in one package, with a reason and an expiry; expired or unused exceptions fail. Current: GHSA-86w9-cpqp-85rv (node-forge via Expo CLI code signing, no patched release) until 2026-11-01.
 
 `relay:test:integration` runs self-contained local Relay/model servers and recorded mobile adapters. Real local-model inference uses `test:local-model:recovery` (`CLAWKET_RECOVERY_CONFIG`) or `test:local-model:preview` (`CLAWKET_LOCAL_MODEL_PREVIEW_SMOKE=1`, optional model endpoint configuration); these commands fail when prerequisites are absent, never silently skip.
 
