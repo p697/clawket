@@ -1,10 +1,18 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-02 商店第二张图「Stay in the flow」19 语言制作与保存（负责人已验收英文并授权两个商店上传保存）。
+  - 按已验收的 `9059c185` JS bundle / assets，在已有 iPhone 17 和 iPad Pro 11 英寸 (M5) 模拟器壳中切换 App 原生语言、实拍全部 19 语言。保留专用演示会话的英文对话、原生工具步骤及型号名称；iPad 收起侧栏，避免私人会话预览。未用生图翻译 UI。
+  - 风格 A / `Stay in the flow.` / `Natural conversations. Clear progress.` 本地化；iPhone 原图 1206×2622、Apple 上传 1242×2688，iPad 横屏原图 2420×1668、成图 2752×2064；Google Play 导出 1080×1920，去除 iOS 系统栏并使用中性设备框，按既定方案复用于两个安卓平板栏位。共 38 张原生截图；133 个来源/预览/上传文件的尺寸和 SHA-256 已记录，上传文件均无透明通道。
+  - App Store 19 语言 × iPhone / iPad = 38 个第二张图栏位；Google Play 19 语言 × 手机 / 7 英寸 / 10 英寸 = 57 个栏位，共 95 个栏位已替换、保存。重新加载或重新进入编辑页后逐语言核对：每组 7 张、`02-flow.png` 或对应 Google flow 文件位于第二位，其他六张顺序和图片保留。Google 的西语 / 拉美西语字节相同，资源库自动复用西语文件。过程中发现语言菜单点击未实际切换，已校正并在统一保存前、保存后全量复核。
+  - 预览、渲染器、19 语言文案、原图、manifest / REPRODUCE：`evidence/store-styles-2026-09-21/public/chat-flow-2026-10-02/`；上传文件、两个 Apple 审计、Google 审计及后台完成截图：`evidence/store-flow-upload-2026-10-02/`。本机预览 `http://127.0.0.1:8948/chat-flow-2026-10-02/`。
+  - 仅更新截图；未改商店文案、构建或审核设置，未打正式包、上传包、提审或发布。App Store 3.1.0 原有 4.1 Copycats 拒绝状态未改变；Google 更改保存到发布概览等待送审。复用原生壳的视觉截图不代表新原生构建或性能验收。模拟器已关闭、租约已释放。
+
 - 2026-10-02 商店第二张图「Stay in the flow」英文预览（负责人选择聊天体验方案 A，先看英文效果）。
   - 以 `9059c185` 的聊天代码生成当前 JS bundle / assets，在已有 iPhone 17 模拟器原生壳中实拍；开启本地 Pro 预览环境开关，未修改产品源码、未重建或分发原生包。这是视觉预览，不是原生兼容或流畅度验收。
   - 独立 Lucy 演示会话实际读取专用 `Kyoto Notes.md`，生成周六计划，再按追问保存专用 `Saturday Checklist.md`。保留真实回复及气泡内工作记录、步骤数和耗时；未使用私人对话，也未通过生图改写 UI。
   - 沿用风格 A，主标题 `Stay in the flow.`，副标题 `Natural conversations. Clear progress.`；英文 iPhone 预览为 1206×2622。本机预览/原图/渲染器/来源记录：`evidence/store-styles-2026-09-21/public/chat-flow-en-v1/`；操作与会话证据：`evidence/store-flow-en-2026-10-02/`。
-  - 待负责人验收这张图；本轮不扩展其他语言、不修改商店、不提交审核。
+  - 负责人已验收并授权扩展所有语言、上传保存（本轮续办，见上方完成记录）。
+
 - 2026-10-02 Codex / Claude Code 新增连接缺少电脑名（负责人要求调查、修复并测试）。
   - 原来的 #91 实现仍在 main；只为全新 Bridge 配置生成名称，旧配置缺少 displayName 时直接退回产品名。本机两种 Production 设备配置均没有保存名称（只读取字段存在性，未输出凭据）。客户端认领优先采用 Registry 名称，因此仅补 QR 名称不足以修复已有配对记录。
   - 显式 pair 为旧配置的缺失/空白名称补上已实现的 macOS ComputerName / hostname 默认，并保存复用；所有非空名称保留。现有认证 access-code 刷新同时同步保存名称到 Registry，保持 gatewayId、Relay secret、旧手机凭据与项目/设备作用域。新扫码、加密邀请与配对码得到一致名称；普通 run/start/restart 不迁移，电脑改名不重算，手机已有名称/手动改名仍保留。OpenClaw / Hermes / Pi 不改。
