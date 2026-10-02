@@ -32,6 +32,13 @@ const STEP_WELL = 30;
 const STEP_SPINNER_SCALE = 0.7;
 /** The panel never covers more than this share of the window; longer runs scroll inside it. */
 const PANEL_MAX_SHARE = 0.62;
+/**
+ * The panel is drawn in the Thread's own tree, not in a native modal, so its
+ * layer must outrank the Thread's stacked layers (timeline 1, floating header
+ * 2, expanded composer 3). Without a zIndex of its own the timeline drew over
+ * the open panel on iOS (owner report 2026-10-02).
+ */
+const PANEL_LAYER_Z_INDEX = 10;
 // `monospace` is a family only Android resolves; iOS falls back to the system face without Menlo.
 const CODE_FONT = Platform.select({ ios: 'Menlo', default: 'monospace' });
 
@@ -194,7 +201,7 @@ export function WorkPanel({ visible, phase, work, startedAt, bottomOffset, onClo
 
   if (!visible) return null;
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="box-none" testID="work-panel-layer">
+    <View style={styles.layer} pointerEvents="box-none" testID="work-panel-layer">
       <Animated.View entering={FadeIn.duration(Motion.duration.normal)} exiting={FadeOut.duration(Motion.duration.fast)}
         style={[StyleSheet.absoluteFill, { backgroundColor: withAlpha(colors.scrim, scheme === 'dark' ? 0.4 : 0.12) }]}>
         <Pressable testID="work-panel-scrim" style={StyleSheet.absoluteFill} accessibilityRole="button"
@@ -274,6 +281,10 @@ const panelFall: EntryExitAnimationFunction = () => {
 };
 
 const styles = StyleSheet.create({
+  layer: {
+    ...StyleSheet.absoluteFill,
+    zIndex: PANEL_LAYER_Z_INDEX,
+  },
   panel: {
     position: 'absolute',
     left: Space.md,

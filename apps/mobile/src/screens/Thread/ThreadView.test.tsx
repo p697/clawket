@@ -2416,6 +2416,8 @@ describe('work dock', () => {
     fireEvent.press(dock);
     const panel = within(view.getByTestId('work-panel'));
     expect(panel.getByText('“Found it.”')).toBeTruthy();
+    // The in-tree panel outranks the timeline (1), header (2) and expanded composer (3): iOS drew bubbles over it.
+    expect(flattenStyle(view.getByTestId('work-panel-layer').props.style).zIndex).toBeGreaterThan(3);
     expect(view.getByTestId('thread-run-x')).toBeTruthy();
     fireEvent.press(view.getByTestId('thread-run-r'));
     expect(view.getByTestId('thread-tool-detail').props).toMatchObject({ args: JSON.stringify({ path: 'a.ts' }) });
