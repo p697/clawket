@@ -2,6 +2,8 @@
 
 Owner authorization: 2026-09-26. Implement Codex as an independent backend; perform local, Preview, iOS simulator and connected Android development testing. Production release and package publication remain separate decisions.
 
+Owned conversation reset/delete follow the confirmed native lifecycle: pending and active runs disable those actions until the original turn ends. A stale menu can still receive a refusal; the session panel shows its existing failure notice and keeps the row available for explicit retry, with errors fenced to the current panel/connection. Other backends retain their own action permissions.
+
 ## Approved next phase (2026-09-26)
 
 The owner approved device-level project discovery, recent-first project navigation and original-thread continuity, excluding Git/IDE management. The detailed target and user-question acceptance are in `../research/codex-project-sync-direction-2026-09-26.md`. Desktop IPC adaptation is now authorized for this extension, with explicit ownership, supported-version checks and safe degradation; implementation and acceptance evidence are tracked separately below. Update affected contracts and workspace instructions alongside implementation. Existing single-project authorization must not silently widen.

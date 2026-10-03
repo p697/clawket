@@ -411,6 +411,29 @@ describe('Codex owned sessions', () => {
     await request('chat.steer', { sessionKey: key, runId: run.runId, text: 'do less' });
     expect(mock.request).toHaveBeenCalledWith('turn/steer', { threadId, expectedTurnId: 'turn-1', input: [{ type: 'text', text: 'do less' }] });
   });
+  it('withholds reset and delete from dispatch through cancellation until native confirms the original turn ended', async () => {
+    const original = mock.request.getMockImplementation()!;
+    let accept!: (value: any) => void;
+    mock.request.mockImplementation((method, params) => method === 'turn/start'
+      ? new Promise(resolve => { accept = resolve; }) : original(method, params));
+    const actions = async () => (await request('sessions.list')).find((row: any) => row.key === key).allowedActions;
+    expect(await actions()).toMatchObject({ reset: true, delete: true });
+    const run = await request('chat.send', { sessionKey: key, text: 'active', idempotencyKey: 'active-actions' });
+    const reportedActions = () => updates.filter(update => update.type === 'session_info_update' && update.session.key === key).at(-1)?.session.allowedActions;
+    expect(await actions()).toMatchObject({ reset: false, delete: false });
+    expect(reportedActions()).toMatchObject({ reset: false, delete: false });
+    await expect(request('sessions.reset', { sessionKey: key })).rejects.toThrow('Stop');
+    await expect(request('sessions.delete', { sessionKey: key })).rejects.toThrow('Stop');
+    accept({ turn: { id: 'turn-1' } }); await Promise.resolve();
+    notify('turn/started', { turn: { id: 'turn-1' } });
+    await request('chat.abort', { sessionKey: key, runId: run.runId });
+    expect(await actions()).toMatchObject({ reset: false, delete: false });
+    expect(reportedActions()).toMatchObject({ reset: false, delete: false });
+    notify('turn/completed', { turn: { id: 'turn-1', status: 'interrupted' } });
+    expect(await actions()).toMatchObject({ reset: true, delete: true });
+    expect(reportedActions()).toMatchObject({ reset: true, delete: true });
+  });
+
   it('rejects reset while work is running and preserves retry fingerprints after reset', async () => {
     const run = await start(); await expect(request('sessions.reset', { sessionKey: key })).rejects.toThrow('Stop');
     notify('turn/completed', { turn: { id: 'turn-1', status: 'completed' } }); await request('sessions.reset', { sessionKey: key });

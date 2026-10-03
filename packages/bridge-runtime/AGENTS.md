@@ -205,6 +205,8 @@ Default Claude executable discovery prefers the newest runnable Desktop Code hos
 
 ## Codex App Server
 
+Codex owned-session reset/delete are available only while no run is pending or active. Publish that restriction through `allowedActions`; a turn-start or Stop acknowledgement does not establish idle state. Keep native imported sessions read-only for these mutations and retain server-side rejection for stale menus.
+
 Native thread provenance does not imply a remote owner after an authorized local resume. Keep subsequent turns and settings on the owning App Server, publish ownership to followers, and repeat owner discovery after process restart. Settings-only resume uses the same ownership proof as continuation. A Bridge-created thread may recover after a proven pre-dispatch Desktop-broker failure only with matching idle history and an explicitly verified native version whose atomic writer lock rejects even an idle competing owner; imported threads and unknown versions still require explicit no-owner. Uncertain dispatch never opens another writer.
 
 Cold direct sends must apply that same proof before persisting a receipt or dispatching a turn; recovery must not depend on opening the model picker first. A failed broker preflight may attempt only the audited atomic resume path, with native settings verification, and cannot turn unknown/active ownership into permission to send.

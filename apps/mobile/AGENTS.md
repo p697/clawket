@@ -497,6 +497,8 @@ The official Pi Preview Registry is environment-checked like OpenClaw/Hermes Pre
 
 ## Codex conversations
 
+Confirmed reset/delete failures use the session panel’s scoped failure notice and retain the conversation for explicit retry. Discard late errors after the panel or connection scope changes; honor backend-provided `allowedActions` rather than globally forbidding active-session actions.
+
 Codex entry uses a 12-second slow-hint budget per real connection/catalog stage. Derive `Connecting` versus `Loading sessions` from the current connection readiness; rerenders do not reset the clock. Reuse cold activation’s complete live catalog for the picker, but retain the fallback after failed/cache-only reads. Only exact `sessionCatalogPageIndex: 1` negotiation enables three concurrent frozen catalog pages; retain legacy serial reads, scope/retirement fences, complete atomic validation and all existing size/expiry bounds. See `../../docs/3.1/session-catalog-sync.md`.
 
 An explicit Codex failed completion without a terminal notice, reply text or attachment gets one fixed generic system notice keyed by its Bridge run ID. Preserve authoritative failure explanations and successful/cancelled completions. Silence, disconnection and user-only history from an older Bridge are not failure evidence; never infer an authentication failure or resend from them.

@@ -663,11 +663,16 @@ export class CodexService extends EventEmitter {
   private update(update: SessionUpdate): void {
     if (update.type === 'run_finished') { const key = update.sessionKey; update = this.artifacts.final(update, [this.records.find(row => row.id === key)?.cwd ?? this.native.get(key)?.cwd ?? this.project]); }
     const patch = this.attention.accept(update);
+    if (update.type === 'run_started') {
+      const record = this.records.find(row => row.id === update.sessionKey);
+      if (record) this.emit('update', { type: 'session_info_update', session: this.descriptor(record) });
+    }
     this.emit('update', update);
     if (patch) this.emit('update', patch);
   }
   private descriptor(r: Entry): SessionDescriptor {
-    return { connectionId: '', agentId: 'codex', key: r.id, kind: 'direct', title: r.title || basename(r.cwd ?? this.project), updatedAt: r.activity ?? r.created, lastActivityAt: r.activity ?? null, preview: r.preview, model: modelName(r.model), modelProvider: r.provider, sessionId: r.threadId, hasActiveRun: this.runs.has(r.id), attention: this.attention.get(r.id), project: this.options.device ? this.projectDetails(r.cwd ?? this.project) : undefined, canContinue: r.native ? !!this.options.device : undefined, source: r.native ? 'native' : 'bridge', archived: r.archived === true, allowedActions: { rename: true, reset: !r.native, delete: !r.native, pin: true, archive: !!r.threadId } };
+    const active = this.runs.has(r.id);
+    return { connectionId: '', agentId: 'codex', key: r.id, kind: 'direct', title: r.title || basename(r.cwd ?? this.project), updatedAt: r.activity ?? r.created, lastActivityAt: r.activity ?? null, preview: r.preview, model: modelName(r.model), modelProvider: r.provider, sessionId: r.threadId, hasActiveRun: active, attention: this.attention.get(r.id), project: this.options.device ? this.projectDetails(r.cwd ?? this.project) : undefined, canContinue: r.native ? !!this.options.device : undefined, source: r.native ? 'native' : 'bridge', archived: r.archived === true, allowedActions: { rename: true, reset: !r.native && !active, delete: !r.native && !active, pin: true, archive: !!r.threadId } };
   }
   private async thread(r: Entry, released = false, permissionSelection?: Record<string, unknown>): Promise<void> {
     if (r.permissionsUnconfirmed && !permissionSelection) throw new Error('Codex did not restore the conversation permissions. Select and confirm permissions before sending.');

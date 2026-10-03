@@ -848,10 +848,11 @@ export function SessionPanelView({
   const [archiveLoading, setArchiveLoading] = useState(false);
   const [archiveError, setArchiveError] = useState(false);
   const [actionError, setActionError] = useState(false);
+  const actionRequest = useRef(0);
   const archiveRequest = useRef(0);
   const actionContext = useRef({ archiveScope, visible });
   actionContext.current = { archiveScope, visible };
-  useEffect(() => { archiveRequest.current += 1; setShowArchived(false); setArchivedRows([]); setArchiveLoading(false); setArchiveError(false); setActionError(false); }, [archiveScope, visible]);
+  useEffect(() => { archiveRequest.current += 1; actionRequest.current += 1; setShowArchived(false); setArchivedRows([]); setArchiveLoading(false); setArchiveError(false); setActionError(false); }, [archiveScope, visible]);
   const displayRows = showArchived ? archivedRows : rows;
   const loadArchived = useCallback(() => {
     if (!onLoadArchived) return;
@@ -1033,8 +1034,9 @@ export function SessionPanelView({
       if (onSessionAction) {
         analyticsEvents.sessionAction({ action });
         setActionError(false);
+        const generation = ++actionRequest.current;
         const request = archiveRequest.current;
-        const isCurrent = () => request === archiveRequest.current && actionContext.current.visible
+        const isCurrent = () => generation === actionRequest.current && request === archiveRequest.current && actionContext.current.visible
           && actionContext.current.archiveScope === archiveScope;
         void Promise.resolve(onSessionAction(actionRow, action)).then(() => {
           if (!isCurrent()) return;
@@ -1050,12 +1052,20 @@ export function SessionPanelView({
     setConfirmation(null);
     if (onSessionAction) {
       analyticsEvents.sessionAction({ action: pending.action });
-      void Promise.resolve(onSessionAction(pending.row, pending.action)).catch(() => undefined);
+      setActionError(false);
+      const generation = ++actionRequest.current;
+      const request = archiveRequest.current;
+      const isCurrent = () => generation === actionRequest.current && request === archiveRequest.current && actionContext.current.visible
+        && actionContext.current.archiveScope === archiveScope;
+      void Promise.resolve().then(() => onSessionAction(pending.row, pending.action))
+        .catch(() => { if (isCurrent()) setActionError(true); });
     }
-  }, [confirmation, onSessionAction]);
+  }, [confirmation, onSessionAction, archiveScope]);
   const renameSession = useCallback((row: SessionPanelRow, title: string) => {
     if (!onSessionAction) return undefined;
     analyticsEvents.sessionAction({ action: 'rename' });
+    actionRequest.current++;
+    setActionError(false);
     return onSessionAction(row, 'rename', { title });
   }, [onSessionAction]);
 
