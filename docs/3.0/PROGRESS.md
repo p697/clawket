@@ -1,5 +1,10 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-04 Codex 最终答复重载后时间回退（负责人真机 219→220 与视频 010：同一回复从完成时刻退回 31 分钟前的请求时刻，时间分隔随之消失）。
+  - 原因：实时成功 final 使用手机收到完成通知的时间，原生历史所有行却使用 turn.startedAt。已有 unknown 工具状态/时钟修复与这个正文时间问题无关。
+  - 依据：官方 Native Turn.completedAt 是 Unix 秒；last_agent_message 只认可最后一条非空 final_answer 或旧模型 absent/null phase。已完成 final 和生成图片附件统一原生完成时间；用户、commentary、plan、工具以及缺失/非法/未知原生时间的既有 fallback 保留。协议只增加可选 FinalMessage.timestampMs，不改变其它后端未提供此字段时的行为。
+  - 验证：Bridge 历史基线 3 红、实际 Mobile controller（普通/含工具）基线 2 红；修复后逐文件串行 history 35、service 171、Mobile adapter 26、controller 26，共 258 项通过，包含旧模型分页、未知 phase（包括 final 后追加 commentary/unknown 不借时钟）、非法时间、Desktop 完成先于 ACK、图片 final 与反复 canonical reload 的气泡/时间分隔不变。Protocol/Mobile/Bridge 类型、文档 7 组指令对/5 项检查器用例与 diff 检查通过。本任务不操作手机、Native、RPC、账户或运行中的服务；负责人随后集成验收，未发布。完整门禁交 PR CI；依赖审计 braces 公告仍等待负责人处理，不能绕过合并门禁。
+
 - 2026-10-03 配对首页直出命令与自动检测强调（负责人选定平台在上方案，并要求完整落地）。
   - 保留六个平台与官方品牌图标，改为两列紧凑入口；下方独立强调「自动检测电脑上的 Agent」，命令 `npx @p697/clawket@latest pair choose` 与复制直接展示，删除只为复制/扫码而进入的中间页面。该命令仍仅 Production 显示，不改变 CLI 或 Preview 范围。
   - 首页直接扫码、相册与原地展开输码；手输码先用临时平台弹层选定后端，保持各后端校验、现有单次认领和环境检查。收起保留草稿，平台/环境变化清空；配对进度回传或失败不把首页推入平台指引，迟到粘贴不能覆盖新表单或认领旧平台邀请。平台专属 Agent/终端默认、Pi 项目提示、本地模型引擎、键盘避让与连接遮罩保留。
@@ -1382,6 +1387,7 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 
 | 编号 | 事项 | 怎么做 | 验证方法 | 状态 |
 |---|---|---|---|---|
+| HT-CODEX-REPLY-CLOCK-1004 | Codex 回复时间修复的 CI 审计合并门禁 | 由负责人处理既有 braces 高危公告 GHSA-vfj7-8cjw-p6xm；本任务没有例外授权，不扩大到依赖更新或绕过保护。 | 当前 main 上完整必需 CI 全绿后才能合并；组合开发候选的手机验收仍可独立继续。 | 代码、258 项窄回归与类型/文档已通过，PR CI 待确认；审计处理待负责人。 |
 | HT-NATIVE-NAME-1002 | 新增原生连接电脑名修复的 Bridge 交付与手机验收 | 在另行授权的 Bridge 发布/更新后，用旧设备配置执行显式 Codex / Claude Code pair，再在手机新增连接；普通运行不会自行补名称，已有连接可在连接设置手动改名。 | 新连接显示 Product · 电脑名；旧手机继续连接，已有/手动名称不被重配覆盖。本次只改源码并由 CI 验证，不发布、不修改现有配对配置。 | 待负责人授权交付与验收 |
 | HT-USER-FOLD-1002 | 用户消息折叠的双端体验验收 | 在包含本轮代码的开发 App 或后续授权更新中，查看中英文长消息、连续换行、带图片 / 文件的消息；调整字号并在 iPad 分栏查看。 | 默认 6 行，展开 / 收起可达且阅读不被拉向页尾；时间和送达标记不盖文字；长按状态一致、复制 / 分享保留全文；短消息及助手回复照旧。 | 定向自动化已通过；待负责人真机视觉 / 手感验收，本轮未打包或发布。 |
 | HT-HERMES-GATEWAY-KEY-1002 | Hermes gateway 所有权恢复（#69）的发布决定 | 3.1.10 从 `accfe2f4` 起，不含本修复；由负责人决定随哪个 Bridge 版本发布 | 升级后用 `clawket pair --backend hermes --restart-hermes` 让新 bridge 启动并记录 gateway，再 `clawket reset` 后重新配对：手机应直接连上，`hermes-bridge.log` 出现 `owner=clawket`；没有记录的旧 gateway 应在配对时失败并提示 `--restart-hermes` | 待负责人决定；本轮不打包、不发布。 |

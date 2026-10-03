@@ -253,6 +253,8 @@ export interface FinalMessage {
   artifactDisplayText?: string;
   role: 'assistant';
   content: string;
+  /** Native final-reply clock in milliseconds; absent keeps receipt-time presentation. */
+  timestampMs?: number;
   attachments?: ChatMessage['attachments'];
   provider?: string;
   model?: string;

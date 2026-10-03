@@ -175,6 +175,65 @@ describe('Codex owned sessions', () => {
     expect(await request('sessions.sync')).toMatchObject({ kind: 'full', total: 1 });
     await expect(request('chat.history', { sessionKey: `native:${threadId}` })).rejects.toThrow('Session unavailable');
   });
+  it('delivers the same final completion clock live and after native history reload', async () => {
+    await start();
+    const turn = { id: 'turn-1', status: 'completed', startedAt: 1727996280, completedAt: 1727998140, items: [
+      { id: 'user', type: 'userMessage', content: [{ type: 'text', text: 'hello' }] },
+      { id: 'answer', type: 'agentMessage', phase: 'final_answer', text: 'Done' },
+    ] };
+    notify('item/completed', { turnId: turn.id, item: turn.items[1] });
+    notify('turn/completed', { turn });
+    const live = updates.find(update => update.type === 'run_finished');
+    expect(live).toMatchObject({ stopReason: 'end_turn', message: { content: 'Done', timestampMs: turn.completedAt * 1000 } });
+    const original = mock.request.getMockImplementation()!;
+    mock.request.mockImplementation((method, params) => method === 'thread/turns/list' ? Promise.resolve({ data: [turn] })
+      : method === 'thread/items/list' ? Promise.resolve({ data: [...turn.items].reverse().map(item => ({ turnId: turn.id, item })) }) : original(method, params));
+    const history = await request('chat.history', { sessionKey: key });
+    expect(history.messages.find((message: any) => message.id === 'answer').timestampMs).toBe(live.message.timestampMs);
+    expect(history.messages.find((message: any) => message.id === 'user').timestampMs).toBe(turn.startedAt * 1000);
+    expect(history.hasActiveRun).toBe(false);
+  });
+
+  it.each([undefined, null, NaN, Infinity, -1, 9, 10.5])('omits an unproven native completion clock from the successful live final: %j', async completedAt => {
+    await start();
+    notify('item/completed', { turnId: 'turn-1', item: { id: 'answer', type: 'agentMessage', text: 'Done' } });
+    notify('turn/completed', { turn: { id: 'turn-1', status: 'completed', startedAt: 10, completedAt } });
+    expect(updates.find(update => update.type === 'run_finished').message).not.toHaveProperty('timestampMs');
+  });
+  it.each(['commentary', 'future-phase'])('does not project %s text as a final reply clock from a terminal notification', async phase => {
+    await start();
+    const item = { id: 'answer', type: 'agentMessage', phase, text: 'Progress' };
+    notify('item/completed', { turnId: 'turn-1', item });
+    notify('turn/completed', { turn: { id: 'turn-1', status: 'completed', startedAt: 10, completedAt: 1870, items: [item] } });
+    expect(updates.find(update => update.type === 'run_finished').message).not.toHaveProperty('timestampMs');
+  });
+  it.each(['commentary', 'future-phase'])('does not borrow a prior final-answer clock for a later %s live body', async phase => {
+    await start();
+    const first = { id: 'final', type: 'agentMessage', phase: 'final_answer', text: 'Done' };
+    const later = { id: 'later', type: 'agentMessage', phase, text: 'Later progress' };
+    notify('item/completed', { turnId: 'turn-1', item: first });
+    notify('item/completed', { turnId: 'turn-1', item: later });
+    notify('turn/completed', { turn: { id: 'turn-1', status: 'completed', startedAt: 10, completedAt: 1870, items: [first, later] } });
+    const live = updates.find(update => update.type === 'run_finished');
+    expect(live.message.content).toBe('Later progress');
+    expect(live.message).not.toHaveProperty('timestampMs');
+  });
+  it('retimes the legacy final on the head page but preserves a preceding paragraph on an older partial page', async () => {
+    await start(); notify('turn/completed', { turn: { id: 'turn-1', status: 'completed' } });
+    const original = mock.request.getMockImplementation()!;
+    mock.request.mockImplementation((method, params) => {
+      if (method === 'thread/turns/list') return Promise.resolve({ data: [{ id: 'turn-1', status: 'completed', startedAt: 10, completedAt: 1870 }] });
+      if (method === 'thread/items/list') return Promise.resolve(params.cursor ? { data: [
+        { turnId: 'turn-1', item: { id: 'progress', type: 'agentMessage', text: 'Earlier paragraph' } },
+      ] } : { data: [{ turnId: 'turn-1', item: { id: 'final', type: 'agentMessage', text: 'Done' } }], nextCursor: 'older' });
+      return original(method, params);
+    });
+    const head = await request('chat.history', { sessionKey: key });
+    expect(head.messages[0]).toMatchObject({ id: 'final', timestampMs: 1870000 });
+    const older = await request('chat.history', { sessionKey: key, cursor: head.nextCursor });
+    expect(older.messages[0]).toMatchObject({ id: 'progress', timestampMs: 10000 });
+  });
+
   it('preserves a native failed-turn notice with the same identity in live delivery and reloaded history', async () => {
     await start();
     const turn = { id: 'turn-1', status: 'failed', startedAt: 10, completedAt: 12,
@@ -757,7 +816,7 @@ describe('device project discovery and desktop routing', () => {
       stopReason: status === 'failed' ? 'error' : status === 'interrupted' ? 'cancelled' : 'end_turn' })]);
     if (status === 'failed') expect(finished[0].terminalMessage).toMatchObject({ id: 'codex-turn-error:fast-turn',
       text: 'Model authentication failed. Sign in again on your computer.' });
-    if (status === 'completed') expect(finished[0].message.content).toBe('Done');
+    if (status === 'completed') expect(finished[0].message).toMatchObject({ content: 'Done', timestampMs: 12000 });
     expect((service as any).runs.has(key)).toBe(false);
     desktop.emit('snapshot', threadId, snapshot);
     expect(updates.filter(u => u.type === 'run_finished')).toHaveLength(1);

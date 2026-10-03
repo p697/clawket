@@ -47,10 +47,33 @@ export function codexTool(item: any): ChatMessage['tool'] | undefined {
     output: item.type === 'imageGeneration' ? (item.status === 'completed' && !item.failure ? 'Image generated' : '')
       : String(item.aggregatedOutput ?? (item.result ? JSON.stringify(item.result) : item.error ? JSON.stringify(item.error) : item.type === 'fileChange' ? JSON.stringify(item.changes) : '')).slice(0, 32000) };
 }
-export function codexMessages(turns: any[]): ChatMessage[] {
+
+/** Native turn clocks are Unix seconds; only a confirmed successful terminal turn dates its reply. */
+export function codexReplyTimestamp(turn: any): number | undefined {
+  const completed = turn?.completedAt, started = turn?.startedAt;
+  if (turn?.status !== 'completed' || !Number.isSafeInteger(completed) || completed <= 0
+    || !Number.isFinite(new Date(completed * 1000).getTime())
+    || (started != null && (!Number.isSafeInteger(started) || started < 0 || completed < started))) return undefined;
+  return completed * 1000;
+}
+
+/** Mirrors native last_agent_message, retaining phase-less provider compatibility. */
+export function codexFinalReplyId(items: any[], allowLegacy = true): string | undefined {
+  let id: string | undefined;
+  for (const item of items) if (item.type === 'agentMessage' && typeof item.id === 'string'
+    && typeof item.text === 'string' && item.text.trim()
+    && (item.phase === 'final_answer' || (allowLegacy && item.phase == null))) id = item.id;
+  return id;
+}
+
+export function codexMessages(turns: any[], options: { unconfirmedLegacyTurnId?: string } = {}): ChatMessage[] {
   const messages: ChatMessage[] = [];
   for (const turn of turns) {
-    for (const item of turn.items ?? []) {
+    const items = turn.items ?? [];
+    const completedAtMs = codexReplyTimestamp(turn);
+    const finalReplyId = codexFinalReplyId(items,
+      options.unconfirmedLegacyTurnId === undefined || turn.id !== options.unconfirmedLegacyTurnId);
+    for (const item of items) {
       if (typeof item.id !== 'string') continue;
       const timestampMs = typeof turn.startedAt === 'number' ? turn.startedAt * 1000 : undefined;
       const base = { id: item.id, timestampMs };
@@ -64,12 +87,12 @@ export function codexMessages(turns: any[]): ChatMessage[] {
         }
         messages.push({ ...base, role: 'user', text, ...(typeof item.clientId === 'string' && item.clientId && item.clientId.length <= 200 ? { idempotencyKey: item.clientId } : {}), ...(attachments.length ? { attachments } : {}) });
       } else if (item.type === 'agentMessage' || item.type === 'plan') {
-        messages.push({ ...base, role: 'assistant', text: String(item.text ?? '') });
+        messages.push({ ...base, ...(item.id === finalReplyId && completedAtMs !== undefined ? { timestampMs: completedAtMs } : {}), role: 'assistant', text: String(item.text ?? '') });
       } else {
         const tool = codexTool(item);
         if (tool) messages.push({ ...base, id: `toolcall_${item.id}`, role: 'tool', text: '', tool });
         const image = codexGeneratedImage(item);
-        if (image) messages.push({ ...image, timestampMs });
+        if (image) messages.push({ ...image, timestampMs: completedAtMs ?? timestampMs });
       }
     }
     const failure = codexTurnFailure(turn);

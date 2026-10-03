@@ -60,6 +60,8 @@ Optional `promptStatus` and `getPromptStatus` negotiate read-only receipt lookup
 
 Optional `run_finished.terminalMessage` carries a fixed, safe system notice for a failed native turn. Its ID and timestamp match its history projection so recovery preserves one notice. It is not an assistant reply, raw provider diagnostic, or evidence to retry a prompt; older peers may ignore the additive field and read the same system row in history.
 
+Optional `FinalMessage.timestampMs` is the backend-authored final-reply clock in milliseconds. Omission preserves receipt-time presentation; it does not supply a tool timestamp, run outcome or authorization to retry. Existing final-message peers remain compatible.
+
 `health.sessionCatalogSync === 1` optionally negotiates `sessions.sync` for Codex, Claude Code and Pi without changing `sessions.list` or the adapter's array return type. Full snapshots use immutable epoch/revision pages of at most 64 KiB; small deltas carry exact base revision, upserts, removed keys and complete order. Clients apply only complete, validated results atomically and may restart an expired page sequence once. Incomplete native discovery is not deletion evidence. Keep these wire types runtime-free.
 
 Codex may independently negotiate `health.sessionCatalogPageIndex === 1`. Only then request `pageIndex: true` on an initial/base read; the optional first-page `pageOffsets` indexes frozen continuations. Bound it to 512 increasing offsets and three outstanding reads; keep complete atomic validation, one expiry restart and all existing size limits. Missing negotiation/index retains serial v1 pages.

@@ -407,7 +407,8 @@ export function mapAdapterSessionUpdate(
             id: `final_${update.runId}`,
             role: 'assistant' as const,
             text: update.message.content,
-            timestampMs,
+            timestampMs: typeof update.message.timestampMs === 'number' && update.message.timestampMs > 0
+              && Number.isFinite(new Date(update.message.timestampMs).getTime()) ? update.message.timestampMs : timestampMs,
             modelLabel: modelLabel(update.message.provider, update.message.model),
             usage,
           }

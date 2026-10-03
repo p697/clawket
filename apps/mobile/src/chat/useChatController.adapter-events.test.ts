@@ -10,6 +10,7 @@ import { routeGatewayEvent } from '../connection/protocol/events';
 import { mapGatewayAdapterEvent, type GatewayAdapterEvent } from '../connection/adapters/gateway-session-update';
 import { buildChildSessionActivityCards } from './childSessionActivity';
 import { useChildRunRecords } from './useChildRunRecords';
+import { buildThreadTimelineItems } from '../screens/Thread/model';
 
 const historyMock = {
   sessionKey: 'agent:main:main' as string | null,
@@ -309,6 +310,45 @@ describe('useChatController adapter event migration', () => {
 
     expect(result.current.isSending).toBe(false);
     expect(historyMock.messages).toEqual([]);
+  });
+
+  it.each([false, true])('retains the final reply completion clock and separator through repeated canonical reloads (tool: %s)', withTool => {
+    const { result, adapter, handlers } = renderController('codex');
+    const startedAt = 1727996280000, completedAt = startedAt + 31 * 60_000;
+    const user = { id: 'native-user', role: 'user' as const, text: 'Wait for my answer', timestampMs: startedAt };
+    historyMock.messages = [user];
+    act(() => {
+      handlers.onState?.('ready');
+      handlers.onUpdate?.(mapAdapterSessionUpdate({ type: 'run_started', sessionKey: 'agent:main:main', runId: 'clock-run' }, { now: () => startedAt }));
+      if (withTool) handlers.onUpdate?.(mapAdapterSessionUpdate({
+        type: 'tool_call', sessionKey: 'agent:main:main', runId: 'clock-run', toolCallId: 'clock-tool', title: 'exec',
+      }, { now: () => startedAt + 1000 }));
+      handlers.onUpdate?.(mapAdapterSessionUpdate({
+        type: 'run_finished', sessionKey: 'agent:main:main', runId: 'clock-run', stopReason: 'end_turn',
+        message: { role: 'assistant', content: 'Done', timestampMs: completedAt },
+      }, { now: () => completedAt + 20_000 }));
+    });
+    const final = historyMock.messages.find(message => message.role === 'assistant');
+    expect(final).toMatchObject({ text: 'Done', timestampMs: completedAt });
+    const dates = () => buildThreadTimelineItems({ messages: [...historyMock.messages].reverse(), runs: [], nowMs: completedAt })
+      .filter(item => item.type === 'date').map(item => item.timestampMs);
+    expect(dates()).toContain(completedAt);
+    for (let count = 0; count < 2; count++) act(() => {
+      handlers.onUpdate?.(mapAdapterSessionUpdate({
+        type: 'history_reconciled', sessionKey: 'agent:main:main', history: {
+          key: 'agent:main:main', hasActiveRun: false, messages: [user,
+            ...(withTool ? [{ id: 'toolcall_clock-tool', role: 'tool' as const, text: '', timestampMs: startedAt,
+              tool: { name: 'exec', callId: 'clock-tool', status: 'success' as const } }] : []),
+            { id: 'native-final', role: 'assistant' as const, text: 'Done', timestampMs: completedAt }],
+        },
+      }));
+    });
+    expect(historyMock.messages.filter(message => message.role === 'assistant')).toEqual([
+      expect.objectContaining({ text: 'Done', timestampMs: completedAt, renderKey: final.renderKey }),
+    ]);
+    expect(dates()).toContain(completedAt);
+    expect(result.current.isSending).toBe(false);
+    expect(adapter.prompt).not.toHaveBeenCalled();
   });
 
   it('keeps one failed native-turn notice after live completion and repeated history recovery', () => {

@@ -128,6 +128,25 @@ describe('mapAdapterChatMessage', () => {
 });
 
 describe('mapAdapterSessionUpdate', () => {
+  it.each([undefined, null, NaN, Infinity, -1, 0, 1e20, '900'])('retains receipt-time presentation for omitted or invalid final clock %j', timestampMs => {
+    const update = mapAdapterSessionUpdate({
+      type: 'run_finished', sessionKey: session.key, runId: 'legacy-final', stopReason: 'end_turn',
+      message: { role: 'assistant', content: 'Done', timestampMs },
+    } as any, { now: () => 1000 });
+    expect(update.type).toBe('run_finished');
+    if (update.type === 'run_finished') expect(update.finalMessage?.timestampMs).toBe(1000);
+  });
+  it('uses an authoritative final clock without retiming a cancellation notice', () => {
+    const update = mapAdapterSessionUpdate({
+      type: 'run_finished', sessionKey: session.key, runId: 'clock-final', stopReason: 'cancelled',
+      message: { role: 'assistant', content: 'Partial reply', timestampMs: 900 },
+    }, { now: () => 1000 });
+    expect(update.type).toBe('run_finished');
+    if (update.type === 'run_finished') {
+      expect(update.finalMessage?.timestampMs).toBe(900);
+      expect(update.systemMessage?.timestampMs).toBe(1000);
+    }
+  });
   const options = {
     now: () => 1_000,
     translate: (key: string) => `translated:${key}`,

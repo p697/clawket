@@ -16,7 +16,7 @@ import { nativeSettings, matchesNativeSettings, permissionMode, permissionSelect
 import { fastServiceTier, isFastServiceTier, hasServiceTier } from './speed.js';
 import { CodexProfile } from './profile.js';
 import { CodexRpc } from './rpc.js';
-import { codexMessages, codexGeneratedImage, codexTool, codexTurnFailure } from './history.js';
+import { codexMessages, codexGeneratedImage, codexTool, codexTurnFailure, codexReplyTimestamp, codexFinalReplyId } from './history.js';
 import { loadDesktopHistory } from './desktop-history.js';
 import { nativeResumeSpeed } from './resume-settings.js';
 import { desktopTurns, desktopState } from './desktop-state.js';
@@ -1124,7 +1124,10 @@ export class CodexService extends EventEmitter {
       for (const [id, item] of active.items) combined.set(id, item);
       liveTurn.items = [...combined.values()];
     }
-    const messages = this.artifacts.project(String(key), codexMessages(turns), [metadata.thread.cwd], artifactEpoch, cursor);
+    // An older item page may begin midway through the first turn. Its last
+    // phase-less paragraph is not evidence of that turn's final reply.
+    const unconfirmedLegacyTurnId = !legacyCursor && page.native ? result.data[0]?.turnId : undefined;
+    const messages = this.artifacts.project(String(key), codexMessages(turns, { unconfirmedLegacyTurnId }), [metadata.thread.cwd], artifactEpoch, cursor);
     const end = page.end ?? messages.length;
     if (end > messages.length) throw new Error('History changed; refresh this conversation');
     let start = end, bytes = 0;
@@ -1287,8 +1290,13 @@ export class CodexService extends EventEmitter {
     this.save(); this.scheduleDesktop(r);
     const generated = [...run.items.values()].flatMap(item => codexGeneratedImage(item)?.attachments ?? []);
     const terminalMessage = stopReason === 'error' ? codexTurnFailure({ id: run.turnId ?? `run:${run.id}`, status: 'failed', ...nativeTurn }) : undefined;
+    const finalItems = nativeTurn?.items?.length ? nativeTurn.items : [...run.items.values()];
+    const finalReplyId = codexFinalReplyId(finalItems);
+    const lastAgentId = finalItems.filter((item: any) => item.type === 'agentMessage').at(-1)?.id;
+    const timestampMs = stopReason === 'end_turn' && nativeTurn?.id === run.turnId
+      && (generated.length || (finalReplyId !== undefined && finalReplyId === lastAgentId)) ? codexReplyTimestamp(nativeTurn) : undefined;
     this.update({ type: 'run_finished', sessionKey: r.id, runId: run.id, stopReason, ...(terminalMessage ? { terminalMessage,
-      message: { role: 'assistant', content: terminalMessage.text } } : run.final || generated.length ? { message: { role: 'assistant', content: run.final ?? '', ...(generated.length ? { attachments: generated } : {}), model: r.model, provider: r.provider } } : {}) });
+      message: { role: 'assistant', content: terminalMessage.text } } : run.final || generated.length ? { message: { role: 'assistant', content: run.final ?? '', ...(timestampMs !== undefined ? { timestampMs } : {}), ...(generated.length ? { attachments: generated } : {}), model: r.model, provider: r.provider } } : {}) });
     this.update({ type: 'session_info_update', session: this.descriptor(r) });
   }
   prepareForUpdate(): boolean { return this.updateAdmission.prepare(() => this.runs.size > 0 || this.starts.size > 0); }
