@@ -108,6 +108,8 @@ export interface AgentAdapter {
   /** Optional negotiated, read-only activity for at most 32 visible sessions. */
   readSessionActivity?(keys: readonly string[]): Promise<SessionActivity[]>;
   loadSession(key: string, options?: { limit?: number; cursor?: string }): Promise<SessionHistory>;
+  /** Optional synchronous local validation; never sends, probes or authorizes retry. */
+  validatePrompt?(key: string, input: PromptInput): void;
   prompt(key: string, input: PromptInput): Promise<{ runId: string }>;
   /** Read-only receipt lookup. Recorded proves durable Bridge receipt, not native execution. */
   getPromptStatus?(key: string, idempotencyKey: string): Promise<PromptStatus>;

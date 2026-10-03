@@ -4,7 +4,7 @@ import { validProfileReply } from './profile-reply';
 import { artifactHistoryDisplay, artifactUpdateDisplay } from './artifact-display';
 import type { ArtifactOperations } from '@clawket/agent-protocol';
 import {
-  AdapterError, resolveCapabilities,
+  AdapterError, LocalSendRejectedError, resolveCapabilities,
   type AgentAdapter, type AgentDescriptor, type ConnectionDescriptor, type ConnectionRecord,
   type ConnectionState, type SessionDescriptor, type SessionHistory, type SessionUpdate,
   type AgentQuestion, type PromptStatus, type PromptInput, type ManagementOperations, type ModelSelectionState, type ModelSelectionWriteResult,
@@ -18,6 +18,7 @@ import { bridgeUnavailableDelay } from './bridge-availability';
 import { SessionCatalogConsumer } from './session-catalog';
 import { requiresConnectionAction } from '../recovery-window';
 import type { WebSocketFactory } from '../transports/types';
+import { assertWebSocketFrameWithinLimit, WebSocketFrameTooLargeError } from '../transports/frame-limit';
 
 type Listeners = {
   update: (update: SessionUpdate) => void;
@@ -27,6 +28,22 @@ type Listeners = {
 
 function withNativeModelOrder<T extends ModelSelectionState>(state: T, unencryptedTransport = false): T {
   return { ...state, ...(state.permissions ? { permissions: { ...state.permissions, unencryptedTransport } } : {}), models: state.models.map((model, sortOrder) => ({ ...model, sortOrder })) };
+}
+
+function codexPromptParams(key: string, input: PromptInput): Record<string, unknown> {
+  return { sessionKey: key, ...input, thinkingLevel: input.thinkingLevel === 'off' ? undefined : input.thinkingLevel };
+}
+
+function codexRequest(id: string, method: string, params: Record<string, unknown>): string {
+  const frame = JSON.stringify({ type: 'req', id, method, params });
+  if (method === 'chat.send') {
+    try { assertWebSocketFrameWithinLimit(frame); }
+    catch (error) {
+      if (error instanceof WebSocketFrameTooLargeError) throw new LocalSendRejectedError();
+      throw error;
+    }
+  }
+  return frame;
 }
 
 /** Project-scoped Codex sessions, native history and extension questions over the authenticated Bridge. */
@@ -239,9 +256,13 @@ export class CodexAdapter implements AgentAdapter {
   loadSession(key: string, options?: { limit?: number; cursor?: string }): Promise<SessionHistory> {
     return this.rpc<SessionHistory>('chat.history', { sessionKey: key, cursor: options?.cursor }).then(artifactHistoryDisplay);
   }
+  validatePrompt(key: string, input: PromptInput): void {
+    // generateId() produces 32 hex characters. Use the same complete UTF-8 envelope without allocating a request.
+    codexRequest('0'.repeat(32), 'chat.send', codexPromptParams(key, input));
+  }
   prompt(key: string, input: PromptInput): Promise<{ runId: string }> {
     if (this.state !== 'ready') throw new AdapterError('bridge_offline', 'Codex Bridge is offline');
-    return this.rpc('chat.send', { sessionKey: key, ...input, thinkingLevel: input.thinkingLevel === 'off' ? undefined : input.thinkingLevel });
+    return this.rpc('chat.send', codexPromptParams(key, input));
   }
   async getPromptStatus(key: string, idempotencyKey: string): Promise<PromptStatus> {
     if (!this.capabilities.promptStatus) return { status: 'unknown' };
@@ -272,9 +293,12 @@ export class CodexAdapter implements AgentAdapter {
     // must never resolve a different request on the same saved connection.
     const id = generateId();
     return new Promise<T>((resolve, reject) => {
+      let frame: string;
+      try { frame = codexRequest(id, method, params); }
+      catch (error) { reject(error); return; }
       const cancelTimeout = scheduleRequestTimeout(this.transport, timeoutMs, () => { this.pending.delete(id); reject(new AdapterError('timeout', 'Codex request timed out')); });
       this.pending.set(id, { resolve: value => resolve(value as T), reject, cancelTimeout });
-      try { this.transport.send(JSON.stringify({ type: 'req', id, method, params })); }
+      try { this.transport.send(frame); }
       catch (error) { cancelTimeout(); this.pending.delete(id); reject(error); }
     });
   }

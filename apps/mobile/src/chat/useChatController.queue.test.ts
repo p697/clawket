@@ -2,7 +2,9 @@ import { act, renderHook } from '@testing-library/react-native';
 import { AppState, type AppStateStatus } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import * as Network from 'expo-network';
-import { resolveCapabilities, type BackendKind } from '@clawket/agent-protocol';
+import { AdapterError, LocalSendRejectedError, resolveCapabilities, type BackendKind } from '@clawket/agent-protocol';
+import { CodexAdapter } from '../connection/adapters/codex';
+import type { WebSocketLike } from '../connection/transports/types';
 import { analyticsEvents } from '../services/analytics/events';
 import { getMessageQueueStore, messageQueueScopeKey, MESSAGE_QUEUE_LIMIT, resetMessageQueueStore } from './messageQueue';
 import { clearUncertainSends } from './sendRecovery';
@@ -317,6 +319,7 @@ describe('useChatController message queue', () => {
     jest.clearAllMocks();
     jest.mocked(useIsFocused).mockReturnValue(true);
     resetMessageQueueStore();
+    for (const backend of ['openclaw', 'hermes', 'codex']) clearUncertainSends(`${backend}-connection`);
     historyMock.sessionKey = SESSION_KEY;
     historyMock.sessions = [{ key: SESSION_KEY, kind: 'direct' as const }];
     historyMock.messages = [];
@@ -359,6 +362,76 @@ describe('useChatController message queue', () => {
     expect(result.current.sendFailureDetails).toBeNull();
     expect(adapter.prompt).toHaveBeenCalledTimes(1);
     expect(result.current.listData.filter(m => m.text === 'Network test')).toHaveLength(1);
+  });
+
+  it('keeps an oversized GIF batch editable in the held outbox through the real Codex frame guard', async () => {
+    const socket: Omit<WebSocketLike, 'readyState'> & { readyState: number; sent: string[] } = {
+      readyState: 0, onopen: null, onmessage: null, onerror: null, onclose: null, sent: [],
+      send(data) { this.sent.push(String(data)); }, close() { this.readyState = 3; },
+    };
+    const native = new CodexAdapter({ id: 'capacity-qa', backendKind: 'codex', transportKind: 'local', label: 'QA', createdAt: 1,
+      url: 'ws://127.0.0.1:17880/v1/codex/ws', auth: { token: 'fixture-token' } }, { webSocketFactory: () => socket });
+    const connected = native.connect(); socket.readyState = 1; socket.onopen?.();
+    const connect = JSON.parse(socket.sent.at(-1)!);
+    socket.onmessage?.({ data: JSON.stringify({ type: 'res', id: connect.id, ok: true, payload: { backend: 'codex', models: [] } }) });
+    await connected;
+    const proxy = createAdapter('codex');
+    proxy.prompt.mockImplementation(native.prompt.bind(native) as typeof proxy.prompt);
+    Object.assign(proxy, { validatePrompt: (native as any).validatePrompt?.bind(native) });
+    const images = [1, 2].map(index => ({ uri: `file:///qa-${index}.gif`, mimeType: 'image/gif', base64: 'A'.repeat(4 * 1024 * 1024) }));
+    imagePickerMock.pendingImages = images;
+    const before = socket.sent.length;
+    const { result, rerender } = renderController('codex', proxy);
+    try {
+      await typeAndSend(result, 'QA oversized batch');
+      expect(socket.sent).toHaveLength(before);
+      expect(result.current.sendFailure).toBe('Message too large to send');
+      expect(result.current.listData.filter(row => row.text === 'QA oversized batch')).toHaveLength(1);
+      expect(result.current.listData.find(row => row.text === 'QA oversized batch')).toMatchObject({ delivery: 'held' });
+      expect(result.current.listData.some(row => row.sendUncertain)).toBe(false);
+      expect(result.current.queuedMessages).toHaveLength(1);
+      expect(result.current.queuedMessages[0].images).toEqual(images);
+      rerender(undefined); await flush();
+      expect(socket.sent).toHaveLength(before);
+      act(() => { result.current.editQueuedMessage(result.current.queuedMessages[0].id); });
+      expect(result.current.input).toBe('QA oversized batch');
+      expect(imagePickerMock.pendingImages).toEqual(images);
+    } finally { native.disconnect(); }
+  });
+
+  it.each([false, true])('holds a local rejection in its original scope without replay (switch scope: %s)', async switchScope => {
+    const proxy = createAdapter('codex');
+    const rejection = deferred<{ runId: string }>();
+    proxy.prompt.mockReturnValueOnce(rejection.promise);
+    imagePickerMock.pendingImages = [{ uri: 'file:///qa.gif', mimeType: 'image/gif', base64: 'AAAA' }];
+    const { result, rerender } = renderController('codex', proxy);
+    await typeAndSend(result, 'QA local rejection');
+    if (switchScope) { historyMock.sessionKey = 'different-qa'; historyMock.messages = []; rerender(undefined); await flush(); }
+    act(() => { result.current.setInput('new draft'); });
+    await act(async () => { rejection.reject(new LocalSendRejectedError()); });
+    await flush();
+    expect(result.current.input).toBe('new draft');
+    if (switchScope) {
+      expect(result.current.listData.some(row => row.text === 'QA local rejection')).toBe(false);
+      expect(result.current.sendFailure).toBeNull();
+      historyMock.sessionKey = SESSION_KEY; historyMock.messages = []; rerender(undefined); await flush();
+    }
+    const held = result.current.listData.find(row => row.text === 'QA local rejection');
+    expect(held).toMatchObject({ delivery: 'held' });
+    expect(held?.sendUncertain).toBeFalsy();
+    expect(result.current.queuedMessages[0].images).toEqual([{ uri: 'file:///qa.gif', mimeType: 'image/gif', base64: 'AAAA' }]);
+    rerender(undefined); await flush();
+    expect(proxy.prompt).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['openclaw', 'hermes', 'codex'] as const)('keeps uncertain %s socket/remote failures despite frame-like metadata', async backend => {
+    const { result, adapter } = renderController(backend);
+    adapter.prompt.mockRejectedValueOnce(Object.assign(new AdapterError('frame_too_large', 'remote frame refused'), { dispatchOutcome: 'not_sent' }));
+    await typeAndSend(result, 'QA ambiguous remote result');
+    expect(adapter.prompt).toHaveBeenCalledTimes(1);
+    expect(result.current.listData.find(row => row.text === 'QA ambiguous remote result')?.sendUncertain).toBe(true);
+    expect(result.current.queuedMessages).toHaveLength(0);
+    expect(result.current.sendFailure).toBe('Sending failed. Check the conversation before trying again.');
   });
 
   it('keeps a photo and its draft before sending to an explicitly text-only model', async () => {

@@ -20,3 +20,13 @@ export class AdapterError extends Error {
     this.code = code;
   }
 }
+
+/** A local adapter proved its frame was refused before any socket send. Remote codes are not this proof. */
+export class LocalSendRejectedError extends AdapterError {
+  public readonly dispatchOutcome = 'not_sent';
+
+  public constructor() {
+    super('frame_too_large', 'frame_too_large');
+    this.name = 'LocalSendRejectedError';
+  }
+}

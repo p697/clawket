@@ -1,5 +1,5 @@
 import { CodexAdapter } from './codex';
-import type { ConnectionRecord } from '@clawket/agent-protocol';
+import { LocalSendRejectedError, type ConnectionRecord } from '@clawket/agent-protocol';
 import type { WebSocketLike } from '../transports/types';
 
 class Socket implements WebSocketLike {
@@ -242,4 +242,65 @@ it('reports authenticated Bridge-version evidence and replaces it after reconnec
   reply(sockets[0], '3.1.10'); await first; expect(adapter.getConnectionRuntimeMetadata().bridgeVersion).toBe('3.1.10');
   adapter.disconnect(); const next = adapter.connect(); sockets.at(-1)!.open(); expect(adapter.getConnectionRuntimeMetadata().bridgeVersion).toBeUndefined();
   reply(sockets.at(-1)!, '3.1.11'); await next; expect(adapter.getConnectionRuntimeMetadata().bridgeVersion).toBe('3.1.11');
+});
+
+
+it('proves an oversized image batch is rejected locally before socket dispatch', async () => {
+  const connected = adapter.connect(); sockets[0].open(); sockets[0].reply(); await connected;
+  const before = sockets[0].sent.length;
+  const input = { text: 'QA image batch', idempotencyKey: 'capacity-only', attachments: [
+    { type: 'image' as const, mimeType: 'image/gif', content: 'A'.repeat(4 * 1024 * 1024) },
+    { type: 'image' as const, mimeType: 'image/gif', content: 'A'.repeat(4 * 1024 * 1024) },
+  ] };
+  const failure = await adapter.prompt('qa', input).catch(error => error);
+  expect(sockets[0].sent).toHaveLength(before);
+  expect(failure).toMatchObject({ code: 'frame_too_large', dispatchOutcome: 'not_sent' });
+  expect(adapter.state).toBe('ready');
+});
+
+
+it.each([-1, 0, 1])('uses the exact full request UTF-8 size at the 8 MiB boundary (%s)', async extra => {
+  const connected = adapter.connect(); sockets[0].open(); sockets[0].reply(); await connected;
+  const input = { text: '', idempotencyKey: 'wire-boundary' };
+  const overhead = new TextEncoder().encode(JSON.stringify({ type: 'req', id: '0'.repeat(32), method: 'chat.send', params: { sessionKey: 'qa', ...input } })).byteLength;
+  input.text = 'a'.repeat(8 * 1024 * 1024 - overhead + extra);
+  const before = sockets[0].sent.length;
+  if (extra > 0) {
+    expect(() => adapter.validatePrompt('qa', input)).toThrow(LocalSendRejectedError);
+    await expect(adapter.prompt('qa', input)).rejects.toBeInstanceOf(LocalSendRejectedError);
+    expect(sockets[0].sent).toHaveLength(before);
+  } else {
+    expect(() => adapter.validatePrompt('qa', input)).not.toThrow();
+    const pending = adapter.prompt('qa', input);
+    const request = JSON.parse(sockets[0].sent.at(-1)!);
+    expect(new TextEncoder().encode(sockets[0].sent.at(-1)!).byteLength).toBe(8 * 1024 * 1024 + extra);
+    sockets[0].onmessage?.({ data: JSON.stringify({ type: 'res', id: request.id, ok: true, payload: { runId: 'boundary-run' } }) });
+    expect(await pending).toEqual({ runId: 'boundary-run' });
+  }
+});
+
+it('keeps a 5 MiB single image within the same envelope and counts multibyte text', async () => {
+  const connected = adapter.connect(); sockets[0].open(); sockets[0].reply(); await connected;
+  const input = { text: 'QA one image', idempotencyKey: 'one-image', attachments: [{ type: 'image' as const, mimeType: 'image/gif',
+    content: 'A'.repeat(4 * Math.ceil(5 * 1024 * 1024 / 3) - 1) + '=' }] };
+  expect(() => adapter.validatePrompt('qa', input)).not.toThrow();
+  const pending = adapter.prompt('qa', input);
+  const request = JSON.parse(sockets[0].sent.at(-1)!);
+  sockets[0].onmessage?.({ data: JSON.stringify({ type: 'res', id: request.id, ok: true, payload: { runId: 'single-image' } }) });
+  expect(await pending).toEqual({ runId: 'single-image' });
+  const before = sockets[0].sent.length;
+  await expect(adapter.prompt('qa', { text: '图'.repeat(3 * 1024 * 1024), idempotencyKey: 'utf8' })).rejects.toBeInstanceOf(LocalSendRejectedError);
+  expect(sockets[0].sent).toHaveLength(before);
+});
+
+it('does not infer local rejection from a socket exception or a remote frame code', async () => {
+  const connected = adapter.connect(); sockets[0].open(); sockets[0].reply(); await connected;
+  const send = jest.spyOn(sockets[0], 'send').mockImplementationOnce(() => { throw Object.assign(new Error('frame_too_large'), { code: 'frame_too_large', name: 'WebSocketFrameTooLargeError' }); });
+  const thrown = await adapter.prompt('qa', { text: 'small', idempotencyKey: 'socket-unknown' }).catch(error => error);
+  expect(thrown).not.toBeInstanceOf(LocalSendRejectedError);
+  send.mockRestore();
+  const pending = adapter.prompt('qa', { text: 'small', idempotencyKey: 'remote-unknown' }).catch(error => error);
+  const request = JSON.parse(sockets[0].sent.at(-1)!);
+  sockets[0].onmessage?.({ data: JSON.stringify({ type: 'res', id: request.id, ok: false, error: { code: 'frame_too_large', message: 'frame_too_large' } }) });
+  expect(await pending).not.toBeInstanceOf(LocalSendRejectedError);
 });

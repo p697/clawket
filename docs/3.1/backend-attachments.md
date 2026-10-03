@@ -8,6 +8,8 @@ Owner-authorized extension, 2026-09-30. This is local candidate implementation a
 
 All five backends can deliver existing images and supported files to Clawket. Image generation still depends on the backend's configured model/tools. Receiving an image does not require a vision-capable text model.
 
+Codex image sends validate the complete UTF-8 request after local image preparation, including every attachment, text, session and request envelope. A per-image size bound does not guarantee a multi-image batch fits the 8 MiB frame limit. A known local capacity refusal keeps the message and original photos in the held, editable outbox and shows size feedback; it does not create a native run or mark the bubble uncertain. The actual adapter dispatch repeats the same bound for callers outside the composer. Remote frame errors, socket exceptions and unknown delivery outcomes retain the existing uncertainty/no-replay behavior. OpenClaw and Hermes keep their existing paths when optional local validation is absent.
+
 | Backend | Delivery source | Negotiation |
 | --- | --- | --- |
 | OpenClaw | Native managed artifacts, with native download authorization | See [OpenClaw attachments](openclaw-attachments.md) |

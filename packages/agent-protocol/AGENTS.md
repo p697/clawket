@@ -58,6 +58,8 @@ Optional `permissions.requiresConfirmation` retains an unresolved native permiss
 
 Optional `promptStatus` and `getPromptStatus` negotiate read-only receipt lookup. `recorded` identifies a durable Bridge receipt and run ID, not native dispatch, running or completion. `unknown` is not a rejection; neither result authorizes resending. Only exact native message identity reconciles an uncertain bubble. Missing capability preserves older peers.
 
+Optional `validatePrompt` is synchronous local validation of the prepared prompt, with no networking or side effects. Only `LocalSendRejectedError` proves an adapter rejected a too-large complete frame before socket dispatch; a remote `frame_too_large`, matching message/name or copied outcome property is not this proof. Consumers keep the unsent item editable and held, without automatic replay.
+
 Optional `run_finished.terminalMessage` carries a fixed, safe system notice for a failed native turn. Its ID and timestamp match its history projection so recovery preserves one notice. It is not an assistant reply, raw provider diagnostic, or evidence to retry a prompt; older peers may ignore the additive field and read the same system row in history.
 
 `health.sessionCatalogSync === 1` optionally negotiates `sessions.sync` for Codex, Claude Code and Pi without changing `sessions.list` or the adapter's array return type. Full snapshots use immutable epoch/revision pages of at most 64 KiB; small deltas carry exact base revision, upserts, removed keys and complete order. Clients apply only complete, validated results atomically and may restart an expired page sequence once. Incomplete native discovery is not deletion evidence. Keep these wire types runtime-free.

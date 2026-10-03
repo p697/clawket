@@ -18,6 +18,7 @@ import {
   isImageAttachmentMimeType,
   normalizeAttachmentMimeType,
   supportsFileAttachments,
+  LocalSendRejectedError,
   type AgentAdapter,
   type AgentDescriptor,
   type ConnectionState as AdapterConnectionState,
@@ -2497,12 +2498,15 @@ export function useChatController({
       const submittedAt = Date.now();
       const submissionScope = sendScopeRef.current;
       const localTimestamp = queued?.createdAt ?? submittedAt;
+      const idempotencyKey = `${submittedAt}_${Math.random().toString(36).slice(2, 10)}`;
+      const effectiveText = getUserMessageText(text, images);
+      const prompt = { text: effectiveText || " ", attachments: buildPromptAttachments(images), idempotencyKey };
+      // Validate the prepared payload while its original outbox item still owns every attachment.
+      adapter.validatePrompt?.(sessionKey, prompt);
       setMessageSubmittedAt(submittedAt);
       if (!queued) setScrollToBottomRequestAt(submittedAt);
       setSendFailure(null);
-      const idempotencyKey = `${submittedAt}_${Math.random().toString(36).slice(2, 10)}`;
       const realImages = images.filter((image) => isImageAttachmentMimeType(image.mimeType));
-      const effectiveText = getUserMessageText(text, images);
       const uiMsg = buildUserUiMessage({
         // A queued message keeps its id so its bubble settles in place once sent.
         id: options?.messageId ?? `usr_${localTimestamp}`,
@@ -2558,10 +2562,8 @@ export function useChatController({
           .catch((err) => dbg(`cache write failed: ${String(err)}`));
       }
 
-      const attachments = buildPromptAttachments(images);
-
       adapter
-        .prompt(sessionKey, { text: effectiveText || " ", attachments, idempotencyKey })
+        .prompt(sessionKey, prompt)
         .then(({ runId: serverRunId }) => {
           if (submissionScope.active && sendScopeRef.current === submissionScope && sessionKeyRef.current === sessionKey) {
             setMessageAcceptedAt(submittedAt);
@@ -2618,6 +2620,19 @@ export function useChatController({
             sessionRunStateRef.current.delete(sessionKey);
           }
           sourceQueue.store.update(sourceQueue.scopeKey, holdMessageQueue);
+          if (error instanceof LocalSendRejectedError) {
+            const item = queued ?? { id: uiMsg.id, text, images, createdAt: localTimestamp };
+            const held = sourceQueue.store.update(sourceQueue.scopeKey, current => holdMessageQueue(
+              current.items.some(row => row.id === item.id) || !canEnqueueMessage(current)
+                ? current : { ...current, items: [item, ...current.items] },
+            ));
+            if (submissionScope.active && sendScopeRef.current === submissionScope && sessionKeyRef.current === sessionKey) {
+              if (held.items.some(row => row.id === item.id)) history.setMessages(previous => previous.filter(message => message.id !== uiMsg.id));
+              setSendFailure(t('Message too large to send'));
+              setSendFailureDetails(null);
+            }
+            return;
+          }
           rememberUncertainSend(sourceQueue.scopeKey, uiMsg);
           if (messageQueueRef.current.scopeKey !== sourceQueue.scopeKey) return;
           setSendFailure(t('Sending failed. Check the conversation before trying again.'));
@@ -2683,8 +2698,8 @@ export function useChatController({
         return true;
       } catch (error) {
         if (isCurrent()) {
-          setSendFailure(t('Sending failed. Check the conversation before trying again.'));
-          setSendFailureDetails(sanitizeReplyFailure(error instanceof Error ? error.message : String(error)) || null);
+          setSendFailure(t(error instanceof LocalSendRejectedError ? 'Message too large to send' : 'Sending failed. Check the conversation before trying again.'));
+          setSendFailureDetails(error instanceof LocalSendRejectedError ? null : sanitizeReplyFailure(error instanceof Error ? error.message : String(error)) || null);
         }
         return false;
       } finally {
