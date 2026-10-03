@@ -622,7 +622,7 @@ describe('structured user input', () => {
 describe('device project discovery and desktop routing', () => {
   async function device() {
     const { EventEmitter } = await import('node:events');
-    const desktop = Object.assign(new EventEmitter(), { ready: true, snapshots: new Map(), connect: vi.fn(async () => {}), follow: vi.fn(), stop: vi.fn(), broadcast: vi.fn(), request: vi.fn(async () => ({ result: { turn: { id: 'desktop-turn' } } })) });
+    const desktop = Object.assign(new EventEmitter(), { ready: true, snapshots: new Map(), connect: vi.fn(async () => {}), follow: vi.fn(), stop: vi.fn(), broadcast: vi.fn(), request: vi.fn(async (_method: string, _params?: object): Promise<any> => ({ result: { turn: { id: 'desktop-turn' } } })) });
     await service.stop(); service = new CodexService({ project, directory: join(root, 'device'), device: true, env: { CODEX_HOME: root }, desktop: desktop as any });
     return desktop;
   }
@@ -727,13 +727,148 @@ describe('device project discovery and desktop routing', () => {
     const original = mock.request.getMockImplementation()!;
     mock.request.mockImplementation((method, params) => method === 'thread/list' ? Promise.resolve({ data: [{ id: threadId, cwd: project, updatedAt: 1 }] }) : original(method, params));
     await request('sessions.list');
-    desktop.request.mockRejectedValueOnce(new Error('connection interrupted'));
+    desktop.request.mockImplementation(async (method: string) => {
+      if (method === 'thread-owner-discovery') return {};
+      throw new Error('connection interrupted');
+    });
     await request('chat.send', { sessionKey: `native:${threadId}`, text: 'Continue', idempotencyKey: 'native-send' });
     await new Promise(r => setTimeout(r, 0));
     expect(desktop.request).toHaveBeenCalledWith('thread-follower-start-turn', expect.objectContaining({ conversationId: threadId }));
     expect(mock.request.mock.calls.filter(c => ['thread/resume', 'turn/start'].includes(c[0]))).toEqual([]);
     await request('chat.send', { sessionKey: `native:${threadId}`, text: 'Continue', idempotencyKey: 'native-send' });
-    expect(desktop.request).toHaveBeenCalledTimes(1);
+    expect(desktop.request).toHaveBeenCalledTimes(2);
+  });
+  it.each(['unknown-speed', 'unknown-profile', 'writer-busy', 'unsupported-settings'])('rejects a released native %s preparation before accepting a cold send', async reason => {
+    const desktop = await device();
+    service.on('update', update => updates.push(update));
+    const original = mock.request.getMockImplementation()!;
+    mock.request.mockImplementation(async (method, params) => {
+      if (method === 'thread/list') return { data: [{ id: threadId, cwd: project, updatedAt: 1 }] };
+      if (method === 'thread/resume' && reason === 'writer-busy') throw new Error('Conversation already has a native writer');
+      const result = await original(method, params);
+      if (method === 'thread/resume' && reason === 'unsupported-settings') delete result.approvalsReviewer;
+      return result;
+    });
+    desktop.request.mockRejectedValue(new DesktopIpcError('no-owner', 'No owner'));
+    if (reason === 'unknown-speed') mock.resumeSpeed.mockResolvedValue({ kind: 'unknown' });
+    if (reason === 'unknown-profile') mock.resumeSpeed.mockResolvedValue({ kind: 'native', serviceTier: null });
+    await request('sessions.list'); key = `native:${threadId}`;
+    await expect(request('chat.send', { sessionKey: key, text: 'Continue', idempotencyKey: 'released-preflight' })).rejects.toThrow();
+    expect(desktop.request).toHaveBeenCalledWith('thread-owner-discovery', { conversationId: threadId });
+    expect(desktop.request.mock.calls.some(([method]) => method === 'thread-follower-start-turn')).toBe(false);
+    expect(mock.request.mock.calls.some(([method]) => method === 'turn/start')).toBe(false);
+    expect(await request('chat.promptStatus', { sessionKey: key, idempotencyKey: 'released-preflight' })).toEqual({ status: 'unknown' });
+    expect((service as any).runs.has(key)).toBe(false);
+    expect(updates.some(update => update.type === 'run_started')).toBe(false);
+    expect((await request('chat.history', { sessionKey: key })).hasActiveRun).toBe(false);
+  });
+  it('preserves a live Desktop turn discovered while a cold send is being prepared', async () => {
+    const desktop = await device();
+    const original = mock.request.getMockImplementation()!;
+    mock.request.mockImplementation((method, params) => method === 'thread/list'
+      ? Promise.resolve({ data: [{ id: threadId, cwd: project, updatedAt: 1 }] }) : original(method, params));
+    desktop.request.mockImplementation(async (method: string) => {
+      if (method === 'thread-owner-discovery') {
+        const snapshot = { fresh: true, state: { latestThreadSettings: settings,
+          turns: [{ id: 'already-active', status: 'inProgress', items: [] }], requests: [] } };
+        desktop.snapshots.set(threadId, snapshot); desktop.emit('snapshot', threadId, snapshot);
+      }
+      return {};
+    });
+    await request('sessions.list'); key = `native:${threadId}`;
+    await expect(request('chat.send', { sessionKey: key, text: 'Continue', idempotencyKey: 'discovery-became-active' })).rejects.toThrow('busy');
+    expect((service as any).runs.get(key)).toMatchObject({ id: 'desktop:already-active', turnId: 'already-active', desktop: true });
+    expect(await request('chat.promptStatus', { sessionKey: key, idempotencyKey: 'discovery-became-active' })).toEqual({ status: 'unknown' });
+    expect(desktop.request.mock.calls.some(([method]) => method === 'thread-follower-start-turn')).toBe(false);
+    expect(mock.request.mock.calls.some(([method]) => method === 'turn/start')).toBe(false);
+  });
+  it.each(['unknown-speed', 'unknown-profile', 'writer-busy', 'unsupported-settings'])('settles an accepted prompt when its owner disappears and %s fails before dispatch', async reason => {
+    const desktop = await device();
+    service.on('update', update => updates.push(update));
+    const original = mock.request.getMockImplementation()!;
+    let blocked = true;
+    mock.request.mockImplementation(async (method, params) => {
+      if (method === 'thread/list') return { data: [{ id: threadId, cwd: project, updatedAt: 1 }] };
+      if (method === 'thread/resume' && blocked && reason === 'writer-busy') throw new Error('Conversation already has a native writer');
+      const result = await original(method, params);
+      if (method === 'thread/resume' && blocked && reason === 'unsupported-settings') delete result.approvalsReviewer;
+      return result;
+    });
+    desktop.request.mockImplementation(async (method: string) => {
+      if (method === 'thread-owner-discovery') return {};
+      throw new DesktopIpcError('no-owner', 'No owner');
+    });
+    if (reason === 'unknown-speed') mock.resumeSpeed.mockResolvedValue({ kind: 'unknown' });
+    if (reason === 'unknown-profile') mock.resumeSpeed.mockResolvedValue({ kind: 'native', serviceTier: null });
+    await request('sessions.list'); key = `native:${threadId}`;
+    const sent = await request('chat.send', { sessionKey: key, text: 'Continue', idempotencyKey: 'owner-race' });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(mock.request.mock.calls.some(([method]) => method === 'turn/start')).toBe(false);
+    expect((service as any).runs.has(key)).toBe(false);
+    expect(updates.filter(update => update.type === 'run_finished')).toEqual([
+      expect.objectContaining({ runId: sent.runId, stopReason: 'error' }),
+    ]);
+    expect((await request('chat.history', { sessionKey: key })).hasActiveRun).toBe(false);
+    expect(await request('chat.abort', { sessionKey: key, runId: sent.runId })).toEqual({ ok: true });
+    expect(await request('chat.promptStatus', { sessionKey: key, idempotencyKey: 'owner-race' })).toEqual({ status: 'recorded', runId: sent.runId });
+    const desktopCalls = desktop.request.mock.calls.length;
+    expect(await request('chat.send', { sessionKey: key, text: 'Continue', idempotencyKey: 'owner-race' })).toEqual(sent);
+    expect(desktop.request).toHaveBeenCalledTimes(desktopCalls);
+    expect(mock.request.mock.calls.some(([method]) => method === 'turn/start')).toBe(false);
+
+    // Only a new explicit user send follows repaired ownership/settings; the
+    // rejected prompt fingerprint never becomes an automatic replay.
+    blocked = false; mock.resumeSpeed.mockResolvedValue({ kind: 'absent' });
+    if (reason === 'unknown-profile') await request('models.permissions', { sessionKey: key, mode: 'workspace' });
+    if (reason === 'unsupported-settings') await request('models.list', { sessionKey: key });
+    await request('chat.send', { sessionKey: key, text: 'Try after repair', idempotencyKey: 'explicit-after-repair' });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(mock.request.mock.calls.filter(([method]) => method === 'turn/start')).toEqual([
+      ['turn/start', expect.objectContaining({ clientUserMessageId: 'explicit-after-repair' })],
+    ]);
+  });
+  it.each(['uncertain', 'generic-handler-failure'])('retains unknown dispatch when an owner disappears through %s', async reason => {
+    const desktop = await device();
+    service.on('update', update => updates.push(update));
+    const original = mock.request.getMockImplementation()!;
+    mock.request.mockImplementation((method, params) => method === 'thread/list'
+      ? Promise.resolve({ data: [{ id: threadId, cwd: project, updatedAt: 1 }] }) : original(method, params));
+    desktop.request.mockImplementation(async (method: string) => {
+      if (method === 'thread-owner-discovery') return {};
+      throw reason === 'uncertain' ? new DesktopIpcError('uncertain', 'Acknowledgement lost') : new Error('Handler did not confirm');
+    });
+    await request('sessions.list'); key = `native:${threadId}`;
+    const sent = await request('chat.send', { sessionKey: key, text: 'Continue', idempotencyKey: 'uncertain-owner-race' });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect((service as any).runs.get(key)).toMatchObject({ id: sent.runId, desktop: true });
+    expect(updates.some(update => update.type === 'run_finished')).toBe(false);
+    expect(mock.request.mock.calls.some(([method]) => ['thread/resume', 'turn/start'].includes(method))).toBe(false);
+    expect(await request('chat.promptStatus', { sessionKey: key, idempotencyKey: 'uncertain-owner-race' })).toEqual({ status: 'recorded', runId: sent.runId });
+    await expect(request('chat.send', { sessionKey: key, text: 'Must not replay', idempotencyKey: 'uncertain-new-key' })).rejects.toThrow('busy');
+    expect(desktop.request).toHaveBeenCalledTimes(2);
+  });
+  it('preserves uncertain native dispatch after a proven owner release and safe local preparation', async () => {
+    const desktop = await device();
+    service.on('update', update => updates.push(update));
+    const original = mock.request.getMockImplementation()!;
+    mock.request.mockImplementation((method, params) => {
+      if (method === 'thread/list') return Promise.resolve({ data: [{ id: threadId, cwd: project, updatedAt: 1 }] });
+      if (method === 'turn/start') return Promise.reject(Object.assign(new Error('Native acknowledgement lost'), { outcome: 'uncertain' }));
+      return original(method, params);
+    });
+    desktop.request.mockImplementation(async (method: string) => {
+      if (method === 'thread-owner-discovery') return {};
+      throw new DesktopIpcError('no-owner', 'No owner');
+    });
+    await request('sessions.list'); key = `native:${threadId}`;
+    const sent = await request('chat.send', { sessionKey: key, text: 'Continue', idempotencyKey: 'native-uncertain-after-release' });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect((service as any).runs.get(key)).toMatchObject({ id: sent.runId, desktop: false });
+    expect(updates.some(update => update.type === 'run_finished')).toBe(false);
+    expect((await request('chat.history', { sessionKey: key })).hasActiveRun).toBe(true);
+    expect(mock.request.mock.calls.filter(([method]) => method === 'turn/start')).toHaveLength(1);
+    expect(await request('chat.send', { sessionKey: key, text: 'Continue', idempotencyKey: 'native-uncertain-after-release' })).toEqual(sent);
+    expect(mock.request.mock.calls.filter(([method]) => method === 'turn/start')).toHaveLength(1);
   });
   it.each(['failed', 'completed', 'interrupted'])('reconciles a fast Desktop %s snapshot received before its start acknowledgement', async status => {
     const desktop = await device();
@@ -742,7 +877,8 @@ describe('device project discovery and desktop routing', () => {
     mock.request.mockImplementation((method, params) => method === 'thread/list' ? Promise.resolve({ data: [{ id: threadId, cwd: project, updatedAt: 1 }] }) : original(method, params));
     await request('sessions.list'); key = `native:${threadId}`;
     let accept!: (value: unknown) => void;
-    desktop.request.mockImplementationOnce(() => new Promise(resolve => { accept = resolve; }));
+    desktop.request.mockImplementation((method: string) => method === 'thread-owner-discovery'
+      ? Promise.resolve({}) : new Promise(resolve => { accept = resolve; }));
     const sent = await request('chat.send', { sessionKey: key, text: 'Continue', idempotencyKey: 'fast-native-send' });
     const turn = { id: 'fast-turn', status, startedAt: 10, completedAt: 12,
       ...(status === 'failed' ? { error: { codexErrorInfo: 'unauthorized', message: 'private provider detail' } } : {}),
@@ -761,7 +897,7 @@ describe('device project discovery and desktop routing', () => {
     expect((service as any).runs.has(key)).toBe(false);
     desktop.emit('snapshot', threadId, snapshot);
     expect(updates.filter(u => u.type === 'run_finished')).toHaveLength(1);
-    expect(desktop.request).toHaveBeenCalledTimes(1);
+    expect(desktop.request).toHaveBeenCalledTimes(2);
     expect(mock.request.mock.calls.filter(([method]) => ['thread/resume', 'turn/start'].includes(method))).toEqual([]);
     expect(JSON.stringify(finished)).not.toContain('private');
   });
@@ -772,7 +908,8 @@ describe('device project discovery and desktop routing', () => {
     mock.request.mockImplementation((method, params) => method === 'thread/list' ? Promise.resolve({ data: [{ id: threadId, cwd: project, updatedAt: 1 }] }) : original(method, params));
     await request('sessions.list'); key = `native:${threadId}`;
     let accept!: (value: unknown) => void;
-    desktop.request.mockImplementationOnce(() => new Promise(resolve => { accept = resolve; }));
+    desktop.request.mockImplementation((method: string) => method === 'thread-owner-discovery'
+      ? Promise.resolve({}) : new Promise(resolve => { accept = resolve; }));
     await request('chat.send', { sessionKey: key, text: 'Continue', idempotencyKey: 'unknown-native-send' });
     const snapshot = { fresh: reason !== 'stale', state: { requests: [], turns: [{
       id: reason === 'another-turn' ? 'old-turn' : 'current-turn',
@@ -783,7 +920,7 @@ describe('device project discovery and desktop routing', () => {
     await new Promise(resolve => setTimeout(resolve, 0));
     expect(updates.filter(u => u.type === 'run_finished')).toEqual([]);
     expect((service as any).runs.get(key)).toMatchObject({ desktop: true, turnId: 'current-turn' });
-    expect(desktop.request).toHaveBeenCalledTimes(1);
+    expect(desktop.request).toHaveBeenCalledTimes(2);
     expect(mock.request.mock.calls.filter(([method]) => ['thread/resume', 'turn/start'].includes(method))).toEqual([]);
   });
   it('keeps a released native thread locally owned for subsequent mobile and follower turns', async () => {

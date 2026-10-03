@@ -26,6 +26,8 @@ Fast/Standard and permissions are confirmed session settings and must survive ar
 
 CLI-only continuation after Bridge restart works directly from Send; it does not require a prior model-picker read. A proven broker failure before dispatch follows the same audited native writer-lock acquisition and settings validation. Uncertain broker errors, imported threads, unsupported versions and active native work remain blocked before a prompt receipt is persisted.
 
+Cold sends also discover the actual owner when the Desktop broker is reachable. An explicit no-owner response completes local ownership and settings preparation before accepting the prompt, so a failed speed/permission restore cannot create a permanently busy conversation. If the owner disappears between this read and turn dispatch, only explicit no-owner or pre-dispatch broker failure permits treating failed local preparation as rejection: settle the run and preserve its receipt fingerprint without replay. A routed timeout/handler failure or a later uncertain native `turn/start` still retains unknown execution and blocks another writer.
+
 ## Architecture and safety
 
 Native roster previews use `thread/turns/list` with `itemsView: summary`; fetching full tool transcripts during routine listing can exceed bounded RPC frames and take down the native process. Explicit history still reads full items. Authenticated local stop/restart remains available after native-health failure, including an identity-checked legacy recovery path; normal phone handshakes still require health. Read-only native verification and remaining device limits are recorded in the [2026-09-28 incident](../3.0/connection-incident-2026-09-28.md).

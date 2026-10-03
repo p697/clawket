@@ -522,10 +522,20 @@ export class CodexService extends EventEmitter {
       if (!result?.result?.turn?.id) throw new DesktopIpcError('uncertain', 'Desktop did not confirm a native turn identity');
       return result.result;
     } catch (error) {
-      await this.assertReleasedNative(r, error, true);
-      run.desktop = false;
-      await this.thread(r, true);
-      if (!this.effectiveSettings.has(r.id)) throw new DesktopIpcError('rejected', 'This Codex version cannot confirm safe conversation settings. Update Codex before continuing.');
+      try {
+        await this.assertReleasedNative(r, error, true);
+        run.desktop = false;
+        await this.thread(r, true);
+        if (!this.effectiveSettings.has(r.id)) throw new DesktopIpcError('rejected', 'This Codex version cannot confirm safe conversation settings. Update Codex before continuing.');
+      } catch (preparationError) {
+        // The Desktop explicitly did not dispatch this prompt. A failed local
+        // ownership/settings preparation must not leave it permanently running.
+        // Only the subsequent turn/start can make prompt execution uncertain.
+        if (error instanceof DesktopIpcError && (error.outcome === 'no-owner' || error.reason === 'broker-unavailable')) {
+          throw new DesktopIpcError('rejected', preparationError instanceof Error ? preparationError.message : 'Codex could not prepare this conversation. Refresh before sending again.');
+        }
+        throw preparationError;
+      }
       return this.rpc.request('turn/start', params);
     }
   }
@@ -1152,7 +1162,12 @@ export class CodexService extends EventEmitter {
       if (r.permissionsUnconfirmed) throw new Error('Codex did not restore the conversation permissions. Select and confirm permissions before sending.');
       let desktopOwned = !!r.threadId && !!r.activity && !this.loaded.has(r.id);
       if (desktopOwned) {
-        try { await this.desktop!.connect(); }
+        try {
+          await this.desktop!.connect();
+          // Broker reachability does not establish a thread owner. Prove the
+          // route or complete safe local preparation before recording receipt.
+          await this.desktop!.request('thread-owner-discovery', { conversationId: r.threadId });
+        }
         catch (error) {
           // A send need not be preceded by opening the model picker. Use the
           // same pre-dispatch ownership proof and native lock as cold settings.
@@ -1169,6 +1184,9 @@ export class CodexService extends EventEmitter {
       const model = this.catalog.find(m => m.model === r.model);
       if (images.length && model && !model.inputModalities?.includes('image')) throw new Error('This model does not support images');
       if (!desktopOwned && input.thinkingLevel && !model?.supportedReasoningEfforts?.some((e: any) => e.reasoningEffort === input.thinkingLevel)) throw new Error('This model does not support that reasoning level');
+      // Owner discovery/settings may deliver a fresh active Desktop snapshot.
+      // Preserve that exact turn instead of replacing it with our pending send.
+      if (this.runs.has(r.id)) throw new Error('This session is busy. Stop it or send guidance.');
       if (Object.keys(r.keys).length >= 10000) throw new Error('Start a new conversation to continue');
       const runId = randomUUID();
       const previousMetadata = { preview: r.preview, activity: r.activity, title: r.title, effort: r.effort };
