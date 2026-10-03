@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { useIsFocused } from '@react-navigation/native';
@@ -79,14 +79,22 @@ function ProfilePage({ adapter, profile, section, online, navigation, params }: 
   }, [profile, section, selectedId]);
   const read = useProfileRead<ProfileDefaults | ProfileUsage | ProfileSkills | ProfileInstruction[] | ProfileMcp[] | ProfilePlugin[]>(load, online && focused && (!scoped || !!selectedId), refresh);
   const context = useRef({ profile, selectedId, section, online, focused }); context.current = { profile, selectedId, section, online, focused };
+  const mutationGeneration = useRef(0);
+  useLayoutEffect(() => {
+    mutationGeneration.current++;
+    return () => { mutationGeneration.current++; };
+  }, [profile, selectedId, section, online, focused]);
   const mutate = async (operation: () => Promise<unknown>, confirmed?: (value: unknown) => void) => {
     if (lock.current || !online || !focused) return;
-    const before = context.current; lock.current = true; setBusy(true); setWriteError(false);
+    const before = context.current, generation = mutationGeneration.current;
+    const current = () => live.current && mutationGeneration.current === generation
+      && context.current.profile === before.profile && context.current.selectedId === before.selectedId
+      && context.current.section === before.section && context.current.online && context.current.focused;
+    lock.current = true; setBusy(true); setWriteError(false);
     try {
       const value = await operation();
-      const now = context.current;
-      if (live.current && now.profile === before.profile && now.selectedId === before.selectedId && now.section === before.section && now.online && now.focused) confirmed?.(value);
-    } catch { if (live.current && context.current.profile === before.profile && context.current.selectedId === before.selectedId && context.current.focused) setWriteError(true); }
+      if (current()) confirmed?.(value);
+    } catch { if (current()) setWriteError(true); }
     finally { lock.current = false; if (live.current) setBusy(false); }
   };
   const levelLabel = (level: string) => ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'ultra'].includes(level) ? t(`profile.level.${level}`) : level;
