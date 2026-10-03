@@ -89,6 +89,8 @@ import {
 } from './model';
 
 type MaybePromise = void | Promise<void>;
+/** A retired presentation keeps the accepted creation but must not dismiss a newer sheet. */
+type SessionCreationResult = void | false | Promise<void | false>;
 type SessionPanelActionHandler = (
   row: SessionPanelRow,
   action: SessionPanelAction,
@@ -140,7 +142,7 @@ export type SessionPanelViewProps = Readonly<{
   onClose: () => void;
   onAfterClose?: () => void;
   onSelectSession: (row: SessionPanelRow) => MaybePromise;
-  onCreateSession?: (agent: AgentDescriptor, projectId?: string) => MaybePromise;
+  onCreateSession?: (agent: AgentDescriptor, projectId?: string) => SessionCreationResult;
   onSessionAction?: SessionPanelActionHandler;
   onRetry?: () => MaybePromise;
   onOpenBridgeHelp?: () => void;
@@ -162,7 +164,7 @@ export type SessionPanelProps = Readonly<{
   onClose: () => void;
   onAfterClose?: () => void;
   onSelectSession: (row: SessionPanelRow) => MaybePromise;
-  onCreateSession?: (agent: AgentDescriptor, projectId?: string) => MaybePromise;
+  onCreateSession?: (agent: AgentDescriptor, projectId?: string) => SessionCreationResult;
   onSessionAction?: SessionPanelActionHandler;
   onOpenBridgeHelp?: () => void;
   onOpenPermission?: () => void;
@@ -955,7 +957,8 @@ export function SessionPanelView({
   const createInProject = (id?: string) => {
     if (createBusy.current || !viewAgent || !onCreateSession) return;
     createBusy.current = true; setCreating(true); setCreateError(false);
-    void Promise.resolve().then(() => id ? onCreateSession(viewAgent, id) : onCreateSession(viewAgent)).then(onClose)
+    void Promise.resolve().then(() => id ? onCreateSession(viewAgent, id) : onCreateSession(viewAgent))
+      .then(result => { if (result !== false) onClose(); })
       .catch(() => setCreateError(true)).finally(() => { createBusy.current = false; setCreating(false); });
   };
   const searching = query.trim().length > 0;

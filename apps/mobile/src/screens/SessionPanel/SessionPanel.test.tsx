@@ -791,6 +791,18 @@ it('does not offer session creation without a handler or an Agent', () => {
    expect(onClose).toHaveBeenCalledTimes(1);
  });
 
+it('does not dismiss or show a failure when creation belongs to a retired presentation', async () => {
+  const onCreateSession = jest.fn(() => Promise.resolve(false as const));
+  const onClose = jest.fn();
+  const view = render(<SessionPanelView {...props({ onCreateSession, onClose })} />);
+  fireEvent.press(view.getByTestId('session-panel-create'));
+  await act(async () => Promise.resolve());
+  expect(onCreateSession).toHaveBeenCalledTimes(1);
+  expect(onClose).not.toHaveBeenCalled();
+  expect(view.queryByText('Save Failed')).toBeNull();
+  expect(view.getByTestId('session-panel-create').props.disabled).toBe(false);
+});
+
 
 describe('project refresh lifecycle', () => {
   const project = { id: 'project-a', name: 'Work', path: '/work', available: true };

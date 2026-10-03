@@ -6,8 +6,9 @@ import { BridgeUpgradeScreen } from './src/features/app-updates/BridgeUpgradeScr
 import { useBridgeUpgrade } from './src/features/app-updates/useBridgeUpgrade';
 import { ConversationExportSheet } from './src/features/sharing/ConversationExportSheet';
 import { isMainConversation } from './src/utils/session-preview';
-import { ManualSessions, useManualSessions } from './src/services/manual-sessions';
+import { useManualSessions } from './src/services/manual-sessions';
 import { FreshSessions } from './src/services/fresh-sessions';
+import { createSessionForPresentation } from './src/screens/SessionPanel/create-session';
 import { IncomingShareCoordinator } from './src/features/sharing/IncomingShareCoordinator';
 import 'react-native-get-random-values';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -2131,19 +2132,25 @@ function AppContent({
                   setCurrentAgentId(row.agentId);
                   if (rootNavigationRef.isReady()) rootNavigationRef.navigate('Thread', params);
                 }}
-                onCreateSession={async (agent, projectId) => {
+                onCreateSession={async (agent, projectId, canPresent) => {
                   const create = async () => {
+                    if (!canPresent()) return false;
                     const adapter = connections.activeAdapter;
                     if (adapter?.connection.id !== agent.connectionId || !adapter.capabilities.sessionCreate || !adapter.createSession) throw new Error('Session creation unavailable');
-                    const session = await ManualSessions.create(adapter, agent.agentId, 'manual', projectId ? { projectId } : undefined);
-                    if (getConnectionRuntime().getSnapshot().activeAdapter !== adapter || !rootNavigationRef.isReady()) return;
-                    const params: RootStackParamList['Thread'] = { connectionId: agent.connectionId, agentId: agent.agentId, sessionKey: session.key, from: 'panel' };
-                    setThreadContext(params); setCurrentAgentId(agent.agentId);
-                    sessionPanelRef.current?.close(); rootNavigationRef.navigate('Thread', params);
+                    return createSessionForPresentation(adapter, agent.agentId, projectId,
+                      () => canPresent() && getConnectionRuntime().getSnapshot().activeAdapter === adapter && rootNavigationRef.isReady(),
+                      (session) => {
+                        const params: RootStackParamList['Thread'] = { connectionId: agent.connectionId, agentId: agent.agentId, sessionKey: session.key, from: 'panel' };
+                        setThreadContext(params); setCurrentAgentId(agent.agentId);
+                        rootNavigationRef.navigate('Thread', params);
+                      });
                   };
                   if (!canAccessRosterAgent(agent.connectionId, agent.agentId)) {
-                    presentPaywall(canAccessConnection(agent.connectionId) ? 'agents' : 'gatewayConnections', create);
-                  } else await create();
+                    presentPaywall(canAccessConnection(agent.connectionId) ? 'agents' : 'gatewayConnections', async () => {
+                      if (await create() && canPresent()) sessionPanelRef.current?.close();
+                    });
+                    return false;
+                  } else return await create() ? undefined : false;
                 }}
                 onSessionAction={handleSessionAction}
                 onAfterClose={handleSessionPanelAfterClose}
