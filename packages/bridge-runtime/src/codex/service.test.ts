@@ -626,6 +626,150 @@ describe('device project discovery and desktop routing', () => {
     await service.stop(); service = new CodexService({ project, directory: join(root, 'device'), device: true, env: { CODEX_HOME: root }, desktop: desktop as any });
     return desktop;
   }
+  it('replays caught-up Desktop text and tools in native item order without replaying unchanged snapshots', async () => {
+    const desktop = await device();
+    service.on('update', update => updates.push(update));
+    const original = mock.request.getMockImplementation()!;
+    mock.request.mockImplementation((method, params) => method === 'thread/list'
+      ? Promise.resolve({ data: [{ id: threadId, cwd: project, updatedAt: 1 }] }) : original(method, params));
+    await request('sessions.list');
+    await request('chat.history', { sessionKey: `native:${threadId}` });
+    const items = [
+      { id: 'prompt', type: 'userMessage', content: [{ type: 'text', text: 'Inspect the project' }] },
+      { id: 'a', type: 'agentMessage', text: 'First.' },
+      { id: 'one', type: 'commandExecution', command: 'pwd', status: 'completed', exitCode: 0, aggregatedOutput: 'one' },
+      { id: 'b', type: 'agentMessage', text: 'Second.' },
+      { id: 'two', type: 'commandExecution', command: 'sleep 1', status: 'inProgress' },
+      { id: 'c', type: 'assistantMessage', message: 'Third.' },
+    ];
+    const snapshot = { fresh: true, state: { turns: [{ id: 'ordered-turn', status: 'inProgress', items }], requests: [] } };
+    const presentation = () => updates.filter(update => ['run_started', 'agent_message_chunk', 'tool_call', 'tool_call_update', 'run_finished'].includes(update.type));
+    updates.length = 0;
+    desktop.emit('snapshot', threadId, snapshot);
+    expect(presentation()).toEqual([
+      expect.objectContaining({ type: 'run_started', runId: 'desktop:ordered-turn' }),
+      expect.objectContaining({ type: 'agent_message_chunk', text: 'First.', textMode: 'snapshot' }),
+      expect.objectContaining({ type: 'tool_call', toolCallId: 'one' }),
+      expect.objectContaining({ type: 'tool_call_update', toolCallId: 'one', status: 'success', rawOutput: 'one' }),
+      expect.objectContaining({ type: 'agent_message_chunk', text: 'First.\n\nSecond.', textMode: 'snapshot' }),
+      expect.objectContaining({ type: 'tool_call', toolCallId: 'two' }),
+      expect.objectContaining({ type: 'agent_message_chunk', text: 'First.\n\nSecond.\n\nThird.', textMode: 'snapshot' }),
+    ]);
+    updates.length = 0;
+    desktop.emit('snapshot', threadId, structuredClone(snapshot));
+    expect(presentation()).toEqual([]);
+    const stale = structuredClone(snapshot);
+    stale.fresh = false;
+    stale.state.turns[0].items[5] = { id: 'c', type: 'assistantMessage', message: 'Stale text' };
+    desktop.emit('snapshot', threadId, stale);
+    expect(presentation()).toEqual([]);
+    const completed = { fresh: true, state: { turns: [{ id: 'ordered-turn', status: 'completed', items }], requests: [] } };
+    desktop.emit('snapshot', threadId, completed);
+    desktop.emit('snapshot', threadId, structuredClone(completed));
+    expect(presentation()).toEqual([expect.objectContaining({ type: 'run_finished', runId: 'desktop:ordered-turn', stopReason: 'end_turn' })]);
+    updates.length = 0;
+    desktop.emit('snapshot', threadId, { fresh: true, state: { turns: [{ id: 'next-turn', status: 'inProgress', items: [{ id: 'next', type: 'agentMessage', text: 'New turn.' }] }], requests: [] } });
+    expect(presentation()).toEqual([
+      expect.objectContaining({ type: 'run_started', runId: 'desktop:next-turn' }),
+      expect.objectContaining({ type: 'agent_message_chunk', runId: 'desktop:next-turn', text: 'New turn.', textMode: 'snapshot' }),
+    ]);
+  });
+  it('updates the current Desktop tail without temporarily replaying earlier text or tool calls', async () => {
+    const desktop = await device();
+    service.on('update', update => updates.push(update));
+    const original = mock.request.getMockImplementation()!;
+    mock.request.mockImplementation((method, params) => method === 'thread/list'
+      ? Promise.resolve({ data: [{ id: threadId, cwd: project, updatedAt: 1 }] }) : original(method, params));
+    await request('sessions.list');
+    await request('chat.history', { sessionKey: `native:${threadId}` });
+    const items = [
+      { id: 'a', type: 'agentMessage', text: 'Before.' },
+      { id: 'one', type: 'commandExecution', command: 'pwd', status: 'inProgress' },
+      { id: 'b', type: 'agentMessage', text: 'After' },
+    ];
+    desktop.emit('snapshot', threadId, { fresh: true, state: { turns: [{ id: 'growing-turn', status: 'inProgress', items }], requests: [] } });
+    updates.length = 0;
+    desktop.emit('snapshot', threadId, { fresh: true, state: { turns: [{ id: 'growing-turn', status: 'inProgress', items: [
+      items[0], { ...items[1], status: 'completed', exitCode: 0, aggregatedOutput: 'done' }, { ...items[2], text: 'After the tool.' },
+    ] }], requests: [] } });
+    expect(updates.filter(update => ['agent_message_chunk', 'tool_call', 'tool_call_update'].includes(update.type))).toEqual([
+      expect.objectContaining({ type: 'tool_call_update', toolCallId: 'one', status: 'success', rawOutput: 'done' }),
+      expect.objectContaining({ type: 'agent_message_chunk', text: 'Before.\n\nAfter the tool.', textMode: 'snapshot' }),
+    ]);
+    updates.length = 0;
+    desktop.emit('snapshot', threadId, { fresh: true, state: { turns: [{ id: 'growing-turn', status: 'inProgress', items: [
+      { ...items[0], text: 'Corrected before.' }, { ...items[1], status: 'completed', exitCode: 0, aggregatedOutput: 'done' }, { ...items[2], text: 'After the tool.' },
+    ] }], requests: [] } });
+    expect(updates.filter(update => ['agent_message_chunk', 'tool_call', 'tool_call_update'].includes(update.type))).toEqual([
+      expect.objectContaining({ type: 'agent_message_chunk', text: 'Corrected before.\n\nAfter the tool.', textMode: 'snapshot' }),
+    ]);
+  });
+  it.each(['completed', 'interrupted', 'failed'])('settles a coalesced Desktop %s turn before starting the next native turn', async status => {
+    const desktop = await device();
+    service.on('update', update => updates.push(update));
+    const original = mock.request.getMockImplementation()!;
+    mock.request.mockImplementation((method, params) => method === 'thread/list'
+      ? Promise.resolve({ data: [{ id: threadId, cwd: project, updatedAt: 1 }] }) : original(method, params));
+    await request('sessions.list');
+    await request('chat.history', { sessionKey: `native:${threadId}` });
+    const first = { id: 'first-turn', status: 'inProgress', items: [
+      { id: 'a', type: 'agentMessage', text: 'Before the tool.' },
+      { id: 'one', type: 'commandExecution', command: 'pwd', status: 'inProgress' },
+    ] };
+    desktop.emit('snapshot', threadId, { fresh: true, state: { turns: [first], requests: [] } });
+    const completed = { ...first, status, items: [first.items[0], { ...first.items[1], status: 'completed', exitCode: 0, aggregatedOutput: 'done' },
+      { id: 'b', type: 'agentMessage', text: 'After the tool.' }] };
+    const second = { id: 'second-turn', status: 'inProgress', items: [
+      { id: 'next', type: 'agentMessage', text: 'Second turn.' },
+      { id: 'two', type: 'commandExecution', command: 'sleep 1', status: 'inProgress' },
+    ] };
+    const snapshot = { fresh: true, state: { turns: [completed, second], requests: [] } };
+    updates.length = 0;
+    desktop.emit('snapshot', threadId, { ...snapshot, fresh: false });
+    expect(updates).toEqual([]);
+    desktop.emit('snapshot', threadId, snapshot);
+    const presentation = () => updates.filter(update => ['run_started', 'agent_message_chunk', 'tool_call', 'tool_call_update', 'run_finished'].includes(update.type));
+    expect(presentation()).toEqual([
+      expect.objectContaining({ type: 'tool_call_update', runId: 'desktop:first-turn', toolCallId: 'one', status: 'success' }),
+      expect.objectContaining({ type: 'agent_message_chunk', runId: 'desktop:first-turn', text: 'Before the tool.\n\nAfter the tool.', textMode: 'snapshot' }),
+      expect.objectContaining({ type: 'run_finished', runId: 'desktop:first-turn', stopReason: status === 'interrupted' ? 'cancelled' : status === 'failed' ? 'error' : 'end_turn' }),
+      expect.objectContaining({ type: 'run_started', runId: 'desktop:second-turn' }),
+      expect.objectContaining({ type: 'agent_message_chunk', runId: 'desktop:second-turn', text: 'Second turn.', textMode: 'snapshot' }),
+      expect.objectContaining({ type: 'tool_call', runId: 'desktop:second-turn', toolCallId: 'two' }),
+    ]);
+    expect((service as any).runs.get(`native:${threadId}`)).toMatchObject({ id: 'desktop:second-turn', turnId: 'second-turn', text: 'Second turn.' });
+    expect([...(service as any).runs.get(`native:${threadId}`).items.keys()]).toEqual(['next', 'two']);
+    updates.length = 0;
+    desktop.emit('snapshot', threadId, structuredClone(snapshot));
+    expect(presentation()).toEqual([]);
+    await service.stop();
+    desktop.emit('snapshot', threadId, snapshot);
+    expect(presentation()).toEqual([]);
+    expect(desktop.request).not.toHaveBeenCalled();
+    expect(mock.request.mock.calls.some(([method]) => ['thread/resume', 'turn/start'].includes(method))).toBe(false);
+  });
+  it('preserves an unconfirmed Desktop turn instead of assigning a different active turn to its run', async () => {
+    const desktop = await device();
+    service.on('update', update => updates.push(update));
+    const original = mock.request.getMockImplementation()!;
+    mock.request.mockImplementation((method, params) => method === 'thread/list'
+      ? Promise.resolve({ data: [{ id: threadId, cwd: project, updatedAt: 1 }] }) : original(method, params));
+    await request('sessions.list');
+    await request('chat.history', { sessionKey: `native:${threadId}` });
+    const first = { id: 'unconfirmed-turn', status: 'inProgress', items: [{ id: 'a', type: 'agentMessage', text: 'Original turn.' }] };
+    desktop.emit('snapshot', threadId, { fresh: true, state: { turns: [first], requests: [] } });
+    const run = (service as any).runs.get(`native:${threadId}`);
+    updates.length = 0;
+    desktop.emit('snapshot', threadId, { fresh: true, state: { turns: [
+      { ...first, status: 'unknown' }, { id: 'different-turn', status: 'inProgress', items: [{ id: 'b', type: 'agentMessage', text: 'Different turn.' }] },
+    ], requests: [] } });
+    expect(updates).toEqual([expect.objectContaining({ type: 'error', code: 'unsupported' })]);
+    expect((service as any).runs.get(`native:${threadId}`)).toBe(run);
+    expect(run).toMatchObject({ id: 'desktop:unconfirmed-turn', turnId: 'unconfirmed-turn', text: 'Original turn.' });
+    expect([...run.items.keys()]).toEqual(['a']);
+    expect(desktop.request).not.toHaveBeenCalled();
+    expect(mock.request.mock.calls.some(([method]) => ['thread/resume', 'turn/start'].includes(method))).toBe(false);
+  });
   it('uses the last visible native message instead of the first prompt and caches the tail', async () => {
     await device();
     const original = mock.request.getMockImplementation()!;

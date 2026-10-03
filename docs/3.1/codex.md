@@ -36,6 +36,8 @@ Session descriptors treat model metadata as an optional string. Native catalog o
 
 Persist owned-thread metadata and prompt fingerprints before acknowledgement. Native transcript storage stays Codex-owned. Reconnect reads native state and pending approvals; phone disconnection leaves work running. Bridge loss never silently reruns work. Stop only owned children. Honor native permission refusals; never add bypass flags. Explicit approvals apply once to one pending native request and retire only after dispatch/terminal resolution.
 
+When entering or recovering a Desktop-owned running conversation, project its snapshot in native item order: each new tool follows only the text before it, and later commentary remains after that tool. Keep cumulative snapshot text and suppress unchanged replay so normal tail growth does not flash earlier messages or duplicate work records. A snapshot containing a completed old turn and a new active turn finishes the exact old run before starting the new one; missing or unknown old termination leaves its ownership and run identity intact.
+
 Codex Registry/Relay resources, room classes, pairing state, secrets and Preview deployment units are isolated from OpenClaw, Hermes and Pi. Existing clients and transports keep their contracts and 8 MiB frame limits.
 
 ## Research baseline

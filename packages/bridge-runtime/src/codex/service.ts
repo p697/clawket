@@ -581,11 +581,35 @@ export class CodexService extends EventEmitter {
     await this.confirmedSettings(r, settings, () => this.rpc.request('thread/settings/update', { threadId: r.threadId, ...settings }));
     this.scheduleDesktop(r);
   }
+  private projectDesktopItems(r: Entry, run: Run, items: any[]): void {
+    const messages: string[] = [];
+    const publishText = () => {
+      const text = messages.join('\n\n').slice(-128000);
+      if (text !== run.text) { run.text = text; this.update({ type: 'agent_message_chunk', sessionKey: r.id, runId: run.id, text, textMode: 'snapshot' }); }
+    };
+    for (const item of items) {
+      if (typeof item.id !== 'string') continue;
+      const old = run.items.get(item.id); run.items.set(item.id, item); this.items.set(item.id, item);
+      if (['agentMessage', 'assistantMessage'].includes(item.type)) {
+        messages.push(String(item.text ?? item.message ?? ''));
+        continue;
+      }
+      const tool = codexTool(item); if (!tool) continue;
+      if (!old) {
+        // Mobile commits the current text at a new tool boundary. Replaying
+        // a caught-up snapshot must publish only the preceding words first.
+        publishText();
+        this.update({ type: 'tool_call', sessionKey: r.id, runId: run.id, toolCallId: item.id, title: tool.name, rawInput: tool.input });
+      }
+      if (tool.status !== 'running' && tool.status !== 'unknown' && old?.status !== item.status) this.update({ type: 'tool_call_update', sessionKey: r.id, runId: run.id, toolCallId: item.id, status: tool.status, rawOutput: tool.output });
+    }
+    publishText();
+  }
   private desktopSnapshot(threadId: string, snapshot: DesktopSnapshot): void {
     const r = this.records.find(e => e.threadId === threadId);
     // Once our App Server owns this thread, its notifications are the only
     // effective-state authority. Delayed Desktop echoes cannot replace it.
-    if (!r || !snapshot.fresh || this.loaded.has(r.id)) return;
+    if (this.stopped || !r || !snapshot.fresh || this.loaded.has(r.id)) return;
     const settings = nativeSettings(snapshot.state.latestThreadSettings);
     if (settings) this.rememberSettings(r, settings);
     r.model = snapshot.state.latestModel ?? r.model; r.effort = snapshot.state.latestReasoningEffort ?? r.effort; r.provider = snapshot.state.modelProvider ?? r.provider;
@@ -595,26 +619,32 @@ export class CodexService extends EventEmitter {
     // Parallel active turns require an explicit native target; never guess one.
     if (active.length > 1) { this.update({ type: 'error', sessionKey: r.id, code: 'unsupported', message: 'This conversation has parallel active tasks. Choose the task in Codex Desktop.' }); return; }
     const turn = active[0];
+    const terminalFor = (turnId: string) => turns.find((t: any) => (t.turnId ?? t.id) === turnId && ['completed', 'interrupted', 'failed'].includes(t.status));
+    const finishDesktopTurn = (run: Run, terminal: any) => {
+      if (Array.isArray(terminal.items) && terminal.items.length) this.projectDesktopItems(r, run, terminal.items);
+      run.final = run.text;
+      this.finish(r, terminal.status === 'interrupted' ? 'cancelled' : terminal.status === 'failed' ? 'error' : 'end_turn', terminal);
+    };
     let run = this.runs.get(r.id);
     if (run && !run.desktop) return; // An idle desktop echo cannot take a local writer.
     if (turn) {
       const turnId = turn.turnId ?? turn.id;
       if (typeof turnId !== 'string' || !turnId) return;
+      if (run?.turnId && run.turnId !== turnId) {
+        const terminal = terminalFor(run.turnId);
+        if (!terminal) {
+          this.update({ type: 'error', sessionKey: r.id, code: 'unsupported', message: 'The previous task outcome is unconfirmed. Check this conversation in Codex Desktop.' });
+          return;
+        }
+        finishDesktopTurn(run, terminal);
+        run = undefined;
+      }
       if (!run) { run = { id: `desktop:${turnId}`, desktop: true, turnId, text: '', started: Date.now(), items: new Map() }; this.runs.set(r.id, run); this.update({ type: 'run_started', sessionKey: r.id, runId: run.id }); }
       run.turnId = turnId;
-      const items = Array.isArray(turn.items) ? turn.items : [];
-      const text = items.filter((i: any) => ['agentMessage', 'assistantMessage'].includes(i.type)).map((i: any) => i.text ?? i.message ?? '').join('\n\n').slice(-128000);
-      if (text !== run.text) { run.text = text; this.update({ type: 'agent_message_chunk', sessionKey: r.id, runId: run.id, text, textMode: 'snapshot' }); }
-      for (const item of items) {
-        if (typeof item.id !== 'string') continue;
-        const old = run.items.get(item.id); run.items.set(item.id, item); this.items.set(item.id, item);
-        const tool = codexTool(item); if (!tool) continue;
-        if (!old) this.update({ type: 'tool_call', sessionKey: r.id, runId: run.id, toolCallId: item.id, title: tool.name, rawInput: tool.input });
-        if (tool.status !== 'running' && tool.status !== 'unknown' && old?.status !== item.status) this.update({ type: 'tool_call_update', sessionKey: r.id, runId: run.id, toolCallId: item.id, status: tool.status, rawOutput: tool.output });
-      }
+      this.projectDesktopItems(r, run, Array.isArray(turn.items) ? turn.items : []);
     } else if (run?.turnId) {
-      const terminal = turns.find((t: any) => (t.turnId ?? t.id) === run!.turnId && ['completed', 'interrupted', 'failed'].includes(t.status));
-      if (terminal) { run.final = (terminal.items ?? []).filter((i: any) => i.type === 'agentMessage').map((i: any) => i.text ?? '').join('\n\n'); this.finish(r, terminal.status === 'interrupted' ? 'cancelled' : terminal.status === 'failed' ? 'error' : 'end_turn', terminal); }
+      const terminal = terminalFor(run.turnId);
+      if (terminal) finishDesktopTurn(run, terminal);
     }
     const pending = snapshot.state.requests.filter((q: any) => q.completed !== true);
     for (const [id, consent] of this.approvals) if (consent.desktop && consent.entry === r && !pending.some((q: any) => q.id === consent.wireId)) { this.approvals.delete(id); this.update({ type: 'approval_resolved', approvalId: id, decision: 'expired' }); }
