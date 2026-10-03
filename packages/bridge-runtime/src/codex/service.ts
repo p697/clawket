@@ -104,6 +104,10 @@ export class CodexService extends EventEmitter {
       for (const r of this.records) { if (r.cwd && !options.device && r.cwd !== this.project) throw new Error('Project authorization mismatch'); this.rememberProject(r.cwd ?? this.project); }
       {
         this.desktop = options.desktop ?? new DesktopIpc();
+        this.desktop.followProtected = id => this.records.some(record => record.threadId === id
+          && (this.runs.has(record.id) || this.queues.has(record.id)
+            || [...this.approvals.values()].some(consent => consent.entry === record)
+            || [...this.questions.values()].some(group => group.entry === record)));
         this.desktop.on('follow', (id: string, following: boolean) => { if (following && this.records.some(r => r.threadId === id && this.loaded.has(r.id))) { this.desktopFollowers.add(id); void this.publishDesktop(id).catch(() => {}); } else this.desktopFollowers.delete(id); });
         this.desktop.handler = { accepts: (method, p) => this.acceptDesktop(method, p), request: (method, p) => this.desktopRequest(method, p) };
         this.desktop.on('unsupported', (id: string) => { const r = this.records.find(row => row.threadId === id); if (r && !this.desktop?.isObservationOnly?.(id)) this.update({ type: 'error', sessionKey: r.id, code: 'unsupported', message: 'This Codex Desktop version cannot be followed safely. Continue on your computer.' }); });
@@ -515,7 +519,12 @@ export class CodexService extends EventEmitter {
     for (const key of this.nativePreviews.keys()) if (!this.native.has(key)) this.nativePreviews.delete(key);
   }
   private async desktopTurn(r: Entry, params: object): Promise<any> {
-    this.desktop!.follow(r.threadId!);
+    try { this.desktop!.follow(r.threadId!); }
+    catch (error) {
+      // Subscription writes do not dispatch a prompt. A failure here cannot
+      // turn a recorded but unsent input into an unknown native execution.
+      throw new DesktopIpcError('rejected', error instanceof Error ? error.message : 'Codex could not observe this conversation. Refresh before sending again.');
+    }
     const run = this.runs.get(r.id)!; run.desktop = true;
     try {
       const result = await this.desktop!.request('thread-follower-start-turn', { conversationId: r.threadId, turnStart: { request: params, context: { inheritThreadSettings: true } } });
@@ -643,7 +652,9 @@ export class CodexService extends EventEmitter {
     if (!record && native && this.options.device) {
       record = { id: String(key), archived: this.archivedNative.has(String(key)), threadId: native.id, native: true, cwd: native.cwd, title: native.name || native.preview?.slice(0, 80) || '', created: native.createdAt * 1000 || Date.now(), activity: native.updatedAt * 1000 || Date.now(), model: modelName(native.model), provider: native.modelProvider, keys: {} };
       if (this.records.length >= 1000) throw new Error('Conversation index limit reached');
-      this.records.push(record); this.save(); this.desktop?.follow(native.id);
+      this.desktop?.follow(native.id);
+      this.records.push(record);
+      try { this.save(); } catch (error) { this.records.pop(); throw error; }
     }
     if (!record) throw new Error('This session is read-only. Create a branch to continue.');
     return record;
@@ -1152,6 +1163,9 @@ export class CodexService extends EventEmitter {
       if (r.permissionsUnconfirmed) throw new Error('Codex did not restore the conversation permissions. Select and confirm permissions before sending.');
       let desktopOwned = !!r.threadId && !!r.activity && !this.loaded.has(r.id);
       if (desktopOwned) {
+        // An indexed idle chat may have retired its observation. Admission is
+        // required before receipt; local-owned turns need no Desktop slot.
+        this.desktop!.follow(r.threadId!);
         try { await this.desktop!.connect(); }
         catch (error) {
           // A send need not be preceded by opening the model picker. Use the
@@ -1169,6 +1183,9 @@ export class CodexService extends EventEmitter {
       const model = this.catalog.find(m => m.model === r.model);
       if (images.length && model && !model.inputModalities?.includes('image')) throw new Error('This model does not support images');
       if (!desktopOwned && input.thinkingLevel && !model?.supportedReasoningEfforts?.some((e: any) => e.reasoningEffort === input.thinkingLevel)) throw new Error('This model does not support that reasoning level');
+      // Owner discovery/settings may deliver a fresh active Desktop snapshot.
+      // Preserve that exact turn instead of replacing it with our pending send.
+      if (this.runs.has(r.id)) throw new Error('This session is busy. Stop it or send guidance.');
       if (Object.keys(r.keys).length >= 10000) throw new Error('Start a new conversation to continue');
       const runId = randomUUID();
       const previousMetadata = { preview: r.preview, activity: r.activity, title: r.title, effort: r.effort };

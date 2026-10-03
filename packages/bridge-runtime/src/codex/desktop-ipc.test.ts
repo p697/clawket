@@ -182,6 +182,6 @@ it('opening a chat evicts a disposable observation instead of letting the catalo
     expect(() => ipc.follow('opened')).not.toThrow(); expect(released).toHaveBeenCalledWith('visible-0');
     ipc.unobserve('opened'); expect(ipc.isObservationOnly('opened')).toBe(false);
     for (let i = 1; i < 64; i++) ipc.follow(`visible-${i}`);
-    expect(() => ipc.follow('overflow')).toThrow('Too many open desktop conversations');
+    expect(() => ipc.follow('overflow')).toThrow('Too many active or unconfirmed desktop conversations');
   } finally { ipc.stop(); }
 });

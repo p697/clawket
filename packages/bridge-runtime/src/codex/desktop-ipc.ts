@@ -49,9 +49,17 @@ export class DesktopIpc extends EventEmitter {
   private connecting?: Promise<void>;
   private closed = false;
   private retry?: ReturnType<typeof setTimeout>;
-  private pending = new Map<string, { method: string; resolve: (v: any) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }>();
+  private pending = new Map<string, { method: string; conversationId?: string; resolve: (v: any) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }>();
   private followed = new Set<string>();
   private permanentFollows = new Set<string>();
+  private followGenerations = new Map<string, number>();
+  private stateGenerations = new Map<string, number>();
+  private nextFollowGeneration = 0;
+  private noOwner = new Set<string>();
+  private ownerProbeQueue = new Set<string>();
+  private ownerProbes = new Map<string, number>();
+  /** Service work stays protected even before a native active snapshot arrives. */
+  followProtected?: (id: string) => boolean;
   handler?: { accepts(method: string, params: any): boolean; request(method: string, params: any): Promise<any> };
   broadcast(method: string, params: object): void {
     if (this.ready) this.write({ type: 'broadcast', method, version: versions[method] ?? 1, sourceClientId: this.clientId, params });
@@ -101,6 +109,7 @@ export class DesktopIpc extends EventEmitter {
       body = undefined;
       if (this.socket !== socket) return;
       this.clientId = ''; this.socket = undefined;
+      this.noOwner.clear(); this.ownerProbeQueue.clear();
       for (const value of this.snapshots.values()) value.fresh = false;
       for (const p of this.pending.values()) { clearTimeout(p.timer); p.reject(new DesktopIpcError('uncertain', 'Desktop connection interrupted; check the task before retrying.')); }
       this.pending.clear(); this.emit('offline');
@@ -115,7 +124,7 @@ export class DesktopIpc extends EventEmitter {
       const result = await this.call('initialize', { clientType: 'clawket-bridge' }, true);
       if (typeof result?.clientId !== 'string' || !result.clientId) throw new Error('Invalid desktop handshake');
       this.clientId = result.clientId;
-      for (const id of this.followed) this.announceFollowing(id, true);
+      for (const id of this.followed) { this.announceFollowing(id, true); this.queueOwnerProbe(id); }
       this.emit('ready');
     } catch (error) { socket.destroy(); throw error; }
   }
@@ -130,10 +139,10 @@ export class DesktopIpc extends EventEmitter {
     if (this.pending.size >= 32) return Promise.reject(new Error('Too many desktop requests'));
     const requestId = randomUUID();
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { this.pending.delete(requestId); reject(new DesktopIpcError('uncertain', 'Desktop has not confirmed this operation. Do not send it again automatically.')); }, REQUEST_TIMEOUT_MS);
-      this.pending.set(requestId, { method, resolve, reject, timer });
+      const timer = setTimeout(() => { this.pending.delete(requestId); queueMicrotask(() => this.probeOwners()); reject(new DesktopIpcError('uncertain', 'Desktop has not confirmed this operation. Do not send it again automatically.')); }, REQUEST_TIMEOUT_MS);
+      this.pending.set(requestId, { method, conversationId: (params as { conversationId?: string }).conversationId, resolve, reject, timer });
       try { this.write({ type: 'request', requestId, sourceClientId: initializing ? 'initializing-client' : this.clientId, version, method, params }); }
-      catch (error) { clearTimeout(timer); this.pending.delete(requestId); reject(error); }
+      catch (error) { clearTimeout(timer); this.pending.delete(requestId); queueMicrotask(() => this.probeOwners()); reject(error); }
     });
   }
   async request(method: string, params: object): Promise<any> {
@@ -152,28 +161,103 @@ export class DesktopIpc extends EventEmitter {
     }
   }
   follow(id: string): void {
+    if (this.closed) throw new Error('Desktop connection stopped');
     if (!this.followed.has(id) && this.followed.size >= 64) {
-      const temporary = [...this.followed].find(key => !this.permanentFollows.has(key));
-      if (!temporary) throw new Error('Too many open desktop conversations');
-      this.unobserve(temporary); // Opening a chat takes priority over a disposable catalog observation.
+      const disposable = [...this.followed].find(key => !this.permanentFollows.has(key))
+        ?? [...this.followed].find(key => this.idleFollow(key));
+      if (!disposable) throw new Error('Too many active or unconfirmed desktop conversations; refresh after tasks finish');
+      this.releaseFollow(disposable);
     }
+    const alreadyFollowed = this.followed.has(id), alreadyOpened = this.permanentFollows.has(id);
     this.permanentFollows.add(id);
+    if (!alreadyFollowed) this.followGenerations.set(id, ++this.nextFollowGeneration);
+    // Insertion order is the recency order; repeatedly reading a chat renews it.
+    this.followed.delete(id);
     this.followed.add(id);
-    this.announceFollowing(id, true);
+    try { this.announceFollowing(id, true); }
+    catch (error) {
+      if (!alreadyOpened) this.permanentFollows.delete(id);
+      if (!alreadyFollowed) { this.followed.delete(id); this.followGenerations.delete(id); }
+      throw error;
+    }
+    this.queueOwnerProbe(id);
   }
   /** Bounded catalog observation never acquires an owner or loads complete history. */
   observe(id: string): boolean {
+    if (this.closed) return false;
     if (!this.followed.has(id) && this.followed.size >= 64) return false;
+    if (!this.followed.has(id)) this.followGenerations.set(id, ++this.nextFollowGeneration);
     this.followed.add(id);
     this.announceFollowing(id, true);
     return true;
   }
   isObservationOnly(id: string): boolean { return this.followed.has(id) && !this.permanentFollows.has(id); }
   unobserve(id: string): void {
-    if (this.permanentFollows.has(id) || !this.followed.delete(id)) return;
-    this.snapshots.delete(id);
+    if (this.permanentFollows.has(id)) return;
+    this.releaseFollow(id);
+  }
+  private idleFollow(id: string): boolean {
+    if (this.followProtected?.(id) || [...this.pending.values()].some(request => request.conversationId === id)) return false;
+    const snapshot = this.snapshots.get(id);
+    if (snapshot) {
+      const state = snapshot.state, history = state?.turnHistory?.history;
+      let turns = state?.turns;
+      if (state?.turnHistory?.kind === 'canonical') {
+        if (!history?.entitiesByKey || typeof history.entitiesByKey !== 'object' || Array.isArray(history.entitiesByKey)
+          || !Array.isArray(history.islands)) return false;
+        for (const island of history.islands) {
+          if (!island || !Array.isArray(island.entries)) return false;
+          for (const entry of island.entries) {
+            const key = typeof entry === 'string' ? entry : entry?.value ?? entry?.key;
+            if (typeof key !== 'string' || !Object.hasOwn(history.entitiesByKey, key)) return false;
+          }
+        }
+        // Hidden/unreferenced entities may still be active. An empty projected
+        // island is never proof that the native graph has no active turn.
+        turns = Object.values(history.entitiesByKey);
+      }
+      return Array.isArray(turns) && (snapshot.fresh || (this.ready && this.noOwner.has(id))) && Array.isArray(state?.requests)
+        && state.requests.every((request: any) => request?.completed === true)
+        && turns.every((turn: any) => ['completed', 'interrupted', 'failed'].includes(turn?.status));
+    }
+    return this.ready && this.noOwner.has(id);
+  }
+  private releaseFollow(id: string): void {
+    if (!this.followed.has(id)) return;
+    // Retire native observation before changing local membership. A failed
+    // write leaves the old follow intact rather than leaking an untracked one.
     if (this.ready) this.announceFollowing(id, false);
+    this.followed.delete(id); this.permanentFollows.delete(id);
+    this.followGenerations.delete(id); this.stateGenerations.delete(id); this.noOwner.delete(id); this.ownerProbeQueue.delete(id);
+    this.snapshots.delete(id);
     this.emit('observation-released', id);
+  }
+  private queueOwnerProbe(id: string): void {
+    if (!this.permanentFollows.has(id) || this.snapshots.get(id)?.fresh || this.noOwner.has(id)) return;
+    this.ownerProbeQueue.add(id);
+    queueMicrotask(() => this.probeOwners());
+  }
+  private probeOwners(): void {
+    if (this.closed || !this.ready) return;
+    for (const id of this.ownerProbeQueue) {
+      if (this.ownerProbes.size >= 2 || this.pending.size >= 30) return;
+      if (this.ownerProbes.has(id)) continue;
+      this.ownerProbeQueue.delete(id);
+      if (!this.permanentFollows.has(id) || this.snapshots.get(id)?.fresh) continue;
+      const generation = this.followGenerations.get(id)!, socket = this.socket, clientId = this.clientId;
+      const stateGeneration = this.stateGenerations.get(id), snapshot = this.snapshots.get(id);
+      this.ownerProbes.set(id, generation);
+      // No snapshot is not idle evidence. Read-only native discovery supplies
+      // explicit no-owner proof without adding its deadline to history reads.
+      void this.call('thread-owner-discovery', { conversationId: id }).catch(error => {
+        if (error instanceof DesktopIpcError && error.outcome === 'no-owner' && this.ready
+          && this.socket === socket && this.clientId === clientId && this.followGenerations.get(id) === generation
+          && this.stateGenerations.get(id) === stateGeneration && this.snapshots.get(id) === snapshot) this.noOwner.add(id);
+      }).finally(() => {
+        if (this.ownerProbes.get(id) === generation) this.ownerProbes.delete(id);
+        this.probeOwners();
+      });
+    }
   }
   private announceFollowing(id: string, following: boolean): void {
     if (this.ready) {
@@ -188,6 +272,7 @@ export class DesktopIpc extends EventEmitter {
     if (frame.type === 'response') {
       const p = this.pending.get(frame.requestId); if (!p) return;
       this.pending.delete(frame.requestId); clearTimeout(p.timer);
+      queueMicrotask(() => this.probeOwners());
       if (frame.method !== undefined && frame.method !== p.method) { p.reject(new DesktopIpcError('uncertain', 'Unsupported desktop response')); return; }
       if (frame.resultType === 'error') {
         const error = String(frame.error);
@@ -221,6 +306,7 @@ export class DesktopIpc extends EventEmitter {
     if (frame.type !== 'broadcast' || frame.method !== 'thread-stream-state-changed' || frame.sourceClientId === this.clientId) return;
     const p = frame.params, id = p?.conversationId;
     if (p.hostId !== 'local' || typeof frame.sourceClientId !== 'string' || !this.followed.has(id)) return; // Never cache unrelated desktop content.
+    this.noOwner.delete(id); this.stateGenerations.set(id, (this.stateGenerations.get(id) ?? 0) + 1);
     if (frame.version !== 11) { this.snapshots.delete(id); this.emit('unsupported', id); return; }
     const old = this.snapshots.get(id), change = p.change;
     let state: any;
@@ -230,8 +316,14 @@ export class DesktopIpc extends EventEmitter {
     } else { if (old) old.fresh = false; this.announceFollowing(id, true); return; }
     if (!state || !Array.isArray(state.turns) || !Array.isArray(state.requests)) { if (old) old.fresh = false; this.emit('unsupported', id); return; }
     if (typeof change.revision === 'number' && old?.fresh && old.source === frame.sourceClientId && typeof old.revision === 'number' && change.revision < old.revision) return;
+    this.ownerProbeQueue.delete(id);
     const next = { state, source: frame.sourceClientId, revision: change.revision, fresh: true };
     this.snapshots.set(id, next); this.emit('snapshot', id, next);
   }
-  stop(): void { this.closed = true; if (this.retry) clearTimeout(this.retry); this.socket?.destroy(); this.snapshots.clear(); this.followed.clear(); this.permanentFollows.clear(); }
+  stop(): void {
+    this.closed = true; if (this.retry) clearTimeout(this.retry); this.socket?.destroy();
+    for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(new DesktopIpcError('uncertain', 'Desktop connection stopped')); }
+    this.pending.clear(); this.ownerProbes.clear(); this.ownerProbeQueue.clear();
+    this.snapshots.clear(); this.followed.clear(); this.permanentFollows.clear(); this.followGenerations.clear(); this.stateGenerations.clear(); this.noOwner.clear();
+  }
 }
