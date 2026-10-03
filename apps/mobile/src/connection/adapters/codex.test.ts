@@ -34,6 +34,51 @@ it('uses health for Relay authentication without starting an OpenClaw challenge'
   expect(JSON.parse(sockets[0].sent[0]).method).toBe('health');
   sockets[0].reply(); await connected;
 });
+
+it.each([{ messages: [] }, { messages: [{ id: 'u', role: 'user', text: 'Hello' }, { id: 'a', role: 'assistant', text: 'Hello again' }] }])
+  ('marks a complete first history page as cursor based even on a Bridge without a pagination marker (%j)', async ({ messages }) => {
+    const connected = adapter.connect(); sockets[0].open(); sockets[0].reply(); await connected;
+    const loaded = adapter.loadSession('new-session');
+    const request = JSON.parse(sockets[0].sent.at(-1)!);
+    expect(request).toMatchObject({ method: 'chat.history', params: { sessionKey: 'new-session' } });
+    const history = { key: 'new-session', messages, hasActiveRun: false };
+    sockets[0].onmessage?.({ data: JSON.stringify({ type: 'res', id: request.id, ok: true, payload: history }) });
+    expect(await loaded).toEqual({ ...history, pagination: 'cursor' });
+  });
+
+it('marks a terminal reconciled history event with the same cursor semantics', async () => {
+  const connected = adapter.connect(); sockets[0].open(); sockets[0].reply(); await connected;
+  const listener = jest.fn(); adapter.on('update', listener);
+  const history = { key: 'new-session', messages: [], hasActiveRun: false };
+  sockets[0].onmessage?.({ data: JSON.stringify({ type: 'event', event: 'codex.update',
+    payload: { type: 'history_reconciled', sessionKey: 'new-session', history } }) });
+  expect(listener).toHaveBeenCalledWith({ type: 'history_reconciled', sessionKey: 'new-session',
+    history: { ...history, pagination: 'cursor' } });
+});
+
+it.each([
+  [true, 'chat.send', 'codex_error', 'Codex did not restore the conversation permissions. Select and confirm permissions before sending.', 'confirm_permissions'],
+  [true, 'chat.send', 'codex_error', 'The previous conversation permissions cannot be verified safely. Select and confirm permissions before sending.', 'confirm_permissions'],
+  [true, 'chat.send', 'codex_error', 'A different native send failure', undefined],
+  [true, 'chat.send', 'server', 'Codex did not restore the conversation permissions. Select and confirm permissions before sending.', undefined],
+  [true, 'chat.history', 'codex_error', 'Codex did not restore the conversation permissions. Select and confirm permissions before sending.', undefined],
+  [false, 'chat.send', 'codex_error', 'Codex did not restore the conversation permissions. Select and confirm permissions before sending.', undefined],
+  [true, 'chat.send', 'server', 'The previous conversation permissions cannot be verified safely. Select and confirm permissions before sending.', undefined],
+  [true, 'chat.history', 'codex_error', 'The previous conversation permissions cannot be verified safely. Select and confirm permissions before sending.', undefined],
+  [false, 'chat.send', 'codex_error', 'The previous conversation permissions cannot be verified safely. Select and confirm permissions before sending.', undefined],
+])('classifies only the negotiated, exact pre-dispatch permission send rejection (%s, %s, %s)', async (sessionPermissions, method, code, message, recoveryAction) => {
+  const connected = adapter.connect(); sockets[0].open();
+  let request = JSON.parse(sockets[0].sent.at(-1)!);
+  sockets[0].onmessage?.({ data: JSON.stringify({ type: 'res', id: request.id, ok: true,
+    payload: { backend: 'codex', sessionPermissions, models: [] } }) });
+  await connected;
+  const rejected = (method === 'chat.send' ? adapter.prompt('s', { text: 'Review this draft', idempotencyKey: 'rejected-draft' }) : adapter.loadSession('s')).catch(error => error);
+  request = JSON.parse(sockets[0].sent.at(-1)!);
+  sockets[0].onmessage?.({ data: JSON.stringify({ type: 'res', id: request.id, ok: false, error: { code, message } }) });
+  expect(await rejected).toMatchObject({ code: 'server', recoveryAction });
+  expect(adapter.state).toBe('ready');
+  expect(sockets[0].sent.map(frame => JSON.parse(frame).method)).toEqual(['health', method]);
+});
 it('keeps token-authenticated connect for direct sockets', async () => {
   adapter.disconnect();
   adapter = new CodexAdapter({ ...record, transportKind: 'local', relay: undefined,

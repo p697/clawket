@@ -276,6 +276,7 @@ function projectHistoryMessage(message: ChatMessage): Record<string, unknown> {
 
   return {
     ...raw,
+    normalizedMessageId: message.id,
     // Normalized system rows are deliberate transcript notices. Raw backend
     // system envelopes above remain hidden (they can contain model prompts).
     displaySystem: message.role === 'system',
@@ -387,6 +388,9 @@ export function useChatHistoryState({
   }, [adapter]);
   const messageSessionKeyRef = useRef(sessionKey);
   const historyLoadInFlightRef = useRef(new Map<string, Promise<number>>());
+  const historyLoadTailRef = useRef<{
+    scope: typeof readScope; key: string; selection: number; transport: number; promise: Promise<number>;
+  } | null>(null);
   const historyLoadScopeRef = useRef(readScope);
   if (historyLoadScopeRef.current !== readScope) {
     historyLoadScopeRef.current = readScope;
@@ -615,24 +619,35 @@ export function useChatHistoryState({
       return inFlight;
     }
 
+    const scopeVersion = historyScopeVersionRef.current;
+    const transportVersion = historyTransportVersionRef.current;
+    // A supplied snapshot was observed before any queued wait. Do not make
+    // old activity look freshly read when it finally reaches the cursor window.
+    const reconciledAtMs = options?.head ? Date.now() : undefined;
+    const previous = historyLoadTailRef.current;
+    const precedingRead = previous?.scope === readScope && previous.key === key
+      && previous.selection === scopeVersion && previous.transport === transportVersion ? previous.promise : null;
+    const isRetiredScope = () => !mountedRef.current || readScopeRef.current !== readScope
+      || scopeVersion !== historyScopeVersionRef.current || transportVersion !== historyTransportVersionRef.current
+      || (!!sessionKeyRef.current && !sessionKeysMatch(sessionKeyRef.current, key));
+
     const request = (async (): Promise<number> => {
+    // Head refreshes and earlier pages share one cursor window. A tool/result
+    // refresh must not cancel a reader's page or let its older clone overwrite
+    // a newer head. Execute in order and select the current cursor after waiting.
+    if (precedingRead) await precedingRead.catch(() => 0);
+    if (isRetiredScope()) return 0;
     markHermesConnectTrace('history_fetch_begin', {
       limit,
     });
     const requestId = ++historyRequestIdRef.current;
-    const scopeVersion = historyScopeVersionRef.current;
-    const transportVersion = historyTransportVersionRef.current;
     const isStaleRequest = () => (
-      !mountedRef.current || readScopeRef.current !== readScope
-      || scopeVersion !== historyScopeVersionRef.current
-      || transportVersion !== historyTransportVersionRef.current
-      || requestId !== historyRequestIdRef.current
-      || (!!sessionKeyRef.current && !sessionKeysMatch(sessionKeyRef.current, key))
+      isRetiredScope() || requestId !== historyRequestIdRef.current
     );
 
     let cursorAttempt = Boolean(options?.older || options?.head?.nextCursor);
     try {
-      const requestedAtMs = Date.now();
+      const requestedAtMs = reconciledAtMs ?? Date.now();
       const currentWindow = cursorWindowRef.current;
       let candidate = currentWindow?.scope === readScope && currentWindow.key === key ? currentWindow.window.clone() : null;
       let pageLimitReached = false;
@@ -653,7 +668,7 @@ export function useChatHistoryState({
       } else {
         const head = options?.head ?? await requireAdapter(adapter).loadSession(key, { limit });
         if (isStaleRequest()) return 0;
-        if (head.nextCursor !== undefined || candidate) {
+        if (head.pagination === 'cursor' || head.nextCursor !== undefined || candidate) {
           cursorAttempt = true;
           if (head.key !== key) throw new Error('History belongs to another conversation');
           // A reset may keep the route key while replacing its native thread.
@@ -725,6 +740,7 @@ export function useChatHistoryState({
       let currentTurnArtifacts: NonNullable<UiMessage['artifactAttachments']> = [];
       let currentTurnTimestamp = 0;
       let currentHistoryMessageId: string | undefined;
+      let currentNormalizedMessageId: string | undefined;
       let currentTurnModel = '';
       let hasAssistantTurn = false;
       const currentTurnHasContent = () => (
@@ -741,7 +757,7 @@ export function useChatHistoryState({
           const idSeed = currentTurnText
             || (currentTurnArtifacts.length ? currentTurnArtifacts.map(a => a.artifactId).join('_') : `${currentTurnImages.length}_img_${currentTurnFiles.length}_file`);
           uiMessages.push({
-            id: stableMessageId('assistant', currentTurnTimestamp, idSeed),
+            id: currentNormalizedMessageId ?? stableMessageId('assistant', currentTurnTimestamp, idSeed),
             historyMessageId: currentHistoryMessageId,
             role: 'assistant',
             text: currentTurnText,
@@ -759,6 +775,7 @@ export function useChatHistoryState({
         currentTurnArtifacts = [];
         currentTurnTimestamp = 0;
         currentHistoryMessageId = undefined;
+        currentNormalizedMessageId = undefined;
         currentTurnModel = '';
         hasAssistantTurn = false;
       };
@@ -843,7 +860,9 @@ export function useChatHistoryState({
           const attribution = normalizeMessageAttribution(message.attribution);
           const cacheRowId = typeof message.cacheRowId === 'string' && /^usr_/.test(message.cacheRowId)
             ? message.cacheRowId : undefined;
-          const userMsgId = cacheRowId ?? stableMessageId('user', msgTs, attribution
+          const normalizedMessageId = typeof message.normalizedMessageId === 'string' && message.normalizedMessageId
+            ? message.normalizedMessageId : undefined;
+          const userMsgId = cacheRowId ?? normalizedMessageId ?? stableMessageId('user', msgTs, attribution
             ? `${typeof message.id === 'string' ? message.id : JSON.stringify(attribution)}:${userIdSeed}` : userIdSeed);
           if (uiMessages.some((item) => item.id === userMsgId)) continue;
 
@@ -897,6 +916,8 @@ export function useChatHistoryState({
 
           hasAssistantTurn = true;
           currentHistoryMessageId = typeof message.id === 'string' ? message.id : undefined;
+          currentNormalizedMessageId = typeof message.normalizedMessageId === 'string' && message.normalizedMessageId
+            ? message.normalizedMessageId : undefined;
           prevRole = 'assistant';
           if (msgTs > 0) currentTurnTimestamp = msgTs;
 
@@ -1143,6 +1164,8 @@ export function useChatHistoryState({
     })();
 
     historyLoadInFlightRef.current.set(requestKey, request);
+    const tail = { scope: readScope, key, selection: scopeVersion, transport: transportVersion, promise: request };
+    historyLoadTailRef.current = tail;
     try {
       return await request;
     } finally {
@@ -1150,6 +1173,7 @@ export function useChatHistoryState({
       if (current === request) {
         historyLoadInFlightRef.current.delete(requestKey);
       }
+      if (historyLoadTailRef.current === tail) historyLoadTailRef.current = null;
     }
   }, [adapter, dbg, measuredToolsRef, readScope, sessionKeyRef, t]);
 
@@ -1292,7 +1316,7 @@ export function useChatHistoryState({
 
   const applyReconciledHistory = useCallback((head: SessionHistory): boolean => {
     const current = cursorWindowRef.current;
-    if (head.nextCursor === undefined && !(current?.scope === readScope && current.key === head.key)) return false;
+    if (head.pagination !== 'cursor' && head.nextCursor === undefined && !(current?.scope === readScope && current.key === head.key)) return false;
     if (readScopeRef.current !== readScope || !sessionKeysMatch(sessionKeyRef.current, head.key)) return true;
     void loadHistory(head.key, historyLimitRef.current, { head });
     return true;

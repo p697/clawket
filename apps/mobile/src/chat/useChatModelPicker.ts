@@ -441,6 +441,19 @@ export function useChatModelPicker({
     void loadModelsForPicker();
   }, [adapter, connectionState, loadModelsForPicker, sessionKey]);
 
+  const requirePermissionsConfirmation = useCallback((sourceAdapter: AgentAdapter, key: string) => {
+    if (!sourceAdapter.capabilities.sessionPermissions) return;
+    let errorMessage: string | null = null;
+    try { runtimeSettingsStatus.requirePermissions(sourceAdapter.connection.id, key); }
+    catch (error) { errorMessage = error instanceof Error ? error.message : String(error); }
+    if (!isSameAdapterRequest(sourceAdapter, sourceAdapter.connection.id, key)) return;
+    runtimeReadRevisionRef.current += 1;
+    runtimeSettingsUnconfirmedRef.current = true;
+    setRuntimeSettingsUnconfirmed(true);
+    setPermissions(previous => ({ ...(previous ?? { mode: null, available: false, scope: 'session' }), requiresConfirmation: true }));
+    if (errorMessage) setModelPickerError(errorMessage);
+  }, [isSameAdapterRequest]);
+
   const onSelectModel = useCallback((selected: ModelInfo) => {
     const providerModel = resolveProviderModel(selected);
     if (!providerModel.trim()) return;
@@ -595,7 +608,7 @@ export function useChatModelPicker({
     modelScope: (adapter?.capabilities.modelPerSession ? 'session' : 'global') as 'session' | 'global',
     hasRuntimeSettings, runtimeSettingsBusy, runtimeSettingsPendingRef, runtimeSettingsUnconfirmed, runtimeSettingsUnconfirmedRef,
     fastMode, permissions: visiblePermissions, permissionPickerVisible, setPermissionPickerVisible,
-    onSelectFastMode, onSelectPermissions, openPermissionPicker,
+    onSelectFastMode, onSelectPermissions, openPermissionPicker, requirePermissionsConfirmation,
     currentModelSupportsImages: modelMetadataScope.current?.adapter === adapter
       && modelMetadataScope.current?.sessionKey === sessionKey && selectedCatalogModel?.input?.length
       ? selectedCatalogModel.input.includes('image') : undefined,

@@ -2,7 +2,7 @@ import { clearUncertainSends } from './sendRecovery';
 import { act, renderHook } from '@testing-library/react-native';
 import * as Network from 'expo-network';
 import * as DocumentPicker from 'expo-document-picker';
-import { CAPABILITY_MATRIX } from '@clawket/agent-protocol';
+import { AdapterError, CAPABILITY_MATRIX } from '@clawket/agent-protocol';
 import { analyticsEvents } from '../services/analytics/events';
 import { recordSuccessfulSendForAutomaticReview } from '../services/auto-app-review';
 import { cacheMessageImages } from '../services/image-cache';
@@ -67,6 +67,7 @@ const modelPickerHookMock = {
   runtimeSettingsBusy: false,
   runtimeSettingsPendingRef: { current: false },
     runtimeSettingsUnconfirmedRef: { current: false },
+  requirePermissionsConfirmation: jest.fn(() => { modelPickerHookMock.runtimeSettingsUnconfirmedRef.current = true; }),
   availableModels: [{ id: 'gpt-5', name: 'gpt-5', provider: 'openai' }],
   modelPickerError: null,
   modelPickerLoading: false,
@@ -196,6 +197,7 @@ function resetMockState() {
   historyMock.thinkingLevel = null;
   modelPickerHookMock.hasRuntimeSettings = false;
   modelPickerHookMock.nativeThinkingLevel = null;
+  modelPickerHookMock.runtimeSettingsUnconfirmedRef.current = false;
   historyMock.setMessages.mockClear();
   historyMock.applyReconciledHistory.mockReset().mockReturnValue(false);
   historyMock.setSessions.mockClear();
@@ -244,7 +246,7 @@ jest.mock('../services/analytics/events', () => ({
 
 function createAdapter(
   connectionState: 'ready' | 'connecting' = 'ready',
-  backendKind: 'openclaw' | 'hermes' = 'openclaw',
+  backendKind: 'openclaw' | 'hermes' | 'codex' = 'openclaw',
 ) {
   const listeners: Record<string, Set<(...args: any[]) => void>> = {
     update: new Set(),
@@ -676,6 +678,84 @@ describe('useChatController contract', () => {
     expect(adapter.probe).toHaveBeenCalledTimes(1);
     expect(adapter.prompt).toHaveBeenCalledTimes(1);
     expect(recordSuccessfulSendForAutomaticReview).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([false, true])('holds an explicitly rejected permission send for review without uncertainty or replay (new draft: %s)', async (hasNewDraft) => {
+    const adapter = createAdapter('ready', 'codex');
+    adapter.capabilities.sessionPermissions = true;
+    let rejectSend!: (error: Error) => void;
+    adapter.prompt.mockImplementation(() => new Promise((_resolve, reject) => { rejectSend = reject; }));
+    const { result } = renderHook(() => useChatController({ adapter: adapter as any, debugMode: false, showAgentAvatar: true } as any));
+    await act(async () => { result.current.setInput('Original permission draft'); });
+    await act(async () => { result.current.onSend(); await Promise.resolve(); });
+    if (hasNewDraft) await act(async () => { result.current.setInput('New draft'); });
+    await act(async () => {
+      rejectSend(new AdapterError('server', 'Fixed native permission rejection', 'confirm_permissions'));
+      await Promise.resolve();
+    });
+    expect(modelPickerHookMock.requirePermissionsConfirmation).toHaveBeenCalledWith(adapter, 'agent:main:main');
+    expect(result.current.input).toBe(hasNewDraft ? 'New draft' : '');
+    expect(result.current.listData.filter(message => message.text === 'Original permission draft')).toHaveLength(1);
+    expect(result.current.listData.find(message => message.text === 'Original permission draft')).toMatchObject({ delivery: 'held' });
+    expect(result.current.listData.some(message => message.sendUncertain)).toBe(false);
+    expect(result.current.sendFailure).toBeNull();
+    expect(result.current.sendFailureDetails).toBeNull();
+    expect(result.current.isSending).toBe(false);
+    await act(async () => { result.current.onSend(); await Promise.resolve(); });
+    expect(adapter.prompt).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    'Codex did not restore the conversation permissions. Select and confirm permissions before sending.',
+    'The previous conversation permissions cannot be verified safely. Select and confirm permissions before sending.',
+  ])('keeps an immediate permission rejection paused after local submission settles (%s)', async message => {
+    const adapter = createAdapter('ready', 'codex');
+    adapter.capabilities.sessionPermissions = true;
+    adapter.prompt.mockRejectedValue(new AdapterError('server', message, 'confirm_permissions'));
+    const { result } = renderHook(() => useChatController({ adapter: adapter as any, debugMode: false, showAgentAvatar: true } as any));
+    await act(async () => { result.current.setInput('Keep this input'); });
+    await act(async () => { result.current.onSend(); await Promise.resolve(); });
+    expect(result.current.listData.filter(message => message.text === 'Keep this input')).toHaveLength(1);
+    expect(result.current.listData.find(message => message.text === 'Keep this input')).toMatchObject({ delivery: 'held' });
+    expect(result.current.listData.some(message => message.sendUncertain)).toBe(false);
+    expect(adapter.prompt).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    'Codex did not restore the conversation permissions. Select and confirm permissions before sending.',
+    'The previous conversation permissions cannot be verified safely. Select and confirm permissions before sending.',
+  ])('retains the ordinary uncertain send path when a server error has the permission text without a classified recovery (%s)', async message => {
+    const adapter = createAdapter('ready', 'codex');
+    adapter.capabilities.sessionPermissions = true;
+    adapter.prompt.mockRejectedValue(new AdapterError('server', message));
+    const { result } = renderHook(() => useChatController({ adapter: adapter as any, debugMode: false, showAgentAvatar: true } as any));
+    await act(async () => { result.current.setInput('Unknown result'); });
+    await act(async () => { result.current.onSend(); await Promise.resolve(); });
+    expect(modelPickerHookMock.requirePermissionsConfirmation).not.toHaveBeenCalled();
+    expect(result.current.listData.find(message => message.text === 'Unknown result')?.sendUncertain).toBe(true);
+    expect(result.current.listData.find(message => message.text === 'Unknown result')?.delivery).not.toBe('held');
+    expect(result.current.sendFailure).toBe('Sending failed. Check the conversation before trying again.');
+  });
+
+  it('keeps a late explicit rejection in the original held outbox without changing a different session draft', async () => {
+    const adapter = createAdapter('ready', 'codex');
+    adapter.capabilities.sessionPermissions = true;
+    modelPickerHookMock.requirePermissionsConfirmation.mockImplementationOnce(() => {});
+    let rejectSend!: (error: Error) => void;
+    adapter.prompt.mockImplementation(() => new Promise((_resolve, reject) => { rejectSend = reject; }));
+    const { result, rerender } = renderHook(() => useChatController({ adapter: adapter as any, debugMode: false, showAgentAvatar: true } as any));
+    await act(async () => { result.current.setInput('Original permission draft'); });
+    await act(async () => { result.current.onSend(); await Promise.resolve(); });
+    historyMock.sessionKey = 'agent:main:other'; historyMock.messages = []; rerender(undefined);
+    await act(async () => { result.current.setInput('Other draft'); });
+    await act(async () => { rejectSend(new AdapterError('server', 'Fixed native permission rejection', 'confirm_permissions')); await Promise.resolve(); });
+    expect(result.current.input).toBe('Other draft');
+    expect(result.current.listData.some(message => message.text === 'Original permission draft')).toBe(false);
+    historyMock.sessionKey = 'agent:main:main'; rerender(undefined);
+    expect(result.current.listData.filter(message => message.text === 'Original permission draft')).toHaveLength(1);
+    expect(result.current.listData.find(message => message.text === 'Original permission draft')).toMatchObject({ delivery: 'held' });
+    expect(result.current.listData.some(message => message.sendUncertain)).toBe(false);
+    expect(adapter.prompt).toHaveBeenCalledTimes(1);
   });
 
   it.each([false, true])('keeps one uncertain bubble without refilling the composer (new draft: %s)', async (hasNewDraft) => {

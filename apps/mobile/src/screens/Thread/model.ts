@@ -642,8 +642,8 @@ export function resolveThreadErrorDetail(error: unknown): string | undefined {
 /**
  * Places what `foldTurnSteps` decided (tool process design C, owner decision
  * 2026-10-02): a finished turn's last reply carries its receipt, and a turn
- * that ended on a step keeps one pill where that step was, keyed by the
- * turn's oldest call so it stays put while history replaces live call ids.
+ * that ended on a step keeps one pill where that step was, keyed by that
+ * newest call so paging older steps cannot replace the visible anchor.
  * Any other tool call leaves the conversation: the work dock shows the
  * running turn. Approvals stay messages. Input is newest-first.
  */
@@ -671,7 +671,7 @@ export function placeTurnReceipts(
     if (!pill || pill.steps.length === 0) continue;
     result.push({
       type: 'tools',
-      key: `tools:${renderKeyOf(pill.steps[0]!)}`,
+      key: `tools:${key}`,
       timestampMs: item.timestampMs,
       messages: [...pill.steps].reverse(),
       failed: pill.failed,

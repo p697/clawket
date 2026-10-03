@@ -89,9 +89,16 @@ let mockScheme: 'light' | 'dark' = 'light';
 let mockReducedMotion = false;
 let mockPacedText: string | undefined;
 let mockRenderMessageClone = false;
+let mockNativeMarkdownDeferred = false;
+const mockNativeMarkdownJobs: Array<() => void> = [];
+let mockRecycledTimelineMessageId: string | null = null;
 const mockScrollToEnd = jest.fn();
 /** Geometry the FlashList mock reports from its imperative handle. */
 const mockListLayout = { content: 0, viewport: 0 };
+let mockHistoryGeometry: { first: number; offset: number; header: number; positions: number[] } | null = null;
+const mockScrollToOffset = jest.fn(({ offset }: { offset: number }) => {
+  if (mockHistoryGeometry) mockHistoryGeometry.offset = offset;
+});
 const originalRaf = global.requestAnimationFrame;
 const originalCancelRaf = global.cancelAnimationFrame;
 beforeAll(() => {
@@ -167,11 +174,18 @@ jest.mock('react-native-enriched-markdown', () => {
   const ReactRuntime = require('react');
   const { Text } = require('react-native');
   return {
-    EnrichedMarkdownText: ({ markdown, ...props }: { markdown: string }) => ReactRuntime.createElement(
-      Text,
-      { ...props, markdown },
-      markdown,
-    ),
+    EnrichedMarkdownText: ({ markdown, ...props }: { markdown: string }) => {
+      // Android's native view retains its painted text while its executor
+      // parses new props. Detaching a view prevents that work painting again.
+      const [painted, setPainted] = ReactRuntime.useState(mockNativeMarkdownDeferred ? '' : markdown);
+      ReactRuntime.useLayoutEffect(() => {
+        if (!mockNativeMarkdownDeferred) return;
+        let attached = true;
+        mockNativeMarkdownJobs.push(() => { if (attached) setPainted(markdown); });
+        return () => { attached = false; };
+      }, [markdown]);
+      return ReactRuntime.createElement(Text, { ...props, markdown }, mockNativeMarkdownDeferred ? painted : markdown);
+    },
   };
 });
 
@@ -233,13 +247,21 @@ jest.mock('@shopify/flash-list', () => {
         getNativeScrollRef: () => ({ scrollToEnd: mockScrollToEnd }),
         getChildContainerDimensions: () => ({ width: 393, height: mockListLayout.content }),
         getWindowSize: () => ({ width: 393, height: mockListLayout.viewport }),
+        getFirstVisibleIndex: () => mockHistoryGeometry?.first ?? 0,
+        getLayout: (index: number) => mockHistoryGeometry?.positions[index] === undefined
+          ? undefined : { y: mockHistoryGeometry.positions[index] },
+        getFirstItemOffset: () => mockHistoryGeometry?.header ?? 0,
+        getAbsoluteLastScrollOffset: () => mockHistoryGeometry?.offset ?? 0,
+        scrollToOffset: mockScrollToOffset,
       }), []);
       return ReactRuntime.createElement(
       View,
       { ...props, data },
-      ...data.map((item, index) => ReactRuntime.createElement(
+      ...data.map((item, index) => ({ item, index })).filter(({ item }) => !mockRecycledTimelineMessageId
+        || (item as { message?: UiMessage }).message?.id === mockRecycledTimelineMessageId)
+        .map(({ item, index }, holder) => ReactRuntime.createElement(
         ReactRuntime.Fragment,
-        { key: (item as { key?: string }).key ?? index },
+        { key: mockRecycledTimelineMessageId ? `recycled:${holder}` : (item as { key?: string }).key ?? index },
         renderItem({ item, index, target: 'Cell' }),
       )),
       ListHeaderComponent,
@@ -489,6 +511,12 @@ describe('ThreadView', () => {
     expect(props.onSend).not.toHaveBeenCalled();
     expect(props.onChangeInput).not.toHaveBeenCalled();
     expect(view.getByTestId('thread-screen-composer-primary').props.accessibilityState.disabled).toBe(true);
+    view.rerender(<ThreadView {...props} permissionsNeedConfirmation />);
+    expect(view.getByText('Choose permissions again before sending.')).toBeTruthy();
+    expect(view.queryByText('Confirm settings before sending.')).toBeNull();
+    fireEvent.press(view.getByTestId('thread-settings-unconfirmed-action'));
+    expect(onReviewRuntimeSettings).toHaveBeenCalledTimes(2);
+    expect(props.onSend).not.toHaveBeenCalled();
     view.rerender(<ThreadView {...props} canSend onReviewRuntimeSettings={undefined} />);
     expect(view.queryByTestId('thread-settings-unconfirmed')).toBeNull();
     expect(view.getByTestId('thread-screen-composer-primary').props.accessibilityState.disabled).toBe(false);
@@ -497,10 +525,15 @@ describe('ThreadView', () => {
   let consoleErrorSpy: jest.SpyInstance;
 
   beforeEach(() => {
+    mockHistoryGeometry = null;
+    mockScrollToOffset.mockClear();
     mockScheme = 'light';
     mockPacedText = undefined;
     mockReducedMotion = false;
     mockRenderMessageClone = false;
+    mockNativeMarkdownDeferred = false;
+    mockNativeMarkdownJobs.length = 0;
+    mockRecycledTimelineMessageId = null;
     require('react-native').Linking.openURL.mockClear();
     consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation((message?: unknown) => {
       if (typeof message === 'string' && message.includes('react-test-renderer is deprecated')) return;
@@ -1136,7 +1169,10 @@ describe('ThreadView', () => {
     expect(props.onChangeInput).not.toHaveBeenCalled();
     view.rerender(<ThreadView {...props} historyLoadMoreError={false} />);
     expect(view.queryByTestId('thread-screen-history-retry')).toBeNull();
-    act(() => { view.getByTestId('thread-screen-timeline').props.onStartReached(); });
+    act(() => {
+      view.getByTestId('thread-screen-timeline').props.onScrollBeginDrag();
+      view.getByTestId('thread-screen-timeline').props.onStartReached();
+    });
     expect(props.onLoadMoreHistory).toHaveBeenCalledTimes(1);
   });
 
@@ -1217,6 +1253,7 @@ describe('ThreadView', () => {
     fireEvent.press(view.getByTestId('thread-screen-composer-add'));
     expect(view.queryByTestId('thread-screen-composer-voice')).toBeNull();
     fireEvent.press(view.getByTestId('thread-screen-composer-primary'));
+    view.getByTestId('thread-screen-timeline').props.onScrollBeginDrag();
     view.getByTestId('thread-screen-timeline').props.onStartReached();
     fireEvent.press(view.getByTestId('tools:tool-1'));
     fireEvent.press(view.getByTestId('thread-run-tool-1'));
@@ -1457,6 +1494,52 @@ describe('ThreadView', () => {
     expect(view.getByTestId('thread-markdown-canonical-table')).toBe(markdown);
     expect(markdown.props.markdown).toContain('Cloudy');
     expect(view.getAllByTestId(/^thread-markdown-/)).toHaveLength(1);
+  });
+
+  it.each([[12, 24], [1, 8]])('never paints assistant %s inside a recycled row for assistant %s while native parsing waits', (oldNumber, nextNumber) => {
+    mockNativeMarkdownDeferred = true;
+    const oldMessage: UiMessage = { id: `assistant-${oldNumber}`, role: 'assistant', text: `QA_HIST_${oldNumber}` };
+    const nextMessage: UiMessage = { id: `assistant-${nextNumber}`, role: 'assistant', text: `QA_HIST_${nextNumber}` };
+    const messages = [oldMessage, nextMessage];
+    // FlashList first lays out the prepended page at its old offset, then
+    // reuses that same holder for the restored reading window. Both messages
+    // stay in data; only the engaged window changes.
+    mockRecycledTimelineMessageId = oldMessage.id;
+    const props = createProps({ messages });
+    const view = render(<ThreadView {...props} />);
+    act(() => mockNativeMarkdownJobs.splice(0).forEach(job => job()));
+    expect(view.getByText(oldMessage.text)).toBeTruthy();
+    const oldNative = view.getByTestId(`thread-markdown-${oldMessage.id}`);
+    mockRecycledTimelineMessageId = nextMessage.id;
+    view.rerender(<ThreadView {...props} messages={[...messages]} />);
+    const nextNative = view.getByTestId(`thread-markdown-${nextMessage.id}`);
+    expect(view.queryByText(oldMessage.text)).toBeNull();
+    expect(nextNative).not.toBe(oldNative);
+    act(() => mockNativeMarkdownJobs.splice(0).forEach(job => job()));
+    expect(view.getByText(nextMessage.text)).toBeTruthy();
+    view.unmount();
+  });
+
+  it('keeps native parser identity across same-message stream completion and history aliases', () => {
+    mockNativeMarkdownDeferred = true;
+    const stream: UiMessage = { id: 'stream-native', historyMessageId: 'native-reply', renderKey: 'stable-reply', role: 'assistant', text: 'First words', streaming: true };
+    mockRecycledTimelineMessageId = stream.id;
+    const props = createProps({ messages: [stream], isRunning: true });
+    const view = render(<ThreadView {...props} />);
+    act(() => mockNativeMarkdownJobs.splice(0).forEach(job => job()));
+    const native = view.getByTestId(`thread-markdown-${stream.id}`);
+    const final = { ...stream, id: 'final-native', text: 'First words complete', streaming: false };
+    mockRecycledTimelineMessageId = final.id;
+    view.rerender(<ThreadView {...props} messages={[final]} isRunning={false} />);
+    expect(view.getByTestId(`thread-markdown-${final.id}`)).toBe(native);
+    act(() => mockNativeMarkdownJobs.splice(0).forEach(job => job()));
+    expect(view.getByText(final.text)).toBeTruthy();
+    const history = { ...final, id: 'history-native', renderKey: undefined };
+    mockRecycledTimelineMessageId = history.id;
+    view.rerender(<ThreadView {...props} messages={preserveHydratedMessageKeys([final], [history])} isRunning={false} />);
+    expect(view.getByTestId(`thread-markdown-${history.id}`)).toBe(native);
+    expect(view.getByText(history.text)).toBeTruthy();
+    view.unmount();
   });
 
   it.each(['drag', 'session', 'composer', 'unmount'])('cancels a pending layout correction on %s', (action) => {
@@ -2232,7 +2315,192 @@ describe('ThreadView', () => {
       expect(view.getByTestId('thread-screen-composer-input')).toBe(input);
     });
 
-  it('keeps following when a short conversation reaches its top on a layout change while the reader rests at the end', () => {
+  it.each(['openclaw', 'hermes', 'codex', 'claude-code', 'pi'] as const)(
+    'preserves a stable %s message screen position when paging removes the first date separator, without chaining pages', async backend => {
+      jest.useFakeTimers();
+      let complete!: () => void;
+      const page = new Promise<void>(resolve => { complete = resolve; });
+      const onLoadMoreHistory = jest.fn().mockImplementationOnce(() => page).mockResolvedValue(undefined);
+      const stamp = new Date('2026-10-03T10:14:00Z').getTime();
+      const props = createProps({ capabilities: CAPABILITY_MATRIX[backend], onLoadMoreHistory, messages: [
+        { id: '26', role: 'assistant', text: 'Reply 26', timestampMs: stamp + 1000 },
+        { id: '25', role: 'user', text: 'Read 25', timestampMs: stamp },
+      ] });
+      mockHistoryGeometry = { first: 0, offset: 100, header: 80, positions: [0, 60, 220] };
+      mockListLayout.content = 900;
+      mockListLayout.viewport = 600;
+      const view = render(<ThreadView {...props} />);
+      const timeline = () => view.getByTestId('thread-screen-timeline');
+      fireEvent(timeline(), 'load', { elapsedTimeInMs: 5 });
+      act(() => timeline().props.onCommitLayoutEffect());
+      const previousDate = timeline().props.data[0].key;
+      act(() => {
+        timeline().props.onScrollBeginDrag();
+        timeline().props.onScroll({ nativeEvent: { contentSize: { height: 900 },
+          layoutMeasurement: { height: 600 }, contentOffset: { y: 100 } } });
+        timeline().props.onStartReached();
+      });
+      expect(timeline().props.maintainVisibleContentPosition).toEqual({ disabled: true });
+      view.rerender(<ThreadView {...props} messages={[...props.messages,
+        { id: '09', role: 'user', text: 'Earlier 09', timestampMs: stamp - 1000 },
+      ]} />);
+      expect(timeline().props.data.some((row: { key: string }) => row.key === previousDate)).toBe(false);
+      mockHistoryGeometry.positions = [0, 60, 2060, 2220];
+      mockListLayout.content = 2900;
+      mockScrollToEnd.mockClear();
+      act(() => { timeline().props.onContentSizeChange(393, 2900); timeline().props.onCommitLayoutEffect(); });
+      expect(mockHistoryGeometry.positions[2]! + mockHistoryGeometry.header - mockHistoryGeometry.offset).toBe(40);
+      expect(mockScrollToOffset).toHaveBeenLastCalledWith({ offset: 2100, animated: false });
+      await act(async () => { complete(); await page; });
+      act(() => { timeline().props.onStartReached(); timeline().props.onStartReached(); jest.advanceTimersByTime(50); });
+      expect(onLoadMoreHistory).toHaveBeenCalledTimes(1);
+      expect(mockScrollToEnd).not.toHaveBeenCalled();
+      // The composer and list retain their original instances.
+      expect(view.getAllByTestId('thread-screen-timeline')).toHaveLength(1);
+      mockHistoryGeometry.first = 2;
+      await act(async () => { timeline().props.onScrollBeginDrag(); timeline().props.onStartReached(); });
+      expect(onLoadMoreHistory).toHaveBeenCalledTimes(2);
+      act(() => {
+        timeline().props.onMomentumScrollEnd({ nativeEvent: { contentSize: { height: 2900 },
+          layoutMeasurement: { height: 600 }, contentOffset: { y: 2300 } } });
+      });
+      mockScrollToOffset.mockClear();
+      view.rerender(<ThreadView {...props} messages={[
+        { id: '27', role: 'assistant', text: 'New reply', timestampMs: stamp + 2000 }, ...props.messages,
+      ]} />);
+      mockListLayout.content = 3200;
+      act(() => timeline().props.onCommitLayoutEffect());
+      expect(mockScrollToOffset).not.toHaveBeenCalled(); // Returning to bottom retires the reading anchor.
+    });
+
+  it.each([false, true])('preserves 25 when an old zero-offset end-drag arrives between the prepend commit and native size growth (fresh old-child drag: %s)', freshDrag => {
+    jest.useFakeTimers();
+    const originalScroll = mockScrollToOffset.getMockImplementation()!;
+    let nativeMaximum = 1500;
+    mockScrollToOffset.mockImplementation(({ offset }) => {
+      if (mockHistoryGeometry) mockHistoryGeometry.offset = Math.min(offset, nativeMaximum);
+    });
+    const stamp = new Date('2026-10-03T10:14:00Z').getTime();
+    const props = createProps({ capabilities: CAPABILITY_MATRIX.codex, messages: [
+      { id: '26', role: 'assistant', text: 'Reply 26', timestampMs: stamp + 1000 },
+      { id: '25', role: 'user', text: 'Read 25', timestampMs: stamp },
+    ] });
+    mockHistoryGeometry = { first: 0, offset: 0, header: 80, positions: [0, 60, 220] };
+    mockListLayout.content = 2100;
+    mockListLayout.viewport = 600;
+    const view = render(<ThreadView {...props} />);
+    try {
+      const timeline = () => view.getByTestId('thread-screen-timeline');
+      const scroll = (offset: number, height = 2100) => ({ nativeEvent: { contentSize: { height },
+        layoutMeasurement: { height: 600 }, contentOffset: { y: offset } } });
+      fireEvent(timeline(), 'load', { elapsedTimeInMs: 5 });
+      act(() => timeline().props.onCommitLayoutEffect());
+      act(() => {
+        timeline().props.onScrollBeginDrag(scroll(0));
+        timeline().props.onScroll(scroll(0));
+        timeline().props.onStartReached();
+      });
+      view.rerender(<ThreadView {...props} messages={[...props.messages,
+        { id: '09', role: 'user', text: 'Earlier 09', timestampMs: stamp - 1000 },
+      ]} />);
+      mockHistoryGeometry.positions = [0, 60, 2060, 2220];
+      mockListLayout.content = 4900;
+      act(() => timeline().props.onCommitLayoutEffect());
+      expect(mockScrollToOffset).toHaveBeenLastCalledWith({ offset: 2000, animated: false });
+      // The gesture reached the old page head before its response; its delayed
+      // release still carries offset 0 and the old native content height.
+      mockHistoryGeometry.first = 0;
+      mockHistoryGeometry.offset = 0;
+      act(() => timeline().props.onScrollEndDrag(scroll(0)));
+      act(() => jest.advanceTimersByTime(160));
+      if (freshDrag) {
+        act(() => timeline().props.onScrollBeginDrag(scroll(0)));
+        act(() => timeline().props.onScroll(scroll(0)));
+      }
+      nativeMaximum = 4300;
+      // Native onScroll can report the grown child before onContentSizeChange;
+      // that must not make the latter discard the pending same-target retry.
+      act(() => timeline().props.onScroll(scroll(0, 4900)));
+      act(() => timeline().props.onContentSizeChange(393, 4900));
+      expect(mockScrollToOffset).toHaveBeenLastCalledWith({ offset: 2000, animated: false });
+      expect(mockHistoryGeometry.positions[2]! + mockHistoryGeometry.header - mockHistoryGeometry.offset).toBe(140);
+      act(() => timeline().props.onScroll(scroll(2000, 4900)));
+      act(() => timeline().props.onScrollEndDrag(scroll(0)));
+      act(() => timeline().props.onCommitLayoutEffect());
+      expect(mockScrollToOffset).toHaveBeenLastCalledWith({ offset: 2000, animated: false });
+      expect(props.onLoadMoreHistory).toHaveBeenCalledTimes(1);
+    } finally {
+      view.unmount();
+      mockScrollToOffset.mockImplementation(originalScroll);
+      jest.useRealTimers();
+    }
+  });
+
+  it.each([false, true])('retries an Android prepend after native content size commits instead of retaining the old maximum offset: settled=%s', settled => {
+    jest.useFakeTimers();
+    const originalScroll = mockScrollToOffset.getMockImplementation()!;
+    let nativeMaximum = 1500;
+    mockScrollToOffset.mockImplementation(({ offset }) => {
+      if (mockHistoryGeometry) mockHistoryGeometry.offset = Math.min(offset, nativeMaximum);
+    });
+    const stamp = new Date('2026-10-03T10:14:00Z').getTime();
+    const props = createProps({ capabilities: CAPABILITY_MATRIX.codex, messages: [
+      { id: '26', role: 'assistant', text: 'Reply 26', timestampMs: stamp + 1000 },
+      { id: '25', role: 'user', text: 'Read 25', timestampMs: stamp },
+    ] });
+    mockHistoryGeometry = { first: 0, offset: 100, header: 80, positions: [0, 60, 220] };
+    mockListLayout.content = 2100;
+    mockListLayout.viewport = 600;
+    const view = render(<ThreadView {...props} />);
+    try {
+      const timeline = () => view.getByTestId('thread-screen-timeline');
+      const scroll = (offset: number, height = 2100) => ({ nativeEvent: { contentSize: { height },
+        layoutMeasurement: { height: 600 }, contentOffset: { y: offset } } });
+      fireEvent(timeline(), 'load', { elapsedTimeInMs: 5 });
+      act(() => timeline().props.onCommitLayoutEffect());
+      act(() => {
+        timeline().props.onScrollBeginDrag();
+        timeline().props.onScroll(scroll(100));
+        timeline().props.onStartReached();
+      });
+      view.rerender(<ThreadView {...props} messages={[...props.messages,
+        { id: '09', role: 'user', text: 'Earlier 09', timestampMs: stamp - 1000 },
+      ]} />);
+      mockHistoryGeometry.positions = [0, 60, 2060, 2220];
+      mockListLayout.content = 4900; // FlashList's JS layout is ahead of Android's content View.
+      act(() => timeline().props.onCommitLayoutEffect());
+      expect(mockScrollToOffset).toHaveBeenLastCalledWith({ offset: 2100, animated: false });
+      expect(mockHistoryGeometry.offset).toBe(1500);
+      mockHistoryGeometry.first = 1;
+      act(() => timeline().props.onScroll(scroll(1500))); // Still inside the drag's settle window.
+      if (settled) {
+        act(() => timeline().props.onScrollEndDrag(scroll(1500)));
+        act(() => jest.advanceTimersByTime(160)); // Its old maximum must not masquerade as returning to bottom.
+      }
+      nativeMaximum = 4300;
+      act(() => timeline().props.onContentSizeChange(393, 4900)); // No further user gesture or JS layout change.
+      expect(mockScrollToOffset).toHaveBeenCalledTimes(2);
+      expect(mockHistoryGeometry.positions[2]! + mockHistoryGeometry.header - mockHistoryGeometry.offset).toBe(40);
+      expect(timeline().props.maintainVisibleContentPosition).toEqual({ disabled: true });
+      if (!settled) {
+        act(() => timeline().props.onScroll(scroll(2100, 4900))); // The final target is acknowledged.
+        mockHistoryGeometry.offset = 1500;
+        act(() => timeline().props.onScrollEndDrag(scroll(1500))); // A late old clamp/end-drag event follows it.
+        act(() => jest.advanceTimersByTime(160));
+        mockHistoryGeometry.positions = [0, 60, 2460, 2620];
+        mockListLayout.content = 5300;
+        act(() => timeline().props.onCommitLayoutEffect());
+        expect(mockScrollToOffset).toHaveBeenLastCalledWith({ offset: 2500, animated: false });
+        expect(mockHistoryGeometry.positions[2]! + mockHistoryGeometry.header - mockHistoryGeometry.offset).toBe(40);
+      }
+    } finally {
+      view.unmount();
+      mockScrollToOffset.mockImplementation(originalScroll);
+      jest.useRealTimers();
+    }
+  });
+
+  it('keeps following without paging when a short conversation reaches its top on a layout change', () => {
     jest.useFakeTimers();
     const props = createProps({ messages: [{ id: 'newest', role: 'user', text: 'Run the tests' }] });
     const view = render(<ThreadView {...props} />);
@@ -2243,7 +2511,7 @@ describe('ThreadView', () => {
     act(() => timeline.props.onCommitLayoutEffect());
     // The work dock rising moves the viewport; FlashList reports its top again.
     act(() => { timeline.props.onStartReached(); });
-    expect(props.onLoadMoreHistory).toHaveBeenCalledTimes(1);
+    expect(props.onLoadMoreHistory).not.toHaveBeenCalled();
     mockScrollToEnd.mockClear();
     view.rerender(<ThreadView {...props} messages={[{ id: 'reply', role: 'assistant', text: 'All green.' }, ...props.messages]} />);
     mockListLayout.content = 700;
@@ -2421,7 +2689,7 @@ it('names Codex js calls by their titles in the work dock, the work record and t
 
     // The turn ended on a step: one pill stands for it.
     view.rerender(<ThreadView {...props} isRunning={false} messages={[js('b', '刷新审核状态', 'success'), js('a', '查看当前浏览器页面', 'success'), prompt]} />);
-    fireEvent.press(view.getByTestId('tools:a'));
+    fireEvent.press(view.getByTestId('tools:b'));
     const row = within(view.getByTestId('thread-run-a'));
     expect(row.getByText('查看当前浏览器页面')).toBeTruthy();
     expect(view.getByTestId('thread-run-a').props.accessibilityLabel).toBe('查看当前浏览器页面, js');
@@ -2438,9 +2706,9 @@ it('keeps a failure the Agent moved past quiet and gives a turn that ended on on
   const failed: UiMessage = { ...ok, id: 'b', toolArgs: JSON.stringify({ command: 'gh pr checks 50' }), toolStatus: 'error' };
   const view = render(<ThreadView {...createProps({ messages: [failed, ok, prompt] })} />);
   const keys = () => view.getByTestId('thread-screen-timeline').props.data.map((item: any) => item.key);
-  expect(keys()).toEqual(['message:ask', 'tools:a']);
-  expect(view.getByTestId('tools:a').props.accessibilityLabel).toBe('gh pr checks 50 failed');
-  fireEvent.press(view.getByTestId('tools:a'));
+  expect(keys()).toEqual(['message:ask', 'tools:b']);
+  expect(view.getByTestId('tools:b').props.accessibilityLabel).toBe('gh pr checks 50 failed');
+  fireEvent.press(view.getByTestId('tools:b'));
   expect(view.getByTestId('thread-run-a')).toBeTruthy();
   expect(view.getByTestId('thread-run-b').props.accessibilityLabel).toContain('Failed');
 

@@ -17,6 +17,7 @@ export function useOlderHistoryPaging(options: Options) {
   latest.current = options;
   const active = useRef<{ scope: string } | null>(null);
   const queued = useRef<{ scope: string; manual: boolean } | null>(null);
+  const automaticGesture = useRef<string | null>(null);
   const [pendingScope, setPendingScope] = useState<string | null>(null);
   const [pulledScope, setPulledScope] = useState<string | null>(null);
   const [failedScope, setFailedScope] = useState<string | null>(null);
@@ -30,6 +31,7 @@ export function useOlderHistoryPaging(options: Options) {
     if ((current.failed || failedScope === current.scope) && !manual) return;
     const load = manual && current.failed ? current.retry : current.load;
     if (!load) return;
+    automaticGesture.current = null;
     if (pulled) setPulledScope(current.scope);
     current.onReadEarlier(manual);
     if (current.blocked) {
@@ -82,6 +84,7 @@ export function useOlderHistoryPaging(options: Options) {
     return () => {
       if (active.current?.scope === options.scope) active.current = null;
       if (queued.current?.scope === options.scope) queued.current = null;
+      if (automaticGesture.current === options.scope) automaticGesture.current = null;
     };
   }, [options.scope]);
 
@@ -89,11 +92,20 @@ export function useOlderHistoryPaging(options: Options) {
     if (!options.loading && pendingScope !== options.scope) setPulledScope(null);
   }, [options.loading, options.scope, pendingScope]);
 
-  const automatic = useCallback(() => request(false), [request]);
+  const beginDrag = useCallback(() => {
+    const current = latest.current;
+    // One page per fresh user drag; layout/anchor corrections cannot chain pages.
+    automaticGesture.current = !current.loading && active.current?.scope !== current.scope
+      && queued.current?.scope !== current.scope ? current.scope : null;
+  }, []);
+  const automatic = useCallback(() => {
+    if (automaticGesture.current === latest.current.scope) request(false);
+  }, [request]);
   const manual = useCallback(() => request(true), [request]);
   const pull = useCallback(() => request(true, true), [request]);
   return {
     automatic,
+    beginDrag,
     manual,
     pull,
     pulling: pulledScope === options.scope && (options.loading || pendingScope === options.scope),

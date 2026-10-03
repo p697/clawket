@@ -311,6 +311,53 @@ describe('useChatController adapter event migration', () => {
     expect(historyMock.messages).toEqual([]);
   });
 
+  it.each(['missing', 'recent'])('keeps the latest reply after its user when an earlier matching reply has a %s timestamp', (timestampKind) => {
+    const previousMessages = [
+      { id: 'old-user', role: 'user', text: 'First question' },
+      { id: 'native-old-reply', role: 'assistant', text: 'OK', timestampMs: timestampKind === 'recent' ? Date.now() : undefined },
+      { id: 'current-user', role: 'user', text: 'Next question' },
+    ];
+    historyMock.messages = previousMessages;
+    const { result, handlers } = renderController('codex');
+
+    act(() => {
+      handlers.onState?.('ready');
+      handlers.onUpdate?.(mapAdapterSessionUpdate({
+        type: 'run_started', sessionKey: 'agent:main:main', runId: 'current-run',
+      }));
+      handlers.onUpdate?.(mapAdapterSessionUpdate({
+        type: 'run_finished', sessionKey: 'agent:main:main', runId: 'current-run',
+        stopReason: 'end_turn', message: { role: 'assistant', content: 'OK' },
+      }));
+    });
+
+    expect(result.current.isSending).toBe(false);
+    expect(historyMock.messages).toEqual([
+      ...previousMessages,
+      expect.objectContaining({ role: 'assistant', text: 'OK' }),
+    ]);
+  });
+
+  it('still merges a matching recovered reply after the latest user', () => {
+    historyMock.messages = [
+      { id: 'current-user', role: 'user', text: 'Question' },
+      { id: 'native-current-reply', role: 'assistant', text: 'OK' },
+    ];
+    const { handlers } = renderController('codex');
+    act(() => {
+      handlers.onState?.('ready');
+      handlers.onUpdate?.(mapAdapterSessionUpdate({
+        type: 'run_started', sessionKey: 'agent:main:main', runId: 'current-run',
+      }));
+      handlers.onUpdate?.(mapAdapterSessionUpdate({
+        type: 'run_finished', sessionKey: 'agent:main:main', runId: 'current-run',
+        stopReason: 'end_turn', message: { role: 'assistant', content: 'OK' },
+      }));
+    });
+    expect(historyMock.messages).toHaveLength(2);
+    expect(historyMock.messages[1]).toEqual(expect.objectContaining({ role: 'assistant', text: 'OK' }));
+  });
+
   it('keeps one failed native-turn notice after live completion and repeated history recovery', () => {
     const { result, adapter, handlers } = renderController('codex');
     const terminalMessage = {

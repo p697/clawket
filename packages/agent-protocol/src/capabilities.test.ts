@@ -130,5 +130,7 @@ describe('canonical capability contract', () => {
       code: 'bridge_offline',
       message: 'Bridge unavailable',
     });
+    expect(error.recoveryAction).toBeUndefined();
+    expect(new AdapterError('server', 'Explicit permission rejection', 'confirm_permissions').recoveryAction).toBe('confirm_permissions');
   });
 });

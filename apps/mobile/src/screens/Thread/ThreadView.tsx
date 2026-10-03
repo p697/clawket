@@ -10,6 +10,7 @@ import { messageTextRaise } from '../../chat/textCentering';
 import { SessionPreviewNotice, SessionPreviewFooter } from './components/SessionPreviewNotice';
 import { useUiThreadFollow, type UiThreadFollow } from './useUiThreadFollow';
 import { useOlderHistoryPaging } from './useOlderHistoryPaging';
+import { useHistoryScrollAnchor } from './useHistoryScrollAnchor';
 import { useTranslation } from 'react-i18next';
 import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -238,6 +239,7 @@ const TIMELINE_REVEAL_TIMING = { duration: Motion.duration.normal, easing: Easin
 const EMPTY_HINT_EXIT = FadeOut.duration(Motion.duration.fast);
 const getTimelineRowKey = (row: ThreadTimelineRow): string => row.key;
 const getTimelineRowType = (row: ThreadTimelineRow): string => row.type;
+const HISTORY_ANCHOR_POSITION = { disabled: true } as const;
 
 function areMessageStatusesEqual(
   left: ReadonlyMap<string, UserMessageStatus>,
@@ -436,6 +438,7 @@ export type ThreadViewProps = Readonly<{
   onSelectSlashCommand?: (command: SlashCommand) => void;
   onDismissSlashSuggestions?: () => void;
   onReviewRuntimeSettings?: () => void;
+  permissionsNeedConfirmation?: boolean;
   onResolveApproval?: (
     approvalId: string,
     decision: 'allow-once' | 'allow-always' | 'deny' | 'approve' | 'reject',
@@ -559,6 +562,7 @@ export function ThreadView({
   onSelectSlashCommand,
   onDismissSlashSuggestions,
   onReviewRuntimeSettings,
+  permissionsNeedConfirmation,
   onResolveApproval,
   testID = 'thread-screen',
 }: ThreadViewProps): React.JSX.Element {
@@ -823,6 +827,7 @@ export function ThreadView({
   reduceMotionRef.current = reduceMotion;
   const followNewMessagesRef = useRef(true);
   const historyPagingBusyRef = useRef(false);
+  const historyDragRef = useRef<(() => void) | null>(null);
   const previewWasVisible = useRef(Boolean(sessionPreview));
   if (previewWasVisible.current && !sessionPreview) followNewMessagesRef.current = false;
   previewWasVisible.current = Boolean(sessionPreview);
@@ -836,6 +841,10 @@ export function ThreadView({
   const distanceFromBottomRef = useRef(0);
   const scrollMetricsRef = useRef({ height: 0, viewport: 0, offset: 0 });
   const timelineRef = useRef<FlashListRef<ThreadTimelineRow>>(null);
+  const historyAnchor = useHistoryScrollAnchor(historyScope ?? sessionKey ?? '', timelineRef, timelineItems);
+  const { restore: restoreHistoryAnchor, readerScrolled: updateHistoryAnchor,
+    beginDrag: beginHistoryDrag, capture: captureHistoryAnchor, release: releaseHistoryAnchor,
+    isActive: historyAnchorActive, isCorrectionPending: historyCorrectionPending } = historyAnchor;
   // Placement state belongs to one list instance: another session mounts a new
   // list whose layout commits run before this view's effects, and they must
   // never act on the previous list's measurements.
@@ -968,6 +977,12 @@ export function ThreadView({
   const handleCommittedLayout = useCallback(() => {
     const list = timelineRef.current;
     if (!list) return;
+    // Preserve a surviving content row before considering end-follow corrections.
+    if (!followNewMessagesRef.current) {
+      const { height, viewport } = scrollMetricsRef.current;
+      restoreHistoryAnchor({ nativeMaxOffset: viewport > 0 ? Math.max(0, height - viewport) : undefined,
+        nativeOffset: viewport > 0 ? scrollMetricsRef.current.offset : undefined });
+    }
     let content: number;
     let viewport: number;
     try {
@@ -1000,7 +1015,7 @@ export function ThreadView({
     const withinBudget = Math.abs(growth) <= viewport * FOLLOW_GLIDE_MAX_VIEWPORT_RATIO;
     const grew = growth > 0 && viewport === previous.viewport && (appended || uiFollowRef.current !== null);
     followToEnd(withinBudget && (followGlideRef.current || grew));
-  }, [cancelBottomFollow, followToEnd, releaseComposerHold, timelineLoaded]);
+  }, [cancelBottomFollow, followToEnd, releaseComposerHold, restoreHistoryAnchor, timelineLoaded]);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const scrollButtonProgress = useSharedValue(0);
   useEffect(() => {
@@ -1014,6 +1029,7 @@ export function ThreadView({
     transform: [{ translateY: reduceMotion ? 0 : Space.sm * (1 - scrollButtonProgress.value) }],
   }));
   const scrollToBottom = useCallback(() => {
+    releaseHistoryAnchor();
     // A glide in flight is already on its way to the end.
     const far = distanceFromBottomRef.current > Space.lg && !followGlideRef.current;
     cancelReaderSettle();
@@ -1029,7 +1045,7 @@ export function ThreadView({
     returningToBottomRef.current = animated;
     followNewMessagesRef.current = !animated;
     timelineRef.current?.scrollToEnd({ animated });
-  }, [cancelBottomFollow, cancelReaderSettle, endFollowGlide, reduceMotion, timelineLoaded]);
+  }, [cancelBottomFollow, cancelReaderSettle, endFollowGlide, reduceMotion, releaseHistoryAnchor, timelineLoaded]);
   const refreshScrollButton = useCallback(() => {
     const { height, viewport, offset } = scrollMetricsRef.current;
     if (viewport <= 0) return;
@@ -1047,23 +1063,29 @@ export function ThreadView({
       offset: nativeEvent.contentOffset.y,
     };
     scrollMetricsRef.current = metrics;
-    refreshScrollButton();
+    // A queued compensation/clamp event supplies native sizing but cannot turn
+    // the reader's old-height maximum into an intent to follow the bottom.
+    if (!updateHistoryAnchor(metrics.offset, readerScrollingRef.current, metrics.height)) refreshScrollButton();
     // Rows inserted above a short top-anchored list (older history, a preview
     // unlocked) make the anchor correction push the offset past the end; iOS
     // keeps it there as blank space until the next touch. A reader's own
     // bounce is left to the native view.
     const overscroll = metrics.offset - Math.max(0, metrics.height - metrics.viewport);
-    if (overscroll > 1 && metrics.viewport > 0 && !readerScrollingRef.current
+    if (overscroll > 1 && metrics.viewport > 0 && !readerScrollingRef.current && !historyAnchorActive()
       && !returningToBottomRef.current && !followGlideRef.current) {
       snapToEnd();
     }
-  }, [refreshScrollButton, snapToEnd]);
+  }, [historyAnchorActive, refreshScrollButton, snapToEnd, updateHistoryAnchor]);
   const settleReaderScroll = useCallback(() => {
     cancelReaderSettle();
     if (!readerScrollingRef.current) return;
     readerScrollingRef.current = false;
-    followNewMessagesRef.current = !historyPagingBusyRef.current && distanceFromBottomRef.current <= Space.lg;
-  }, [cancelReaderSettle]);
+    // A prepend command clipped to the old native maximum looks like the end
+    // until native sizing catches up; it cannot release the reader's anchor.
+    followNewMessagesRef.current = !historyPagingBusyRef.current && !historyCorrectionPending()
+      && distanceFromBottomRef.current <= Space.lg;
+    if (followNewMessagesRef.current) releaseHistoryAnchor();
+  }, [cancelReaderSettle, historyCorrectionPending, releaseHistoryAnchor]);
   const finishScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     cancelReaderSettle();
     if (returningToBottomRef.current) {
@@ -1088,7 +1110,10 @@ export function ThreadView({
     loadedTimelineRef.current = list;
     uiFollowRef.current = Platform.OS === 'android' && uiFollow.bind(list?.getNativeScrollRef?.()) ? uiFollow : null;
   }, [uiFollow]);
-  const handleScrollBeginDrag = useCallback(() => {
+  const handleScrollBeginDrag = useCallback((event?: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const native = event?.nativeEvent;
+    beginHistoryDrag(historyPagingBusyRef.current, native ? { offset: native.contentOffset.y, height: native.contentSize.height } : undefined);
+    historyDragRef.current?.();
     // The reader's finger takes over any glide in flight.
     cancelReaderSettle();
     cancelBottomFollow();
@@ -1096,22 +1121,39 @@ export function ThreadView({
     returningToBottomRef.current = false;
     readerScrollingRef.current = true;
     followNewMessagesRef.current = false;
-  }, [cancelBottomFollow, cancelReaderSettle, endFollowGlide]);
+  }, [beginHistoryDrag, cancelBottomFollow, cancelReaderSettle, endFollowGlide]);
   const handleContentSizeChange = useCallback((_width: number, height: number) => {
     const changed = scrollMetricsRef.current.height !== height;
     scrollMetricsRef.current.height = height;
     if (followNewMessagesRef.current) {
       if (changed) scheduleBottomFollow(false);
-    } else refreshScrollButton();
-  }, [refreshScrollButton, scheduleBottomFollow]);
+    } else {
+      // Native size confirms that a previously clamped prepend can now reach
+      // the same planned offset, even without another JS layout commit.
+      const { viewport } = scrollMetricsRef.current;
+      if (changed || historyCorrectionPending()) restoreHistoryAnchor({
+        nativeMaxOffset: viewport > 0 ? Math.max(0, height - viewport) : undefined,
+        nativeOffset: scrollMetricsRef.current.offset,
+        nativeGeometryCommitted: true,
+      });
+      refreshScrollButton();
+    }
+  }, [historyCorrectionPending, refreshScrollButton, restoreHistoryAnchor, scheduleBottomFollow]);
   const handleTimelineLayout = useCallback((event: LayoutChangeEvent) => {
     const height = event.nativeEvent.layout.height;
     const changed = scrollMetricsRef.current.viewport !== height;
     scrollMetricsRef.current.viewport = height;
     if (followNewMessagesRef.current) {
       if (changed) scheduleBottomFollow(true);
-    } else refreshScrollButton();
-  }, [refreshScrollButton, scheduleBottomFollow]);
+    } else {
+      if (changed || historyCorrectionPending()) restoreHistoryAnchor({
+        nativeMaxOffset: height > 0 ? Math.max(0, scrollMetricsRef.current.height - height) : undefined,
+        nativeOffset: scrollMetricsRef.current.offset,
+        nativeGeometryCommitted: true,
+      });
+      refreshScrollButton();
+    }
+  }, [historyCorrectionPending, refreshScrollButton, restoreHistoryAnchor, scheduleBottomFollow]);
   useLayoutEffect(() => {
     cancelReaderSettle();
     cancelBottomFollow();
@@ -1349,7 +1391,8 @@ export function ThreadView({
     returningToBottomRef.current = false;
     followNewMessagesRef.current = false;
     historyPagingBusyRef.current = true;
-  }, [cancelBottomFollow, cancelReaderSettle, endFollowGlide]);
+    captureHistoryAnchor();
+  }, [cancelBottomFollow, cancelReaderSettle, captureHistoryAnchor, endFollowGlide]);
   const historyPaging = useOlderHistoryPaging({
     scope: historyScope ?? sessionKey ?? '',
     loading: loadingMoreHistory,
@@ -1360,6 +1403,7 @@ export function ThreadView({
     onReadEarlier: pauseHistoryFollow,
   });
   historyPagingBusyRef.current = historyPaging.loading;
+  historyDragRef.current = historyPaging.beginDrag;
   const canPageHistory = !previewUpgrade && Boolean(onLoadMoreHistory || historyPaging.failed || historyPaging.loading);
   const timelineHeader = useMemo(() => (previewUpgrade ? <SessionPreviewNotice onUpgrade={previewUpgrade} /> : canPageHistory ? (
     <View style={styles.historyControl}>
@@ -1506,6 +1550,7 @@ export function ThreadView({
                 ref={timelineRef}
                 testID={`${testID}-timeline`}
                 data={timelineItems}
+                historyAnchorActive={historyAnchor.managed}
                 onLoad={handleTimelineLoad}
                 onCommitLayoutEffect={handleCommittedLayout}
                 onScrollBeginDrag={handleScrollBeginDrag}
@@ -1680,7 +1725,7 @@ export function ThreadView({
             ) : null}
             notice={onReviewRuntimeSettings ? <>{selectedSkill}<Banner
               testID="thread-settings-unconfirmed"
-              message={t('Confirm settings before sending.', { ns: 'chat' })}
+              message={t(permissionsNeedConfirmation ? 'Choose permissions again before sending.' : 'Confirm settings before sending.', { ns: 'chat' })}
               actionLabel={t('Review settings', { ns: 'chat' })}
               onAction={onReviewRuntimeSettings}
             /></> : selectedSkill || (composerExpanded && offline ? (
@@ -1813,7 +1858,7 @@ export function ThreadView({
 type ThreadTimelineListProps = Omit<
   FlashListProps<ThreadTimelineRow>,
   'data' | 'initialScrollIndex' | 'initialScrollIndexParams' | 'maintainVisibleContentPosition'
-> & Readonly<{ data: ReadonlyArray<ThreadTimelineRow> }>;
+> & Readonly<{ data: ReadonlyArray<ThreadTimelineRow>; historyAnchorActive: boolean }>;
 
 /**
  * The timeline list: chronological and top-anchored, so a short conversation
@@ -1825,7 +1870,7 @@ type ThreadTimelineListProps = Omit<
  * never hidden, so a first message shows the moment it is sent.
  */
 const ThreadTimelineList = React.forwardRef(function ThreadTimelineList(
-  { data, onLoad, ...props }: ThreadTimelineListProps,
+  { data, onLoad, historyAnchorActive, ...props }: ThreadTimelineListProps,
   ref: React.ForwardedRef<FlashListRef<ThreadTimelineRow>>,
 ): React.JSX.Element {
   const [initialScrollIndex] = useState(() => (data.length > 0 ? data.length - 1 : undefined));
@@ -1863,6 +1908,7 @@ const ThreadTimelineList = React.forwardRef(function ThreadTimelineList(
       <FlashList
         ref={ref}
         data={data}
+        maintainVisibleContentPosition={historyAnchorActive ? HISTORY_ANCHOR_POSITION : undefined}
         initialScrollIndex={initialScrollIndex}
         initialScrollIndexParams={initialScrollIndex === undefined ? undefined : INITIAL_SCROLL_TO_END}
         onLoad={handleLoad}
@@ -2599,7 +2645,10 @@ function AssistantBubble({
       joinsNewer={joinsNewer}
     >
       <View>
+        {/* Native Markdown keeps painted text while parsing in the background.
+            A recycled holder must own one stable reply, including its stream. */}
         <EnrichedMarkdownText
+          key={renderKeyOf(message)}
           testID={`thread-markdown-${message.id}`}
           flavor={THREAD_MARKDOWN_FLAVOR}
           markdown={displayText}

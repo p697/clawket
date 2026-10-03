@@ -22,6 +22,8 @@ This package is the platform-neutral contract between Clawket UI and backend ada
 
 `SessionDescriptor.lastActivityAt` is the additive human-activity clock: adapters that can tell a user message or user-facing reply apart from record housekeeping (heartbeats, metadata patches) must set it, `null` when the session never had such activity; adapters that cannot leave it undefined so `sessionActivityAt` falls back to `updatedAt`. `HUMAN_SESSION_KINDS` names the session kinds a person takes part in. Consumers order and unread-mark on this clock only.
 
+`SessionHistory.pagination: cursor` is optional adapter-authored read semantics: `nextCursor` absence means completion, even on the first empty page. Omission retains legacy limit/local-cache handling; a cursor alone remains sufficient to enter cursor paging. Adapters set the marker only for a known cursor API, never infer it from a short result.
+
 `SessionHistory.toolCallAliases` optionally carries confirmed source-to-canonical tool identities; consumers may retire a source copy only with its matching canonical tool in the snapshot. `SessionHistory.activeRun` is an optional backend recovery snapshot (identity, visible text, start time and session-scoped cancellation hint). Peers without it retain their existing behavior; mocks clone it independently.
 
 `agent_message_chunk.textMode` is additive: `snapshot` replaces the whole run text, `delta` appends verbatim (including repeated tokens); omission preserves legacy adapter behavior. This is text semantics, independent of backend capabilities and transport identity.
@@ -54,7 +56,7 @@ Optional `AgentDescriptor.entryMode: sessions` declares that an Agent has no pri
 
 Optional `fastMode`, `sessionPermissions` and `sessionArchive` are runtime-negotiated Codex refinements. Settings resolve with authoritative native state; `permissions.mode: custom | null` never authorizes a default override. `unencryptedTransport` is local transport evidence for the permission UI, not a server security claim. Archive is reversible through `archiveSession(key, false)` and `listArchivedSessions`; it must retain native IDs/history and remain absent on older peers.
 
-Optional `permissions.requiresConfirmation` retains an unresolved native permission restore across reconnects. A current readable mode is not confirmation; clients keep Send blocked until an explicit permission selection returns verified state with the flag cleared.
+`AdapterError.recoveryAction: confirm_permissions` is an optional adapter classification for a verified rejection before prompt dispatch, never a generic server failure or unknown receipt. It pauses sending for explicit permission review without replaying the input. Optional `permissions.requiresConfirmation` retains an unresolved native permission restore across reconnects. A current readable mode is not confirmation; clients keep Send blocked until an explicit permission selection returns verified state with the flag cleared.
 
 Optional `promptStatus` and `getPromptStatus` negotiate read-only receipt lookup. `recorded` identifies a durable Bridge receipt and run ID, not native dispatch, running or completion. `unknown` is not a rejection; neither result authorizes resending. Only exact native message identity reconciles an uncertain bubble. Missing capability preserves older peers.
 

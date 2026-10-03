@@ -1108,6 +1108,7 @@ function ThreadScreenContent({
         showSlashSuggestions={controller.showSlashSuggestions}
         onSelectSlashCommand={controller.onSelectSlashCommand}
         onDismissSlashSuggestions={controller.dismissSlashSuggestions}
+        permissionsNeedConfirmation={controller.permissions?.requiresConfirmation === true}
         onReviewRuntimeSettings={controller.runtimeSettingsUnconfirmed && !controller.runtimeSettingsBusy ? () => {
           controller.composerRef.current?.blur();
           Keyboard.dismiss();

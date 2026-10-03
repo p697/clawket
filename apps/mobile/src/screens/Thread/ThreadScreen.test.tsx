@@ -314,6 +314,7 @@ describe('ThreadScreen connection container', () => {
     const setPermissionPickerVisible = jest.fn();
     mockController.setPermissionPickerVisible = setPermissionPickerVisible;
     render(<ThreadScreen {...props} />);
+    expect(mockThreadViewProps?.permissionsNeedConfirmation).toBe(true);
     act(() => mockThreadViewProps?.onReviewRuntimeSettings?.());
     expect(setPermissionPickerVisible).toHaveBeenCalledWith(true);
     expect(mockController.setModelPickerVisible).toHaveBeenCalledWith(false);

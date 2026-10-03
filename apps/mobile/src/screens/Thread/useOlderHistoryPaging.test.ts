@@ -1,5 +1,4 @@
 import { act, renderHook } from '@testing-library/react-native';
-import { useLayoutEffect } from 'react';
 import { useOlderHistoryPaging } from './useOlderHistoryPaging';
 
 function deferred() {
@@ -18,7 +17,7 @@ it('makes a slow automatic page visible at once and coalesces repeated pulls and
   const page = deferred();
   const props = options({ load: jest.fn(() => page.promise) });
   const { result } = renderHook(() => useOlderHistoryPaging(props));
-  act(() => { result.current.automatic(); result.current.manual(); result.current.automatic(); });
+  act(() => { result.current.beginDrag(); result.current.automatic(); result.current.manual(); result.current.beginDrag(); result.current.automatic(); });
   expect(result.current.loading).toBe(true);
   expect(props.load).toHaveBeenCalledTimes(1);
   expect(props.onReadEarlier).toHaveBeenCalledTimes(1);
@@ -36,7 +35,7 @@ it('keeps one visible pull during a head refresh and runs the latest cursor call
   const first = options({ blocked: true });
   const next = jest.fn(() => page.promise);
   const { result, rerender } = renderHook((props: Options) => useOlderHistoryPaging(props), { initialProps: first });
-  act(() => { result.current.manual(); result.current.automatic(); });
+  act(() => { result.current.manual(); result.current.beginDrag(); result.current.automatic(); });
   expect(result.current.loading).toBe(true);
   expect(first.load).not.toHaveBeenCalled();
   rerender({ ...first, blocked: false, load: next });
@@ -59,7 +58,7 @@ it('does not automatically replay a failed page and lets a manual retry carry it
   const page = deferred();
   const props = options({ failed: true, retry: jest.fn(() => page.promise) });
   const { result } = renderHook(() => useOlderHistoryPaging(props));
-  act(() => { result.current.automatic(); });
+  act(() => { result.current.beginDrag(); result.current.automatic(); });
   expect(props.load).not.toHaveBeenCalled();
   act(() => { result.current.manual(); result.current.manual(); });
   expect(props.retry).toHaveBeenCalledTimes(1);
@@ -77,7 +76,7 @@ it('settles a rejected request and offers manual retry without an unhandled reje
   await act(async () => { page.reject(new Error('read failed')); await page.promise.catch(() => {}); });
   expect(result.current.loading).toBe(false);
   expect(result.current.failed).toBe(true);
-  act(() => { result.current.automatic(); });
+  act(() => { result.current.beginDrag(); result.current.automatic(); });
   expect(load).toHaveBeenCalledTimes(1);
   await act(async () => { result.current.manual(); });
   expect(load).toHaveBeenCalledTimes(2);
@@ -87,7 +86,7 @@ it('settles a rejected request and offers manual retry without an unhandled reje
 it('discards queued automatic work when history reports a failure', () => {
   const props = options({ blocked: true });
   const { result, rerender } = renderHook((props: Options) => useOlderHistoryPaging(props), { initialProps: props });
-  act(() => { result.current.automatic(); });
+  act(() => { result.current.beginDrag(); result.current.automatic(); });
   rerender({ ...props, blocked: false, failed: true });
   expect(result.current.loading).toBe(false);
   expect(props.load).not.toHaveBeenCalled();
@@ -150,7 +149,7 @@ it('uses native refreshing only for a pull, including a pull made during automat
   const page = deferred();
   const props = options({ load: jest.fn(() => page.promise) });
   const { result } = renderHook(() => useOlderHistoryPaging(props));
-  act(() => { result.current.automatic(); });
+  act(() => { result.current.beginDrag(); result.current.automatic(); });
   expect(result.current.loading).toBe(true);
   expect(result.current.pulling).toBe(false);
   act(() => { result.current.pull(); });
@@ -162,23 +161,32 @@ it('uses native refreshing only for a pull, including a pull made during automat
   expect(result.current.pulling).toBe(false);
 });
 
-it('preserves automatic requests started during list placement, including a new scope before old cleanup', async () => {
-  const first = deferred();
-  const second = deferred();
-  const props = options({ load: jest.fn(() => first.promise) });
-  const next = { ...props, scope: 'new-conversation', load: jest.fn(() => second.promise) };
-  const { result, rerender } = renderHook((props: Options) => {
-    const paging = useOlderHistoryPaging(props);
-    useLayoutEffect(() => { paging.automatic(); }, [props.scope]);
-    return paging;
-  }, { initialProps: props });
-  expect(result.current.loading).toBe(true);
+it('ignores mount and post-page layout callbacks until another fresh user drag', async () => {
+  const page = deferred();
+  const props = options({ load: jest.fn().mockImplementationOnce(() => page.promise).mockResolvedValue(undefined) });
+  const { result } = renderHook(() => useOlderHistoryPaging(props));
+  act(() => { result.current.automatic(); });
+  expect(props.load).not.toHaveBeenCalled();
+  act(() => { result.current.beginDrag(); result.current.automatic(); });
   expect(props.load).toHaveBeenCalledTimes(1);
-  rerender(next);
-  expect(next.load).toHaveBeenCalledTimes(1);
-  expect(result.current.loading).toBe(true);
-  await act(async () => { first.resolve(); await first.promise; });
-  expect(result.current.loading).toBe(true);
-  await act(async () => { second.resolve(); await second.promise; });
-  expect(result.current.loading).toBe(false);
+  // A second gesture made while this page is pending cannot queue a follow-on page.
+  act(() => { result.current.beginDrag(); result.current.automatic(); });
+  await act(async () => { page.resolve(); await page.promise; });
+  act(() => { result.current.automatic(); result.current.automatic(); });
+  expect(props.load).toHaveBeenCalledTimes(1);
+  await act(async () => { result.current.beginDrag(); result.current.automatic(); });
+  expect(props.load).toHaveBeenCalledTimes(2);
+});
+
+it('does not carry an armed gesture across conversation replacement or a manual page', () => {
+  const props = options();
+  const { result, rerender } = renderHook((props: Options) => useOlderHistoryPaging(props), { initialProps: props });
+  act(() => { result.current.beginDrag(); });
+  rerender({ ...props, scope: 'different' });
+  act(() => { result.current.automatic(); });
+  rerender(props);
+  act(() => { result.current.automatic(); });
+  expect(props.load).not.toHaveBeenCalled();
+  act(() => { result.current.beginDrag(); result.current.manual(); result.current.automatic(); });
+  expect(props.load).toHaveBeenCalledTimes(1);
 });

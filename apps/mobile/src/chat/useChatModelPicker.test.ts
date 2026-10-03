@@ -838,6 +838,43 @@ describe('native confirmed runtime settings', () => {
     expect(result.current.modelPickerVisible).toBe(failure === 'network');
     expect(result.current.modelPickerError).toBe(failure === 'network' ? error.message : null);
   });
+  it('turns a classified permission rejection into a scoped confirmation guard and keeps it through reads and dismissal', async () => {
+    const getSelection = jest.fn().mockResolvedValue(native());
+    const setPermissions = jest.fn().mockResolvedValue({ ...native(), permissions: { ...native().permissions!, requiresConfirmation: false } });
+    const adapter = createAdapter({ backendKind: 'codex', getSelection, setPermissions });
+    const { result } = renderHook(() => useChatModelPicker({ adapter, connectionState: 'ready', sessionKey: 'session', setInput: jest.fn(), setSessions: jest.fn() }));
+    await act(async () => {});
+    expect(result.current.runtimeSettingsUnconfirmed).toBe(false);
+    act(() => result.current.requirePermissionsConfirmation(adapter, 'session'));
+    expect(result.current.runtimeSettingsUnconfirmedRef.current).toBe(true);
+    expect(result.current.permissions?.requiresConfirmation).toBe(true);
+    await act(async () => result.current.openPermissionPicker());
+    expect(result.current.permissionPickerVisible).toBe(true);
+    expect(result.current.permissions?.requiresConfirmation).toBe(true);
+    act(() => result.current.setPermissionPickerVisible(false));
+    await act(async () => result.current.refreshCurrentModel());
+    expect(result.current.runtimeSettingsUnconfirmed).toBe(true);
+    await act(async () => result.current.onSelectPermissions('workspace'));
+    expect(setPermissions).toHaveBeenCalledWith('workspace', 'session');
+    expect(result.current.runtimeSettingsUnconfirmed).toBe(false);
+    expect(adapter.prompt).not.toHaveBeenCalled();
+  });
+
+  it('remembers a late permission rejection only for its original session', async () => {
+    const adapter = createAdapter({ backendKind: 'codex', getSelection: jest.fn().mockResolvedValue(native()) });
+    const { result, rerender } = renderHook<ReturnType<typeof useChatModelPicker>, { session: string }>(({ session }) => useChatModelPicker({ adapter, connectionState: 'ready', sessionKey: session, setInput: jest.fn(), setSessions: jest.fn() }), { initialProps: { session: 'source' } });
+    await act(async () => {});
+    rerender({ session: 'other' });
+    await act(async () => {});
+    act(() => result.current.requirePermissionsConfirmation(adapter, 'source'));
+    expect(result.current.runtimeSettingsUnconfirmed).toBe(false);
+    expect(result.current.permissions?.requiresConfirmation).not.toBe(true);
+    rerender({ session: 'source' });
+    await act(async () => {});
+    expect(result.current.runtimeSettingsUnconfirmed).toBe(true);
+    expect(result.current.permissions?.requiresConfirmation).toBe(true);
+  });
+
   it('blocks sending on a native permission-confirmation requirement until explicit permission selection is acknowledged', async () => {
     const guarded = { ...native(), permissions: { mode: 'full-access' as const, available: true, scope: 'session' as const, requiresConfirmation: true } };
     const getSelection = jest.fn().mockResolvedValue(guarded);

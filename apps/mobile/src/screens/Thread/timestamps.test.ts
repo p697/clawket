@@ -41,7 +41,7 @@ describe('Thread time grouping', () => {
   it('labels a tool-only turn by the step its pill stands at', () => {
     const folded = foldTurnSteps([message('b', at(7, 12, 1), 'tool'), message('a', at(7), 'tool')], false);
     const timeline = placeTurnReceipts(buildThreadTimelineItems({ messages: folded.messages, runs: [] }), folded);
-    expect(timeline.map((row) => row.key)).toEqual(['tools:a', 'date:message:b']);
+    expect(timeline.map((row) => row.key)).toEqual(['tools:b', 'date:message:b']);
   });
 
   it('keeps equal or backwards timestamps in source order', () => {

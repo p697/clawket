@@ -241,6 +241,9 @@ export interface SessionHistory {
   toolCallAliases?: Readonly<Record<string, string>>;
   key: string;
   messages: ChatMessage[];
+  /** Adapter-declared cursor semantics: an absent nextCursor is a complete page,
+   * including the first empty page. Omission preserves legacy limit/local paging. */
+  pagination?: 'cursor';
   nextCursor?: string;
   hasActiveRun: boolean;
   /** Backend recovery snapshot; absent on peers that do not expose live runs. */

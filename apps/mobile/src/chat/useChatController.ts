@@ -15,6 +15,7 @@ import * as Haptics from "expo-haptics";
 import * as Network from "expo-network";
 import { useTranslation } from "react-i18next";
 import {
+  AdapterError,
   isImageAttachmentMimeType,
   normalizeAttachmentMimeType,
   supportsFileAttachments,
@@ -2140,6 +2141,7 @@ export function useChatController({
             history.setMessages((previous) => {
               if (previous.some((message) => message.id === finalMessage.id)) return previous;
               for (let index = previous.length - 1; index >= 0; index -= 1) {
+                if (previous[index].role === "user") break;
                 if (!shouldMergeFinalMessage(previous[index], finalText, activeRunStartedAt)) continue;
                 const next = [...previous];
                 next[index] = { ...previous[index], ...finalMessage };
@@ -2476,6 +2478,38 @@ export function useChatController({
     releaseSendTriggerGuard();
   }, [isPreparingSend, isSending, releaseSendTriggerGuard]);
 
+  const {
+    recentModels, modelScope,
+    hasRuntimeSettings, runtimeSettingsBusy, runtimeSettingsPendingRef, runtimeSettingsUnconfirmed, runtimeSettingsUnconfirmedRef,
+    fastMode, permissions, permissionPickerVisible, setPermissionPickerVisible,
+    onSelectFastMode, onSelectPermissions, openPermissionPicker, requirePermissionsConfirmation,
+    availableModels,
+    availableProviders,
+    configuredDefaultModel,
+    currentModel,
+    currentModelHeaderLabel,
+    currentModelDisplayName,
+    currentModelSupportsImages,
+    selectNativeThinkingLevel,
+    nativeThinkingLevel,
+    nativeThinkingLevels,
+    currentModelProvider,
+    modelPickerError,
+    modelPickerLoading,
+    modelPickerVisible,
+    onSelectModel,
+    openModelPicker,
+    retryModelPickerLoad,
+    setModelPickerVisible,
+  } = useChatModelPicker({
+    connectionState,
+    adapter,
+    sessionKey: history.sessionKey,
+    sessionMetadata: history.sessions.find((session) => session.key === history.sessionKey),
+    setInput,
+    setSessions: history.setSessions,
+    setThinkingLevel: history.setThinkingLevel,
+  });
   const getUserMessageText = useCallback((text: string, images: readonly PendingImage[]) => {
       const fallbackKey = resolveAttachmentOnlyFallbackKey(images);
       const attachmentFallbackCopy = {
@@ -2513,7 +2547,11 @@ export function useChatController({
       });
       uiMsg.renderKey = uiMsg.id;
       if (!shouldHideMessage(uiMsg)) {
-        history.setMessages((prev) => [...prev, uiMsg]);
+        history.setMessages((prev) => {
+          const existing = prev.findIndex(message => message.id === uiMsg.id);
+          if (existing < 0) return [...prev, uiMsg];
+          const next = [...prev]; next[existing] = uiMsg; return next;
+        });
         setUnconfirmedMessageIds((previous) => new Set(previous).add(uiMsg.id));
       }
 
@@ -2618,6 +2656,23 @@ export function useChatController({
             sessionRunStateRef.current.delete(sessionKey);
           }
           sourceQueue.store.update(sourceQueue.scopeKey, holdMessageQueue);
+          if (adapter.capabilities.sessionPermissions && error instanceof AdapterError
+            && error.recoveryAction === 'confirm_permissions') {
+            requirePermissionsConfirmation(adapter, sessionKey);
+            // This fixed native guard rejects before dispatch. Keep the original
+            // input reviewable and paused, without labelling it uncertain or replaying it.
+            const restoredQueue = queued ? sourceQueue.store.update(sourceQueue.scopeKey, current => holdMessageQueue(
+              !current.items.some(item => item.id === queued.id) && canEnqueueMessage(current)
+                ? { ...current, items: [queued, ...current.items] } : current,
+            )) : null;
+            if (submissionScope.active && sendScopeRef.current === submissionScope && sessionKeyRef.current === sessionKey) {
+              history.setMessages(previous => previous.map(message => message.id === uiMsg.id
+                ? { ...message, delivery: restoredQueue?.items.some(item => item.id === uiMsg.id) ? 'held' : undefined } : message));
+              setSendFailure(null);
+              setSendFailureDetails(null);
+            }
+            return;
+          }
           rememberUncertainSend(sourceQueue.scopeKey, uiMsg);
           if (messageQueueRef.current.scopeKey !== sourceQueue.scopeKey) return;
           setSendFailure(t('Sending failed. Check the conversation before trying again.'));
@@ -2627,7 +2682,7 @@ export function useChatController({
           // Preserve one recoverable bubble; refilling the composer invites duplicate sends.
         });
     },
-    [adapter, dbg, getUserMessageText, history, messageQueue.store, messageQueue.scopeKey, markTransportConfirmed, t],
+    [adapter, dbg, getUserMessageText, history, messageQueue.store, messageQueue.scopeKey, markTransportConfirmed, requirePermissionsConfirmation, setSendFailure, t],
   );
 
   const submitMessageWithConnectionCheck = useCallback(
@@ -2708,38 +2763,6 @@ export function useChatController({
     ],
   );
 
-  const {
-    recentModels, modelScope,
-    hasRuntimeSettings, runtimeSettingsBusy, runtimeSettingsPendingRef, runtimeSettingsUnconfirmed, runtimeSettingsUnconfirmedRef,
-    fastMode, permissions, permissionPickerVisible, setPermissionPickerVisible,
-    onSelectFastMode, onSelectPermissions, openPermissionPicker,
-    availableModels,
-    availableProviders,
-    configuredDefaultModel,
-    currentModel,
-    currentModelHeaderLabel,
-    currentModelDisplayName,
-    currentModelSupportsImages,
-    selectNativeThinkingLevel,
-    nativeThinkingLevel,
-    nativeThinkingLevels,
-    currentModelProvider,
-    modelPickerError,
-    modelPickerLoading,
-    modelPickerVisible,
-    onSelectModel,
-    openModelPicker,
-    retryModelPickerLoad,
-    setModelPickerVisible,
-  } = useChatModelPicker({
-    connectionState,
-    adapter,
-    sessionKey: history.sessionKey,
-    sessionMetadata: history.sessions.find((session) => session.key === history.sessionKey),
-    setInput,
-    setSessions: history.setSessions,
-    setThinkingLevel: history.setThinkingLevel,
-  });
   // The levels the backend reports for the session's current model come first
   // (OpenClaw 2026.x); a static list would offer levels the model refuses.
   const thinkingLevelOptions = useMemo(
@@ -3376,6 +3399,9 @@ export function useChatController({
     }));
     const merged = mergeNewestFirstMessages(sessionMessages, pairMessages);
     if (messageQueue.state.items.length === 0) return merged;
+    const queuedIds = new Set(messageQueue.state.items.map(item => item.id));
+    const withDelivery = merged.map(message => queuedIds.has(message.id) && !message.sendUncertain
+      ? { ...message, delivery: queuedMessageDelivery(messageQueue.state, message.id) } : message);
     // Queued bubbles sit below everything else; an item whose
     // optimistic message already entered history is rendered from history.
     const known = new Set(history.messages.map((message) => message.id));
@@ -3389,7 +3415,7 @@ export function useChatController({
         delivery: queuedMessageDelivery(messageQueue.state, item.id),
       }), renderKey: item.id }))
       .reverse();
-    return queued.length > 0 ? [...queued, ...merged] : merged;
+    return queued.length > 0 ? [...queued, ...withDelivery] : withDelivery;
   }, [adapter, chatStream, chatStreamSegments, chatToolMessages, getUserMessageText, history.messages, messageQueue.state, pairApprovalProjection, presentationRunId, presentationStartedAt, recoverableMessages]);
 
   useEffect(() => {

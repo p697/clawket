@@ -23,14 +23,24 @@ it('takes a finished turn out of the conversation and leaves its receipt on the 
   expect(answer?.type === 'message' ? answer.receipt?.failed : null).toBe(false);
 });
 
-it('keeps one pill for a turn that ended on a step, keyed by its oldest call and red only on failure', () => {
+it('keeps one pill for a turn that ended on a step, keyed by its newest call and red only on failure', () => {
   const quiet = timeline(newestFirst(prompt('ask'), tool('a'), tool('b')));
-  expect(keys(quiet)).toEqual(['tools:a', 'message:ask']);
+  expect(keys(quiet)).toEqual(['tools:b', 'message:ask']);
   const pill = quiet[0];
   expect(pill?.type === 'tools' ? [pill.messages.map((message) => message.id), pill.failed] : null).toEqual([['b', 'a'], false]);
   const failed = timeline(newestFirst(prompt('ask'), reply('trying'), tool('a', 'error')));
   expect(failed[0]?.type === 'tools' ? failed[0].failed : null).toBe(true);
   expect(keys(failed)).toEqual(['tools:a', 'message:trying', 'message:ask']);
+});
+
+it('keeps the visible pill anchor when an earlier native page fills in the beginning of its turn', () => {
+  const latest = tool('toolresult_c', 'success', { renderKey: 'toolcall_c' });
+  const initial = timeline(newestFirst(tool('b'), latest));
+  const paged = timeline(newestFirst(prompt('ask'), tool('a'), tool('b'), latest));
+  expect(initial[0]?.key).toBe('tools:toolcall_c');
+  expect(paged[0]?.key).toBe(initial[0]?.key);
+  expect(paged[0]?.type === 'tools' ? paged[0].messages.map(message => message.id) : null)
+    .toEqual(['toolresult_c', 'b', 'a']);
 });
 
 it('shows nothing for the running turn steps: the work dock does', () => {
