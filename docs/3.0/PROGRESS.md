@@ -1,5 +1,11 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-03 Codex 工具状态与历史重载一致性（负责人要求全面真机测试中即时修复）。
+  - 原生 WebSearch/ImageView 可以没有 `status`；Desktop 恢复此前强制先发 running，之后又漏掉无 status 完成和未知工具更新，导致只剩一个真实工具时仍显示 11～15 步并行。按历史的状态/输出投影发送初始状态及变化，保留同一工具行、重复快照去重、同 status 输出/非零退出码修正；明确未知状态不推定运行或完成，回合不因工具结果而结束。
+  - 最低支持的官方原生代码证明 ImageView canonical 历史只在 completed 的 ViewImageToolCall 上写入；隔离 CODEX_HOME 生成当前 Desktop 0.160.0 schema，确认 ImageView 仅 id/path/type、搜索也无 status，元数据证据存入本轮共享 evidence。只有已知历史契约可隐式成功：图片查看为 completed-only；搜索 Begin 无 status 且 action/results 为 null，保留 unknown，End 必须官方四种有效 action、string query 与合法可选 results。非空 results 原样进入既有 32K JSON 工具输出，缺失/null/[] 不补造结果、不改模型正文；显式未来/运行/失败状态优先，owned completed 同样不强造 success。Bridge 所有的搜索/图片查看通知只在 active run 的内存覆盖中保留已确认 started/completed；冷历史、活跃历史与 follower 保持一致，原生项/文件不改。
+  - 可选初始 `tool_call.status`、unknown update 与 history `statusReported` 向后兼容：缺字段仍按旧后端 live start；明确 unknown 不计并行、不建完成时钟、不触发 settled recovery，历史合并也不回填旧完成时钟；seq-gap直接history projection显式清字段，避免live/history对象spread沿用此前完成时钟。Claude/Pi 旧 missing-result fallback、OpenClaw/Hermes 缺省路径保留。回归覆盖十次已完成图片查看加一个正在执行命令、unknown↔running、冻结原生对象及 live/active/cold history。
+  - 独立工作树 npm ci 后逐文件串行：Bridge history 57、service 170；Mobile adapter-events 20、turn-work 15、history 157、controller contract 61、historyMergePolicy 57（共 537）；protocol/Mobile/Bridge 类型与 docs 通过，Bridge/Mobile 只读 peer review 无阻挡。未碰设备、重启用户 Bridge、发布或改账号；Android 组合候选验收由本轮根任务继续。PR131 既有 CI 仅未获批准的 braces 高危审计红，禁止绕过，更新后的 CI 继续等待。
+
 - 2026-10-03 配对首页直出命令与自动检测强调（负责人选定平台在上方案，并要求完整落地）。
   - 保留六个平台与官方品牌图标，改为两列紧凑入口；下方独立强调「自动检测电脑上的 Agent」，命令 `npx @p697/clawket@latest pair choose` 与复制直接展示，删除只为复制/扫码而进入的中间页面。该命令仍仅 Production 显示，不改变 CLI 或 Preview 范围。
   - 首页直接扫码、相册与原地展开输码；手输码先用临时平台弹层选定后端，保持各后端校验、现有单次认领和环境检查。收起保留草稿，平台/环境变化清空；配对进度回传或失败不把首页推入平台指引，迟到粘贴不能覆盖新表单或认领旧平台邀请。平台专属 Agent/终端默认、Pi 项目提示、本地模型引擎、键盘避让与连接遮罩保留。

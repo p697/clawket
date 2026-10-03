@@ -50,6 +50,25 @@ describe('opensTurn', () => {
 });
 
 describe('collectLiveTurnWork', () => {
+  it('counts only the one confirmed running step after ten completed image views and an explicitly unknown tool', () => {
+    const images = Array.from({ length: 10 }, () => call('view_image', {}, { toolStatusReported: true }));
+    const running = call('exec', {}, { toolStatus: 'running', toolStatusReported: true });
+    const unknown = call('read', {}, { toolStatus: 'unknown', toolStatusReported: true });
+    const work = collectLiveTurnWork(newestFirst(prompt('inspect'), ...images, running, unknown));
+    expect(work.steps).toHaveLength(12);
+    expect(work.running).toBe(1);
+    expect(work.current).toBe(running);
+    const unconfirmed = collectLiveTurnWork(newestFirst(prompt('inspect'), ...images, unknown));
+    expect(unconfirmed.running).toBe(0);
+    expect(unconfirmed.current).toBeUndefined();
+  });
+
+  it('preserves the legacy Claude/Pi missing-result hint when the adapter has not reported execution state', () => {
+    const pending = call('read', {}, { toolStatus: 'unknown' });
+    const work = collectLiveTurnWork(newestFirst(prompt('go'), pending));
+    expect(work.running).toBe(1);
+    expect(work.current).toBe(pending);
+  });
   it('names the newest running step and counts failures without dropping them', () => {
     const start = 1_700_000_000_000;
     const ask = prompt('fix the tests');

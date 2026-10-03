@@ -253,6 +253,7 @@ function projectHistoryMessage(message: ChatMessage): Record<string, unknown> {
       content: message.text || '',
       normalizedToolId: message.id,
       toolStatus: message.tool?.status,
+      ...(message.tool?.statusReported ? { toolStatusReported: true } : {}),
       timestamp: message.timestampMs,
       toolCallId: message.tool?.callId ?? message.id.replace(/^tool(?:call|result)_/, ''),
       name: message.tool?.name ?? 'tool',
@@ -970,10 +971,12 @@ export function useChatHistoryState({
           const toolStartedAt = typeof msgRecord.toolStartedAt === 'number'
             ? msgRecord.toolStartedAt
             : undefined;
-          const toolFinishedAt = typeof msgRecord.toolFinishedAt === 'number'
+          const reportedUnsettled = msgRecord.toolStatusReported === true
+            && (msgRecord.toolStatus === 'unknown' || msgRecord.toolStatus === 'running');
+          const toolFinishedAt = reportedUnsettled ? undefined : typeof msgRecord.toolFinishedAt === 'number'
             ? msgRecord.toolFinishedAt
             : (msgTs > 0 ? msgTs : undefined);
-          const toolDurationMs = typeof msgRecord.toolDurationMs === 'number'
+          const toolDurationMs = reportedUnsettled ? undefined : typeof msgRecord.toolDurationMs === 'number'
             ? msgRecord.toolDurationMs
             : (
               typeof toolStartedAt === 'number' && typeof toolFinishedAt === 'number'
@@ -1005,19 +1008,20 @@ export function useChatHistoryState({
             const existing = uiMessages[existingIdx];
             const baseSummary = stripToolStatusPrefix(existing.toolSummary ?? '', t)
               || formatToolOneLinerLocalized(name, undefined, t);
-            const finishedAt = msgTs > 0 ? msgTs : existing.toolFinishedAt;
+            const finishedAt = reportedUnsettled ? undefined : msgTs > 0 ? msgTs : existing.toolFinishedAt;
             const durationMs = (
               existing.toolStartedAt !== undefined
               && typeof finishedAt === 'number'
             )
               ? Math.max(0, finishedAt - existing.toolStartedAt)
-              : existing.toolDurationMs;
+              : reportedUnsettled ? undefined : existing.toolDurationMs;
             uiMessages[existingIdx] = {
               ...existing,
               toolName: existing.toolName ?? name,
               toolStatus: msgRecord.toolStatus === 'unknown' ? 'unknown'
                 : msgRecord.toolStatus === 'running' ? 'running' : hasError ? 'error' : 'success',
-              toolSummary: hasError
+              ...(msgRecord.toolStatusReported === true ? { toolStatusReported: true as const } : {}),
+              toolSummary: reportedUnsettled ? baseSummary : hasError
                 ? t('Failed {{name}}', { ns: 'chat', name: baseSummary })
                 : t('Completed {{name}}', { ns: 'chat', name: baseSummary }),
               toolArgs: existing.toolArgs ?? toolArgs,
@@ -1036,7 +1040,8 @@ export function useChatHistoryState({
               toolName: name,
               toolStatus: msgRecord.toolStatus === 'unknown' ? 'unknown'
                 : msgRecord.toolStatus === 'running' ? 'running' : hasError ? 'error' : 'success',
-              toolSummary: hasError
+              ...(msgRecord.toolStatusReported === true ? { toolStatusReported: true as const } : {}),
+              toolSummary: reportedUnsettled ? baseSummary : hasError
                 ? t('Failed {{name}}', { ns: 'chat', name: baseSummary })
                 : t('Completed {{name}}', { ns: 'chat', name: baseSummary }),
               toolArgs,

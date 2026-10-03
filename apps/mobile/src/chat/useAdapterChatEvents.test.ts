@@ -1,4 +1,5 @@
 import { act, renderHook } from '@testing-library/react-native';
+import { preserveCompletedRunPresentation } from './historyMergePolicy';
 import {
   createMockAdapter,
   type ConnectionDescriptor,
@@ -38,6 +39,23 @@ const session: SessionDescriptor = {
 };
 
 describe('mapAdapterChatMessage', () => {
+  it.each(['unknown', 'running'] as const)('clears prior completion clocks when a gap reload merges reported %s into the active turn', status => {
+    const user = { id: 'user', role: 'user' as const, text: 'inspect' };
+    const recovered = mapAdapterChatMessage({ id: 'tool', role: 'tool', text: '', tool: { name: 'read', status, statusReported: true } })!;
+    const live = { ...recovered, presentationRunId: 'run', toolStatus: 'success' as const, toolStartedAt: 100, toolFinishedAt: 200, toolDurationMs: 100 };
+    const merged = preserveCompletedRunPresentation([user, live], [user, recovered], { live: true });
+    expect(merged[1]).toMatchObject({ toolStatus: status, toolStatusReported: true });
+    expect(merged[1].toolFinishedAt).toBeUndefined();
+    expect(merged[1].toolDurationMs).toBeUndefined();
+  });
+
+  it('retains explicitly reported unknown history without treating it as a live start', () => {
+    const message = mapAdapterChatMessage({ id: 'unknown', role: 'tool', text: '', tool: { name: 'read', status: 'unknown', statusReported: true, durationMs: 50, finishedAtMs: 200 } });
+    expect(message)
+      .toMatchObject({ toolStatus: 'unknown', toolStatusReported: true });
+    expect(message?.toolDurationMs).toBeUndefined();
+    expect(message?.toolFinishedAt).toBeUndefined();
+  });
   it('preserves normalized history content in the existing UiMessage shape', () => {
     expect(mapAdapterChatMessage({
       id: 'message-1',
@@ -251,6 +269,18 @@ describe('mapAdapterSessionUpdate', () => {
         toolFinishedAt: 1_000,
       },
     });
+
+    for (const status of ['running', 'unknown', 'success', 'error'] as const) {
+      const start = mapAdapterSessionUpdate({ type: 'tool_call', sessionKey: session.key, runId: 'run-1', toolCallId: status, title: 'Read file', status }, options);
+      expect(start).toMatchObject({ message: { toolStatus: status, toolStatusReported: true } });
+      if (start.type !== 'tool_call') throw new Error('Missing tool call');
+      expect(start.message.toolStartedAt).toBe(status === 'running' ? 1_000 : undefined);
+      expect(start.message.toolFinishedAt).toBeUndefined();
+      const change = mapAdapterSessionUpdate({ type: 'tool_call_update', sessionKey: session.key, runId: 'run-1', toolCallId: status, status }, options);
+      if (change.type !== 'tool_call_update') throw new Error('Missing tool update');
+      expect(change.message.toolStatus).toBe(status);
+      expect(change.message.toolFinishedAt).toBe(status === 'success' || status === 'error' ? 1_000 : undefined);
+    }
 
     expect(mapAdapterSessionUpdate({
       type: 'run_finished',

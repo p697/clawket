@@ -38,14 +38,34 @@ export function codexTurnFailure(turn: any): (Pick<ChatMessage, 'id' | 'text' | 
     ...(typeof timestamp === 'number' && Number.isFinite(timestamp) && timestamp >= 0 ? { timestampMs: timestamp * 1000 } : {}) };
 }
 
+/** Canonical End always has an action; Begin has null action/results and no status. */
+function completedWebSearch(item: any): boolean {
+  const action = item.action;
+  if (typeof item.query !== 'string' || !action || typeof action !== 'object' || Array.isArray(action)
+    || (item.results !== undefined && item.results !== null && !Array.isArray(item.results))) return false;
+  const optionalString = (value: unknown) => value === undefined || value === null || typeof value === 'string';
+  switch (action.type) {
+    case 'search': return optionalString(action.query) && (action.queries === undefined || action.queries === null
+      || (Array.isArray(action.queries) && action.queries.every((query: unknown) => typeof query === 'string')));
+    case 'openPage': return optionalString(action.url);
+    case 'findInPage': return optionalString(action.url) && optionalString(action.pattern);
+    case 'other': return true;
+    default: return false;
+  }
+}
+
 export function codexTool(item: any): ChatMessage['tool'] | undefined {
   const names: Record<string, string> = { commandExecution: 'exec', fileChange: 'apply_patch', mcpToolCall: item.tool ?? 'MCP', dynamicToolCall: item.tool ?? 'tool', webSearch: 'web_search', collabAgentToolCall: item.tool ?? 'agent', imageView: 'view_image', imageGeneration: 'image_generation' };
   if (!names[item.type]) return undefined;
   const failed = ['failed', 'declined', 'interrupted'].includes(item.status) || (typeof item.exitCode === 'number' && item.exitCode !== 0) || !!item.error;
-  return { callId: item.id, name: names[item.type], status: failed ? 'error' : item.status === 'inProgress' ? 'running' : item.status === 'completed' || item.type === 'webSearch' ? 'success' : 'unknown',
+  // Native ImageView enters canonical history only after its completed event.
+  // Other tools without an execution status still lack outcome evidence.
+  const implicitCompleted = item.status === undefined && (item.type === 'imageView' || (item.type === 'webSearch' && completedWebSearch(item)));
+  const result = item.type === 'webSearch' && Array.isArray(item.results) && item.results.length > 0 ? item.results : item.result;
+  return { callId: item.id, name: names[item.type], statusReported: true, status: failed ? 'error' : item.status === 'inProgress' ? 'running' : item.status === 'completed' || implicitCompleted ? 'success' : 'unknown',
     input: item.type === 'commandExecution' ? { command: item.command, cwd: item.cwd } : item.type === 'fileChange' ? { changes: item.changes } : item.arguments ?? { query: item.query, path: item.path },
     output: item.type === 'imageGeneration' ? (item.status === 'completed' && !item.failure ? 'Image generated' : '')
-      : String(item.aggregatedOutput ?? (item.result ? JSON.stringify(item.result) : item.error ? JSON.stringify(item.error) : item.type === 'fileChange' ? JSON.stringify(item.changes) : '')).slice(0, 32000) };
+      : String(item.aggregatedOutput ?? (result ? JSON.stringify(result) : item.error ? JSON.stringify(item.error) : item.type === 'fileChange' ? JSON.stringify(item.changes) : '')).slice(0, 32000) };
 }
 export function codexMessages(turns: any[]): ChatMessage[] {
   const messages: ChatMessage[] = [];

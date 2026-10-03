@@ -41,13 +41,15 @@ export type SessionUpdate =
       title: string;
       kind?: string;
       rawInput?: unknown;
+      /** Omission retains the legacy live-start event; unknown does not prove execution. */
+      status?: 'running' | 'success' | 'error' | 'unknown';
     }
   | {
       type: 'tool_call_update';
       sessionKey: string;
       runId: string;
       toolCallId: string;
-      status: 'running' | 'success' | 'error';
+      status: 'running' | 'success' | 'error' | 'unknown';
       rawOutput?: unknown;
     }
   | {

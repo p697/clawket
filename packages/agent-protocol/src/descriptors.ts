@@ -226,6 +226,8 @@ export interface ChatMessage {
   tool?: {
     name: string;
     status: 'running' | 'success' | 'error' | 'unknown';
+    /** Adapter-reported state, including unknown; do not infer a live start from it. */
+    statusReported?: true;
     callId?: string;
     summary?: string;
     input?: unknown;

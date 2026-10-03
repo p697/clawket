@@ -1997,10 +1997,11 @@ export function useChatController({
         markActivityStarted(update.sessionKey, update.runId);
         const agentId = agentIdFromSessionKey(update.sessionKey);
         const toolName = update.message.toolName ?? "tool";
-        if (agentId && agentId !== currentAgentId) {
+        const running = update.message.toolStatus === "running";
+        if (running && agentId && agentId !== currentAgentId) {
           applyActivityToolStart(agentActivityRef.current, agentId, toolName);
         }
-        if (update.sessionKey.includes(":subagent:")) {
+        if (running && update.sessionKey.includes(":subagent:")) {
           applyChildToolStart(childSessionActivityRef.current, update.sessionKey, toolName);
           onChildSessionActivityChange();
         }
@@ -2008,7 +2009,7 @@ export function useChatController({
         if (!acceptRun(update.sessionKey, update.runId)) return;
         if (chatToolMessagesRef.current.some(message => sameLiveToolCall(message, update.message))) return;
         commitCurrentStreamSegment();
-        setActivityLabel(formatToolActivity(unwrapToolCall(toolName, update.message.toolArgs).name, t));
+        if (running) setActivityLabel(formatToolActivity(unwrapToolCall(toolName, update.message.toolArgs).name, t));
         const message = {
           ...update.message,
           toolSummary: formatToolOneLinerLocalized(toolName, update.message.toolArgs, t),
@@ -2049,15 +2050,16 @@ export function useChatController({
         };
         chatToolMessagesRef.current = withToolMessage(chatToolMessagesRef.current, message);
         setChatToolMessages(chatToolMessagesRef.current);
-        if (update.message.toolStatus === "running") return;
-        if (durationMs !== undefined) {
-          measuredToolsRef.current = [
-            ...measuredToolsRef.current.filter((measured) => !sameLiveToolCall(measured, message)),
-            message,
-          ].slice(-MEASURED_TOOL_LIMIT);
+        if (update.message.toolStatus === "running" || update.message.toolStatus === "unknown") {
+          measuredToolsRef.current = measuredToolsRef.current.filter((measured) => !sameLiveToolCall(measured, message));
+          clearToolSettledRecoveryTimer();
         }
-        // A settled step stops describing the turn: a step still running takes
-        // over, else the header and working pill fall back to "Thinking…".
+        if (update.message.toolStatus === "running") {
+          setActivityLabel(formatToolActivity(unwrapToolCall(toolName, previousMessage?.toolArgs).name, t));
+          return;
+        }
+        // Only confirmed running steps describe execution. Unknown clears an
+        // obsolete label but does not produce completion timing or recovery.
         const settledLabel = formatToolActivity(unwrapToolCall(toolName, previousMessage?.toolArgs).name, t);
         const stillRunning = chatToolMessagesRef.current.findLast(
           (candidate) => candidate.toolStatus === "running" && !candidate.approval,
@@ -2066,6 +2068,13 @@ export function useChatController({
           : stillRunning
             ? formatToolActivity(unwrapToolCall(stillRunning.toolName ?? "tool", stillRunning.toolArgs).name, t)
             : null);
+        if (update.message.toolStatus === "unknown") return;
+        if (durationMs !== undefined) {
+          measuredToolsRef.current = [
+            ...measuredToolsRef.current.filter((measured) => !sameLiveToolCall(measured, message)),
+            message,
+          ].slice(-MEASURED_TOOL_LIMIT);
+        }
         clearToolSettledRecoveryTimer();
         requestVisibleHistoryReload(update.sessionKey, "tool-result").catch(() => {});
         toolSettledRecoveryTimerRef.current = setTimeout(() => {

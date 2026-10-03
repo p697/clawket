@@ -497,6 +497,8 @@ The official Pi Preview Registry is environment-checked like OpenClaw/Hermes Pre
 
 ## Codex conversations
 
+Tool calls with an optional initial status use that state; omission preserves existing live-start behavior. Carry `statusReported` through canonical history and UI merges so explicitly unknown tools never use the legacy Claude/Pi missing-result running hint. Unknown has no finish timestamp, completion summary, measured duration or tool-settled recovery; direct seq-gap history projections explicitly clear old completion clocks through live/history object merges; only confirmed running tools name current execution. Preserve other backends' legacy events and history behavior.
+
 Codex entry uses a 12-second slow-hint budget per real connection/catalog stage. Derive `Connecting` versus `Loading sessions` from the current connection readiness; rerenders do not reset the clock. Reuse cold activation’s complete live catalog for the picker, but retain the fallback after failed/cache-only reads. Only exact `sessionCatalogPageIndex: 1` negotiation enables three concurrent frozen catalog pages; retain legacy serial reads, scope/retirement fences, complete atomic validation and all existing size/expiry bounds. See `../../docs/3.1/session-catalog-sync.md`.
 
 An explicit Codex failed completion without a terminal notice, reply text or attachment gets one fixed generic system notice keyed by its Bridge run ID. Preserve authoritative failure explanations and successful/cancelled completions. Silence, disconnection and user-only history from an older Bridge are not failure evidence; never infer an authentication failure or resend from them.

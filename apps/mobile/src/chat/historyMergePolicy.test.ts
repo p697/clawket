@@ -591,6 +591,12 @@ describe('preserveToolTiming', () => {
   const reloaded: UiMessage = { id: 'toolresult_call_1', role: 'tool', text: '', toolName: 'bash', toolStatus: 'success', toolFinishedAt: 7_000 };
   const reply: UiMessage = { id: 'reply', role: 'assistant', text: 'done' };
 
+  it.each(['unknown', 'running'] as const)('does not restore old completion clocks to explicitly reported %s history', toolStatus => {
+    const next = [{ ...reloaded, toolStatus, toolStatusReported: true as const, toolFinishedAt: undefined }];
+    expect(preserveToolTiming([live], next)).toBe(next);
+    expect(next[0].toolFinishedAt).toBeUndefined();
+  });
+
   it('keeps the times the phone measured when history has none of its own', () => {
     expect(preserveToolTiming([live], [reply, reloaded])).toEqual([
       reply,

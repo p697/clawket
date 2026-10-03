@@ -1864,6 +1864,37 @@ describe('useChatController contract', () => {
     expect(ExpoHaptics.notificationAsync).not.toHaveBeenCalled();
   });
 
+  it('keeps reported unknown tool updates uncompleted without scheduling settled recovery', async () => {
+    const adapter = createAdapter('ready');
+    const view = renderHook(() => useChatController({ adapter: adapter as any, debugMode: false, showAgentAvatar: true } as any));
+    const events = jest.mocked(useAdapterChatEvents).mock.calls.at(-1)?.[0];
+    const run = { sessionKey: 'agent:main:main', runId: 'run-unknown', activeRunId: 'run-unknown', isSending: true as const };
+    await act(async () => {
+      events!.onState?.('ready');
+      events!.onUpdate?.({ type: 'run_started', ...run, startedAtMs: 100 });
+      events!.onUpdate?.({ type: 'tool_call', ...run, toolCallId: 'read', merge: false, message: {
+        id: 'toolcall_read', role: 'tool', text: '', toolName: 'read', toolStatus: 'running', toolStartedAt: 100,
+      } });
+    });
+    expect(view.result.current.activityLabel).toBe('Reading file');
+    historyMock.loadHistory.mockClear();
+    historyMock.refreshCurrentSessionHistory.mockClear();
+    historyMock.reconcileLatestAssistantFromHistory.mockClear();
+    await act(async () => {
+      events!.onUpdate?.({ type: 'tool_call_update', ...run, toolCallId: 'read', merge: true, message: {
+        id: 'toolcall_read', role: 'tool', text: '', toolStatus: 'unknown', toolStatusReported: true, toolFinishedAt: undefined,
+      } });
+      jest.advanceTimersByTime(2000);
+      await Promise.resolve();
+    });
+    expect(view.result.current.isSending).toBe(true);
+    expect(view.result.current.activityLabel).toBeNull();
+    expect(historyMock.loadHistory).not.toHaveBeenCalled();
+    expect(historyMock.refreshCurrentSessionHistory).not.toHaveBeenCalled();
+    expect(historyMock.reconcileLatestAssistantFromHistory).not.toHaveBeenCalled();
+    view.unmount();
+  });
+
   it('stops labelling the turn with a tool once that tool settles', async () => {
     const adapter = createAdapter('ready');
     const { result } = renderHook(() =>

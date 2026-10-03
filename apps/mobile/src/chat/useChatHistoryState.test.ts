@@ -796,6 +796,30 @@ describe('useChatHistoryState', () => {
     expect(result.current.state.messages[0]?.modelLabel).toBe('openai/gpt-5');
   });
 
+  it('keeps reported Codex unknown/running history uncompleted while the turn remains active', async () => {
+    const key = 'agent:main:main';
+    const adapter = { connection: { backendKind: 'codex' }, state: 'ready', listSessions: jest.fn().mockResolvedValue([]),
+      loadSession: jest.fn().mockResolvedValue({ key, hasActiveRun: true, messages: [
+        { id: 'user', role: 'user', text: 'inspect', timestampMs: 1000 },
+        ...['unknown', 'running'].map(status => ({ id: `toolcall_${status}`, role: 'tool', text: '', timestampMs: 2000,
+          tool: { name: 'read', callId: status, status, statusReported: true, startedAtMs: 1500 } })),
+      ] }),
+    };
+    const { result } = renderHook(() => {
+      const sessionKeyRef = useRef<string | null>(key);
+      return useChatHistoryState({ adapter: adapter as any, dbg: jest.fn(), t: translate,
+        sessionKeyRef, mainSessionKey: key, gatewayConfigId: null, currentAgentId: 'main' });
+    });
+    await act(async () => { result.current.setSessionKey(key); await result.current.loadHistory(key, 12); });
+    for (const status of ['unknown', 'running']) {
+      const message = result.current.messages.find(message => message.id === `toolcall_${status}`)!;
+      expect(message).toMatchObject({ toolStatus: status, toolStatusReported: true });
+      expect(message.toolSummary).not.toContain('Completed');
+      expect(message.toolFinishedAt).toBeUndefined();
+      expect(message.toolDurationMs).toBeUndefined();
+    }
+  });
+
   it.each(['openclaw', 'hermes'])('keeps missing %s tool results unknown without inventing output', async backendKind => {
     const key = 'agent:main:main';
     const adapter = { connection: { backendKind }, state: 'ready',

@@ -77,8 +77,8 @@ export const EMPTY_TURN_WORK: TurnWork = Object.freeze({ entries: [], steps: [],
 /**
  * Builds a turn from its messages, newest first. In the running turn a step
  * whose result is not recorded yet can read `unknown` (Claude Code and Pi
- * history reloads mid-run): when nothing else runs, the newest such step is
- * the one still working.
+ * history reloads mid-run): when nothing else runs, the newest such legacy
+ * step is still working. Explicit unknown state is never execution evidence.
  */
 function buildTurnWork(turn: ReadonlyArray<UiMessage>, live = false): TurnWork {
   if (turn.length === 0) return EMPTY_TURN_WORK;
@@ -113,7 +113,7 @@ function buildTurnWork(turn: ReadonlyArray<UiMessage>, live = false): TurnWork {
   }
   if (steps.length === 0 && !pendingApproval) return EMPTY_TURN_WORK;
   // `steps` is still newest-first here.
-  if (live && !current && steps[0]?.toolStatus === 'unknown') {
+  if (live && !current && steps[0]?.toolStatus === 'unknown' && !steps[0].toolStatusReported) {
     current = steps[0];
     running = 1;
   }

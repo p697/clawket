@@ -85,6 +85,8 @@ export type UiMessage = {
   usage?: MessageUsage;
   toolName?: string;
   toolStatus?: 'running' | 'success' | 'error' | 'unknown';
+  /** Explicit adapter state; unknown is not the legacy missing-result hint. */
+  toolStatusReported?: true;
   toolSummary?: string;
   toolArgs?: string;
   toolDetail?: string;

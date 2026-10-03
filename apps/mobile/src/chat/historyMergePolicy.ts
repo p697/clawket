@@ -108,6 +108,7 @@ export function preserveToolTiming(previous: UiMessage[], next: UiMessage[], ali
   if (measured.size === 0) return next;
   let changed = false;
   const merged = next.map(message => {
+    if (message.toolStatusReported && (message.toolStatus === 'running' || message.toolStatus === 'unknown')) return message;
     const key = toolCallKey(message);
     const live = key && !hasStepTiming(message) ? measured.get(key) : undefined;
     if (!live) return message;
