@@ -11,6 +11,7 @@ import { useChatAutoCache } from '../hooks/useChatAutoCache';
 import { useAdapterChatEvents } from './useAdapterChatEvents';
 import { useChatController as useChatControllerImpl } from './useChatController';
 import { resetMessageQueueStore } from './messageQueue';
+import { preserveOptimisticAssistantMessage } from './historyMergePolicy';
 
 const mockT = (key: string) => key;
 const mockI18n = { language: 'en-US' };
@@ -108,6 +109,8 @@ jest.mock('react-i18next', () => ({
     i18n: mockI18n,
   })),
 }));
+
+jest.mock('../i18n', () => ({ __esModule: true, default: { t: (key: string) => key } }));
 
 jest.mock('expo-document-picker', () => ({
   getDocumentAsync: jest.fn().mockResolvedValue({ canceled: true, assets: [] }),
@@ -244,7 +247,7 @@ jest.mock('../services/analytics/events', () => ({
 
 function createAdapter(
   connectionState: 'ready' | 'connecting' = 'ready',
-  backendKind: 'openclaw' | 'hermes' = 'openclaw',
+  backendKind: 'openclaw' | 'hermes' | 'pi' | 'codex' = 'openclaw',
 ) {
   const listeners: Record<string, Set<(...args: any[]) => void>> = {
     update: new Set(),
@@ -310,10 +313,12 @@ function useChatController(options: Record<string, any>) {
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((next) => {
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((next, fail) => {
     resolve = next;
+    reject = fail;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 describe('useChatController contract', () => {
@@ -2350,6 +2355,242 @@ it('does not restore an old history snapshot after a live terminal event', async
   expect(result.current.isSending).toBe(false);
   expect(result.current.listData.some(message => message.text === 'stale')).toBe(false);
 });
+
+  it.each([false, true])('does not append a late steering acknowledgement after its canonical echo or a newer turn (%s)', async nextTurn => {
+    const adapter = createAdapter('ready', 'codex');
+    const acknowledgement = deferred<void>();
+    const steer = jest.fn(() => acknowledgement.promise);
+    Object.assign(adapter, { steer });
+    const { result, rerender } = renderHook(() => useChatController({ adapter: adapter as any, debugMode: false, showAgentAvatar: true } as any));
+    const events = jest.mocked(useAdapterChatEvents).mock.calls.at(-1)![0];
+    const timestampMs = Date.now() - 120_000;
+    const initial = [{ id: 'native-prompt', historyMessageId: 'native-prompt', role: 'user', text: 'Initial task', timestampMs }];
+    historyMock.messages = initial;
+    await act(async () => {
+      events.onState?.('ready');
+      events.onUpdate?.({ type: 'run_started', runId: 'active', sessionKey: 'agent:main:main', activeRunId: 'active', isSending: true, startedAtMs: timestampMs });
+      result.current.setInput('Change course');
+    });
+    act(() => result.current.onSteer('active'));
+    expect(steer).toHaveBeenCalledWith('agent:main:main', 'active', 'Change course');
+    // Native input is committed and a tool-result/history read wins the RPC response race.
+    const canonical = [...initial, { id: 'native-steer', historyMessageId: 'native-steer', role: 'user', text: 'Change course', timestampMs }];
+    await act(async () => {
+      historyMock.messages = canonical;
+      if (nextTurn) {
+        events.onUpdate?.({ type: 'run_finished', sessionKey: 'agent:main:main', runId: 'active', activeRunId: null, isSending: false,
+          stopReason: 'end_turn', finalMessage: { id: 'native-final', role: 'assistant', text: 'Done', timestampMs: timestampMs + 1000 } });
+        historyMock.messages.push({ id: 'native-next-user', historyMessageId: 'native-next-user', role: 'user', text: 'Next task', timestampMs: Date.now() });
+        events.onUpdate?.({ type: 'run_started', runId: 'next', sessionKey: 'agent:main:main', activeRunId: 'next', isSending: true, startedAtMs: Date.now() });
+      }
+      rerender({});
+      acknowledgement.resolve();
+      await acknowledgement.promise;
+    });
+    expect(historyMock.messages.filter(message => message.text === 'Change course')).toHaveLength(1);
+    expect(historyMock.messages.find(message => message.text === 'Change course')?.historyMessageId).toBe('native-steer');
+    if (nextTurn) expect(historyMock.messages.at(-1).text).toBe('Next task');
+    // A further canonical reload must not preserve a duplicate as an unrelated older user.
+    const next = nextTurn ? [...canonical, ...historyMock.messages.filter(message => message.id === 'native-final' || message.id === 'native-next-user')] : canonical;
+    expect(preserveOptimisticAssistantMessage(historyMock.messages, next).filter(message => message.text === 'Change course')).toHaveLength(1);
+    expect(adapter.prompt).not.toHaveBeenCalled();
+  });
+
+  it('places accepted steering before a later turn when its canonical echo has not reached the phone', async () => {
+    const adapter = createAdapter('ready', 'codex');
+    const acknowledgement = deferred<void>();
+    Object.assign(adapter, { steer: jest.fn(() => acknowledgement.promise) });
+    const initial = [{ id: 'native-prompt', historyMessageId: 'native-prompt', role: 'user', text: 'Initial task' }];
+    historyMock.messages = initial;
+    const { result, rerender } = renderHook(() => useChatController({ adapter: adapter as any, debugMode: false, showAgentAvatar: true } as any));
+    const events = jest.mocked(useAdapterChatEvents).mock.calls.at(-1)![0];
+    await act(async () => {
+      events.onState?.('ready');
+      events.onUpdate?.({ type: 'run_started', runId: 'active', sessionKey: 'agent:main:main', activeRunId: 'active', isSending: true, startedAtMs: Date.now() });
+      result.current.setInput('Change course');
+    });
+    const dispatchedAt = Date.now();
+    act(() => result.current.onSteer('active'));
+    await act(async () => {
+      events.onUpdate?.({ type: 'run_finished', sessionKey: 'agent:main:main', runId: 'active', activeRunId: null, isSending: false,
+        stopReason: 'end_turn', finalMessage: { id: 'native-final', role: 'assistant', text: 'Done' } });
+      historyMock.messages.push({ id: 'native-next-user', historyMessageId: 'native-next-user', idempotencyKey: 'next-send', role: 'user', text: 'Next task' });
+      events.onUpdate?.({ type: 'run_started', runId: 'next', sessionKey: 'agent:main:main', activeRunId: 'next', isSending: true, startedAtMs: Date.now() });
+      result.current.setInput('New draft');
+      rerender({});
+      jest.advanceTimersByTime(250);
+      acknowledgement.resolve();
+      await acknowledgement.promise;
+    });
+    expect(historyMock.messages.map(message => message.text)).toEqual(['Initial task', 'Change course', 'Done', 'Next task']);
+    expect(historyMock.messages[1].timestampMs).toBe(dispatchedAt);
+    expect(result.current.acceptedSubmission).toBeNull();
+    expect(result.current.input).toBe('New draft');
+    expect(adapter.prompt).not.toHaveBeenCalled();
+  });
+
+  it('recognizes a canonical steering echo from the actual adapter recovery mapper without a history alias', async () => {
+    const adapter = createAdapter('ready', 'codex');
+    const acknowledgement = deferred<void>();
+    Object.assign(adapter, { steer: jest.fn(() => acknowledgement.promise) });
+    historyMock.messages = [{ id: 'native-prompt', role: 'user', text: 'Initial task', timestampMs: Date.now() - 120_000 }];
+    const { result } = renderHook(() => useChatController({ adapter: adapter as any, debugMode: false, showAgentAvatar: true } as any));
+    const events = jest.mocked(useAdapterChatEvents).mock.calls.at(-1)![0];
+    await act(async () => {
+      events.onState?.('ready');
+      events.onUpdate?.({ type: 'run_started', runId: 'active', sessionKey: 'agent:main:main', activeRunId: 'active', isSending: true, startedAtMs: Date.now() - 120_000 });
+      result.current.setInput('Change course');
+    });
+    act(() => result.current.onSteer('active'));
+    const { mapAdapterSessionUpdate } = jest.requireActual<typeof import('./useAdapterChatEvents')>('./useAdapterChatEvents');
+    await act(async () => {
+      events.onUpdate?.(mapAdapterSessionUpdate({ type: 'history_reconciled', sessionKey: 'agent:main:main', history: {
+        key: 'agent:main:main', hasActiveRun: true, messages: [
+          { id: 'native-prompt', role: 'user', text: 'Initial task', timestampMs: Date.now() - 120_000 },
+          { id: 'native-steer', role: 'user', text: 'Change course', timestampMs: Date.now() - 120_000 },
+        ],
+      } }));
+      acknowledgement.resolve();
+      await acknowledgement.promise;
+    });
+    const guide = historyMock.messages.filter(message => message.text === 'Change course');
+    expect(guide).toHaveLength(1);
+    expect(guide[0].id).toBe('native-steer');
+    expect(guide[0].historyMessageId).toBeUndefined();
+    expect(adapter.prompt).not.toHaveBeenCalled();
+  });
+
+  it('keeps two intentional same-clock steering submissions distinct until their native echoes arrive', async () => {
+    const adapter = createAdapter('ready', 'codex');
+    Object.assign(adapter, { steer: jest.fn().mockResolvedValue(undefined) });
+    historyMock.messages = [{ id: 'native-prompt', historyMessageId: 'native-prompt', role: 'user', text: 'Initial task' }];
+    const { result, rerender } = renderHook(() => useChatController({ adapter: adapter as any, debugMode: false, showAgentAvatar: true } as any));
+    const events = jest.mocked(useAdapterChatEvents).mock.calls.at(-1)![0];
+    await act(async () => {
+      events.onState?.('ready');
+      events.onUpdate?.({ type: 'run_started', runId: 'active', sessionKey: 'agent:main:main', activeRunId: 'active', isSending: true, startedAtMs: Date.now() });
+    });
+    for (let index = 0; index < 2; index++) {
+      await act(async () => { result.current.setInput('Change course'); rerender({}); });
+      await act(async () => { result.current.onSteer('active'); await Promise.resolve(); });
+    }
+    const local = historyMock.messages.filter(message => message.text === 'Change course');
+    expect(local).toHaveLength(2);
+    expect(new Set(local.map(message => message.id)).size).toBe(2);
+    expect((adapter as any).steer).toHaveBeenCalledTimes(2);
+    expect(adapter.prompt).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])('reads post-acknowledgement history only while the send scope remains current (%s)', async retireScope => {
+    const adapter = createAdapter('ready', 'codex');
+    const acknowledgement = deferred<void>();
+    const staleRead = deferred<number>();
+    Object.assign(adapter, { steer: jest.fn(() => acknowledgement.promise) });
+    historyMock.loadHistory.mockReturnValueOnce(staleRead.promise);
+    historyMock.messages = [{ id: 'native-prompt', historyMessageId: 'native-prompt', role: 'user', text: 'Initial task' }];
+    let activeAdapter = adapter;
+    const { result, rerender } = renderHook(() => useChatController({ adapter: activeAdapter as any, debugMode: false, showAgentAvatar: true } as any));
+    const events = jest.mocked(useAdapterChatEvents).mock.calls.at(-1)![0];
+    await act(async () => {
+      events.onState?.('ready');
+      events.onUpdate?.({ type: 'run_started', runId: 'active', sessionKey: 'agent:main:main', activeRunId: 'active', isSending: true, startedAtMs: Date.now() });
+      result.current.setInput('Change course');
+    });
+    expect(historyMock.loadHistory).toHaveBeenCalledTimes(1);
+    await act(async () => { result.current.onSteer('active'); acknowledgement.resolve(); await acknowledgement.promise; });
+    expect(historyMock.loadHistory).toHaveBeenCalledTimes(1);
+    if (retireScope) await act(async () => { activeAdapter = createAdapter('ready', 'codex'); rerender(undefined); });
+    await act(async () => { staleRead.resolve(0); await staleRead.promise; });
+    expect(historyMock.loadHistory).toHaveBeenCalledTimes(retireScope ? 1 : 2);
+    expect(historyMock.loadHistory).toHaveBeenLastCalledWith('agent:main:main', 50);
+  });
+
+  it.each(['session', 'adapter'] as const)('ignores a late steering acknowledgement after the %s changes', async change => {
+    const adapter = createAdapter('ready', 'codex');
+    const acknowledgement = deferred<void>();
+    Object.assign(adapter, { steer: jest.fn(() => acknowledgement.promise) });
+    let activeAdapter = adapter;
+    const { result, rerender } = renderHook(() => useChatController({ adapter: activeAdapter as any, debugMode: false, showAgentAvatar: true } as any));
+    const events = jest.mocked(useAdapterChatEvents).mock.calls.at(-1)![0];
+    await act(async () => {
+      events.onState?.('ready');
+      events.onUpdate?.({ type: 'run_started', runId: 'active', sessionKey: 'agent:main:main', activeRunId: 'active', isSending: true, startedAtMs: Date.now() });
+      result.current.setInput('Change course');
+    });
+    act(() => result.current.onSteer('active'));
+    await act(async () => {
+      if (change === 'session') historyMock.sessionKey = 'other-session';
+      historyMock.messages = [{ id: 'other-user', role: 'user', text: 'Other conversation' }];
+      if (change === 'adapter') activeAdapter = createAdapter('ready', 'codex');
+      rerender(undefined);
+      result.current.setInput('Other draft');
+    });
+    await act(async () => { acknowledgement.resolve(); await acknowledgement.promise; });
+    expect(historyMock.messages.map(message => message.text)).toEqual(['Other conversation']);
+    expect(result.current.input).toBe('Other draft');
+    expect(adapter.prompt).not.toHaveBeenCalled();
+  });
+
+  it('coalesces two accepted steering reads that waited for the same stale history request', async () => {
+    const adapter = createAdapter('ready', 'codex');
+    const staleRead = deferred<number>();
+    Object.assign(adapter, { steer: jest.fn().mockResolvedValue(undefined) });
+    historyMock.loadHistory.mockReturnValueOnce(staleRead.promise);
+    historyMock.messages = [{ id: 'native-prompt', historyMessageId: 'native-prompt', role: 'user', text: 'Initial task' }];
+    const { result, rerender } = renderHook(() => useChatController({ adapter: adapter as any, debugMode: false, showAgentAvatar: true } as any));
+    const events = jest.mocked(useAdapterChatEvents).mock.calls.at(-1)![0];
+    await act(async () => {
+      events.onState?.('ready');
+      events.onUpdate?.({ type: 'run_started', runId: 'active', sessionKey: 'agent:main:main', activeRunId: 'active', isSending: true, startedAtMs: Date.now() });
+    });
+    for (let index = 0; index < 2; index++) {
+      await act(async () => { result.current.setInput(`Guidance ${index}`); rerender({}); });
+      await act(async () => { result.current.onSteer('active'); await Promise.resolve(); });
+    }
+    expect(historyMock.loadHistory).toHaveBeenCalledTimes(1);
+    await act(async () => { staleRead.resolve(0); await staleRead.promise; });
+    expect(historyMock.loadHistory).toHaveBeenCalledTimes(2);
+    expect((adapter as any).steer).toHaveBeenCalledTimes(2);
+    expect(adapter.prompt).not.toHaveBeenCalled();
+  });
+
+  it('preserves the steering draft after uncertain acknowledgement failure without replay or an accepted row', async () => {
+    const adapter = createAdapter('ready', 'codex');
+    const acknowledgement = deferred<void>();
+    Object.assign(adapter, { steer: jest.fn(() => acknowledgement.promise) });
+    const { result } = renderHook(() => useChatController({ adapter: adapter as any, debugMode: false, showAgentAvatar: true } as any));
+    const events = jest.mocked(useAdapterChatEvents).mock.calls.at(-1)![0];
+    await act(async () => {
+      events.onState?.('ready');
+      events.onUpdate?.({ type: 'run_started', runId: 'active', sessionKey: 'agent:main:main', activeRunId: 'active', isSending: true, startedAtMs: Date.now() });
+      result.current.setInput('Change course');
+    });
+    await act(async () => { result.current.onSteer('active'); acknowledgement.reject(new Error('timed out')); await acknowledgement.promise.catch(() => undefined); });
+    expect(result.current.input).toBe('Change course');
+    expect(result.current.sendFailure).toContain('Sending failed');
+    expect(historyMock.messages.some(message => message.text === 'Change course')).toBe(false);
+    expect((adapter as any).steer).toHaveBeenCalledTimes(1);
+    expect(adapter.prompt).not.toHaveBeenCalled();
+  });
+
+  it.each(['openclaw', 'hermes', 'pi'] as const)('preserves the existing steering capability and acceptance path for %s', async backend => {
+    const adapter = createAdapter('ready', backend);
+    Object.assign(adapter, { steer: jest.fn().mockResolvedValue(undefined) });
+    const { result } = renderHook(() => useChatController({ adapter: adapter as any, debugMode: false, showAgentAvatar: true } as any));
+    const events = jest.mocked(useAdapterChatEvents).mock.calls.at(-1)![0];
+    await act(async () => {
+      events.onState?.('ready');
+      events.onUpdate?.({ type: 'run_started', runId: 'active', sessionKey: 'agent:main:main', activeRunId: 'active', isSending: true, startedAtMs: Date.now() });
+      result.current.setInput('Change course');
+    });
+    await act(async () => { result.current.onSteer('active'); await Promise.resolve(); });
+    const supported = backend !== 'openclaw';
+    expect(historyMock.messages.filter(message => message.text === 'Change course')).toHaveLength(supported ? 1 : 0);
+    expect(result.current.input).toBe(supported ? '' : 'Change course');
+    expect(result.current.acceptedSubmission?.text).toBe(supported ? 'Change course' : undefined);
+    expect((adapter as any).steer).toHaveBeenCalledTimes(supported ? 1 : 0);
+    expect(adapter.prompt).not.toHaveBeenCalled();
+  });
 
   it('restores unused steering only for the active run without replaying it', async () => {
     const adapter = createAdapter('ready', 'hermes');

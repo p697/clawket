@@ -1,5 +1,67 @@
 import { UiMessage } from '../types/chat';
-import { preserveApprovalRows, preserveHydratedMessageKeys, preserveMessagePresentation, preserveOptimisticAssistantMessage, preserveToolTiming, prependOlderCachedMessages, retireAliasedTools } from './historyMergePolicy';
+import { preserveApprovalRows, preserveHydratedMessageKeys, preserveMessagePresentation, preserveOptimisticAssistantMessage, preserveToolTiming, prependOlderCachedMessages, reconcileAcceptedSteeringMessage, retireAliasedTools } from './historyMergePolicy';
+
+describe('reconcileAcceptedSteeringMessage', () => {
+  const prompt: UiMessage = { id: 'prompt', historyMessageId: 'prompt-native', role: 'user', text: 'Initial task', timestampMs: 1_000 };
+  const accepted: UiMessage = { id: 'usr_121000_steer_active', renderKey: 'usr_121000_steer_active', role: 'user', sentLocally: true, text: 'Change course', timestampMs: 121_000 };
+  const echo: UiMessage = { id: 'echo', historyMessageId: 'steer-native', role: 'user', text: accepted.text, timestampMs: 1_000 };
+
+  it('keeps a native echo with the original turn clock, including a renamed dispatch anchor', () => {
+    const current = [{ ...prompt, id: 'history-prompt' }, echo];
+    expect(reconcileAcceptedSteeringMessage([prompt], current, accepted)).toBe(current);
+  });
+
+  it.each([false, true])('finds accepted input persisted before an already visible assistant row (%s)', alias => {
+    const assistant: UiMessage = { id: 'live-assistant', renderKey: 'stable-assistant', role: 'assistant', text: 'Working' };
+    const current = [prompt, echo, { ...assistant, id: alias ? 'native-assistant' : assistant.id }];
+    expect(reconcileAcceptedSteeringMessage([prompt, assistant], current, accepted)).toBe(current);
+  });
+
+  it('keeps intentional repeated guidance after a previous canonical echo', () => {
+    const second = { ...echo, id: 'second', historyMessageId: 'second-native' };
+    const current = [prompt, echo, second];
+    expect(reconcileAcceptedSteeringMessage([prompt, echo], current, accepted)).toBe(current);
+    expect(current.filter(message => message.text === accepted.text)).toHaveLength(2);
+  });
+
+  it('inserts missing accepted input at dispatch position, before a later final and same-text queued send', () => {
+    const final: UiMessage = { id: 'old-final', role: 'assistant', text: 'Done' };
+    const next: UiMessage = { id: 'next-send', historyMessageId: 'next-native', idempotencyKey: 'next-send-key', role: 'user', text: accepted.text, timestampMs: 121_100 };
+    expect(reconcileAcceptedSteeringMessage([prompt], [prompt, final, next], accepted)).toEqual([prompt, accepted, final, next]);
+    // A later stale reload cannot let that independent send adopt the steering row.
+    expect(preserveOptimisticAssistantMessage([prompt, accepted], [prompt, next]).filter(message => message.text === accepted.text)).toHaveLength(2);
+  });
+
+  it('does not use older prepended input, different authors or attachments as steering evidence', () => {
+    const tool: UiMessage = { id: 'tool', role: 'tool', text: 'Working' };
+    const attachment = { ...echo, imageUris: ['file://different.png'] };
+    const inbound = { ...echo, id: 'inbound', historyMessageId: 'inbound-native', attribution: { channel: 'slack', sender: { id: 'other' } } };
+    const current = [echo, prompt, tool, attachment, inbound];
+    expect(reconcileAcceptedSteeringMessage([prompt, tool], current, accepted)).toEqual([echo, prompt, tool, accepted, attachment, inbound]);
+  });
+
+  it('does not treat locally queued or accepted rows as new native steering echoes', () => {
+    const queued: UiMessage = { ...echo, historyMessageId: undefined, delivery: 'queued' };
+    const local: UiMessage = { ...echo, id: 'usr_120000', historyMessageId: undefined };
+    const current = [prompt, queued, local];
+    expect(reconcileAcceptedSteeringMessage([prompt], current, accepted)).toEqual([prompt, accepted, queued, local]);
+  });
+
+  it('keeps all repeated native echoes without adding an ACK copy and does not guess placement in a replaced window', () => {
+    const duplicate = { ...echo, id: 'other-echo', historyMessageId: 'other-native' };
+    const repeated = [prompt, echo, duplicate];
+    expect(reconcileAcceptedSteeringMessage([prompt], repeated, accepted)).toBe(repeated);
+    const next: UiMessage = { id: 'new-turn', historyMessageId: 'new-native', role: 'user', text: 'Next task' };
+    const current = [next];
+    expect(reconcileAcceptedSteeringMessage([prompt], current, accepted)).toBe(current);
+  });
+
+  it('appends once in an empty window and keeps an already accepted row idempotently', () => {
+    expect(reconcileAcceptedSteeringMessage([], [], accepted)).toEqual([accepted]);
+    const current = [prompt, accepted];
+    expect(reconcileAcceptedSteeringMessage([prompt], current, accepted)).toBe(current);
+  });
+});
 
 describe('preserveHydratedMessageKeys', () => {
   const cached: UiMessage = { id: 'cached-row', historyMessageId: 'server-row', renderKey: 'stable-row', role: 'assistant', text: 'Outdated text', timestampMs: 1000 };

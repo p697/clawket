@@ -89,7 +89,7 @@ import {
   SessionRunState,
 } from "./sessionRunState";
 import { shouldAdoptPendingOptimisticRunId } from "./pendingOptimisticRun";
-import { preserveApprovalRows, preserveMessagePresentation, preserveOptimisticAssistantMessage, preserveToolTiming, retireAliasedTools } from "./historyMergePolicy";
+import { preserveApprovalRows, preserveMessagePresentation, preserveOptimisticAssistantMessage, preserveToolTiming, reconcileAcceptedSteeringMessage, retireAliasedTools } from "./historyMergePolicy";
 import {
   FOREGROUND_REFRESH_AFTER_RECONNECT_TIMEOUT_MS,
   getForegroundRefreshDelayMs,
@@ -1057,13 +1057,22 @@ export function useChatController({
 
   const requestVisibleHistoryReload = useCallback(
     async (sessionKey: string, reason: string) => {
+      const scope = sendScopeRef.current;
+      const afterNativeWrite = reason === 'post-stream' || reason === 'steer-accepted';
       const inFlight = historyReloadInFlightRef.current;
       if (inFlight && inFlight.sessionKey === sessionKey) {
-        if (reason === "post-stream") {
-          // A tool-result read can precede native persistence. Completion must
-          // read again after it settles, even inside the normal refresh cooldown.
+        if (afterNativeWrite) {
+          // A tool-result read can precede a completed turn or accepted input.
+          // Both require a read after it settles, inside the normal cooldown.
           await inFlight.promise.catch(() => 0);
-          if (sessionKeyRef.current !== sessionKey || currentRunIdRef.current) return 0;
+          if (sessionKeyRef.current !== sessionKey
+            || (reason === 'post-stream' && currentRunIdRef.current)
+            || (reason === 'steer-accepted' && (!scope.active || sendScopeRef.current !== scope))) return 0;
+          // Multiple accepted inputs may have waited for this same older read.
+          // The first fresh read already follows all of those native writes.
+          const following = historyReloadInFlightRef.current;
+          if (reason === 'steer-accepted' && following?.sessionKey === sessionKey
+            && following.promise !== inFlight.promise) return following.promise;
         } else {
           if (showDebug) dbg(`historyReload:reuse session=${sessionKey} reason=${reason}`);
           return inFlight.promise;
@@ -1072,7 +1081,7 @@ export function useChatController({
 
       const recent = recentHistoryReloadRef.current;
       if (
-        reason !== "post-stream" && recent &&
+        !afterNativeWrite && recent &&
         recent.sessionKey === sessionKey &&
         Date.now() - recent.at < HISTORY_RELOAD_MIN_INTERVAL_MS
       ) {
@@ -2976,6 +2985,7 @@ export function useChatController({
   // the post-reply history refresh; the sending marker keeps its bubble in
   // place until history adopts the optimistic message with the same id.
   const steeringBusyRef = useRef(false);
+  const steeringSequenceRef = useRef(0);
   const onSteer = useCallback((expectedRunId?: string) => {
     const key = history.sessionKey;
     const runId = currentRunIdRef.current;
@@ -2987,22 +2997,33 @@ export function useChatController({
     if (readOnly || steeringBusyRef.current || !key || !runId || !text || pendingImages.length
       || !adapter?.capabilities.steer || !adapter.steer || connectionState !== 'ready') return;
     const scope = sendScopeRef.current;
+    const dispatchedMessages = [...history.messages];
+    const dispatchedAt = Date.now();
+    const codex = adapter.connection.backendKind === 'codex';
+    const steeringSequence = codex ? ++steeringSequenceRef.current : undefined;
     steeringBusyRef.current = true;
     setSendFailure(null);
     void adapter.steer(key, runId, text).then(() => {
       if (!scope.active || sendScopeRef.current !== scope || sessionKeyRef.current !== key) return;
-      const timestampMs = Date.now();
-      history.setMessages((messages) => [...messages, { id: `usr_${timestampMs}_steer_${runId}`, role: 'user', sentLocally: true, text, timestampMs }]);
+      const timestampMs = codex ? dispatchedAt : Date.now();
+      const accepted: UiMessage = { id: `usr_${timestampMs}_steer_${runId}${codex ? `_${steeringSequence}` : ''}`, role: 'user', sentLocally: true, text, timestampMs };
+      if (codex) accepted.renderKey = accepted.id;
+      history.setMessages((messages) => codex
+        ? reconcileAcceptedSteeringMessage(dispatchedMessages, messages, accepted)
+        : [...messages, accepted]);
       setInput((current) => current === input ? '' : current);
-      setMessageSubmittedAt(timestampMs);
-      setMessageAcceptedAt(timestampMs);
-      setAcceptedSubmission({ at: timestampMs, text, attachmentUris: [] });
+      if (!codex || currentRunIdRef.current === runId) {
+        setMessageSubmittedAt(timestampMs);
+        setMessageAcceptedAt(timestampMs);
+        setAcceptedSubmission({ at: timestampMs, text, attachmentUris: [] });
+      }
+      if (codex) void requestVisibleHistoryReload(key, 'steer-accepted').catch(() => undefined);
     }).catch((error: unknown) => {
       if (!scope.active || sendScopeRef.current !== scope) return;
       setSendFailure(t('Sending failed. Check the conversation before trying again.'));
       setSendFailureDetails(sanitizeReplyFailure(error instanceof Error ? error.message : String(error)) || null);
     }).finally(() => { steeringBusyRef.current = false; });
-  }, [adapter, connectionState, history.sessionKey, history.setMessages, input, pendingImages.length, readOnly, t]);
+  }, [adapter, connectionState, history.messages, history.sessionKey, history.setMessages, input, pendingImages.length, readOnly, requestVisibleHistoryReload, t]);
 
   const queueDeliveryReady = !readOnly && !runtimeSettingsBusy && !runtimeSettingsUnconfirmed
     && history.historyLoaded
