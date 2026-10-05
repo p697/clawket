@@ -1,5 +1,11 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-05 历史 prepend 的实际旧 child clamp 关联候选（负责人授权，已完成窄验证，真机待验）。
+  - 独立 fresh-main worktree 证明 `5ab56f64` 是负责人重基后 `7bf33d97` 的祖先，再 fast-forward 整棵明确前置树；本任务仅修改 Thread 实际滚动事件 viewport 传递、anchor 的未知 clamp 关联、第五真实 SDK/Thread 阶段用例与最近规则。
+  - Shadow size 可先报新高度；命令在旧 child 上执行时，只有同 scope/list、未见反馈且未有 clamp 关联的 target 超实际事件 max、height 命中 retired geometry、offset 精确到该 max 才绑定现有 `clamp_ack`。保原 row/viewportY/target/pending；重复事件仍被 ledger 关联，已知 clamp、普通拖动/动量、fresh drag 与旧 ACK 门保持。
+  - 第五用例保真实 reading=true，分开 Shadow 尺寸、真实 consumer command 的旧 child clamp、重复 SDK 事件、独立 child mount 与额外 size 输入；不伪造恢复 callback、固定等待、MVCP/Native 私有控制或 paint 断言。单值无法区分用户到同旧 max 与命令反馈，沿既有 ACK 值关联的保守政策明确记录。063/073 原因未定。
+  - 独占 heavy 窗口 own bootstrap exit0；仅两生产文件还原 `7bf33d97` 后第五真实 Thread/SDK 用例 1 红（4 跳过），finally 精确恢复候选。完整阶段初跑 4 绿/1 断言红：同 clamp 在新高度重复被现有 ledger 识别，实际两次而非旧期望一次；仅修期望后 5/5 绿。anchor 29/29 绿（新增 viewport 缺省/NaN/Infinity/0 与非 max reading 五负例），Mobile 类型、文档 7 指令对/5 用例绿。生产 SHA 保持首次冻结版本；未跑全套、不操作 Native/手机/Metro，不宣称真机修复或发布。
+
 - 2026-10-05 Codex QA 收敛：完整任务树重基至 `5ab56f64`，保留 main 的工具展示决定与已获负责人授权的依赖审计例外。
   - 合并后的原生执行身份、同轮指导连续计时/步骤、partial 审批、断线保持及 scope 退休通过独立源码复核。完成后的 receipt 与无空回复占位、首步 dock 行为沿 main 决定；原七个一秒前无 dock 的断言已适配新决定，终止时仍必须退休。
   - 串行九文件358项通过：ThreadView216、turn-work22、work-dock-model10、toolGrouping7、timestamps19、model30、Native QA bridge22、cache17、hook15；Mobile types、十对 agent 文档/五项损坏输入检查与 whitespace 通过。保留首次失败及重测日志。没有本地完整套件、设备动作或 Native 编译；新增只读 QA 模块尚待实际编译与手机回调验证。

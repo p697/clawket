@@ -284,6 +284,27 @@ it('keeps a late clamp acknowledgement after retrying the same target against th
   expect(f.getViewportY('25')).toBe(before);
 });
 
+it.each([
+  { name: 'missing viewport', viewport: undefined, offset: 1500, expectedTarget: 3500 },
+  { name: 'NaN viewport', viewport: Number.NaN, offset: 1500, expectedTarget: 3500 },
+  { name: 'infinite viewport', viewport: Number.POSITIVE_INFINITY, offset: 1500, expectedTarget: 3500 },
+  { name: 'zero viewport', viewport: 0, offset: 1500, expectedTarget: 3500 },
+  { name: 'reader before actual maximum', viewport: 600, offset: 1490, expectedTarget: 3490 },
+])('preserves reader displacement without a proven event clamp: $name', ({ viewport, offset, expectedTarget }) => {
+  const f = fixture();
+  f.list.scrollToOffset.mockImplementation(() => {});
+  act(() => f.result.current.capture(100, 2100));
+  f.setRows([message('09'), message('21'), message('25'), message('26')], [0, 1260, 2060, 2220]);
+  // The planned maximum fits this command, so its ledger has no clamp yet.
+  act(() => f.result.current.restore({ nativeMaxOffset: 3500, nativeOffset: 100 }));
+  expect(f.list.scrollToOffset).toHaveBeenLastCalledWith({ offset: 2100, animated: false });
+  f.setOffset(offset);
+  act(() => f.result.current.readerScrolled(offset, true, 2100, viewport));
+  expect(f.result.current.isCorrectionPending()).toBe(true);
+  act(() => f.result.current.restore({ nativeMaxOffset: 4300, nativeOffset: offset, nativeGeometryCommitted: true }));
+  expect(f.list.scrollToOffset).toHaveBeenLastCalledWith({ offset: expectedTarget, animated: false });
+});
+
 it('keeps the old page reader row when its zero-offset end-drag arrives after the prepend layout', () => {
   const f = fixture();
   f.setOffset(0);

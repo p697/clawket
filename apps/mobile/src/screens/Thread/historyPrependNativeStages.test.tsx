@@ -266,9 +266,9 @@ it('separates early Shadow size, old-child command clamp, child mount and later 
   expect(oldClamp).toEqual({ offset: 2840, height: 3240 });
   act(() => nativeScroll(oldClamp));
   mark('old_child_clamp');
-  expect(acknowledgements()).toHaveLength(0);
+  expect(acknowledgements()).toHaveLength(1);
   expect(mockObservations).toEqual(expect.arrayContaining([
-    expect.objectContaining({ kind: 'old_geometry', geometryPending: true }),
+    expect.objectContaining({ kind: 'clamp_ack', targetOffset: 3240, geometryPending: true }),
   ]));
 
   // 3: Child mounting alone changes neither absolute offset nor JS event data.
@@ -288,9 +288,11 @@ it('separates early Shadow size, old-child command clamp, child mount and later 
   const later = mark('later_native_scroll');
   expect(later.sdkOffset).toBe(2840);
   expect(later.mountedKeys).not.toContain('message:user:25');
-  expect(acknowledgements()).toHaveLength(0);
+  // The same observed clamp remains in the ledger after the child grows;
+  // repeating it acknowledges that clamp, never the still-pending target.
+  expect(acknowledgements()).toHaveLength(2);
   expect(mockObservations.slice(beforeLater)).toEqual(expect.arrayContaining([
-    expect.objectContaining({ kind: 'geometry_pending', geometryPending: true }),
+    expect.objectContaining({ kind: 'clamp_ack', contentHeight: 6440, targetOffset: 3240, geometryPending: true }),
   ]));
   expect(mockCommands.every(command => command.target === 3240)).toBe(true);
   if (mockCommands.length) {
@@ -374,4 +376,41 @@ it('lets a fresh old-child reader displacement retire the old target before late
   // An SDK commit may correct stale SDK feedback. Any such real command must
   // keep the fresh reader's target, not resurrect the initial 3240 anchor.
   expect(mockCommands.every(command => command.target === 3340)).toBe(true);
+});
+
+it('keeps the reader anchor when an early command clamps while the original drag is still reading', () => {
+  const initial = props();
+  const view = render(<ThreadView {...initial} />);
+  startReader();
+  // Retain real Thread reader intent; do not settle this drag before the
+  // Shadow report and actual command feedback traverse the installed SDK.
+  act(() => mockScrollProps!.onScrollBeginDrag!(event()));
+  view.rerender(<ThreadView {...props(9)} />);
+  act(() => shadowSize(6440));
+  expect(mockCommands.map(command => command.target)).toEqual([3240]);
+  expect(offsetCommands().at(-1)).toMatchObject({ targetOffset: 3240, maxOffset: 6040 });
+
+  const oldClamp = applyCommand();
+  expect(oldClamp).toEqual({ offset: 2840, height: 3240 });
+  act(() => nativeScroll(oldClamp));
+  expect(acknowledgements().at(-1)).toMatchObject({ kind: 'clamp_ack', targetOffset: 3240, geometryPending: true });
+  expect(mockListProps?.drawDistance).toBeGreaterThan(250);
+  // Duplicate feedback must use the observed clamp correlation even though
+  // the first callback marked it seen. It still cannot complete the target.
+  act(() => nativeScroll(oldClamp));
+  expect(acknowledgements()).toHaveLength(2);
+  expect(acknowledgements().every(value => value.kind === 'clamp_ack' && value.targetOffset === 3240)).toBe(true);
+  expect(mockObservations.filter(value => value.kind === 'old_geometry')).toHaveLength(0);
+  expect(mockCommands).toHaveLength(0);
+
+  mountChild(6440);
+  // Only this separate size input permits the original target to be retried.
+  act(() => shadowSize(6440));
+  expect(mockCommands.map(command => command.target)).toEqual([3240]);
+  const applied = applyCommand();
+  act(() => nativeScroll(applied));
+  expect(mark('original_reader_target_ack').sdkFirstKey).toBe('message:user:25');
+  expect(acknowledgements().at(-1)).toMatchObject({ kind: 'offset_ack', targetOffset: 3240 });
+  expect(mockListProps?.drawDistance).toBe(250);
+  expect(initial.onSend).not.toHaveBeenCalled();
 });

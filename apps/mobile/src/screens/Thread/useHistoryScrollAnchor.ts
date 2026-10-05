@@ -249,11 +249,28 @@ export function useHistoryScrollAnchor(scope: string, listRef: RefObject<List | 
       release();
     }
   }, [baselineDrawDistance, emit, listRef, release, retireWindow]);
-  const readerScrolled = useCallback((offset: number, reading = true, nativeHeight?: number) => {
+  const readerScrolled = useCallback((offset: number, reading = true, nativeHeight?: number, nativeViewport?: number) => {
     const saved = isActive() ? anchor.current : null;
     // The old native event may arrive before FlashList's first commit callback.
     if (saved) retirePrependedGeometry(saved, latest.current.rows);
     const pending = corrections.current;
+    const oldGeometry = nativeHeight === undefined ? undefined
+      : saved?.retiredGeometry.find(value => Math.abs(value.height - nativeHeight) < 0.5);
+    // Shadow sizing can precede child mount. Bind an unseen command's clamp
+    // to this event's actual geometry, keeping repeat feedback in the ledger.
+    // The same value alone cannot distinguish a finger reaching the old end.
+    if (saved?.geometryPending && oldGeometry && pending?.scope === latest.current.scope && pending.list === listRef.current
+      && nativeHeight !== undefined && Number.isFinite(nativeHeight) && nativeHeight >= 0
+      && nativeViewport !== undefined && Number.isFinite(nativeViewport) && nativeViewport > 0) {
+      const actualMax = Math.max(0, nativeHeight - nativeViewport);
+      if (Math.abs(offset - actualMax) < 0.5) {
+        for (const correction of pending.offsets) {
+          if (!correction.seen && correction.clampedOffset === undefined && correction.offset > actualMax + 0.5) {
+            correction.clampedOffset = actualMax;
+          }
+        }
+      }
+    }
     const acknowledged = pending?.scope === latest.current.scope && pending.list === listRef.current
       ? pending.offsets.filter(value => Math.abs(offset - value.offset) < 0.5
         || (value.clampedOffset !== undefined && Math.abs(offset - value.clampedOffset) < 0.5)) : [];
@@ -274,8 +291,6 @@ export function useHistoryScrollAnchor(scope: string, listRef: RefObject<List | 
       }
       return true;
     }
-    const oldGeometry = nativeHeight === undefined ? undefined
-      : saved?.retiredGeometry.find(value => Math.abs(value.height - nativeHeight) < 0.5);
     if (oldGeometry) {
       emit({ kind: 'old_geometry', offset, contentHeight: nativeHeight, geometryPending: saved?.geometryPending });
       // Keep this gesture's old coordinate space until the native child has

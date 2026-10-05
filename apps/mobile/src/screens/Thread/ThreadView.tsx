@@ -1122,7 +1122,7 @@ export function ThreadView({
     observeViewport({ kind: 'reader_scroll', offset: metrics.offset, contentHeight: metrics.height, viewportHeight: metrics.viewport });
     // A queued compensation/clamp event supplies native sizing but cannot turn
     // the reader's old-height maximum into an intent to follow the bottom.
-    if (!updateHistoryAnchor(metrics.offset, readerScrollingRef.current, metrics.height)) refreshScrollButton();
+    if (!updateHistoryAnchor(metrics.offset, readerScrollingRef.current, metrics.height, metrics.viewport)) refreshScrollButton();
     // Rows inserted above a short top-anchored list (older history, a preview
     // unlocked) make the anchor correction push the offset past the end; iOS
     // keeps it there as blank space until the next touch. A reader's own
