@@ -1,5 +1,12 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-05 Codex 安卓收敛回测完成，组合候选进入最终 PR 门禁。
+  - `55aa6b77` 基于 main `5ab56f64`，精确 CI37286511529 十一项全部通过（Mobile 三分片、v1、Windows/macOS 等）。本机九窄文件358项、实际 Thread/FlashList 阶段5/5、anchor29/29、Mobile types与十对文档/五检查通过，未跑本地全套。
+  - 只安装保数据的独立 QA debug 包，原 debug 证书与商店 App 保留；开发端口缺失和旧 Metro file map 分别保存现场，仅恢复自有映射/重启自有 Metro。完整新手机 cache22,572,375B/SHA d5a2c9eb…核对30源码/78标记；QA 冷启动恢复 Reload 后启动图，不归因原聊天 idle blank。
+  - 自有 H6C 单次 Start 亲见反馈，六个新鲜 scope 拖动最后显示21–24；后续无手势及手动 Stop 后仍21–24，两页旧历史已加载、81投影行。实际 Native V3 mount/scroll 回调与 stopped/manual 已核，完整219,129B cache经生产 encoder逐字相同；237样本、64留存原生事件，早先1,789事件被ring丢弃，不宣称完整阶段/paint。原H6C/R5U全文件大小与SHA不变、0新Send。
+  - 附件 UI 的一图/六图、加减/预览、键盘输入/展开收起、浅深色已有独立真机验收。074全文件4,110,059B/SHA4ba7ee58…稳定传回；设备结束码缺失如实保留，不冒称自然60秒成功。实际容器49.338467秒，864编码帧/72contact全部亲审，尾帧47.717022秒止于26–29；未录后续21–24/两页ACK。未见旧非相邻跨多页跳位/全块blank；571→572及576→577同内容反向移位仍可见，手势/anchor因果未知，不称零位移或连续paint。Desktop重开、认证恢复后的暖推理/控制与原idle blank仍保留明确缺口。修复不等于发布，本轮无升版、分发、Production改动或发布。见 [QA记录](../3.1/codex-android-qa-20261003.md)。
+  - 这次手机保留已验 `cc4ff3ab` QA Bridge，实际验证新 Mobile 历史行为，不冒称全部新 Bridge 推理已实跑。采集后仅退休两自有 QA parent及其App Server四进程、自有Metro，进程/监听均独立消失、原Native全文件仍不变；QA保安装/数据后关闭，租约全free。Desktop/Production未停。原自有reverse最终已缺失，原因未知，未remove-all。ignored私有证据保全后再清工作树。
+
 - 2026-10-05 Codex 收敛 Native QA debug 编译完成：组合历史阶段5/5、anchor29/29、Mobile types及十对文档/五检查通过；`8d449498`精确 CI11/11通过。
   - 首两次编译使用默认 symlink cache，在 RN Gradle 插件的 catalog 配置阶段失败；保留日志与本工作树项目缓存，改用现有 Lucy-SSD 真实 GRADLE_USER_HOME，未改第三方源码或清全局缓存。第三次首次触达只读 QA 模块，发现 Expo57 Context 泛型需要显式 ReactContext 门；按实际 runtime 源码修正为 fail-closed cast。
   - 修正后普通 QA debug assemble 成功（643 tasks，248执行/72缓存/323up-to-date）；实际 QA30101/3.1.1、debuggable、原 debug 证书、Kotlin class 和 APK DEX 新模块存在已核。不是分发/商店构建，尚未装手机或宣称 Native callback/paint 通过。下一步仅 data-preserving QA install与自有H6C冷启动分页回测，Native原始文件保持冻结。
@@ -1798,6 +1805,7 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 
 | 编号 | 事项 | 怎么做 | 验证方法 | 状态 |
 |---|---|---|---|---|
+| HT-CODEX-DESKTOP-REOPEN-1005 | 连续远程发消息后原 Desktop 会话重开的真实验收 | 负责人在正常桌面界面打开同一自有 QA 会话；若报错，保留页面与重试结果。Desktop GUI 控制此前被拒绝，本轮不退出或重启 Desktop 绕过该限制。 | 对照手机原始 turn/receipt 与桌面重开、Retry；新候选成功不能替代原故障复现。 | ownership/history-generation 修复与 CI 通过；真实 Desktop 重开 checkpoint 待负责人，未宣称问题已解决。 |
 | HT-PICKER-MIME-1004 | 相册导出 MIME 真机验收 | 在负责人合入本修复的 QA App，从系统相册选择小 GIF 与 PNG；仅自建 QA 会话发送一次，未知不重发。 | 观察实际 base64 签名和发送 MIME 一致、视觉首帧正确、取消/scope/六图上限保持；不宣称恢复 GIF 动画或制造容量超限。 | hook/发送 wire 回归已通过；真机 gallery 输出待负责人验收。本轮没有设备或发布动作。 |
 | HT-STEER-PENDING-1004 | Current 指引等待确认的真机验收 | 在包含修复的开发 App 上，让 Current ACK 延迟；重新输入不同或相同草稿，打开 Current/Next，再显式选择 Next 或 Stop。 | 等待期间 Current 禁用且显示发送中，选择入口/Next/Stop 可用；旧 ACK 不清新草稿，失败不重放，切换会话后旧 ACK 不修改新会话。 | 本地 257 项窄回归、类型、UI、文档和 19 语言检查通过；负责人真机验收待完成，本任务不发布。 |
 
