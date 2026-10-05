@@ -1820,6 +1820,7 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 
 | 编号 | 事项 | 怎么做 | 验证方法 | 状态 |
 |---|---|---|---|---|
+| HT-CODEX-DESKTOP-SEND-1005 | 修复交付后已有 Desktop 会话的手机验收 | 负责人决定包含本修复的 Bridge 发布版本并授权发布后，更新 Bridge；保持当前客户端，在受影响旧会话续聊两轮并打开原桌面会话。 | 原 ID/历史保留，两轮均成功；IPC 恢复后没有重复发送，桌面重开正常。旧失败消息先核对实际历史，未知执行不重发。 | 已完成只读真实 owner 对照与407项窄回归；本轮未发布或替换运行中3.1.11，phone/GUI验收待更新后进行。 |
 | HT-CODEX-DESKTOP-REOPEN-1005 | 连续远程发消息后原 Desktop 会话重开的真实验收 | 负责人在正常桌面界面打开同一自有 QA 会话；若报错，保留页面与重试结果。Desktop GUI 控制此前被拒绝，本轮不退出或重启 Desktop 绕过该限制。 | 对照手机原始 turn/receipt 与桌面重开、Retry；新候选成功不能替代原故障复现。 | ownership/history-generation 修复与 CI 通过；真实 Desktop 重开 checkpoint 待负责人，未宣称问题已解决。 |
 | HT-PICKER-MIME-1004 | 相册导出 MIME 真机验收 | 在负责人合入本修复的 QA App，从系统相册选择小 GIF 与 PNG；仅自建 QA 会话发送一次，未知不重发。 | 观察实际 base64 签名和发送 MIME 一致、视觉首帧正确、取消/scope/六图上限保持；不宣称恢复 GIF 动画或制造容量超限。 | hook/发送 wire 回归已通过；真机 gallery 输出待负责人验收。本轮没有设备或发布动作。 |
 | HT-STEER-PENDING-1004 | Current 指引等待确认的真机验收 | 在包含修复的开发 App 上，让 Current ACK 延迟；重新输入不同或相同草稿，打开 Current/Next，再显式选择 Next 或 Stop。 | 等待期间 Current 禁用且显示发送中，选择入口/Next/Stop 可用；旧 ACK 不清新草稿，失败不重放，切换会话后旧 ACK 不修改新会话。 | 本地 257 项窄回归、类型、UI、文档和 19 语言检查通过；负责人真机验收待完成，本任务不发布。 |
