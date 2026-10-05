@@ -1,5 +1,10 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-05 负责人授权 Codex Production 与 Bridge 发布，用于本人生产环境验收；发布前检查进行中。
+  - fresh `main` `039aac5c` 独立任务树准备 Bridge `3.1.11`，不改 App 或内部 workspace 版本。正式 npm 当前 `latest=3.1.10`；本轮此前只有源码合并，没有 Production 发布或本机正式 Bridge 更新。
+  - 保留现有 Codex 生产资源、配对、密钥、命名空间和配置；其他后端只读导出用于兼容矩阵。只有生产差异通过固定源码 CI、v1、当前快照兼容及包验证后才能发布。发布 npm 不自动更新运行中 Bridge；App 原生包是独立步骤。
+  - Desktop 重开/Retry、认证恢复后最新 Bridge 推理与原 idle blank 仍有验收缺口，不宣称全量稳定或用发布代替验收。详细范围、门禁和回退见 [发布记录](../3.1/codex-production-bridge-3.1.11-release.md)。
+
 - 2026-10-05 Codex 安卓收敛回测完成，组合候选进入最终 PR 门禁。
   - `55aa6b77` 基于 main `5ab56f64`，精确 CI37286511529 十一项全部通过（Mobile 三分片、v1、Windows/macOS 等）。本机九窄文件358项、实际 Thread/FlashList 阶段5/5、anchor29/29、Mobile types与十对文档/五检查通过，未跑本地全套。
   - 只安装保数据的独立 QA debug 包，原 debug 证书与商店 App 保留；开发端口缺失和旧 Metro file map 分别保存现场，仅恢复自有映射/重启自有 Metro。完整新手机 cache22,572,375B/SHA d5a2c9eb…核对30源码/78标记；QA 冷启动恢复 Reload 后启动图，不归因原聊天 idle blank。
