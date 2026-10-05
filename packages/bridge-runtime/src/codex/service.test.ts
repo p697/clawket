@@ -2772,6 +2772,72 @@ it('reports package version and protects active work before fencing update admis
 
 
 describe('Desktop owner acquisition following status', () => {
+  it('forwards Desktop IPC metadata through the service diagnostic channel', () => {
+    const diagnostic = { reason: 'connection_lost', operation: 'other', pendingCount: 1 }, observed = vi.fn();
+    service.on('desktopDiagnostic', observed);
+    (service as any).desktop.emit('diagnostic', diagnostic);
+    expect(observed).toHaveBeenCalledExactlyOnceWith(diagnostic);
+  });
+  it('continues an imported Desktop thread through native host-scoped IPC without opening another writer', async () => {
+    const nativeKey = `native:${threadId}`;
+    Object.assign((service as any).records[0], { id: nativeKey, native: true, threadId, cwd: project, activity: 1000 });
+    (service as any).save(); await service.stop();
+    const { DesktopIpc } = await vi.importActual<typeof import('./desktop-ipc.js')>('./desktop-ipc.js');
+    const path = process.platform === 'win32' ? String.raw`\\.\pipe\clawket-native-owner-${randomUUID()}` : join(root, 'native-owner.sock');
+    const peers = new Set<Socket>(), frames: any[] = [];
+    let remote!: Socket, starts = 0;
+    const send = (value: object) => {
+      const body = Buffer.from(JSON.stringify(value)), header = Buffer.alloc(4); header.writeUInt32LE(body.length);
+      remote.write(Buffer.concat([header, body]));
+    };
+    const server = createServer(socket => {
+      remote = socket; peers.add(socket); socket.on('close', () => peers.delete(socket));
+      let buffer = Buffer.alloc(0);
+      socket.on('data', chunk => {
+        buffer = Buffer.concat([buffer, chunk]);
+        while (buffer.length >= 4 && buffer.length >= 4 + buffer.readUInt32LE()) {
+          const size = buffer.readUInt32LE(), frame = JSON.parse(buffer.subarray(4, 4 + size).toString());
+          buffer = buffer.subarray(4 + size); frames.push(frame);
+          if (frame.method === 'initialize') send({ type: 'response', requestId: frame.requestId, resultType: 'success', result: { clientId: 'bridge' } });
+          if (frame.type !== 'request') continue;
+          // The installed Desktop predicate requires hostId in discovery params;
+          // thread-follower operations instead default their envelope host to local.
+          if (frame.method === 'thread-owner-discovery') send({ type: 'response', method: frame.method, requestId: frame.requestId,
+            ...(frame.params.hostId === 'local' && frame.params.conversationId === threadId
+              ? { resultType: 'success', handledByClientId: 'desktop', result: { supportsUntrustedAppInput: true } }
+              : { resultType: 'error', error: 'no-client-found' }) });
+          if (frame.method === 'thread-follower-start-turn') send({ type: 'response', method: frame.method, requestId: frame.requestId,
+            resultType: 'success', handledByClientId: 'desktop', result: { result: { turn: { id: `desktop-turn-${++starts}` } } } });
+        }
+      });
+    });
+    await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(path, resolve); });
+    const desktop = new DesktopIpc([path]);
+    service = new CodexService({ project, directory: join(root, 'state'), device: true, desktop });
+    key = nativeKey; mock.request.mockClear();
+    try {
+      await desktop.connect();
+      const first = await request('chat.send', { sessionKey: key, text: 'Continue', idempotencyKey: 'native-first' });
+      await vi.waitFor(() => expect(starts).toBe(1));
+      expect((service as any).runs.get(key).turnId).toBe('desktop-turn-1');
+      expect(frames.filter(frame => frame.method === 'thread-follower-start-turn')[0]).toMatchObject({ version: 2,
+        params: { conversationId: threadId, turnStart: { request: { threadId, clientUserMessageId: 'native-first' }, context: { inheritThreadSettings: true } } } });
+      expect(await request('chat.send', { sessionKey: key, text: 'Continue', idempotencyKey: 'native-first' })).toEqual(first);
+      expect(starts).toBe(1);
+      send({ type: 'broadcast', method: 'thread-stream-state-changed', version: 11, sourceClientId: 'desktop',
+        params: { hostId: 'local', conversationId: threadId, change: { type: 'snapshot', revision: 1,
+          conversationState: { turns: [{ id: 'desktop-turn-1', status: 'completed', items: [] }], requests: [] } } } });
+      await vi.waitFor(() => expect((service as any).runs.has(key)).toBe(false));
+      await request('chat.send', { sessionKey: key, text: 'Continue again', idempotencyKey: 'native-second' });
+      await vi.waitFor(() => expect(starts).toBe(2));
+      expect((service as any).runs.get(key).turnId).toBe('desktop-turn-2');
+      expect(mock.request.mock.calls.filter(([method]) => ['thread/resume', 'turn/start'].includes(method))).toEqual([]);
+      expect(frames.filter(frame => frame.method === 'thread-owner-discovery').every(frame => frame.params.hostId === 'local')).toBe(true);
+    } finally {
+      await service.stop(); for (const peer of peers) peer.destroy();
+      await new Promise<void>(resolve => server.close(() => resolve()));
+    }
+  });
   it('does not announce a cold stranger or a thread whose owner discovery remains uncertain', async () => {
     const desktop = (service as any).desktop, broadcast = vi.spyOn(desktop, 'broadcast');
     Object.assign((service as any).records[0], { threadId, activity: 1000 });

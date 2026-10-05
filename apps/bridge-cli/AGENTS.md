@@ -91,6 +91,8 @@ Repeated Pi pairing against an authenticated running owner must reuse its exact 
 
 ## Codex projects
 
+Persist Codex `desktop_ipc_diagnostic` metadata alongside native RPC diagnostics: only the timestamp, fixed operation/reason, pending count and optional frame size. Never spread a runtime diagnostic object into logs or include native errors, conversation identities, paths or request bodies.
+
 Explicit Codex stop/restart/reset uses authenticated lifecycle control independent of native health. Older Bridges may confirm their authenticated `agents.list` identity after a native-health error; wrong identity, authentication rejection and uncertain timeouts never authorize a replacement. Only connection refusal means no local listener; never kill an occupant by PID or port.
 
 Codex pair/start/doctor/status must preserve non-refusal health failures instead of treating them as an offline owner. Native-health rejection gives fixed explicit restart guidance without exposing the native error body; pairing must not spawn, stop or refresh Registry credentials on that failure.

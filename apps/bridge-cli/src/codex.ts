@@ -104,6 +104,10 @@ async function runCodexCommand(args: string[], progress: Progress): Promise<void
     scope: 'codex_bridge', event: 'native_rpc_diagnostic', ts: new Date().toISOString(),
     reason: diagnostic.reason, pendingCount: diagnostic.pendingCount, frameBytes: diagnostic.frameBytes,
   })));
+  service.on('desktopDiagnostic', diagnostic => console.log(JSON.stringify({
+    scope: 'codex_bridge', event: 'desktop_ipc_diagnostic', ts: new Date().toISOString(),
+    reason: diagnostic.reason, operation: diagnostic.operation, pendingCount: diagnostic.pendingCount, frameBytes: diagnostic.frameBytes,
+  })));
   service.on('permissionDiagnostic', diagnostic => console.log(JSON.stringify({
     scope: 'codex_bridge', event: 'permission_configuration_diagnostic', ts: new Date().toISOString(),
     failureCategory: diagnostic.failureCategory,

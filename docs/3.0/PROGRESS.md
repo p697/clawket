@@ -1,5 +1,13 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-05 负责人生产验收发现已有 Desktop Codex 会话无法续聊；本轮聚焦该链路。
+  - 实际 owner 为 Bridge3.1.11、Native0.160.0、device scope。遗漏原生 owner-discovery 的 `params.hostId: local` 已由安装源码和真实 socket 对照证实：同一会话旧请求10,004ms no-client-found，正确请求7ms确认owner；另两样本均无owner，不扩大结论。
+  - 用户截图详细错误为 Desktop connection interrupted；Native测试时窗12:11:37UTC有四条ipc-connection-reset，但发起原因尚未确定。旧Bridge缺IPC原因日志，不能归因网络或把host修复冒称该断连已完整验收。
+  - 所有前台/后台查询在IPC边界携带local host；显式异域/畸形scope拒绝。仅只读owner查询遇socket中断重连再查一次，已提交turn/settings及其他不明失败不重试、不解除writer fence。CLI新增固定分类/帧大小/计数诊断，不含正文、Native错误、路径、身份或凭据。
+  - 私有隔离真实observer十秒处理4snapshot，IPC存活、0投影异常、0Native prompt/resume/settings写入，自有进程/socket/metadata已清。新增真实framed imported续聊两轮与重复key防重、foreground/background scope、畸形scope、一次恢复/不重放回归；旧实现的scope五负例及续聊场景先红。窄验证与精确CI随后登记，不宣称phone推理/GUI Retry已验。
+  - 串行单文件Desktop IPC42、Service339、CLI26（合计407）通过，Bridge Core/Runtime构建与CLI类型、8对文档/5检查、whitespace通过。CLI首跑因fresh Runtime dist缺失0用例失败，依赖构建后重跑通过；不跑本地完整套件。两无owner样本的真实只读metadata都有named权限，不改其Native设置或恢复writer。
+  - 仅Bridge修复，不改App/Worker/版本、不发布或替换负责人运行中Bridge；更新后的受影响会话手机验收仍待。详见[事故记录](../3.1/codex-desktop-continuation-20261005.md)。
+
 - 2026-10-05 负责人授权的 Codex Production 与 Bridge `3.1.11` 已发布，用于本人生产环境验收。
   - fresh `main` `039aac5c` 独立任务树的源码 `819a5289` 精确 CI37304153413 十一项全部通过，不改 App 或内部 workspace 版本。负责人完成 npm 登录和单独安全密钥认证，固定 tgz 被接受后公开等待期间首次404保留；11:47:49 UTC公开 `latest=3.1.11`，完整下载与候选逐字节、SHA-256/SHA-1/SHA-512核验一致。本机正式 Bridge 尚未更新或重启。
   - v1五文件41项、当前生产导出的兼容矩阵四用例24阶段、Codex Relay隔离集成、六发布门禁、文档与依赖审计（零阻挡、沿用既有两例外）通过。首次v1缺fresh Core dist失败保留，构建后不改源码重跑通过；包验证3文件/4边界/91模块/141输入、固定包dry-run和空npm认证独立候选安装通过。

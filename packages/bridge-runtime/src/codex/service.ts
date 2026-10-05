@@ -138,6 +138,7 @@ export class CodexService extends EventEmitter {
           }
         });
         this.desktop.on('offline', () => this.retireDesktopFollowers());
+        this.desktop.on('diagnostic', diagnostic => this.emit('desktopDiagnostic', diagnostic));
         this.desktop.handler = { accepts: (method, p) => this.acceptDesktop(method, p), request: (method, p, source) => this.desktopRequest(method, p, source) };
         this.desktop.on('unsupported', (id: string) => { const r = this.records.find(row => row.threadId === id); if (r && !this.desktop?.isObservationOnly?.(id)) this.update({ type: 'error', sessionKey: r.id, code: 'unsupported', message: 'This Codex Desktop version cannot be followed safely. Continue on your computer.' }); });
         this.sessionActivity = new CodexSessionActivity(this.desktop, activity => {

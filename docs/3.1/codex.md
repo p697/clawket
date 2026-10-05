@@ -1,5 +1,7 @@
 # Codex integration
 
+Local Desktop owner discovery supplies `params.hostId: local` on every foreground/background query. An omitted host can return `no-client-found` despite a live Desktop owner, so it cannot establish safe local takeover. Explicit foreign or malformed scopes are rejected. Only owner discovery may reconnect and repeat once after a socket interruption; prompt/settings dispatch, routed errors and timeouts retain the existing no-replay rule. The CLI records fixed Desktop IPC reason/operation categories, pending counts and frame sizes without bodies, identities or native errors. See [the 2026-10-05 continuation incident](codex-desktop-continuation-20261005.md) for real-device evidence and remaining acceptance limits.
+
 Owner authorization: 2026-09-26. Implement Codex as an independent backend; perform local, Preview, iOS simulator and connected Android development testing. Production release and package publication remain separate decisions.
 
 Owned conversation reset/delete follow the confirmed native lifecycle: pending and active runs disable those actions until the original turn ends. A stale menu can still receive a refusal; the session panel shows its existing failure notice and keeps the row available for explicit retry, with errors fenced to the current panel/connection. Other backends retain their own action permissions.

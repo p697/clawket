@@ -92,6 +92,93 @@ it('waits beyond native discovery before accepting an explicit no-owner response
   } finally { ipc.stop(); vi.useRealTimers(); }
 });
 
+describe('native local owner discovery', () => {
+  it.each([undefined, 'local'])('includes the native host scope for owner discovery (%s)', async hostId => {
+    const ipc = new DesktopIpc([]);
+    const write = vi.fn(frame => queueMicrotask(() => (ipc as any).receive({ type: 'response', requestId: frame.requestId,
+      method: frame.method, ...(frame.params.hostId === 'local'
+        ? { resultType: 'success', result: { supportsUntrustedAppInput: true } }
+        : { resultType: 'error', error: 'no-client-found' }) })));
+    Object.assign(ipc, { socket: { destroyed: false, destroy: vi.fn() }, clientId: 'qa', write });
+    const params = { conversationId: 'native-thread', ...(hostId === undefined ? {} : { hostId }) };
+    try {
+      await expect(ipc.request('thread-owner-discovery', params)).resolves.toEqual({ supportsUntrustedAppInput: true });
+      expect(write.mock.calls[0][0].params).toEqual({ hostId: 'local', conversationId: 'native-thread' });
+      expect(params).toEqual({ conversationId: 'native-thread', ...(hostId === undefined ? {} : { hostId }) });
+    } finally { ipc.stop(); }
+  });
+  it.each(['remote', '', null])('rejects an explicitly foreign or malformed discovery scope (%s) before dispatch', async hostId => {
+    const ipc = new DesktopIpc([]), write = vi.fn();
+    Object.assign(ipc, { socket: { destroyed: false, destroy: vi.fn() }, clientId: 'qa', write });
+    try {
+      await expect(ipc.request('thread-owner-discovery', { hostId, conversationId: 'native-thread' })).rejects.toMatchObject({ outcome: 'rejected' });
+      expect(write).not.toHaveBeenCalled();
+    } finally { ipc.stop(); }
+  });
+  it('uses the same native host scope for background idle-proof probes', async () => {
+    const ipc = new DesktopIpc([]);
+    const write = vi.fn(frame => {
+      if (frame.type === 'request') queueMicrotask(() => (ipc as any).receive({ type: 'response', requestId: frame.requestId,
+        method: frame.method, resultType: 'error', error: 'no-client-found' }));
+    });
+    Object.assign(ipc, { socket: { destroyed: false, destroy: vi.fn() }, clientId: 'qa', write });
+    try {
+      ipc.follow('native-thread');
+      await vi.waitFor(() => expect(write.mock.calls.filter(([frame]) => frame.type === 'request')).toHaveLength(1));
+      expect(write.mock.calls.find(([frame]) => frame.type === 'request')![0].params)
+        .toEqual({ hostId: 'local', conversationId: 'native-thread' });
+    } finally { ipc.stop(); }
+  });
+});
+
+it.each(['owner-recovers', 'owner-still-disconnected', 'turn-unknown'])('recovers only one read-only discovery after a real IPC disconnect (%s)', async scenario => {
+  const directory = mkdtempSync(join(tmpdir(), 'clawket-ipc-recovery-'));
+  const path = process.platform === 'win32' ? String.raw`\\.\pipe\clawket-ipc-recovery-${randomUUID()}` : join(directory, 'ipc.sock');
+  const peers = new Set<Socket>(), requests: any[] = [];
+  let connections = 0;
+  const send = (socket: Socket, value: object) => {
+    const body = Buffer.from(JSON.stringify(value)), header = Buffer.alloc(4); header.writeUInt32LE(body.length); socket.write(Buffer.concat([header, body]));
+  };
+  const server = createServer(socket => {
+    const generation = ++connections; peers.add(socket); socket.on('close', () => peers.delete(socket));
+    let buffer = Buffer.alloc(0);
+    socket.on('data', chunk => {
+      buffer = Buffer.concat([buffer, chunk]);
+      while (buffer.length >= 4 && buffer.length >= 4 + buffer.readUInt32LE()) {
+        const size = buffer.readUInt32LE(), frame = JSON.parse(buffer.subarray(4, 4 + size).toString()); buffer = buffer.subarray(4 + size);
+        if (frame.method === 'initialize') { send(socket, { type: 'response', requestId: frame.requestId, resultType: 'success', result: { clientId: `bridge-${generation}` } }); continue; }
+        requests.push(frame);
+        if (generation === 1 || scenario !== 'owner-recovers') socket.destroy();
+        else send(socket, { type: 'response', requestId: frame.requestId, method: frame.method, resultType: 'success', result: { supportsUntrustedAppInput: true } });
+      }
+    });
+  });
+  await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(path, resolve); });
+  const ipc = new DesktopIpc([path]);
+  try {
+    const method = scenario === 'turn-unknown' ? 'thread-follower-start-turn' : 'thread-owner-discovery';
+    if (scenario === 'owner-recovers') await expect(ipc.request(method, { conversationId: 'native-thread' })).resolves.toEqual({ supportsUntrustedAppInput: true });
+    else await expect(ipc.request(method, { conversationId: 'native-thread' })).rejects.toMatchObject({ outcome: 'uncertain', reason: 'connection-lost' });
+    expect(requests).toHaveLength(scenario === 'turn-unknown' ? 1 : 2);
+    expect(connections).toBe(scenario === 'turn-unknown' ? 1 : 2);
+    expect(requests.every(frame => frame.method === method)).toBe(true);
+    if (scenario !== 'turn-unknown') expect(requests.every(frame => frame.params.hostId === 'local')).toBe(true);
+  } finally { ipc.stop(); for (const peer of peers) peer.destroy(); await new Promise<void>(resolve => server.close(() => resolve())); rmSync(directory, { recursive: true, force: true }); }
+});
+
+it('emits only fixed IPC failure metadata even for private native errors and throwing diagnostic listeners', async () => {
+  const ipc = new DesktopIpc([]), events: any[] = [];
+  const write = vi.fn(frame => queueMicrotask(() => (ipc as any).receive({ type: 'response', requestId: frame.requestId, resultType: 'error',
+    error: 'private prompt token /private/project/path', payload: { secret: 'private-token' } })));
+  Object.assign(ipc, { socket: { destroyed: false, destroy: vi.fn() }, clientId: 'private-client-id', write });
+  ipc.on('diagnostic', event => events.push(event)); ipc.on('diagnostic', () => { throw new Error('logging failure'); });
+  try {
+    await expect(ipc.request('thread-follower-start-turn', { conversationId: 'private-thread-id' })).rejects.toMatchObject({ outcome: 'uncertain' });
+    expect(events).toEqual([{ reason: 'handler_error', operation: 'turn_start', pendingCount: 0 }]);
+    expect(write).toHaveBeenCalledTimes(1);
+  } finally { ipc.stop(); }
+});
+
 it.each(['request-timeout', 'client-disconnected', 'error-handling-request', 'Clawket could not complete this operation'])('retains unknown dispatch for native %s', async error => {
   const ipc = new DesktopIpc([]);
   const write = vi.fn();
@@ -318,7 +405,7 @@ it('reads per-client lifecycle controls and targeted renewal on an actual framed
     // Opening the chat performs one bounded owner probe; lifecycle controls
     // must neither repeat that probe nor load history or dispatch another turn.
     expect(received.filter(frame => frame.type === 'request' && frame.method !== 'initialize')).toEqual([
-      expect.objectContaining({ method: 'thread-owner-discovery', params: { conversationId: 'opened' } }),
+      expect.objectContaining({ method: 'thread-owner-discovery', params: { hostId: 'local', conversationId: 'opened' } }),
     ]);
   } finally {
     ipc.stop(); for (const peer of peers) peer.destroy();

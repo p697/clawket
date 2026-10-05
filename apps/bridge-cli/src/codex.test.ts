@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { mkdtempSync, mkdirSync, readFileSync, realpathSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-const mock = vi.hoisted(() => ({ control: vi.fn(), background: vi.fn(), fetch: vi.fn(), name: vi.fn(), qr: vi.fn(), home: '' }));
+const mock = vi.hoisted(() => ({ control: vi.fn(), background: vi.fn(), fetch: vi.fn(), name: vi.fn(), qr: vi.fn(), home: '', services: [] as any[] }));
 vi.mock('node:os', async (original) => ({ ...await original<typeof import('node:os')>(), homedir: () => mock.home }));
 vi.mock('./codex-lifecycle.js', () => ({ codexControl: mock.control, startCodexBackground: mock.background }));
 vi.mock('./device-connection-name.js', () => ({ defaultDeviceConnectionName: mock.name }));
@@ -12,7 +12,7 @@ vi.mock('@clawket/bridge-runtime', async () => {
   const { EventEmitter } = await import('node:events');
   return {
     inspectCodexInstallation: async () => ({ version: 'test' }),
-    CodexService: class extends EventEmitter { async health() { return { modelReady: true }; } async stop() {} },
+    CodexService: class extends EventEmitter { constructor() { super(); mock.services.push(this); } async health() { return { modelReady: true }; } async stop() {} },
     CodexServer: class { constructor(private service: any) {} async start() { setTimeout(() => this.service.emit('shutdown'), 30); } async stop() {} },
     CodexRelay: class { start() {} async waitUntilReady() {} stop() {} },
   };
@@ -21,7 +21,7 @@ import { handleCodexCommand } from './codex.js';
 let root: string, project: string, path: string;
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'codex-cli-')); mock.home = root; project = join(root, 'project'); mkdirSync(project); path = join(root, 'runtime.json');
-  mock.control.mockReset(); mock.background.mockReset(); mock.fetch.mockReset();
+  mock.control.mockReset(); mock.background.mockReset(); mock.fetch.mockReset(); mock.services.length = 0;
   mock.name.mockReset().mockReturnValue('Codex · 工作室 Mac'); mock.qr.mockReset().mockResolvedValue('[test QR]');
   mock.control.mockRejectedValue(Object.assign(new Error('offline'), { code: 'ECONNREFUSED' }));
   if (process.send) vi.spyOn(process as unknown as { send: (...args: unknown[]) => boolean }, 'send').mockImplementation(() => true);
@@ -29,6 +29,19 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); rmSync(root, { recursive: true, force: true }); });
 const saved = (relay: object) => writeFileSync(path, JSON.stringify({ project, command: 'codex', token: 'local-test-token', port: 18499, host: '127.0.0.1', relay }));
+it('persists fixed Desktop IPC diagnostics without unknown native bodies or identities', async () => {
+  writeFileSync(path, JSON.stringify({ project, command: 'codex', token: 'local-test-token', port: 18499, host: '127.0.0.1' }));
+  const running = handleCodexCommand(['run', '--config', path]);
+  await vi.waitFor(() => expect(mock.services).toHaveLength(1), { interval: 1 });
+  mock.services[0].emit('desktopDiagnostic', { reason: 'connection_lost', operation: 'other', pendingCount: 1,
+    nativeError: 'private prompt /private/project', threadId: 'private-id', token: 'private-token' });
+  await running;
+  const lines = vi.mocked(console.log).mock.calls.flatMap(([value]) => {
+    try { return [JSON.parse(value)]; } catch { return []; }
+  }).filter(value => value.event === 'desktop_ipc_diagnostic');
+  expect(lines).toEqual([{ scope: 'codex_bridge', event: 'desktop_ipc_diagnostic', ts: expect.any(String),
+    reason: 'connection_lost', operation: 'other', pendingCount: 1 }]);
+});
 it('does not launch another Codex runtime while a refused owner retains its writer lock', async () => {
   saved({}); mkdirSync(join(root, 'sessions')); writeFileSync(join(root, 'sessions', 'owner.lock'), 'owned');
   await expect(handleCodexCommand(['start', '--config', path])).rejects.toThrow('locked without verified health');

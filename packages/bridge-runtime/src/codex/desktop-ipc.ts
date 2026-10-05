@@ -16,9 +16,16 @@ const versions: Record<string, number> = {
 // response. Expiring at the discovery boundary loses explicit no-owner proof.
 const REQUEST_TIMEOUT_MS = 25_000;
 export class DesktopIpcError extends Error {
-  constructor(readonly outcome: 'no-owner' | 'uncertain' | 'rejected', message: string, readonly reason?: 'broker-unavailable' | 'version-mismatch') { super(message); }
+  constructor(readonly outcome: 'no-owner' | 'uncertain' | 'rejected', message: string, readonly reason?: 'broker-unavailable' | 'version-mismatch' | 'connection-lost') { super(message); }
 }
 export type DesktopSnapshot = { state: any; source: string; revision?: number; fresh: boolean };
+export type DesktopIpcDiagnostic = Readonly<{
+  reason: 'frame_too_large' | 'invalid_frame' | 'handler_failed' | 'connection_lost' | 'request_timeout'
+    | 'owner_found' | 'acknowledged' | 'no_owner' | 'version_mismatch' | 'handler_missing' | 'handler_error' | 'invalid_response';
+  operation: 'owner_discovery' | 'turn_start' | 'settings' | 'other';
+  pendingCount: number;
+  frameBytes?: number;
+}>;
 
 /** Strict, bounded Immer patch application. Invalid baselines require a new snapshot. */
 export function applyDesktopPatches(state: any, patches: any[]): any {
@@ -44,6 +51,14 @@ export function applyDesktopPatches(state: any, patches: any[]): any {
 }
 
 export class DesktopIpc extends EventEmitter {
+  private diagnose(reason: DesktopIpcDiagnostic['reason'], method?: string, frameBytes?: number): void {
+    const operation = method === 'thread-owner-discovery' ? 'owner_discovery'
+      : method === 'thread-follower-start-turn' ? 'turn_start'
+      : method === 'thread-follower-update-thread-settings' ? 'settings' : 'other';
+    try { this.emit('diagnostic', { reason, operation, pendingCount: this.pending.size,
+      ...(frameBytes === undefined ? {} : { frameBytes }) } satisfies DesktopIpcDiagnostic); }
+    catch { /* Diagnostics cannot alter dispatch or native ownership. */ }
+  }
   private socket?: Socket;
   private clientId = '';
   private connecting?: Promise<void>;
@@ -93,25 +108,32 @@ export class DesktopIpc extends EventEmitter {
           chunk.copy(header, headerBytes, offset, offset + count); headerBytes += count; offset += count;
           if (headerBytes < 4) return;
           const size = header.readUInt32LE(0); headerBytes = 0;
-          if (!size || size > LIMIT) { socket.destroy(); return; }
+          if (!size || size > LIMIT) { this.diagnose(size > LIMIT ? 'frame_too_large' : 'invalid_frame', undefined, size); socket.destroy(); return; }
           body = Buffer.allocUnsafe(size); bodyBytes = 0;
         }
         const count = Math.min(body.length - bodyBytes, chunk.length - offset);
         chunk.copy(body, bodyBytes, offset, offset + count); bodyBytes += count; offset += count;
         if (bodyBytes < body.length) return;
         const completed = body; body = undefined; bodyBytes = 0;
-        try { this.receive(JSON.parse(completed.toString('utf8'))); }
-        catch { socket.destroy(); return; }
+        let frame: any;
+        try { frame = JSON.parse(completed.toString('utf8')); }
+        catch { this.diagnose('invalid_frame', undefined, completed.length); socket.destroy(); return; }
+        try { this.receive(frame); }
+        catch { this.diagnose('handler_failed', undefined, completed.length); socket.destroy(); return; }
       }
     });
     socket.on('error', () => {});
     socket.on('close', () => {
       body = undefined;
       if (this.socket !== socket) return;
+      if (!this.closed) this.diagnose('connection_lost');
       this.clientId = ''; this.socket = undefined;
       this.noOwner.clear(); this.ownerProbeQueue.clear();
       for (const value of this.snapshots.values()) value.fresh = false;
-      for (const p of this.pending.values()) { clearTimeout(p.timer); p.reject(new DesktopIpcError('uncertain', 'Desktop connection interrupted; check the task before retrying.')); }
+      for (const p of this.pending.values()) {
+        if (!this.closed) this.diagnose('connection_lost', p.method);
+        clearTimeout(p.timer); p.reject(new DesktopIpcError('uncertain', 'Desktop connection interrupted; check the task before retrying.', 'connection-lost'));
+      }
       this.pending.clear(); this.emit('offline');
       if (!this.closed && this.followed.size && !this.retry) this.retry = setTimeout(() => { this.retry = undefined; void this.connect().catch(() => {}); }, 2000);
     });
@@ -136,10 +158,17 @@ export class DesktopIpc extends EventEmitter {
     const header = Buffer.alloc(4); header.writeUInt32LE(body.length); this.socket.write(Buffer.concat([header, body]));
   }
   private call(method: string, params: object, initializing = false, version = versions[method] ?? 1): Promise<any> {
+    if (method === 'thread-owner-discovery') {
+      const hostId = (params as { hostId?: unknown }).hostId;
+      if (hostId !== undefined && hostId !== 'local') return Promise.reject(new DesktopIpcError('rejected', 'Only local Codex Desktop conversations are supported.'));
+      // Native discovery checks params.hostId explicitly. Omitting it returns
+      // no-client-found even when the Desktop still owns the original thread.
+      params = { ...params, hostId: 'local' };
+    }
     if (this.pending.size >= 32) return Promise.reject(new Error('Too many desktop requests'));
     const requestId = randomUUID();
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { this.pending.delete(requestId); queueMicrotask(() => this.probeOwners()); reject(new DesktopIpcError('uncertain', 'Desktop has not confirmed this operation. Do not send it again automatically.')); }, REQUEST_TIMEOUT_MS);
+      const timer = setTimeout(() => { this.pending.delete(requestId); this.diagnose('request_timeout', method); queueMicrotask(() => this.probeOwners()); reject(new DesktopIpcError('uncertain', 'Desktop has not confirmed this operation. Do not send it again automatically.')); }, REQUEST_TIMEOUT_MS);
       this.pending.set(requestId, { method, conversationId: (params as { conversationId?: string }).conversationId, resolve, reject, timer });
       try { this.write({ type: 'request', requestId, sourceClientId: initializing ? 'initializing-client' : this.clientId, version, method, params }); }
       catch (error) { clearTimeout(timer); this.pending.delete(requestId); queueMicrotask(() => this.probeOwners()); reject(error); }
@@ -150,6 +179,12 @@ export class DesktopIpc extends EventEmitter {
     const socket = this.socket, clientId = this.clientId;
     try { return await this.call(method, params); }
     catch (error) {
+      // Discovery has no prompt/settings side effects. Recover one interrupted
+      // preflight on a new socket; delivered turn/settings requests stay uncertain.
+      if (method === 'thread-owner-discovery' && error instanceof DesktopIpcError && error.reason === 'connection-lost') {
+        await this.connect();
+        return this.call(method, params);
+      }
       // Settings v2 adds active-turn/conditional operations. Our outbound
       // next-turn settings subset also exists in v1. The native receiver emits
       // this exact error before dispatch; no ambiguous write is ever replayed.
@@ -273,17 +308,19 @@ export class DesktopIpc extends EventEmitter {
       const p = this.pending.get(frame.requestId); if (!p) return;
       this.pending.delete(frame.requestId); clearTimeout(p.timer);
       queueMicrotask(() => this.probeOwners());
-      if (frame.method !== undefined && frame.method !== p.method) { p.reject(new DesktopIpcError('uncertain', 'Unsupported desktop response')); return; }
+      if (frame.method !== undefined && frame.method !== p.method) { this.diagnose('invalid_response', p.method); p.reject(new DesktopIpcError('uncertain', 'Unsupported desktop response')); return; }
       if (frame.resultType === 'error') {
         const error = String(frame.error);
         const outcome = /^no-client-found(?:\b|:)/.test(error) ? 'no-owner'
           : ['request-version-mismatch', 'no-handler-for-request'].includes(error) ? 'rejected' : 'uncertain';
+        this.diagnose(outcome === 'no-owner' ? 'no_owner' : error === 'request-version-mismatch' ? 'version_mismatch'
+          : error === 'no-handler-for-request' ? 'handler_missing' : 'handler_error', p.method);
         p.reject(new DesktopIpcError(outcome, outcome === 'uncertain'
           ? 'Codex has not confirmed this operation. Check the conversation before trying again.'
           : 'Codex Desktop could not handle this operation.', error === 'request-version-mismatch' ? 'version-mismatch' : undefined));
       }
-      else if (frame.resultType === 'success') p.resolve(frame.result);
-      else p.reject(new DesktopIpcError('uncertain', 'Unsupported desktop response'));
+      else if (frame.resultType === 'success') { this.diagnose(p.method === 'thread-owner-discovery' ? 'owner_found' : 'acknowledged', p.method); p.resolve(frame.result); }
+      else { this.diagnose('invalid_response', p.method); p.reject(new DesktopIpcError('uncertain', 'Unsupported desktop response')); }
       return;
     }
     if (frame.type === 'client-discovery-request') {
