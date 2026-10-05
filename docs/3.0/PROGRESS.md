@@ -1,8 +1,10 @@
 # PROGRESS · Clawket 3.0 进度日志
 
-- 2026-10-05 负责人明确授权再发布 Bridge 更新，本任务准备 `3.1.12`。
-  - fresh `main` `7bd62f45` 独立任务树，包包含 PR175 的 Desktop owner local host 修复、只读 owner 查询 socket 中断一次恢复及固定分类诊断；不重放已提交写入，不改变 writer fences。只改公开 CLI 版本/lock/发布 guard 和记录，不改 App、内部 workspace 版本或 Worker。
-  - 验证、精确 CI、固定 tgz、公开 npm 完整性及独立安装随后登记。发布不自动替换负责人运行中3.1.11；受影响旧会话手机续聊与 Desktop 重开仍需更新后验收。
+- 2026-10-06 负责人授权的 Bridge `3.1.12` 已公开发布，包含旧 Desktop Codex 会话续聊窄修。
+  - fresh main `7bd62f45` 的 source head `dd08ceb4` 精确CI37313256838十一项全部通过；六发布门禁、八指令对/五checker、v1五文件41项、当前生产快照四用例24阶段、审计零阻挡（沿用两既有例外）串行通过。六个Production Worker锚点/源码与上次发布一致，不部署Worker；App和内部workspace版本保持。
+  - 包含PR175的local host owner查询修复、只读socket中断一次恢复及固定分类诊断；不重放写入、不放宽writer fence。包验证3文件/4边界/91模块/141输入、固定tgz dry-run和空认证独立候选安装通过。
+  - 首认证过期未发布，负责人完成新的安全密钥认证后npm接受上传；处理中多次404保留。00:48:21 JST公开version/latest=3.1.12，完整下载与277,198B固定候选逐字节、SHA-256/SHA-1/SHA-512一致；SHA-256 `c99678d4…`。公共npm第二份空认证独立安装也通过identity、exact bundle与CLI help；PR176的发布记录交付CI随后核验。
+  - 未更新/重启负责人运行中3.1.11，未操作Native线程/配对、App构建/安装或商店。受影响旧会话手机续聊与Desktop重开仍待显式更新后验收。详见[发布记录](../3.1/bridge-3.1.12-release.md)。
 
 - 2026-10-05 负责人生产验收发现已有 Desktop Codex 会话无法续聊；本轮聚焦该链路。
   - 实际 owner 为 Bridge3.1.11、Native0.160.0、device scope。遗漏原生 owner-discovery 的 `params.hostId: local` 已由安装源码和真实 socket 对照证实：同一会话旧请求10,004ms no-client-found，正确请求7ms确认owner；另两样本均无owner，不扩大结论。
@@ -1824,7 +1826,7 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 
 | 编号 | 事项 | 怎么做 | 验证方法 | 状态 |
 |---|---|---|---|---|
-| HT-CODEX-DESKTOP-SEND-1005 | 修复交付后已有 Desktop 会话的手机验收 | 负责人已授权发布新版 Bridge，准备3.1.12；公开发布后更新 Bridge，保持当前客户端，在受影响旧会话续聊两轮并打开原桌面会话。 | 原 ID/历史保留，两轮均成功；IPC 恢复后没有重复发送，桌面重开正常。旧失败消息先核对实际历史，未知执行不重发。 | 已完成只读真实 owner 对照与407项窄回归；本轮未发布或替换运行中3.1.11，phone/GUI验收待更新后进行。 |
+| HT-CODEX-DESKTOP-SEND-1005 | 修复交付后已有 Desktop 会话的手机验收 | 3.1.12已公开；负责人用原scope/config更新 Bridge，保持当前客户端，在受影响旧会话续聊两轮并打开原桌面会话。 | 原 ID/历史保留，两轮均成功；IPC 恢复后没有重复发送，桌面重开正常。旧失败消息先核对实际历史，未知执行不重发。 | 已完成只读真实owner对照与407项窄回归，公开Bridge3.1.12包含修复；运行中3.1.11尚未替换，phone/GUI验收待更新后进行。 |
 | HT-CODEX-DESKTOP-REOPEN-1005 | 连续远程发消息后原 Desktop 会话重开的真实验收 | 负责人在正常桌面界面打开同一自有 QA 会话；若报错，保留页面与重试结果。Desktop GUI 控制此前被拒绝，本轮不退出或重启 Desktop 绕过该限制。 | 对照手机原始 turn/receipt 与桌面重开、Retry；新候选成功不能替代原故障复现。 | ownership/history-generation 修复与 CI 通过；真实 Desktop 重开 checkpoint 待负责人，未宣称问题已解决。 |
 | HT-PICKER-MIME-1004 | 相册导出 MIME 真机验收 | 在负责人合入本修复的 QA App，从系统相册选择小 GIF 与 PNG；仅自建 QA 会话发送一次，未知不重发。 | 观察实际 base64 签名和发送 MIME 一致、视觉首帧正确、取消/scope/六图上限保持；不宣称恢复 GIF 动画或制造容量超限。 | hook/发送 wire 回归已通过；真机 gallery 输出待负责人验收。本轮没有设备或发布动作。 |
 | HT-STEER-PENDING-1004 | Current 指引等待确认的真机验收 | 在包含修复的开发 App 上，让 Current ACK 延迟；重新输入不同或相同草稿，打开 Current/Next，再显式选择 Next 或 Stop。 | 等待期间 Current 禁用且显示发送中，选择入口/Next/Stop 可用；旧 ACK 不清新草稿，失败不重放，切换会话后旧 ACK 不修改新会话。 | 本地 257 项窄回归、类型、UI、文档和 19 语言检查通过；负责人真机验收待完成，本任务不发布。 |
