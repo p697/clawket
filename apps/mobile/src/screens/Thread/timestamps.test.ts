@@ -38,10 +38,10 @@ describe('Thread time grouping', () => {
     expect(paged.slice(-4).map((row) => row.key)).toEqual(rows([message('a', at(7)), message('b', at(7, 13))]).map((row) => row.key));
   });
 
-  it('labels a tool-only turn by the step its pill stands at', () => {
+  it('labels a tool-only turn by the step its receipt stands at', () => {
     const folded = foldTurnSteps([message('b', at(7, 12, 1), 'tool'), message('a', at(7), 'tool')], false);
     const timeline = placeTurnReceipts(buildThreadTimelineItems({ messages: folded.messages, runs: [] }), folded);
-    expect(timeline.map((row) => row.key)).toEqual(['tools:a', 'date:message:b']);
+    expect(timeline.map((row) => row.key)).toEqual(['receipt:a', 'date:message:b']);
   });
 
   it('keeps equal or backwards timestamps in source order', () => {

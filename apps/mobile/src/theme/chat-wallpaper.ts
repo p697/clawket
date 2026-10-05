@@ -189,9 +189,6 @@ export const chatWallpaperPalettes: Readonly<Record<AccentColorId, AccentWallpap
  */
 export const CHAT_PHOTO_SERVICE = Object.freeze({ service: 'rgba(0,0,0,0.55)', onService: WHITE });
 
-/** A failed step's pill on any backdrop: deep red that keeps white text at 4.5:1 over white. */
-export const CHAT_SERVICE_BAD = Object.freeze({ service: 'rgba(160,40,40,0.78)', onService: WHITE });
-
 export function resolveChatWallpaperPalette(accentId: AccentColorId | undefined, scheme: ThemeScheme | undefined): ChatWallpaperPalette {
   const id = accentId && isBuiltInAccentId(accentId) ? accentId : defaultAccentId;
   return chatWallpaperPalettes[id][scheme === 'dark' ? 'dark' : 'light'];

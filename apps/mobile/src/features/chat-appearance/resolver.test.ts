@@ -1,7 +1,7 @@
 import { Platform, StyleSheet } from 'react-native';
 import { buildTheme } from '../../theme/theme';
 import { builtInAccents, defaultAccentId } from '../../theme/accents';
-import { chatWallpaperPalettes, CHAT_PHOTO_SERVICE, CHAT_SERVICE_BAD } from '../../theme/chat-wallpaper';
+import { chatWallpaperPalettes, CHAT_PHOTO_SERVICE } from '../../theme/chat-wallpaper';
 import { Shadow } from '../../theme/tokens';
 import type { ChatAppearanceSettings, ChatWallpaperKind } from '../../types/chat-appearance';
 import { DEFAULT_CHAT_APPEARANCE, normalizeChatAppearanceSettings } from './defaults';
@@ -161,11 +161,9 @@ it.each(ACCENTS)('keeps %s service pill text readable over every wallpaper', (ac
       const { service } = resolveChatSurfaces(theme, appearance(kind), accentId);
       for (const backdrop of backdrops(kind, accentId, scheme)) {
         expect(contrastOn(service.textColor, service.backgroundColor, backdrop)).toBeGreaterThanOrEqual(4.5);
-        expect(contrastOn(service.badTextColor, service.badBackgroundColor, backdrop)).toBeGreaterThanOrEqual(4.5);
       }
     }
   }
-  expect(CHAT_SERVICE_BAD.onService).toBe('#FFFFFF');
 });
 
 describe('immersive wallpaper chrome', () => {

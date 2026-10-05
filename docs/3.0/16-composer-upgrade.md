@@ -71,6 +71,8 @@ Part of the owner's request to land every remaining motion item. On Android, whe
 - **Change:** while the draft fits under the five-line cap, the editor's host is one line taller than the capsule shows (`inputFrameHeight`), and the capsule clips it. A new line lands in that spare room, and the capsule then grows to reveal it. Past the cap the editor scrolls inside the capsule as before, and a sent draft keeps its height while the thread holds it (batch 2b).
 - **Device check (SM-A566B QA build):** a draft typed word by word over five lines was recorded, and its first line was tracked frame by frame. Each wrap moved the first line up about 66 px in about 100 ms as the capsule grew. It was never scrolled away and back.
 
+> 2026-10-05: the live pill these batches tuned is retired (tool UI unified on design C). A reply with no words draws nothing, its first words enter with the reply motion, and the work dock speaks for a running turn.
+
 ## A+ motion, batch 2b — 2026-10-01
 
 Batch 2b removes the jolt when a multi-line draft is sent. To measure it, a script tracks a fixed message patch frame by frame in a screen recording, so no screenshots need to be read. The recordings were made on an SM-A566B QA build, sending the same three-line draft in an OpenClaw test session.

@@ -4,7 +4,6 @@ import { Shadow } from '../../theme/tokens';
 import { blendOntoBacking, withAlpha } from '../../theme/color';
 import {
   CHAT_PHOTO_SERVICE,
-  CHAT_SERVICE_BAD,
   resolveChatWallpaperPalette,
   type ChatWallpaperPalette,
 } from '../../theme/chat-wallpaper';
@@ -36,15 +35,10 @@ export type ResolvedChatAppearance = {
   assistantBubble: ChatBubbleSurface;
 };
 
-/** Centred pills over the conversation: dates, system notices, tool activity. */
+/** Centred pills over the conversation: dates and system notices. */
 export type ChatServiceSurface = {
   backgroundColor: string;
   textColor: string;
-  /** Quieter text inside a pill, such as a running step's elapsed time. */
-  secondaryTextColor: string;
-  /** A failed step's pill; its text stays `badTextColor`. */
-  badBackgroundColor: string;
-  badTextColor: string;
 };
 
 /**
@@ -90,8 +84,6 @@ export type ResolvedChatChromeAppearance = {
 const INCOMING_META_ALPHA = 0.8;
 /** Time and ticks on the user's solid bubble: the bubble's own white, softened. */
 const OUTGOING_META_ALPHA = 0.78;
-/** A running step's elapsed time inside a pill. */
-const SERVICE_SECONDARY_ALPHA = 0.72;
 
 /**
  * What is drawn behind the conversation. A photo choice without an image to
@@ -173,24 +165,15 @@ export function resolveChatSurfaces(
     ? {
       backgroundColor: palette.service,
       textColor: palette.onService,
-      secondaryTextColor: withAlpha(palette.onService, SERVICE_SECONDARY_ALPHA),
-      badBackgroundColor: CHAT_SERVICE_BAD.service,
-      badTextColor: CHAT_SERVICE_BAD.onService,
     }
     : photo
       ? {
         backgroundColor: CHAT_PHOTO_SERVICE.service,
         textColor: CHAT_PHOTO_SERVICE.onService,
-        secondaryTextColor: withAlpha(CHAT_PHOTO_SERVICE.onService, SERVICE_SECONDARY_ALPHA),
-        badBackgroundColor: CHAT_SERVICE_BAD.service,
-        badTextColor: CHAT_SERVICE_BAD.onService,
       }
       : {
         backgroundColor: colors.surface,
         textColor: colors.inkSecondary,
-        secondaryTextColor: colors.inkTertiary,
-        badBackgroundColor: CHAT_SERVICE_BAD.service,
-        badTextColor: CHAT_SERVICE_BAD.onService,
       };
   return {
     wallpaper,

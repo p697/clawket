@@ -23,14 +23,22 @@ it('takes a finished turn out of the conversation and leaves its receipt on the 
   expect(answer?.type === 'message' ? answer.receipt?.failed : null).toBe(false);
 });
 
-it('keeps one pill for a turn that ended on a step, keyed by its oldest call and red only on failure', () => {
+it('gives a turn that said nothing a receipt of its own, keyed by its oldest call and standing at its newest', () => {
   const quiet = timeline(newestFirst(prompt('ask'), tool('a'), tool('b')));
-  expect(keys(quiet)).toEqual(['tools:a', 'message:ask']);
-  const pill = quiet[0];
-  expect(pill?.type === 'tools' ? [pill.messages.map((message) => message.id), pill.failed] : null).toEqual([['b', 'a'], false]);
+  expect(keys(quiet)).toEqual(['receipt:a', 'message:ask']);
+  const receipt = quiet[0];
+  expect(receipt?.type === 'receipt'
+    ? [receipt.receipt.steps.map((message) => message.id), receipt.receipt.failed, receipt.anchorKey] : null)
+    .toEqual([['a', 'b'], false, 'b']);
+});
+
+it('puts the receipt on words said before the last step, red when the turn ended on a failure', () => {
   const failed = timeline(newestFirst(prompt('ask'), reply('trying'), tool('a', 'error')));
-  expect(failed[0]?.type === 'tools' ? failed[0].failed : null).toBe(true);
-  expect(keys(failed)).toEqual(['tools:a', 'message:trying', 'message:ask']);
+  expect(keys(failed)).toEqual(['message:trying', 'message:ask']);
+  const trying = failed[0];
+  expect(trying?.type === 'message' ? [trying.receipt?.steps.map((step) => step.id), trying.receipt?.failed] : null)
+    .toEqual([['a'], true]);
+  expect(failed.some((item) => item.type === 'receipt')).toBe(false);
 });
 
 it('shows nothing for the running turn steps: the work dock does', () => {
@@ -49,9 +57,9 @@ it('leaves approval prompts as messages', () => {
   ]);
 });
 
-it('keeps a pill when history replaces a live call id', () => {
+it('keeps a standalone receipt in place when history replaces a live call id', () => {
   const live = timeline(newestFirst(prompt('ask'), tool('toolcall_a', 'success', { renderKey: 'toolcall_a' })));
   const settled = timeline(newestFirst(prompt('ask'), tool('toolresult_a', 'success', { renderKey: 'toolcall_a' })));
-  expect(live[0]?.key).toBe('tools:toolcall_a');
-  expect(settled[0]?.key).toBe('tools:toolcall_a');
+  expect(live[0]?.key).toBe('receipt:toolcall_a');
+  expect(settled[0]?.key).toBe('receipt:toolcall_a');
 });

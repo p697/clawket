@@ -18,8 +18,20 @@ export type WorkDockPhase =
   | Readonly<{ kind: 'question' }>
   | Readonly<{ kind: 'offline' }>;
 
-/** A turn that finishes within this long after its first step never raises the dock. */
+/**
+ * A running turn that has neither used a tool nor said a word for this long
+ * raises the dock to say the Agent is thinking; a quick reply never does.
+ */
 export const WORK_DOCK_GRACE_MS = 1_000;
+
+/** The newest turn has said something so far. `messages` is newest-first. */
+export function liveTurnHasWords(messages: ReadonlyArray<UiMessage>): boolean {
+  for (const message of messages) {
+    if (opensTurn(message)) return false;
+    if (message.role === 'assistant' && message.text.trim()) return true;
+  }
+  return false;
+}
 
 /** The newest turn's reply is streaming words. `messages` is newest-first. */
 function isReplying(messages: ReadonlyArray<UiMessage>): boolean {

@@ -20,7 +20,8 @@ import { PresenceRing } from '../ui/PresenceRing';
 import { SwapEntrance } from '../ui/SwapEntrance';
 import { useConversationTheme } from './ChatPresentation';
 import { describeLiveStep, effectiveTool } from './tool-activity-model';
-import { toolIcon, useElapsed } from './ToolActivityPill';
+import { toolIcon } from './toolIcon';
+import { useElapsed } from './useElapsed';
 import type { TurnWork } from './turn-work';
 import { formatWorkDockCaption, type WorkDockPhase } from './work-dock-model';
 

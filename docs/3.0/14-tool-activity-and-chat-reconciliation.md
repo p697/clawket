@@ -3,6 +3,8 @@
 The owner approved compact, icon-led tool rows with optional consecutive-call grouping, plus independent scheduled events without the thick rail. This supersedes the old RunCard rail recipe in `05-visual-system.md`; it does not change backend capabilities or tool execution.
 
 > **Superseded in part by the A+ chat design (owner decision 2026-09-30).** Tool rows and inline expansion are replaced by three centred pills and a work record sheet; see "A+ tool pills" below. Grouping identity and reconciliation rules still apply.
+>
+> **The pills are retired by tool process design C (owner decisions 2026-10-02 and 2026-10-05).** A running turn's steps live in the work dock above the composer, and every finished turn leaves one receipt chip: on its last reply, or in an Agent bubble of its own when it said nothing. No tool or working state is a centred pill in the conversation. Current rules: `apps/mobile/AGENTS.md`.
 
 ## A+ tool pills — 2026-09-30
 

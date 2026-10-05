@@ -5,7 +5,8 @@ import type { UiMessage } from '../../types/chat';
  * One turn of Agent work as the work dock and the receipts see it (tool
  * process design C, owner decision 2026-10-02). The conversation keeps only
  * what was said; a running turn's steps live in the dock above the composer,
- * and a finished turn leaves one receipt under its last reply.
+ * and a finished turn leaves one receipt under its last reply (owner decision
+ * 2026-10-05: never a centred pill).
  *
  * Every function takes `messages` newest-first, as the chat controller keeps them.
  */
@@ -156,26 +157,27 @@ export type FoldedTurns = Readonly<{
   /** The receipt under each finished turn's last reply, by that reply's render key. */
   receipts: ReadonlyMap<string, TurnReceipt>;
   /**
-   * A finished turn that said nothing after its last step keeps one pill,
-   * standing at that step's render key (its message stays in `messages`).
+   * A finished turn that said nothing at all keeps its receipt in a bubble of
+   * its own, standing at its newest step's render key (that step stays in `messages`).
    */
-  pills: ReadonlyMap<string, TurnReceipt>;
+  standalone: ReadonlyMap<string, TurnReceipt>;
 }>;
 
 const NO_RECEIPTS: ReadonlyMap<string, TurnReceipt> = new Map();
 
 /**
- * Takes tool steps out of the conversation. A finished turn whose newest
- * words come after its last step puts a receipt under those words; one that
- * ended on a step keeps a single pill there, red only when that step failed.
- * The running turn (`liveTurnOpen`) shows nothing for its steps: the dock does.
- * Approvals and everything said stay where they are.
+ * Takes tool steps out of the conversation. A finished turn puts its receipt
+ * under its last words, even when they came before its last step; a turn
+ * that said nothing keeps the receipt standing where its newest step was.
+ * The receipt reads red only when the turn ended on a failed step. The running
+ * turn (`liveTurnOpen`) shows nothing for its steps: the dock does. Approvals
+ * and everything said stay where they are.
  */
 export function foldTurnSteps(messages: ReadonlyArray<UiMessage>, liveTurnOpen: boolean): FoldedTurns {
-  if (!messages.some(isTurnStep)) return { messages, receipts: NO_RECEIPTS, pills: NO_RECEIPTS };
+  if (!messages.some(isTurnStep)) return { messages, receipts: NO_RECEIPTS, standalone: NO_RECEIPTS };
   const shown: UiMessage[] = [];
   const receipts = new Map<string, TurnReceipt>();
-  const pills = new Map<string, TurnReceipt>();
+  const standalone = new Map<string, TurnReceipt>();
   let index = 0;
   let newestTurn = true;
   while (index < messages.length) {
@@ -192,11 +194,13 @@ export function foldTurnSteps(messages: ReadonlyArray<UiMessage>, liveTurnOpen: 
     } else {
       const steps = turn.filter(isTurnStep).reverse();
       const newestWork = turn.find((message) => isTurnStep(message) || saysSomething(message))!;
-      if (saysSomething(newestWork)) {
-        receipts.set(renderKeyOf(newestWork), { steps, failed: false });
+      const receipt = { steps, failed: newestWork === newestStep && newestStep.toolStatus === 'error' };
+      const lastWords = turn.find(saysSomething);
+      if (lastWords) {
+        receipts.set(renderKeyOf(lastWords), receipt);
         for (const message of turn) if (!isTurnStep(message)) shown.push(message);
       } else {
-        pills.set(renderKeyOf(newestStep), { steps, failed: newestStep.toolStatus === 'error' });
+        standalone.set(renderKeyOf(newestStep), receipt);
         for (const message of turn) if (!isTurnStep(message) || message === newestStep) shown.push(message);
       }
     }
@@ -205,5 +209,5 @@ export function foldTurnSteps(messages: ReadonlyArray<UiMessage>, liveTurnOpen: 
       index += 1;
     }
   }
-  return { messages: shown, receipts, pills };
+  return { messages: shown, receipts, standalone };
 }

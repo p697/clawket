@@ -11,7 +11,7 @@ import { SessionPreviewNotice, SessionPreviewFooter } from './components/Session
 import { useUiThreadFollow, type UiThreadFollow } from './useUiThreadFollow';
 import { useOlderHistoryPaging } from './useOlderHistoryPaging';
 import { useTranslation } from 'react-i18next';
-import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   BackHandler,
   type LayoutChangeEvent,
@@ -101,7 +101,6 @@ import { FloatingButton } from '../../components/ui/FloatingButton';
 import { HeaderTextAction } from '../../components/ui/HeaderTextAction';
 import { HeaderPill } from '../../components/ui/HeaderPill';
 import type { PlatformKind } from '../../components/ui/PlatformMark';
-import { ToolActivityPill, useElapsed } from '../../components/chat/ToolActivityPill';
 import { TurnReceiptChip } from '../../components/chat/TurnReceiptChip';
 import { WorkDock } from '../../components/chat/WorkDock';
 import { WorkPanel } from '../../components/chat/WorkPanel';
@@ -114,11 +113,10 @@ import {
   renderKeyOf,
   type TurnReceipt,
 } from '../../components/chat/turn-work';
-import { resolveWorkDockPhase, WORK_DOCK_GRACE_MS } from '../../components/chat/work-dock-model';
+import { liveTurnHasWords, resolveWorkDockPhase, WORK_DOCK_GRACE_MS } from '../../components/chat/work-dock-model';
 import { ServicePill } from '../../components/chat/ServicePill';
 import { WorkRecordSheet } from '../../components/chat/WorkRecordSheet';
 import { CronDigest } from '../../components/chat/CronDigest';
-import { formatActivityDuration } from '../../components/chat/tool-activity-model';
 import { Sheet } from '../../components/ui/Sheet';
 import { ReplyFailureSheet } from '../../components/chat/ReplyFailureSheet';
 import { RunResult } from '../../components/chat/RunResult';
@@ -190,18 +188,9 @@ const STREAMING_REMEND_OPTIONS = {
   comparisonOperators: false,
   singleTilde: false,
 };
-/**
- * The reply bubble exists from the moment a turn is sent: it carries the
- * Agent's live activity until the first token, then the text itself. It uses
- * the live stream's id so the row never remounts when streaming begins.
- */
-const REPLY_PLACEHOLDER_ID = 'streaming';
-const REPLY_PLACEHOLDER: UiMessage = { id: REPLY_PLACEHOLDER_ID, role: 'assistant', text: '', streaming: true };
 /** Execution summaries outgrow the screen: the run sheet scrolls inside fixed detents. */
 const RUN_RESULT_SNAP_POINTS: string[] = ['68%', '92%'];
 const EMPTY_RUN_CARDS: ReadonlyArray<ThreadRunCard> = Object.freeze([]);
-/** A dock seen this recently when the connection drops stays to say so. */
-const DOCK_OFFLINE_HOLD_MS = 3_000;
 const EMPTY_TIMELINE_ROWS: ReadonlyArray<ThreadTimelineRow> = Object.freeze([]);
 /** The last committed list geometry, owned by one list instance. */
 type CommittedTimelineLayout = Readonly<{
@@ -250,10 +239,6 @@ function areMessageStatusesEqual(
   }
   return true;
 }
-/** Live activity for the reply placeholder only, so other rows stay out of its re-render. */
-/** What the Agent is doing now, and since when (the user's newest prompt), for the thinking pill. */
-type ThreadLiveActivity = Readonly<{ label: string; startedAt?: number }>;
-const ThreadLiveActivityContext = createContext<ThreadLiveActivity>({ label: '' });
 
 export type ThreadCopy = Readonly<{
   close?: string;
@@ -369,8 +354,6 @@ export type ThreadViewProps = Readonly<{
   isRunning: boolean;
   /** A local send is leaving the device; the composer already shows Stop (A+ motion: send turns into stop). */
   sendInFlight?: boolean;
-  /** Identity of the live reply row the controller will add for the current run. */
-  pendingReplyRenderKey?: string | null;
   canSend: boolean;
   loadingMoreHistory?: boolean;
   historyLoadMoreError?: boolean;
@@ -509,7 +492,6 @@ export function ThreadView({
   readOnlyFooter,
   isRunning,
   sendInFlight = false,
-  pendingReplyRenderKey,
   canSend,
   loadingMoreHistory = false,
   historyLoadMoreError = false,
@@ -700,65 +682,11 @@ export function ThreadView({
     const timer = setInterval(() => setCalendarDay(localDayNumber(Date.now())), 60_000);
     return () => clearInterval(timer);
   }, []);
-  // The work dock (tool process design C, owner decision 2026-10-02): once a
-  // running turn has used a tool for a second, its steps live in one capsule
-  // above the composer until the turn ends, so the conversation keeps only
-  // what was said. A quick reply never raises it. An approval raises it at
-  // once; a question takes its place above the composer instead.
-  const liveWork = useMemo(() => collectLiveTurnWork(messages), [messages]);
-  const liveTurnKey = useMemo(() => {
-    const prompt = messages.find(opensTurn);
-    return prompt ? renderKeyOf(prompt) : null;
-  }, [messages]);
-  const approvalWaiting = capabilities.execApproval && Boolean(liveWork.pendingApproval);
-  // Seen on this phone: history reloads can drop a step's own start time.
-  const stepsSeenRef = useRef<{ turn: string | null; at: number } | null>(null);
-  if (!isRunning) stepsSeenRef.current = null;
-  else if (liveWork.steps.length > 0 && stepsSeenRef.current?.turn !== liveTurnKey) {
-    stepsSeenRef.current = { turn: liveTurnKey, at: Date.now() };
-  }
-  const dockRiseAt = approvalWaiting ? 0
-    : stepsSeenRef.current?.turn === liveTurnKey && stepsSeenRef.current ? stepsSeenRef.current.at + WORK_DOCK_GRACE_MS : undefined;
-  const [, setDockClock] = useState(0);
-  useEffect(() => {
-    if (dockRiseAt === undefined) return undefined;
-    const wait = dockRiseAt - Date.now();
-    if (wait <= 0) return undefined;
-    const timer = setTimeout(() => setDockClock((tick) => tick + 1), wait);
-    return () => clearTimeout(timer);
-  }, [dockRiseAt]);
-  const runDockVisible = isRunning && dockRiseAt !== undefined && Date.now() >= dockRiseAt;
-  // A dropped connection clears the run until it is back; the dock stays to say so.
-  const connectionDown = state.kind === 'offline' || state.kind === 'reconnecting';
-  const dockLastUpRef = useRef(0);
-  if (runDockVisible) dockLastUpRef.current = Date.now();
-  const [dockHeldOffline, setDockHeldOffline] = useState(false);
-  useEffect(() => {
-    if (!connectionDown) setDockHeldOffline(false);
-    else if (Date.now() - dockLastUpRef.current < DOCK_OFFLINE_HOLD_MS) setDockHeldOffline(true);
-  }, [connectionDown]);
-  const dockOffline = dockHeldOffline && connectionDown;
-  const dockVisible = !locked && !sessionPreview && !questionPending && (runDockVisible || dockOffline);
-  const dockShown = dockVisible && !showSlashSuggestions && !composerExpanded;
-  const dockPhase = resolveWorkDockPhase({
-    work: approvalWaiting ? liveWork : { ...liveWork, pendingApproval: undefined },
-    messages,
-    offline: dockOffline,
-  });
-  // Until the dock rises the reply's own live pill speaks for the turn; once
-  // it is up, a second "Thinking" in the conversation would contradict it.
-  const showReplyPlaceholder = presentedRunning && !awaitingInput && !locked && !sessionPreview && !dockVisible
-    && !messages.some((message) => message.id === REPLY_PLACEHOLDER_ID
-      || (message.role === 'assistant' && message.streaming === true));
-  // Carries the controller's identity for this run's reply, so the first
-  // streamed row takes over this placeholder's cell instead of replacing it.
-  const replyPlaceholder = useMemo(() => (pendingReplyRenderKey
-    ? { ...REPLY_PLACEHOLDER, renderKey: pendingReplyRenderKey } : REPLY_PLACEHOLDER), [pendingReplyRenderKey]);
+  // A reply with no words yet draws nothing: the header and the work dock say
+  // the Agent is working (owner decision 2026-10-05: no pills for it).
   const timelineMessages = useMemo(
-    () => awaitingInput || dockVisible
-      ? replyEntrance.messages.filter(message => !(message.role === 'assistant' && message.streaming && !message.text.trim()))
-      : showReplyPlaceholder ? [replyPlaceholder, ...replyEntrance.messages] : replyEntrance.messages,
-    [awaitingInput, dockVisible, replyEntrance.messages, replyPlaceholder, showReplyPlaceholder],
+    () => replyEntrance.messages.filter((message) => !(message.role === 'assistant' && message.streaming && !message.text.trim())),
+    [replyEntrance.messages],
   );
   // Whether the previous render showed this session as an authoritative empty
   // conversation: its first message then enters like any later one.
@@ -785,10 +713,9 @@ export function ThreadView({
     && newestUserIndex >= 0 && unconfirmedMessageIds?.has(messages[newestUserIndex]!.id)
     && !messages.slice(0, newestUserIndex).some(message => message.role === 'tool'
       || (message.role === 'assistant' && message.text.trim().length > 0));
-  const liveActivityLabel = awaitingSendAcknowledgement ? copy.sending ?? t('Sending…', { ns: 'chat' }) : activityLabel?.trim() || copy.thinking;
-  // The pill's clock keeps the turn's start as first seen. An exact history
+  // The dock's clock keeps the turn's start as first seen. An exact history
   // echo keeps the prompt's row identity but takes the computer's clock, and
-  // the pill counts with the phone's (device check 2026-10-01: 10 s jumped
+  // the dock counts with the phone's (device check 2026-10-01: 10 s jumped
   // to 20 s mid-run).
   const newestUser = newestUserIndex >= 0 ? messages[newestUserIndex]! : undefined;
   const newestUserKey = newestUser ? newestUser.renderKey ?? newestUser.id : null;
@@ -798,13 +725,64 @@ export function ThreadView({
     runStartRef.current = { key: newestUserKey, startedAt: newestUser!.timestampMs };
   }
   const runStartedAt = runStartRef.current?.startedAt;
-  const liveActivity = useMemo<ThreadLiveActivity>(
-    () => ({ label: liveActivityLabel, startedAt: runStartedAt }),
-    [liveActivityLabel, runStartedAt],
-  );
+  // The work dock (tool process design C, owner decisions 2026-10-02 and
+  // 2026-10-05): while a turn runs, what the Agent is doing lives in one
+  // capsule above the composer and the conversation keeps only what was
+  // said. It rises at the turn's first step, or once the Agent has thought
+  // for a second without a word, after the sent message has landed; a quick
+  // reply never raises it. Once up it stays until the turn ends. An approval
+  // raises it at once; a question takes its place above the composer instead.
+  const liveWork = useMemo(() => collectLiveTurnWork(messages), [messages]);
+  const liveTurnKey = useMemo(() => {
+    const prompt = messages.find(opensTurn);
+    return prompt ? renderKeyOf(prompt) : null;
+  }, [messages]);
+  const liveTurnSpoke = useMemo(() => liveTurnHasWords(messages), [messages]);
+  const approvalWaiting = capabilities.execApproval && Boolean(liveWork.pendingApproval);
+  // A dropped connection clears the run until it is back. The turn that was
+  // running stays open meanwhile: its steps stay out of the conversation and
+  // the dock says the connection dropped.
+  const connectionDown = state.kind === 'offline' || state.kind === 'reconnecting';
+  const runningTurnRef = useRef<{ session: string | null | undefined; turn: string | null } | null>(null);
+  if (isRunning) runningTurnRef.current = { session: sessionKey, turn: liveTurnKey };
+  else if (!connectionDown || runningTurnRef.current?.session !== sessionKey) runningTurnRef.current = null;
+  const heldOffline = !isRunning && connectionDown && runningTurnRef.current !== null && runningTurnRef.current.turn === liveTurnKey;
+  const liveTurnOpen = isRunning || heldOffline;
+  // Thinking counts from the turn's start, or from when this view first saw
+  // it run if that is earlier (the prompt may carry the computer's clock).
+  const runSeenRef = useRef<{ turn: string | null; at: number } | null>(null);
+  if (!liveTurnOpen) runSeenRef.current = null;
+  else if (!runSeenRef.current || runSeenRef.current.turn !== liveTurnKey) runSeenRef.current = { turn: liveTurnKey, at: Date.now() };
+  const thinkingDueAt = runSeenRef.current
+    ? Math.min(runSeenRef.current.at, runStartedAt ?? Number.POSITIVE_INFINITY) + WORK_DOCK_GRACE_MS
+    : undefined;
+  const dockRaisedRef = useRef<{ turn: string | null } | null>(null);
+  if (!liveTurnOpen || (dockRaisedRef.current && dockRaisedRef.current.turn !== liveTurnKey)) dockRaisedRef.current = null;
+  const thinkingLong = thinkingDueAt !== undefined && Date.now() >= thinkingDueAt
+    && !liveTurnSpoke && !awaitingSendAcknowledgement;
+  if (liveTurnOpen && !dockRaisedRef.current && (approvalWaiting || heldOffline
+    || (!replyEntrance.holding && (liveWork.steps.length > 0 || thinkingLong)))) {
+    dockRaisedRef.current = { turn: liveTurnKey };
+  }
+  // Wake when a turn that is still thinking reaches the second.
+  const thinkingWakeAt = liveTurnOpen && !dockRaisedRef.current && !liveTurnSpoke && thinkingDueAt !== undefined
+    ? thinkingDueAt : undefined;
+  const [, setDockClock] = useState(0);
+  useEffect(() => {
+    if (thinkingWakeAt === undefined) return undefined;
+    const timer = setTimeout(() => setDockClock((tick) => tick + 1), Math.max(0, thinkingWakeAt - Date.now()));
+    return () => clearTimeout(timer);
+  }, [thinkingWakeAt]);
+  const dockVisible = !locked && !sessionPreview && !questionPending && liveTurnOpen && dockRaisedRef.current !== null;
+  const dockShown = dockVisible && !showSlashSuggestions && !composerExpanded;
+  const dockPhase = resolveWorkDockPhase({
+    work: approvalWaiting ? liveWork : { ...liveWork, pendingApproval: undefined },
+    messages,
+    offline: heldOffline,
+  });
   // Tool steps leave the conversation: a finished turn leaves a receipt on its
-  // last reply (or one pill), the running turn's steps live in the work dock.
-  const foldedTurns = useMemo(() => foldTurnSteps(timelineMessages, isRunning), [isRunning, timelineMessages]);
+  // last reply (or in a bubble of its own), the open turn's steps live in the work dock.
+  const foldedTurns = useMemo(() => foldTurnSteps(timelineMessages, liveTurnOpen), [liveTurnOpen, timelineMessages]);
   const rhythmRows = useMemo(() => withThreadRhythm(groupThreadRuns(placeTurnReceipts(buildThreadTimelineItems({
     messages: foldedTurns.messages,
     runs: runCards,
@@ -1175,10 +1153,6 @@ export function ThreadView({
   }, [copy, favoriteMessageIds, messageStatuses]);
 
 
-  const openWorkRecord = useCallback((calls: ReadonlyArray<UiMessage>) => {
-    const oldest = calls[calls.length - 1];
-    if (oldest) setWorkRecordAnchor(oldest.renderKey ?? oldest.id);
-  }, []);
   const openReceipt = useCallback((receipt: TurnReceipt) => {
     const oldest = receipt.steps[0];
     if (oldest) setWorkRecordAnchor(renderKeyOf(oldest));
@@ -1221,10 +1195,15 @@ export function ThreadView({
   const { claimEntrance: claimRunEntrance, isEntrancePending: isRunEntrancePending } = runEntrance;
   const renderMessage = useCallback(
     ({ item, target }: ListRenderItemInfo<ThreadTimelineRow>) => {
-      if (item.type === 'tools') {
-        return <View style={[stylesStatic.timelineItem, rowGapStyles[item.gapAbove]]}>
-          <ToolActivityPill testID={item.key} messages={item.messages} failed={item.failed} onPress={() => openWorkRecord(item.messages)} />
-        </View>;
+      if (item.type === 'receipt') {
+        return (
+          <ThreadReceiptTimelineItem
+            row={item}
+            animateEntrance={target === 'Cell' && isEntrancePending(item.anchorKey)}
+            claimEntrance={claimEntrance}
+            onOpenReceipt={openReceipt}
+          />
+        );
       }
       if (item.type === 'date') {
         return (
@@ -1309,7 +1288,6 @@ export function ThreadView({
       hasMessageActions,
       messageStatuses,
       openReceipt,
-      openWorkRecord,
       queuedTapOpensActions,
       onOpenAttachments,
       onOpenCronRun,
@@ -1396,7 +1374,6 @@ export function ThreadView({
   return (
     <ChatPresentationProvider value={presentation}>
     <ArtifactProvider operations={artifactOperations} sessionKey={sessionKey}>
-    <ThreadLiveActivityContext.Provider value={liveActivity}>
     <UserMessageDisclosureProvider scope={historyScope ?? readableScope} onToggle={pauseMessageFollow}>
     <View testID={testID} style={[styles.screen, { backgroundColor: theme.colors.canvas }]}
       onLayout={({ nativeEvent }) => {
@@ -1804,7 +1781,6 @@ export function ThreadView({
     />
     </View>
     </UserMessageDisclosureProvider>
-    </ThreadLiveActivityContext.Provider>
     </ArtifactProvider>
     </ChatPresentationProvider>
   );
@@ -2539,6 +2515,54 @@ function ThreadExecApprovalTimelineItem({
   );
 }
 
+/**
+ * A finished turn that said nothing: its receipt in an Agent bubble of its
+ * own, with the time of its last step, so the conversation never shows tool
+ * activity outside the work dock and the receipts (owner decision 2026-10-05).
+ * It enters like a reply when the turn ends in view.
+ */
+const ThreadReceiptTimelineItem = React.memo(function ThreadReceiptTimelineItem({
+  row,
+  animateEntrance,
+  claimEntrance,
+  onOpenReceipt,
+}: Readonly<{
+  row: Extract<ThreadTimelineRow, { type: 'receipt' }>;
+  animateEntrance: boolean;
+  claimEntrance: (key: string) => boolean;
+  onOpenReceipt: (receipt: TurnReceipt) => void;
+}>): React.JSX.Element {
+  const { identity, locale } = useChatPresentation();
+  const time = formatThreadClockTime(row.timestampMs, locale);
+  return (
+    <View style={rowGapStyles[row.gapAbove]}>
+      <MessageEntrance
+        testID={`thread-entrance-${row.key}`}
+        animationKey={row.anchorKey}
+        animate={animateEntrance}
+        claimEntrance={claimEntrance}
+        motion="reply"
+      >
+        <View style={stylesStatic.timelineItem}>
+          {identity && !row.joinsOlder ? <ChatMessageIdentity {...identity} /> : null}
+          <Bubble
+            testID={`thread-${row.key}`}
+            role="assistant"
+            selectable={false}
+            joinsOlder={row.joinsOlder}
+            joinsNewer={row.joinsNewer}
+          >
+            <View style={stylesStatic.receiptOnly}>
+              <TurnReceiptChip testID={`thread-${row.key}-chip`} receipt={row.receipt} onPress={onOpenReceipt} />
+              {time ? <MessageMeta testID={`thread-${row.key}-meta`} time={time} style={stylesStatic.receiptTime} /> : null}
+            </View>
+          </Bubble>
+        </View>
+      </MessageEntrance>
+    </View>
+  );
+});
+
 function AssistantBubble({
   message,
   showIdentity = true,
@@ -2555,7 +2579,7 @@ function AssistantBubble({
   joinsNewer?: boolean;
   receipt?: TurnReceipt;
   onOpenReceipt?: (receipt: TurnReceipt) => void;
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   const theme = useConversationTheme();
   const { fontSize, identity } = useChatPresentation();
   const time = useMessageClock(message);
@@ -2585,9 +2609,9 @@ function AssistantBubble({
     return remend(pacedText, STREAMING_REMEND_OPTIONS);
   }, [message.text, pacedText, textAnimating]);
 
-  // Until the first words show, the reply is a live pill (A+ chat design):
-  // the same row becomes the bubble, so the cell never remounts.
-  if (thinking) return <ThinkingPill testID={`thread-thinking-${message.id}`} />;
+  // Until the first words show the reply draws nothing: the header and the
+  // work dock say the Agent is working (owner decision 2026-10-05).
+  if (thinking) return null;
 
   return (
     <View>
@@ -2677,20 +2701,6 @@ const composerChipStyles = StyleSheet.create({
   label: { flexShrink: 1, minWidth: 0, fontSize: FontSize.caption, lineHeight: LineHeight.caption, fontWeight: FontWeight.semibold },
 });
 
-/** The reply before its first words: a spinner, what the Agent is doing, and how long this turn has run. */
-function ThinkingPill({ testID }: Readonly<{ testID: string }>): React.JSX.Element {
-  const { t } = useTranslation('chat');
-  const live = useContext(ThreadLiveActivityContext);
-  const elapsed = useElapsed(live.startedAt);
-  const time = elapsed !== undefined && elapsed >= 1000 ? formatActivityDuration(elapsed, t) : undefined;
-  return (
-    <View testID={`${testID}-row`} accessibilityLiveRegion="polite" accessibilityState={{ busy: true }}>
-      <ServicePill testID={testID} busy label={live.label} stepKey={live.label} trailing={time}
-        accessibilityLabel={[live.label, time].filter(Boolean).join(', ')} />
-    </View>
-  );
-}
-
 // Horizontal padding of every timeline row; the message actions overlay uses
 // it to align the menu with the bubble edge.
 const THREAD_ROW_INSET = Space.lg;
@@ -2762,6 +2772,12 @@ const stylesStatic = StyleSheet.create({
   },
   receiptTime: {
     marginLeft: 'auto',
+  },
+  // A turn that said nothing: its receipt and time are the bubble's one line.
+  receiptOnly: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.sm,
   },
   metaRowUser: {
     alignSelf: 'flex-end',

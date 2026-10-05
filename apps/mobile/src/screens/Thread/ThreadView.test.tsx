@@ -698,29 +698,25 @@ describe('ThreadView', () => {
     expect(view.queryByText('Atlas', { includeHiddenElements: true })).toBeTruthy();
   });
 
-  it('shows waiting for input without a thinking bubble or working animation', () => {
+  it('shows waiting for input without a working animation, and no row for a reply with no words', () => {
     const messages: UiMessage[] = [{ id: 'streaming', role: 'assistant', text: '', streaming: true }, { id: 'sent', role: 'user', text: 'Ask me' }];
     const view = render(<ThreadView {...createProps({ messages, isRunning: true, interactionAttention: 'input' })} />);
     expect(view.getByText('Agent needs your input')).toBeTruthy();
-    expect(view.queryByTestId('thread-thinking-streaming')).toBeNull();
+    expect(view.queryByTestId('thread-message-streaming')).toBeNull();
     expect(view.queryByTestId('thread-screen-header-pill-working')).toBeNull();
     expect(view.getByTestId('thread-message-sent')).toBeTruthy();
     view.rerender(<ThreadView {...createProps({ messages, isRunning: true, interactionAttention: null })} />);
-    expect(view.getByTestId('thread-thinking-streaming')).toBeTruthy();
+    expect(view.queryByTestId('thread-message-streaming')).toBeNull();
     expect(view.getByTestId('thread-screen-header-pill-working')).toBeTruthy();
   });
 
-  it('keeps the reply present as a live pill from send until the first token', () => {
+  it('draws nothing for the reply until its first words while the header says the Agent is working', () => {
     const sent: UiMessage = { id: 'usr_1', role: 'user', text: 'Hello', timestampMs: Date.now() };
     const messageActions = { onCopy: jest.fn(), onToggleFavorite: jest.fn(), onShare: jest.fn() };
     const view = render(<ThreadView {...createProps({ messages: [sent], isRunning: true, activityLabel: null, input: '', messageActions })} />);
-    // The placeholder shares the live stream id so the row never remounts; until
-    // the first words it is a live pill (A+ chat design), not an empty bubble.
-    expect(view.getByTestId('thread-thinking-streaming')).toHaveTextContent('Thinking…');
-    expect(view.getByTestId('thread-thinking-streaming-busy')).toBeTruthy();
+    // Never a pill or an empty bubble in the conversation (owner decision 2026-10-05).
+    expect(view.queryByTestId('thread-message-streaming')).toBeNull();
     expect(view.queryByTestId('thread-bubble-streaming')).toBeNull();
-    // Nothing to copy or share yet, so the placeholder has no long-press menu while the sent turn keeps its own.
-    expect(view.getByTestId('thread-message-streaming').props.onLongPress).toBeUndefined();
     expect(view.getByTestId('thread-message-usr_1').props.onLongPress).toBeDefined();
     // The header turns its ring and says it too, as the approved motion prototype does; no avatar badge.
     expect(view.getByTestId('thread-screen-header-pill-working')).toBeTruthy();
@@ -728,11 +724,10 @@ describe('ThreadView', () => {
     expect(view.queryByTestId('thread-screen-header-pill-avatar-working')).toBeNull();
 
     view.rerender(<ThreadView {...createProps({ messages: [sent], isRunning: true, activityLabel: 'Using exec…', input: '' })} />);
-    expect(view.getByTestId('thread-thinking-streaming')).toHaveTextContent('Using exec…');
+    expect(view.getByTestId('thread-screen-header-pill-subtitle').props.children).toBe('Using exec…');
 
     const streaming: UiMessage = { id: 'streaming', role: 'assistant', text: 'Partial **bo', streaming: true };
     view.rerender(<ThreadView {...createProps({ messages: [streaming, sent], isRunning: true, input: '' })} />);
-    expect(view.queryByTestId('thread-thinking-streaming')).toBeNull();
     expect(view.getAllByTestId('thread-bubble-streaming')).toHaveLength(1);
     expect(view.getByTestId('thread-screen-header-pill-subtitle').props.children).toBe('Typing…');
     expect(flattenStyle(view.getByTestId('thread-bubble-streaming').props.style).borderRadius).toBe(Radius.bubble);
@@ -748,63 +743,78 @@ describe('ThreadView', () => {
     expect(view.getByTestId('thread-markdown-assistant-9').props.markdown).toBe('Partial **bold**');
 
     view.rerender(<ThreadView {...createProps({ messages: [sent], isRunning: false })} />);
-    expect(view.queryByTestId('thread-thinking-streaming')).toBeNull();
-    // Locked and preview threads never show a placeholder.
+    expect(view.queryByTestId('thread-message-streaming')).toBeNull();
+    // A locked thread shows neither a row nor the dock for the run.
     view.rerender(<ThreadView {...createProps({ messages: [sent], isRunning: true, state: { kind: 'locked' }, input: '' })} />);
-    expect(view.queryByTestId('thread-thinking-streaming')).toBeNull();
+    expect(view.queryByTestId('thread-message-streaming')).toBeNull();
+    expect(view.queryByTestId('thread-screen-work-dock')).toBeNull();
   });
 
-  it.each([false, true])('says sending before the newest prompt is acknowledged (image-only: %s)', (imageOnly) => {
-    const prompt: UiMessage = { id: 'pending-prompt', role: 'user', text: imageOnly ? '' : 'Hello',
-      ...(imageOnly ? { imageUris: ['file:///qa.png'] } : {}) };
-    const props = createProps({ messages: [prompt], input: '', isRunning: true,
-      unconfirmedMessageIds: new Set([prompt.id]), runAcknowledged: false });
-    const view = render(<ThreadView {...props} />);
-    expect(view.getByTestId('thread-thinking-streaming')).toHaveTextContent('Sending…');
-    view.rerender(<ThreadView {...props} runAcknowledged />);
-    expect(view.getByTestId('thread-thinking-streaming')).toHaveTextContent('Thinking…');
+  it.each([false, true])('keeps the dock down while the newest prompt is still leaving (image-only: %s)', (imageOnly) => {
+    jest.useFakeTimers();
+    try {
+      const prompt: UiMessage = { id: 'pending-prompt', role: 'user', text: imageOnly ? '' : 'Hello',
+        ...(imageOnly ? { imageUris: ['file:///qa.png'] } : {}) };
+      const props = createProps({ messages: [prompt], input: '', isRunning: true,
+        unconfirmedMessageIds: new Set([prompt.id]), runAcknowledged: false });
+      const view = render(<ThreadView {...props} />);
+      act(() => jest.advanceTimersByTime(1_500));
+      // The prompt's own clock says it is still sending; "Thinking" would come too early.
+      expect(view.queryByTestId('thread-screen-work-dock')).toBeNull();
+      view.rerender(<ThreadView {...props} runAcknowledged />);
+      expect(within(view.getByTestId('thread-screen-work-dock')).getByText('Thinking…')).toBeTruthy();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
-  it('keeps actual tool activity while a send acknowledgement is delayed', () => {
+  it('raises the dock for real tool activity while a send acknowledgement is delayed', () => {
     const prompt: UiMessage = { id: 'pending-prompt', role: 'user', text: 'Hello' };
-    const props = createProps({ messages: [prompt], input: '', isRunning: true,
-      unconfirmedMessageIds: new Set([prompt.id]), activityLabel: 'Using exec…' });
+    const tool: UiMessage = { id: 'tool', role: 'tool', text: '', toolName: 'exec', toolArgs: JSON.stringify({ command: 'npm test' }), toolStatus: 'running' };
+    const props = createProps({ messages: [tool, prompt], input: '', isRunning: true, unconfirmedMessageIds: new Set([prompt.id]) });
     const view = render(<ThreadView {...props} />);
-    expect(view.getByTestId('thread-thinking-streaming')).toHaveTextContent('Using exec…');
-    view.rerender(<ThreadView {...props} activityLabel={null}
-      messages={[{ id: 'tool', role: 'tool', text: 'Completed' }, prompt]} />);
-    expect(view.getByTestId('thread-thinking-streaming')).toHaveTextContent('Thinking…');
+    expect(within(view.getByTestId('thread-screen-work-dock')).getByText('Running npm test')).toBeTruthy();
+    expect(view.queryByTestId('thread-message-tool')).toBeNull();
   });
 
-  it('does not relabel recovered runs or a queued follow-up as sending', () => {
-    const prompt: UiMessage = { id: 'accepted-prompt', role: 'user', text: 'Hello' };
-    const props = createProps({ messages: [prompt], input: '', isRunning: true });
-    const view = render(<ThreadView {...props} />);
-    expect(view.getByTestId('thread-thinking-streaming')).toHaveTextContent('Thinking…');
-    view.rerender(<ThreadView {...props}
-      messages={[{ id: 'queued', role: 'user', text: 'Next', delivery: 'queued' }, prompt]}
-      unconfirmedMessageIds={new Set(['queued'])} />);
-    expect(view.getByTestId('thread-thinking-streaming')).toHaveTextContent('Thinking…');
+  it('raises the dock for a recovered run that is thinking and keeps it for a queued follow-up', () => {
+    jest.useFakeTimers();
+    try {
+      const prompt: UiMessage = { id: 'accepted-prompt', role: 'user', text: 'Hello' };
+      const props = createProps({ messages: [prompt], input: '', isRunning: true });
+      const view = render(<ThreadView {...props} />);
+      expect(view.queryByTestId('thread-screen-work-dock')).toBeNull();
+      act(() => jest.advanceTimersByTime(1_000));
+      expect(within(view.getByTestId('thread-screen-work-dock')).getByText('Thinking…')).toBeTruthy();
+      view.rerender(<ThreadView {...props}
+        messages={[{ id: 'queued', role: 'user', text: 'Next', delivery: 'queued' }, prompt]}
+        unconfirmedMessageIds={new Set(['queued'])} />);
+      expect(within(view.getByTestId('thread-screen-work-dock')).getByText('Thinking…')).toBeTruthy();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
-  it('slides a live pill\'s next step in from below, never its first', () => {
+  it('slides the dock\'s next step in from below, never its first words', () => {
     const prompt: UiMessage = { id: 'accepted-prompt', role: 'user', text: 'Hello' };
-    const props = createProps({ messages: [prompt], input: '', isRunning: true });
+    const step = (id: string, command: string, toolStatus: UiMessage['toolStatus'] = 'running'): UiMessage => (
+      { id, role: 'tool', text: '', toolName: 'exec', toolArgs: JSON.stringify({ command }), toolStatus });
+    const props = createProps({ messages: [step('a', 'npm ci'), prompt], input: '', isRunning: true });
     const view = render(<ThreadView {...props} />);
-    const step = () => view.getByTestId('thread-thinking-streaming-step');
+    const motion = () => view.getByTestId('thread-screen-work-dock-title-motion');
     view.rerender(<ThreadView {...props} />);
-    expect(step().props.entering).toBeUndefined();
-    view.rerender(<ThreadView {...props} activityLabel="Using exec…" />);
-    const entering = step().props.entering as () => { initialValues: unknown };
+    expect(motion().props.entering).toBeUndefined();
+    const second = [step('b', 'npm test'), step('a', 'npm ci', 'success'), prompt];
+    view.rerender(<ThreadView {...props} messages={second} />);
+    const entering = motion().props.entering as () => { initialValues: unknown };
     expect(entering().initialValues).toEqual({ opacity: 0, transform: [{ translateY: Motion.step.rise }] });
     // A re-render on the same step, such as its elapsed time ticking, does not replay it.
-    view.rerender(<ThreadView {...props} activityLabel="Using exec…" />);
-    expect(step().props.entering).toBe(entering);
-    // Reduced motion: the words fade in place and the spinner stands still.
+    view.rerender(<ThreadView {...props} messages={[...second]} />);
+    expect(motion().props.entering).toBe(entering);
+    // Reduced motion: the words fade in place.
     mockReducedMotion = true;
-    view.rerender(<ThreadView {...props} activityLabel={null} />);
-    expect(step().props.entering).toMatchObject({ name: 'FadeIn', durationMs: Motion.step.duration });
-    expect(view.getByTestId('thread-thinking-streaming-busy').findAll((node) => String(node.type) === 'LoaderCircle')).toHaveLength(1);
+    view.rerender(<ThreadView {...props} messages={[step('c', 'npm run lint'), step('b', 'npm test', 'success'), step('a', 'npm ci', 'success'), prompt]} />);
+    expect(motion().props.entering).toMatchObject({ name: 'FadeIn', durationMs: Motion.step.duration });
   });
 
   it('turns send into a dimmed stop while the message is still leaving', () => {
@@ -929,9 +939,9 @@ describe('ThreadView', () => {
     const sent: UiMessage = { id: 'usr_2', role: 'user', text: 'New' };
     view.rerender(<ThreadView {...createProps({ messages: [sent, older], isRunning: true, input: '' })} />);
     // The new message is drawn at the start of its flight from its first frame (A+ motion),
-    // never in place first; the reply placeholder and the history stay in full view.
+    // never in place first; the history stays in full view and nothing stands for the reply yet.
     expect(flattenStyle(view.getByTestId('thread-entrance-usr_2').props.style).opacity).toBeCloseTo(Motion.send.startOpacity);
-    expect(flattenStyle(view.getByTestId('thread-entrance-streaming').props.style).opacity).toBe(1);
+    expect(view.queryByTestId('thread-entrance-streaming')).toBeNull();
     expect(flattenStyle(view.getByTestId('thread-entrance-a0').props.style).opacity).toBe(1);
 
     // History paged in above the reader never animates.
@@ -1218,7 +1228,7 @@ describe('ThreadView', () => {
     expect(view.queryByTestId('thread-screen-composer-voice')).toBeNull();
     fireEvent.press(view.getByTestId('thread-screen-composer-primary'));
     view.getByTestId('thread-screen-timeline').props.onStartReached();
-    fireEvent.press(view.getByTestId('tools:tool-1'));
+    fireEvent.press(view.getByTestId('thread-receipt-assistant-1'));
     fireEvent.press(view.getByTestId('thread-run-tool-1'));
     fireEvent.press(view.getByLabelText('Photo 1 of 1'));
     fireEvent.press(view.getByTestId('thread-approval-approval-1-primary'));
@@ -1568,7 +1578,7 @@ describe('ThreadView', () => {
     }));
     expect(onOpenRunSession).toHaveBeenCalledTimes(1);
 
-    fireEvent.press(view.getByTestId('tools:tool-details'));
+    fireEvent.press(view.getByTestId('thread-receipt:tool-details-chip'));
     fireEvent.press(view.getByTestId('thread-run-tool-details'));
     expect(view.getByTestId('thread-tool-detail').props.detail).toBe('package.json');
     expect(onOpenRunSession).toHaveBeenCalledTimes(1);
@@ -2419,9 +2429,9 @@ it('names Codex js calls by their titles in the work dock, the work record and t
     expect(within(view.getByTestId('thread-screen-work-dock')).getByText('刷新审核状态')).toBeTruthy();
     expect(view.queryByText('Using js')).toBeNull();
 
-    // The turn ended on a step: one pill stands for it.
+    // The turn said nothing: its receipt stands in a bubble of its own.
     view.rerender(<ThreadView {...props} isRunning={false} messages={[js('b', '刷新审核状态', 'success'), js('a', '查看当前浏览器页面', 'success'), prompt]} />);
-    fireEvent.press(view.getByTestId('tools:a'));
+    fireEvent.press(view.getByTestId('thread-receipt:a-chip'));
     const row = within(view.getByTestId('thread-run-a'));
     expect(row.getByText('查看当前浏览器页面')).toBeTruthy();
     expect(view.getByTestId('thread-run-a').props.accessibilityLabel).toBe('查看当前浏览器页面, js');
@@ -2432,15 +2442,23 @@ it('names Codex js calls by their titles in the work dock, the work record and t
   }
 });
 
-it('keeps a failure the Agent moved past quiet and gives a turn that ended on one a single red pill', () => {
+it('keeps a failure the Agent moved past quiet and turns the receipt of a turn that ended on one red', () => {
   const prompt: UiMessage = { id: 'ask', role: 'user', text: 'Check CI' };
   const ok: UiMessage = { id: 'a', role: 'tool', text: '', toolName: 'exec', toolArgs: JSON.stringify({ command: 'gh pr view 50' }), toolStatus: 'success' };
   const failed: UiMessage = { ...ok, id: 'b', toolArgs: JSON.stringify({ command: 'gh pr checks 50' }), toolStatus: 'error' };
   const view = render(<ThreadView {...createProps({ messages: [failed, ok, prompt] })} />);
   const keys = () => view.getByTestId('thread-screen-timeline').props.data.map((item: any) => item.key);
-  expect(keys()).toEqual(['message:ask', 'tools:a']);
-  expect(view.getByTestId('tools:a').props.accessibilityLabel).toBe('gh pr checks 50 failed');
-  fireEvent.press(view.getByTestId('tools:a'));
+  // Nothing was said: the receipt stands in the Agent's own bubble, never a centred pill.
+  expect(keys()).toEqual(['message:ask', 'receipt:a']);
+  const chip = view.getByTestId('thread-receipt:a-chip');
+  expect(chip.props.accessibilityLabel).toBe('Work record: gh pr checks 50 failed');
+  expect(view.getByTestId('thread-receipt:a-chip-glyph').type).toBe('CircleAlert');
+  // Red glyph on a soft red fill; the words keep the bubble's text color, never red on red.
+  const bad = buildTheme(mockScheme, mockScheme, builtInAccents.iceBlue).colors.bad;
+  expect(view.getByTestId('thread-receipt:a-chip-glyph').props.color).toBe(bad);
+  expect(flattenStyle(within(chip).getByText('gh pr checks 50', { exact: false }).props.style).color).not.toBe(bad);
+  expect(view.getByTestId('thread-receipt:a')).toBeTruthy();
+  fireEvent.press(chip);
   expect(view.getByTestId('thread-run-a')).toBeTruthy();
   expect(view.getByTestId('thread-run-b').props.accessibilityLabel).toContain('Failed');
 
@@ -2448,6 +2466,13 @@ it('keeps a failure the Agent moved past quiet and gives a turn that ended on on
   view.rerender(<ThreadView {...createProps({ messages: [answer, { ...ok, id: 'c' }, failed, ok, prompt] })} />);
   expect(keys()).toEqual(['message:ask', 'message:answer']);
   expect(within(view.getByTestId('thread-receipt-answer')).getByText('Ran 3 commands')).toBeTruthy();
+  expect(view.getByTestId('thread-receipt-answer-glyph').type).toBe('Layers');
+
+  // Words said before a final failed step carry the receipt, red.
+  const trying: UiMessage = { id: 'trying', role: 'assistant', text: 'Checking CI.' };
+  view.rerender(<ThreadView {...createProps({ messages: [failed, trying, prompt] })} />);
+  expect(keys()).toEqual(['message:ask', 'message:trying']);
+  expect(view.getByTestId('thread-receipt-trying').props.accessibilityLabel).toBe('Work record: gh pr checks 50 failed');
 });
 
 describe('work dock', () => {
@@ -2459,19 +2484,14 @@ describe('work dock', () => {
   beforeEach(() => jest.useFakeTimers());
   afterEach(() => jest.useRealTimers());
 
-  it('rises a second into a tool turn, names the step and opens every step so far', () => {
+  it('rises at the turn\'s first step, names it and opens every step so far', () => {
     const props = createProps({ isRunning: true, messages: [run, said, read, prompt] });
     const view = render(<ThreadView {...props} />);
-    // Within the grace the reply's own live pill speaks; steps never enter the conversation.
-    expect(view.queryByTestId('thread-screen-work-dock')).toBeNull();
-    expect(keys(view)).toEqual(['message:ask', 'message:said', 'message:streaming']);
-
-    act(() => jest.advanceTimersByTime(1_000));
     const dock = view.getByTestId('thread-screen-work-dock');
     expect(within(dock).getByText('Running npm test')).toBeTruthy();
     expect(within(dock).getByText('Step 2')).toBeTruthy();
     expect(view.getByTestId('thread-screen-work-dock-working')).toBeTruthy();
-    // Once the dock is up, a second "Thinking" in the conversation would contradict it.
+    // Steps never enter the conversation, and nothing stands for the reply before its words.
     expect(keys(view)).toEqual(['message:ask', 'message:said']);
 
     fireEvent.press(dock);
@@ -2493,14 +2513,38 @@ describe('work dock', () => {
     expect(view.getByTestId('thread-receipt-done')).toBeTruthy();
   });
 
-  it('never rises for a turn that finished within the grace', () => {
-    const props = createProps({ isRunning: true, messages: [run, prompt] });
-    const view = render(<ThreadView {...props} />);
+  it('waits for the sent message to land, and a turn that finished by then never raises it', () => {
+    const view = render(<ThreadView {...createProps({ messages: [] })} />);
+    const sentAt = Date.now();
+    view.rerender(<ThreadView {...createProps({ isRunning: true, messageSubmittedAt: sentAt, messages: [run, prompt] })} />);
     act(() => jest.advanceTimersByTime(400));
-    view.rerender(<ThreadView {...props} isRunning={false} messages={[{ id: 'done', role: 'assistant', text: 'Done.' }, { ...run, toolStatus: 'success' }, prompt]} />);
+    // The reply entrance hold: the sent message lands before anything about the reply.
+    expect(view.queryByTestId('thread-screen-work-dock')).toBeNull();
+    const done: UiMessage = { id: 'done', role: 'assistant', text: 'Done.' };
+    view.rerender(<ThreadView {...createProps({ isRunning: false, messageSubmittedAt: sentAt, messages: [done, { ...run, toolStatus: 'success' }, prompt] })} />);
     act(() => jest.advanceTimersByTime(1_000));
     expect(view.queryByTestId('thread-screen-work-dock')).toBeNull();
     expect(view.getByTestId('thread-receipt-done')).toBeTruthy();
+  });
+
+  it('rises once the Agent has thought for a second and stays through its reply', () => {
+    const props = createProps({ isRunning: true, messages: [prompt] });
+    const view = render(<ThreadView {...props} />);
+    expect(view.queryByTestId('thread-screen-work-dock')).toBeNull();
+    act(() => jest.advanceTimersByTime(1_000));
+    expect(within(view.getByTestId('thread-screen-work-dock')).getByText('Thinking…')).toBeTruthy();
+    view.rerender(<ThreadView {...props} messages={[{ id: 'streaming', role: 'assistant', text: 'Here is', streaming: true }, prompt]} />);
+    expect(within(view.getByTestId('thread-screen-work-dock')).getByText('Replying…')).toBeTruthy();
+    view.rerender(<ThreadView {...props} isRunning={false} messages={[{ id: 'final', role: 'assistant', text: 'Here is the plan.' }, prompt]} />);
+    expect(view.queryByTestId('thread-screen-work-dock')).toBeNull();
+  });
+
+  it('never rises for a quick reply that speaks within the second', () => {
+    const props = createProps({ isRunning: true, messages: [{ id: 'streaming', role: 'assistant', text: 'Sure', streaming: true }, prompt] });
+    const view = render(<ThreadView {...props} />);
+    act(() => jest.advanceTimersByTime(3_000));
+    expect(view.queryByTestId('thread-screen-work-dock')).toBeNull();
+    expect(view.getByTestId('thread-bubble-streaming')).toBeTruthy();
   });
 
   it('turns amber for a pending approval at once and takes the reader back to the card', () => {
@@ -2529,7 +2573,6 @@ describe('work dock', () => {
   it('makes way for a waiting question and shrinks to one line while typing', () => {
     const props = createProps({ isRunning: true, messages: [run, prompt] });
     const view = render(<ThreadView {...props} />);
-    act(() => jest.advanceTimersByTime(1_000));
     expect(view.getByTestId('thread-screen-work-dock-subtitle')).toBeTruthy();
     view.rerender(<ThreadView {...props} keyboardVisible />);
     expect(view.getByTestId('thread-screen-work-dock')).toBeTruthy();
@@ -2538,18 +2581,34 @@ describe('work dock', () => {
     expect(view.queryByTestId('thread-screen-work-dock')).toBeNull();
   });
 
-  it('stays to say the connection dropped while the turn was running', () => {
+  it('keeps the running turn open while the connection is down and takes it up again with the run', () => {
     const props = createProps({ isRunning: true, messages: [run, prompt] });
     const view = render(<ThreadView {...props} />);
-    act(() => jest.advanceTimersByTime(1_000));
     expect(view.getByTestId('thread-screen-work-dock')).toBeTruthy();
-    // The controller clears the run while the connection is down.
+    // The controller clears the run while the connection is down; the turn stays open.
     view.rerender(<ThreadView {...props} isRunning={false} state={{ kind: 'offline' }} />);
     const dock = view.getByTestId('thread-screen-work-dock');
     expect(within(dock).getByText('Connection lost. Reconnecting…')).toBeTruthy();
     expect(within(dock).getByText('The Agent may still be working on your computer')).toBeTruthy();
+    // Its steps stay out of the conversation: no receipt while the run may go on.
+    expect(keys(view)).toEqual(['message:ask']);
+    // The connection returns with the run: the dock names the step again at once.
+    view.rerender(<ThreadView {...props} />);
+    expect(within(view.getByTestId('thread-screen-work-dock')).getByText('Running npm test')).toBeTruthy();
+    // It returns without the run: the turn ended and its receipt takes the steps.
+    view.rerender(<ThreadView {...props} isRunning={false} state={{ kind: 'reconnecting' }} />);
+    expect(view.getByTestId('thread-screen-work-dock')).toBeTruthy();
     view.rerender(<ThreadView {...props} isRunning={false} state={{ kind: 'ready' }} />);
     expect(view.queryByTestId('thread-screen-work-dock')).toBeNull();
+    expect(keys(view)).toEqual(['message:ask', 'receipt:x']);
+  });
+
+  it('opens a dock that was not up yet when the connection drops mid-turn', () => {
+    const props = createProps({ isRunning: true, messages: [prompt] });
+    const view = render(<ThreadView {...props} />);
+    expect(view.queryByTestId('thread-screen-work-dock')).toBeNull();
+    view.rerender(<ThreadView {...props} isRunning={false} state={{ kind: 'offline' }} />);
+    expect(within(view.getByTestId('thread-screen-work-dock')).getByText('Connection lost. Reconnecting…')).toBeTruthy();
   });
 });
 
@@ -2698,10 +2757,11 @@ describe('continuous message presentation', () => {
     view.rerender(<ThreadView {...createProps({ messages: [{ ...message, streaming: false }], isRunning: true })} />);
     expect(view.getByTestId('thread-meta-streaming')).toBeTruthy();
   });
-  it('never adds a second placeholder when the recovered live row has a history id', () => {
+  it('never adds a second reply row when the recovered live row has a history id', () => {
     const message: UiMessage = { id: 'history-live', renderKey: 'reply:run:0', role: 'assistant', text: 'Working on the provider.', timestampMs: 1000, streaming: true };
     const view = render(<ThreadView {...createProps({ messages: [message], isRunning: true })} />);
-    expect(view.queryByTestId('thread-thinking-streaming')).toBeNull();
+    expect(view.getByTestId('thread-screen-timeline').props.data.map((row: { key: string }) => row.key)
+      .filter((key: string) => key.startsWith('message:'))).toEqual(['message:reply:run:0']);
     expect(view.getByTestId('thread-markdown-history-live')).toBeTruthy();
   });
   it('retains native rows, visible clocks and one tail across repeated recovery history projections', () => {
@@ -2728,7 +2788,6 @@ describe('continuous message presentation', () => {
       expect(segment.props.markdown).toBe('Checking the provider.');
       expect(view.getByTestId('thread-meta-segment')).toBe(clock);
       expect(view.getByTestId('thread-markdown-streaming')).toBe(tail);
-      expect(view.queryByTestId('thread-thinking-streaming')).toBeNull();
       expect(view.getByTestId('thread-screen-timeline').props.data.map((item: { key: string }) => item.key)).toEqual(keys);
     }
   });
@@ -2746,52 +2805,50 @@ describe('continuous message presentation', () => {
     expect(view.getByTestId('thread-bubble-history-1') === bubble).toBe(true);
     expect(view.getByTestId('thread-meta-history-1') === meta).toBe(true);
   });
-  it('keeps the live pill when a reply that showed no words completes before the pacer publishes it', () => {
+  it('draws nothing, never an empty bubble, when a reply that showed no words completes before the pacer publishes it', () => {
     const streaming: UiMessage = { id: 'streaming', renderKey: 'reply:1000:0', role: 'assistant', text: '', timestampMs: 1000, streaming: true };
     mockPacedText = '';
     const view = render(<ThreadView {...createProps({ messages: [streaming], isRunning: true })} />);
-    expect(view.getByTestId('thread-thinking-streaming')).toBeTruthy();
+    expect(view.queryByTestId('thread-message-streaming')).toBeNull();
     // The whole reply arrives with the run's end and is published a commit later:
     // never an empty bubble with its clock and tail in between.
     const final: UiMessage = { ...streaming, id: 'final_run', text: 'Done', streaming: false };
     view.rerender(<ThreadView {...createProps({ messages: [final] })} />);
-    expect(view.getByTestId('thread-thinking-final_run')).toBeTruthy();
     expect(view.queryByTestId('thread-bubble-final_run')).toBeNull();
+    expect(view.queryByTestId('thread-meta-final_run')).toBeNull();
     mockPacedText = undefined;
     view.rerender(<ThreadView {...createProps({ messages: [final] })} />);
-    expect(view.queryByTestId('thread-thinking-final_run')).toBeNull();
     expect(view.getByTestId('thread-markdown-final_run').props.markdown).toBe('Done');
   });
 
-  it('keeps the live pill clock on the turn start it first saw when a history echo corrects the prompt time', () => {
+  it('keeps the dock clock on the turn start it first saw when a history echo corrects the prompt time', () => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date('2026-10-01T08:00:12.000Z'));
     try {
+      const { WorkDock } = require('../../components/chat/WorkDock') as typeof import('../../components/chat/WorkDock');
       const sent: UiMessage = { id: 'usr_1', renderKey: 'send:1', role: 'user', text: 'Hello', timestampMs: Date.parse('2026-10-01T08:00:00.000Z') };
       const view = render(<ThreadView {...createProps({ messages: [sent], isRunning: true, input: '' })} />);
-      const label = () => view.getByTestId('thread-thinking-streaming').props.accessibilityLabel as string;
-      const before = label();
-      expect(before).toContain(', ');
+      // Twelve seconds of thinking already: the dock is up and counts from the prompt.
+      expect(view.UNSAFE_getByType(WorkDock).props.startedAt).toBe(sent.timestampMs);
       // The echo keeps the row identity but carries the computer's clock, 10 s behind the phone.
       const echoed: UiMessage = { ...sent, id: 'history-1', timestampMs: sent.timestampMs! - 10_000 };
       view.rerender(<ThreadView {...createProps({ messages: [echoed], isRunning: true, input: '' })} />);
-      expect(label()).toBe(before);
+      expect(view.UNSAFE_getByType(WorkDock).props.startedAt).toBe(sent.timestampMs);
     } finally {
       jest.useRealTimers();
     }
   });
 
-  it('keeps thinking until paced text is visible and preserves markdown through finalization', () => {
+  it('draws nothing until paced text is visible and preserves markdown through finalization', () => {
     const streaming: UiMessage = { id: 'streaming', renderKey: 'reply:1000:0', role: 'assistant', text: 'A complete reply', timestampMs: 1000, streaming: true };
     mockPacedText = '';
     const view = render(<ThreadView {...createProps({ messages: [streaming], isRunning: true })} />);
-    expect(view.getByTestId('thread-thinking-streaming')).toBeTruthy();
+    expect(view.queryByTestId('thread-bubble-streaming')).toBeNull();
     expect(view.queryByTestId('thread-markdown-streaming')).toBeNull();
     mockPacedText = 'A complete';
     view.rerender(<ThreadView {...createProps({ messages: [streaming], isRunning: true })} />);
     const markdown = view.getByTestId('thread-markdown-streaming');
     const meta = view.getByTestId('thread-meta-streaming', { includeHiddenElements: true });
-    expect(view.queryByTestId('thread-thinking-streaming')).toBeNull();
     expect(markdown.props.markdown).toBe('A complete');
     mockPacedText = undefined;
     view.rerender(<ThreadView {...createProps({ messages: [{ ...streaming, id: 'final_run', streaming: false }] })} />);
@@ -3484,20 +3541,21 @@ describe('messenger timeline layout', () => {
     expect(timeline().props.data).toBe(after);
   });
 
-  it('lets the first streamed row of a run take over the reply placeholder cell', () => {
+  it('lets the first streamed words of a run enter like a reply', () => {
     const { withTiming } = require('react-native-reanimated') as { withTiming: jest.Mock };
     const earlier: UiMessage = { id: 'h1', role: 'assistant', text: 'Earlier', timestampMs: 1_000 };
-    const props = createProps({ messages: [earlier], isRunning: true, pendingReplyRenderKey: 'reply:5000:0' });
+    const props = createProps({ messages: [earlier], isRunning: true });
     const view = render(<ThreadView {...props} />);
-    const keys = () => (view.getByTestId('thread-screen-timeline').props.data as ReadonlyArray<{ key: string }>).map((row) => row.key);
-    expect(keys().at(-1)).toBe('message:reply:5000:0');
+    const keys = () => (view.getByTestId('thread-screen-timeline').props.data as ReadonlyArray<{ key: string }>)
+      .map((row) => row.key).filter((key) => key.startsWith('message:'));
+    // Nothing stands for the reply before its words.
+    expect(keys()).toEqual(['message:h1']);
     withTiming.mockClear();
-    // A run the phone did not start: its first text arrives after the placeholder.
+    // A run the phone did not start: its first words arrive.
     const streamed: UiMessage = { id: 'streaming', renderKey: 'reply:5000:0', role: 'assistant', text: 'Checking the channel.', streaming: true, timestampMs: 5_000 };
     view.rerender(<ThreadView {...props} messages={[streamed, earlier]} />);
-    expect(keys().at(-1)).toBe('message:reply:5000:0');
-    expect(keys().filter((key) => key.startsWith('message:reply') || key === 'message:streaming')).toHaveLength(1);
-    expect(entranceCalls()).toHaveLength(0);
+    expect(keys()).toEqual(['message:h1', 'message:reply:5000:0']);
+    expect(entranceCalls()).toHaveLength(1);
   });
 
   it('lets the last streamed words finish in streaming mode, then settles without changing the text', () => {

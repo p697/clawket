@@ -103,12 +103,12 @@ export function areThreadRunSeedsEqual(
 
 export type ThreadTimelineItem =
   | Readonly<{
-      /** A finished turn that said nothing after its last step: one pill, red when that step failed. */
-      type: 'tools';
+      /** A finished turn that said nothing: its receipt in an Agent bubble of its own. */
+      type: 'receipt';
       key: string;
-      /** The turn's calls, newest first. */
-      messages: ReadonlyArray<UiMessage>;
-      failed?: boolean;
+      receipt: TurnReceipt;
+      /** The render key of the turn's newest step, where the bubble stands: it enters like a reply. */
+      anchorKey: string;
       timestampMs?: number;
     }>
   | Readonly<{
@@ -640,16 +640,17 @@ export function resolveThreadErrorDetail(error: unknown): string | undefined {
 }
 
 /**
- * Places what `foldTurnSteps` decided (tool process design C, owner decision
- * 2026-10-02): a finished turn's last reply carries its receipt, and a turn
- * that ended on a step keeps one pill where that step was, keyed by the
- * turn's oldest call so it stays put while history replaces live call ids.
- * Any other tool call leaves the conversation: the work dock shows the
- * running turn. Approvals stay messages. Input is newest-first.
+ * Places what `foldTurnSteps` decided (tool process design C, owner decisions
+ * 2026-10-02 and 2026-10-05): a finished turn's last reply carries its
+ * receipt, and a turn that said nothing keeps the receipt in a bubble of its
+ * own where its newest step was, keyed by the turn's oldest call so it stays
+ * put while history replaces live call ids. Any other tool call leaves the
+ * conversation: the work dock shows the running turn. Approvals stay
+ * messages. Input is newest-first.
  */
 export function placeTurnReceipts(
   items: ReadonlyArray<ThreadTimelineItem>,
-  folded: Pick<FoldedTurns, 'receipts' | 'pills'>,
+  folded: Pick<FoldedTurns, 'receipts' | 'standalone'>,
 ): ThreadTimelineItem[] {
   const result: ThreadTimelineItem[] = [];
   for (const item of items) {
@@ -667,14 +668,14 @@ export function placeTurnReceipts(
       result.push(item);
       continue;
     }
-    const pill = folded.pills.get(key);
-    if (!pill || pill.steps.length === 0) continue;
+    const standalone = folded.standalone.get(key);
+    if (!standalone || standalone.steps.length === 0) continue;
     result.push({
-      type: 'tools',
-      key: `tools:${renderKeyOf(pill.steps[0]!)}`,
+      type: 'receipt',
+      key: `receipt:${renderKeyOf(standalone.steps[0]!)}`,
       timestampMs: item.timestampMs,
-      messages: [...pill.steps].reverse(),
-      failed: pill.failed,
+      receipt: standalone,
+      anchorKey: key,
     });
   }
   return result;
@@ -708,7 +709,7 @@ export function groupThreadRuns(items: ReadonlyArray<ThreadTimelineItem>): Threa
  * Vertical rhythm of a timeline row: the gap it owns toward the older row
  * above it. `joined` keeps consecutive bubbles from one speaker together as
  * one Telegram-style group; `stack` keeps other rows of one voice close (an
- * activity pill and the reply it produced); `turn` separates the user's voice
+ * approval card and the reply after it); `turn` separates the user's voice
  * from the Agent's and sets service pills apart; `section` sets a time label
  * apart from everything before it. The row after a time label owns nothing:
  * the label carries its own gap below.
@@ -738,11 +739,12 @@ function timelineVoice(item: ThreadTimelineItem): ThreadVoice {
 }
 
 /**
- * A row that draws a message bubble, so neighbours from its speaker can join it.
- * A reply with no words yet is the live pill: the bubble above keeps its tail
- * while the pill comes and goes around tool steps.
+ * A row that draws a message bubble, so neighbours from its speaker can join
+ * it: a message, or a standalone receipt in the Agent's bubble. A reply with
+ * no words yet draws nothing.
  */
 function isBubbleRow(item: ThreadTimelineItem | undefined): boolean {
+  if (item?.type === 'receipt') return true;
   return item?.type === 'message' && !item.message.approval
     && (item.message.role === 'user' || item.message.role === 'assistant')
     && !(item.message.streaming === true && !item.message.text.trim());
@@ -797,9 +799,9 @@ function reuseThreadRow(previous: ThreadTimelineRow, next: ThreadTimelineRow): T
     case 'message':
       return previous.type === 'message' && hasSameFields(previous.message, next.message)
         && hasSameReceipt(previous.receipt, next.receipt) ? previous : next;
-    case 'tools':
-      return previous.type === 'tools' && previous.failed === next.failed
-        && hasSameMessages(previous.messages, next.messages) ? previous : next;
+    case 'receipt':
+      return previous.type === 'receipt' && previous.anchorKey === next.anchorKey
+        && hasSameReceipt(previous.receipt, next.receipt) ? previous : next;
     case 'run':
       return previous.type === 'run' && previous.run === next.run ? previous : next;
     case 'cron':

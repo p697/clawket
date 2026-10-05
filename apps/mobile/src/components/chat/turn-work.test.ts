@@ -114,10 +114,10 @@ describe('foldTurnSteps', () => {
     expect(keys(folded.messages)).toEqual(keys(newestFirst(ask, said, answer)));
     // A failure the Agent moved past stays quiet: the receipt is not red.
     expect(folded.receipts.get(answer.id)).toEqual({ steps: [a, b, c], failed: false });
-    expect(folded.pills.size).toBe(0);
+    expect(folded.standalone.size).toBe(0);
   });
 
-  it('leaves one pill when the turn said nothing after its last step, red only for a failure', () => {
+  it('puts the receipt under the last words even when steps followed them, red when the turn ended on a failure', () => {
     const one = prompt('one');
     const two = prompt('two');
     const quiet = call('exec');
@@ -125,11 +125,21 @@ describe('foldTurnSteps', () => {
     const said = reply('Building.');
     const messages = newestFirst(one, call('read'), quiet, two, said, call('exec'), failing);
     const folded = foldTurnSteps(messages, false);
-    expect(keys(folded.messages)).toEqual(keys(newestFirst(one, quiet, two, said, failing)));
-    expect(folded.pills.get(quiet.id)?.failed).toBe(false);
-    expect(folded.pills.get(quiet.id)?.steps).toHaveLength(2);
-    expect(folded.pills.get(failing.id)?.failed).toBe(true);
-    expect(folded.receipts.has(said.id)).toBe(false);
+    // A turn that said nothing keeps its receipt where its newest step was.
+    expect(keys(folded.messages)).toEqual(keys(newestFirst(one, quiet, two, said)));
+    expect(folded.standalone.get(quiet.id)?.failed).toBe(false);
+    expect(folded.standalone.get(quiet.id)?.steps).toHaveLength(2);
+    // Words before the steps still carry the turn's receipt; it reads red because the turn ended on the failure.
+    expect(folded.receipts.get(said.id)?.failed).toBe(true);
+    expect(folded.receipts.get(said.id)?.steps).toHaveLength(2);
+    expect(folded.standalone.has(failing.id)).toBe(false);
+  });
+
+  it('keeps a failure the Agent moved past quiet in a turn that said nothing', () => {
+    const failing = call('exec', {}, { toolStatus: 'error' });
+    const retried = call('exec');
+    const folded = foldTurnSteps(newestFirst(prompt('build'), failing, retried), false);
+    expect(folded.standalone.get(retried.id)).toEqual({ steps: [failing, retried], failed: false });
   });
 
   it('hides the running turn steps without a receipt and keeps approvals in place', () => {
@@ -139,7 +149,7 @@ describe('foldTurnSteps', () => {
     const folded = foldTurnSteps(messages, true);
     expect(keys(folded.messages)).toEqual([waiting.id, said.id, messages.at(-1)!.id]);
     expect(folded.receipts.size).toBe(0);
-    expect(folded.pills.size).toBe(0);
+    expect(folded.standalone.size).toBe(0);
   });
 
   it('returns the same array when no tool ran', () => {

@@ -1,6 +1,6 @@
 import type { UiMessage } from '../../types/chat';
 import { collectLiveTurnWork } from './turn-work';
-import { formatElapsedClock, formatWorkDockCaption, resolveWorkDockPhase } from './work-dock-model';
+import { formatElapsedClock, formatWorkDockCaption, liveTurnHasWords, resolveWorkDockPhase } from './work-dock-model';
 
 const prompt: UiMessage = { id: 'ask', role: 'user', text: 'go' };
 const step = (id: string, toolStatus: UiMessage['toolStatus']): UiMessage => ({ id, role: 'tool', text: '', toolName: 'exec', toolStatus });
@@ -67,5 +67,20 @@ describe('formatWorkDockCaption', () => {
     expect(formatWorkDockCaption({ phase: { kind: 'approval', request: approval }, work, t })).toBe('rm -rf build');
     const wrapped = { ...approval, approval: { ...approval.approval!, command: "/bin/zsh -lc 'curl --head https://example.com'" } } as UiMessage;
     expect(formatWorkDockCaption({ phase: { kind: 'approval', request: wrapped }, work, t })).toBe('curl --head https://example.com');
+  });
+});
+
+describe('liveTurnHasWords', () => {
+  const prompt: UiMessage = { id: 'p', role: 'user', text: 'Fix it' };
+  it('reads only the newest turn and ignores a reply with no words yet', () => {
+    const earlier: UiMessage = { id: 'e', role: 'assistant', text: 'Earlier answer' };
+    expect(liveTurnHasWords([prompt, earlier])).toBe(false);
+    expect(liveTurnHasWords([{ id: 's', role: 'assistant', text: '  ', streaming: true }, prompt, earlier])).toBe(false);
+    expect(liveTurnHasWords([{ id: 's', role: 'assistant', text: 'On it', streaming: true }, prompt])).toBe(true);
+  });
+
+  it('keeps counting through a queued follow-up, which has not opened a turn', () => {
+    const queued: UiMessage = { id: 'q', role: 'user', text: 'Also this', delivery: 'queued' };
+    expect(liveTurnHasWords([queued, { id: 'a', role: 'assistant', text: 'Working on it' }, prompt])).toBe(true);
   });
 });

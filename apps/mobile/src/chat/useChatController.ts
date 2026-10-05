@@ -3560,11 +3560,6 @@ export function useChatController({
     onSend,
     onSteer,
     activeRunId: currentRunIdRef.current,
-    // The identity the live reply row will carry, so a placeholder shown before
-    // the first row reaches the list never remounts when that row lands.
-    pendingReplyRenderKey: currentRunIdRef.current
-      ? liveReplyRenderKey(streamStartedAtRef.current, currentRunIdRef.current, chatStreamSegments.length)
-      : null,
     canSteer: Boolean(adapter?.capabilities.steer && adapter.steer && isSending && currentRunIdRef.current && !pendingImages.length && input.trim()),
     startVoiceInput, stopVoiceInput, cancelVoiceInput,
     voiceInputSupported,
