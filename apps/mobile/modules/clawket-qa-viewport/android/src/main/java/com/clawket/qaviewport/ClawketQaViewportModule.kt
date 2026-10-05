@@ -5,6 +5,7 @@ import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
 import com.facebook.react.bridge.UIManager
+import com.facebook.react.bridge.ReactContext
 import com.facebook.react.bridge.UIManagerListener
 import com.facebook.react.bridge.UiThreadUtil
 import com.facebook.react.common.annotations.UnstableReactNativeAPI
@@ -62,7 +63,7 @@ class ClawketQaViewportModule : Module() {
 
   private fun start(tag: Int, nextGeneration: Int, optIn: Boolean): String {
     if (!UiThreadUtil.isOnUiThread() || processUsed || tag <= 0 || nextGeneration !in 1..MAX || !optIn) return "unavailable"
-    val context = appContext.reactContext ?: return "unavailable"
+    val context = appContext.reactContext as? ReactContext ?: return "unavailable"
     val version = ReactNativeVersion.VERSION
     if (context.packageName != "com.p697.clawket.qa"
       || context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE == 0

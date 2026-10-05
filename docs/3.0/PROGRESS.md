@@ -1,5 +1,9 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-05 Codex 收敛 Native QA debug 编译完成：组合历史阶段5/5、anchor29/29、Mobile types及十对文档/五检查通过；`8d449498`精确 CI11/11通过。
+  - 首两次编译使用默认 symlink cache，在 RN Gradle 插件的 catalog 配置阶段失败；保留日志与本工作树项目缓存，改用现有 Lucy-SSD 真实 GRADLE_USER_HOME，未改第三方源码或清全局缓存。第三次首次触达只读 QA 模块，发现 Expo57 Context 泛型需要显式 ReactContext 门；按实际 runtime 源码修正为 fail-closed cast。
+  - 修正后普通 QA debug assemble 成功（643 tasks，248执行/72缓存/323up-to-date）；实际 QA30101/3.1.1、debuggable、原 debug 证书、Kotlin class 和 APK DEX 新模块存在已核。不是分发/商店构建，尚未装手机或宣称 Native callback/paint 通过。下一步仅 data-preserving QA install与自有H6C冷启动分页回测，Native原始文件保持冻结。
+
 - 2026-10-05 历史 prepend 的实际旧 child clamp 关联候选（负责人授权，已完成窄验证，真机待验）。
   - 独立 fresh-main worktree 证明 `5ab56f64` 是负责人重基后 `7bf33d97` 的祖先，再 fast-forward 整棵明确前置树；本任务仅修改 Thread 实际滚动事件 viewport 传递、anchor 的未知 clamp 关联、第五真实 SDK/Thread 阶段用例与最近规则。
   - Shadow size 可先报新高度；命令在旧 child 上执行时，只有同 scope/list、未见反馈且未有 clamp 关联的 target 超实际事件 max、height 命中 retired geometry、offset 精确到该 max 才绑定现有 `clamp_ack`。保原 row/viewportY/target/pending；重复事件仍被 ledger 关联，已知 clamp、普通拖动/动量、fresh drag 与旧 ACK 门保持。
