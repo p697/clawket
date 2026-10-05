@@ -22,6 +22,14 @@ export const AUDIT_EXCEPTIONS = [
       + 'expo -> @expo/cli -> @expo/code-signing-certificates, build-machine tooling that '
       + 'neither the app nor the Bridge ships (owner approval 2026-10-02).',
   },
+  {
+    advisory: 'GHSA-vfj7-8cjw-p6xm',
+    package: 'braces',
+    expires: '2026-11-01',
+    reason: 'braces <=3.0.3 has no patched release. It reaches Clawket only through micromatch '
+      + 'in the Expo/Metro bundler and Jest, build-machine tooling that expands developer-written '
+      + 'globs; neither the app nor the Bridge ships it (owner approval 2026-10-05).',
+  },
 ];
 
 /** Throws unless every exception names a GHSA advisory, a package, a reason and a real expiry date. */
