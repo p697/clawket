@@ -41,4 +41,4 @@ Latest release checks cache for 24 hours and can be retried manually. Failure pr
 
 ## Release boundary
 
-This implementation does not bump/publish the Bridge package, ship the phone UI or change a live service. Existing public 3.1.10 does not contain the updater. Owner-authorized subsequent Bridge and App releases are required before installed users can use this flow. Keep old protocol frames additive, and pass the v1 replay and desktop gates before releasing.
+Public Bridge 3.1.11 contains the updater; 3.1.10 and older do not. Invoke 3.1.11 or a later verified release through npx for the first update. The phone guide/UI requires a separately delivered compatible App; Bridge publication does not distribute it or automatically update running processes. See the [3.1.11 release record](3.1/codex-production-bridge-3.1.11-release.md). Keep old protocol frames additive, and pass the v1 replay and desktop gates before releasing.

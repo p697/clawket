@@ -1,9 +1,11 @@
 # PROGRESS · Clawket 3.0 进度日志
 
-- 2026-10-05 负责人授权 Codex Production 与 Bridge 发布，用于本人生产环境验收；发布前检查进行中。
-  - fresh `main` `039aac5c` 独立任务树准备 Bridge `3.1.11`，不改 App 或内部 workspace 版本。正式 npm 当前 `latest=3.1.10`；本轮此前只有源码合并，没有 Production 发布或本机正式 Bridge 更新。
-  - 保留现有 Codex 生产资源、配对、密钥、命名空间和配置；其他后端只读导出用于兼容矩阵。只有生产差异通过固定源码 CI、v1、当前快照兼容及包验证后才能发布。发布 npm 不自动更新运行中 Bridge；App 原生包是独立步骤。
+- 2026-10-05 负责人授权的 Codex Production 与 Bridge `3.1.11` 已发布，用于本人生产环境验收。
+  - fresh `main` `039aac5c` 独立任务树的源码 `819a5289` 精确 CI37304153413 十一项全部通过，不改 App 或内部 workspace 版本。负责人完成 npm 登录和单独安全密钥认证，固定 tgz 被接受后公开等待期间首次404保留；11:47:49 UTC公开 `latest=3.1.11`，完整下载与候选逐字节、SHA-256/SHA-1/SHA-512核验一致。本机正式 Bridge 尚未更新或重启。
+  - v1五文件41项、当前生产导出的兼容矩阵四用例24阶段、Codex Relay隔离集成、六发布门禁、文档与依赖审计（零阻挡、沿用既有两例外）通过。首次v1缺fresh Core dist失败保留，构建后不改源码重跑通过；包验证3文件/4边界/91模块/141输入、固定包dry-run和空npm认证独立候选安装通过。
+  - 只部署 Codex Registry `d9391209-328e-4cd2-ae70-d1e77e311808`，读回源码SHA `6d59fa44…`与固定bundle一致；Relay候选与生产逐字节相同，保留 `218bc62c…`。参数/绑定/密钥名/命名空间/日志安全配置不变，OpenClaw/Hermes源和部署ID只读核验不变，其余后端未部署。生产新配对、认证health/受控sessions、保存token重连、访问码刷新claim及原token继续可用通过，exact新增配对记录删除/不存在已核；受控owner/sockets停止，0Native模型/用户进程操作。发布npm不自动更新运行中Bridge，App原生包是独立步骤。
   - Desktop 重开/Retry、认证恢复后最新 Bridge 推理与原 idle blank 仍有验收缺口，不宣称全量稳定或用发布代替验收。详细范围、门禁和回退见 [发布记录](../3.1/codex-production-bridge-3.1.11-release.md)。
+  - 公共npm第二份空认证独立安装也已通过：identity、installed bundle exact bytes与CLI help均成立，包含updateProtocol1。测试配对/受控owner已清，自有heavy租约释放；本机用户Bridge/Native/Desktop未更新或重启，没有App打包、安装或商店动作。
 
 - 2026-10-05 Codex 安卓收敛回测完成，组合候选进入最终 PR 门禁。
   - `55aa6b77` 基于 main `5ab56f64`，精确 CI37286511529 十一项全部通过（Mobile 三分片、v1、Windows/macOS 等）。本机九窄文件358项、实际 Thread/FlashList 阶段5/5、anchor29/29、Mobile types与十对文档/五检查通过，未跑本地全套。
