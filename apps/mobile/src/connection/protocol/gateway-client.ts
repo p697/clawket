@@ -1964,6 +1964,7 @@ function createListenerStore(): {
   return {
     connection: new Set(),
     chatDelta: new Set(),
+    chatCommentary: new Set(),
     chatTool: new Set(),
     chatFinal: new Set(),
     chatAborted: new Set(),

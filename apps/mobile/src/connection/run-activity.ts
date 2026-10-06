@@ -24,7 +24,7 @@ export function updateRunActivities(
     return index < 0 ? current : current.filter((_, position) => position !== index);
   }
   const phase = update.type === 'run_started' || update.type === 'agent_thought_chunk' ? 'thinking'
-    : update.type === 'agent_message_chunk' ? 'replying'
+    : update.type === 'agent_message_chunk' || update.type === 'agent_commentary_chunk' ? 'replying'
       : update.type === 'tool_call' || update.type === 'tool_call_update' ? 'tool' : null;
   if (!phase || current[index]?.phase === phase) return current;
   const item: RunActivity = { connectionId, sessionKey: update.sessionKey, runId: update.runId, phase };

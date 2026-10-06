@@ -139,7 +139,7 @@ export class OpenClawAdapter extends GatewayAdapterBase {
   protected override transformGatewayUpdates(_event: GatewayAdapterEvent, updates: SessionUpdate[]): SessionUpdate[] {
     if (!this.artifacts) return updates;
     return updates.map(update => {
-      if (update.type === 'agent_message_chunk') return { ...update, text: stripOpenClawMediaDirectives(update.text) };
+      if (update.type === 'agent_message_chunk' || update.type === 'agent_commentary_chunk') return { ...update, text: stripOpenClawMediaDirectives(update.text) };
       if (update.type === 'run_finished' && update.message) return { ...update, message: { ...update.message, content: stripOpenClawMediaDirectives(update.message.content) } };
       return update;
     });

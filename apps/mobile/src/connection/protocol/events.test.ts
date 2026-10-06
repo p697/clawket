@@ -143,3 +143,27 @@ describe('background child lifecycle', () => {
     expect(route('agent', { ...child, stream: 'lifecycle', data: { phase: 'finishing' } })).toEqual([]);
   });
 });
+
+describe('commentary progress', () => {
+  const run = { sessionKey: 'agent:main:main', runId: 'run-1' };
+  const preamble = (data: Record<string, unknown>) => route('agent', {
+    ...run, stream: 'item', data: { itemId: 'msg_1', kind: 'preamble', title: 'Preamble', source: 'codex-app-server', ...data },
+  });
+
+  it('forwards each commentary item with its whole text so far', () => {
+    expect(preamble({ phase: 'update', progressText: 'Checking the folder.' }))
+      .toEqual([{ event: 'chatCommentary', payload: { ...run, itemId: 'msg_1', text: 'Checking the folder.' } }]);
+    expect(preamble({ phase: 'end', progressText: 'Checking the folder.\n\nThen the date.' }))
+      .toEqual([{ event: 'chatCommentary', payload: { ...run, itemId: 'msg_1', text: 'Checking the folder.\n\nThen the date.' } }]);
+  });
+
+  it('ignores answer candidates, other phases, incomplete items and silent replies', () => {
+    expect(preamble({ kind: 'answer_candidate', status: 'candidate', phase: 'update', progressText: 'Done.' })).toEqual([]);
+    expect(preamble({ phase: 'start', progressText: 'Checking.' })).toEqual([]);
+    expect(preamble({ phase: 'update', itemId: undefined, progressText: 'Checking.' })).toEqual([]);
+    expect(preamble({ phase: 'update', progressText: '' })).toEqual([]);
+    expect(preamble({ phase: 'update', progressText: 'NO_REPLY' })).toEqual([]);
+    expect(route('agent', { runId: 'run-1', stream: 'item', data: { itemId: 'msg_1', kind: 'preamble', phase: 'update', progressText: 'Checking.' } })).toEqual([]);
+    expect(route('agent', { ...run, stream: 'item' })).toEqual([]);
+  });
+});

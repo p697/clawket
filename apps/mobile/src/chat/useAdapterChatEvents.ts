@@ -72,6 +72,15 @@ export type AdapterChatUpdate =
       isSending: true;
     }
   | {
+      type: 'agent_commentary_chunk';
+      sessionKey: string;
+      runId: string;
+      itemId: string;
+      text: string;
+      activeRunId: string;
+      isSending: true;
+    }
+  | {
       type: 'tool_call';
       sessionKey: string;
       runId: string;
@@ -384,6 +393,7 @@ export function mapAdapterSessionUpdate(
       };
     }
     case 'agent_thought_chunk':
+    case 'agent_commentary_chunk':
       return {
         ...update,
         activeRunId: update.runId,

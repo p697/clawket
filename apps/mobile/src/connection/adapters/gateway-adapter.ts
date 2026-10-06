@@ -534,6 +534,7 @@ export abstract class GatewayAdapterBase implements AgentAdapter {
     const forwardedEvents = [
       'chatRunStart',
       'chatDelta',
+      'chatCommentary',
       'chatTool',
       'chatFinal',
       'chatAborted',
@@ -621,6 +622,7 @@ export abstract class GatewayAdapterBase implements AgentAdapter {
     if (
       update.type === 'run_started'
       || update.type === 'agent_message_chunk'
+      || update.type === 'agent_commentary_chunk'
       || update.type === 'agent_thought_chunk'
       || update.type === 'tool_call'
       || update.type === 'tool_call_update'
@@ -710,6 +712,7 @@ export abstract class GatewayAdapterBase implements AgentAdapter {
 const FORWARDED_GATEWAY_EVENTS = [
   'chatRunStart',
   'chatDelta',
+  'chatCommentary',
   'chatTool',
   'chatFinal',
   'chatAborted',

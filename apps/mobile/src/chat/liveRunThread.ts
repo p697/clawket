@@ -14,7 +14,14 @@ export type StreamSegment = {
   timestampMs: number;
   /** Number of tool rows already present when this text segment ended. */
   afterToolCount?: number;
+  /** Native commentary item this paragraph streamed from; reply text never repeats it. */
+  commentaryItemId?: string;
 };
+
+/** Paragraphs a reply snapshot or final can repeat: commentary streams apart from them. */
+export function replyTextSegments(segments: ReadonlyArray<StreamSegment>): ReadonlyArray<StreamSegment> {
+  return segments.some(segment => segment.commentaryItemId) ? segments.filter(segment => !segment.commentaryItemId) : segments;
+}
 
 /** Remains stable when an optimistic run ID is replaced by the server's ID. */
 export function liveReplyRenderKey(startedAt: number | null, runId: string, segment: number): string {

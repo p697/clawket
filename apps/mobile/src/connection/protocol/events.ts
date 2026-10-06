@@ -196,6 +196,16 @@ function routeAgentEvent(
     emit('sessionsChanged', {});
     return { terminalSessionChange: true };
   }
+  // The Gateway keeps commentary out of chat deltas; its preamble progress
+  // events are the only live copy before the transcript records it.
+  if (payload.stream === 'item') {
+    const data: Record<string, unknown> = isRecord(payload.data) ? payload.data : {};
+    const itemId = readString(data.itemId);
+    const text = readString(data.progressText);
+    if (sessionKey && itemId && text && data.kind === 'preamble' && (data.phase === 'update' || data.phase === 'end')
+      && !isSilentReplyPrefixText(text)) emit('chatCommentary', { runId, sessionKey, itemId, text });
+    return {};
+  }
   if (payload.stream !== 'tool' || !payload.data) return {};
   const phase = payload.data.phase;
   if (phase !== 'start' && phase !== 'update' && phase !== 'result') return {};

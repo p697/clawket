@@ -8,6 +8,8 @@ import type { WebSocketFactory } from '../transports';
 export type GatewayProtocolEvents = {
   connection: { state: ConnectionState; reason?: string };
   chatDelta: { runId: string; sessionKey: string; text: string };
+  /** One commentary item's whole text so far; never part of `chatDelta`. */
+  chatCommentary: { runId: string; sessionKey: string; itemId: string; text: string };
   chatTool: {
     runId: string;
     sessionKey?: string;

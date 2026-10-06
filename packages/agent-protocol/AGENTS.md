@@ -26,6 +26,8 @@ This package is the platform-neutral contract between Clawket UI and backend ada
 
 `SessionHistory.toolCallAliases` optionally carries confirmed source-to-canonical tool identities; consumers may retire a source copy only with its matching canonical tool in the snapshot. `SessionHistory.activeRun` is an optional backend recovery snapshot (identity, visible text, start time and session-scoped cancellation hint). Peers without it retain their existing behavior; mocks clone it independently.
 
+`agent_commentary_chunk` is additive: a commentary paragraph a backend streams outside its reply text (OpenClaw Gateway preamble progress). `text` is that item's whole text so far; reply snapshots and finals never repeat it. Consumers show each item as its own paragraph; peers that ignore it keep their history-only behavior.
+
 `agent_message_chunk.textMode` is additive: `snapshot` replaces the whole run text, `delta` appends verbatim (including repeated tokens); omission preserves legacy adapter behavior. This is text semantics, independent of backend capabilities and transport identity.
 
 Optional `agent_message_chunk.timestampMs` and `SessionHistory.activeRun.messageTimestampMs` describe the current visible paragraph independently of run start. A producer must keep the same paragraph's clock fixed; absent fields preserve older peers. These clocks are presentation metadata, never activity, ownership or dispatch proof.

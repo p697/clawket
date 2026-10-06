@@ -294,6 +294,23 @@ describe('mapAdapterSessionUpdate', () => {
       isSending: true,
     });
 
+    const commentary = mapAdapterSessionUpdate({
+      type: 'agent_commentary_chunk',
+      sessionKey: session.key,
+      runId: 'run-1',
+      itemId: 'msg_1',
+      text: 'Checking the folder.',
+    }, options);
+    expect(commentary).toEqual({
+      type: 'agent_commentary_chunk',
+      sessionKey: session.key,
+      runId: 'run-1',
+      itemId: 'msg_1',
+      text: 'Checking the folder.',
+      activeRunId: 'run-1',
+      isSending: true,
+    });
+
     expect(mapAdapterSessionUpdate({
       type: 'tool_call',
       sessionKey: session.key,

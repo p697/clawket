@@ -85,6 +85,7 @@ import {
   extendRecoveredLiveRun,
   finishLiveRunPresentation,
   mergeNewestFirstMessages,
+  replyTextSegments,
   StreamSegment,
 } from "./liveRunThread";
 import {
@@ -333,6 +334,8 @@ export function useChatController({
   const [chatToolMessages, setChatToolMessages] = useState<UiMessage[]>([]);
   const currentRunIdRef = useRef<string | null>(null);
   const chatStreamRef = useRef<string | null>(null);
+  // The commentary item the live tail shows; null while the tail is reply text.
+  const liveCommentaryItemRef = useRef<string | null>(null);
   const chatStreamSegmentsRef = useRef<StreamSegment[]>([]);
   const chatToolMessagesRef = useRef<UiMessage[]>([]);
   // Outlives the live rows: Codex, Claude Code and Pi history carries no step
@@ -443,6 +446,7 @@ export function useChatController({
         return;
       }
       chatStreamRef.current = null;
+      liveCommentaryItemRef.current = null;
       setChatStream(null);
       chatStreamTimestampRef.current = null;
       setChatStreamTimestampMs(null);
@@ -452,6 +456,8 @@ export function useChatController({
 
   const commitCurrentStreamSegment = useCallback((timestampMs?: number) => {
     const currentText = chatStreamRef.current ?? "";
+    const commentaryItemId = liveCommentaryItemRef.current;
+    liveCommentaryItemRef.current = null;
     if (!currentText.trim()) {
       return;
     }
@@ -464,6 +470,7 @@ export function useChatController({
       ...(runId ? { renderKey: liveReplyRenderKey(startedAt, runId, previous.length) } : {}),
       text: currentText, timestampMs: ts,
       afterToolCount: chatToolMessagesRef.current.length,
+      ...(commentaryItemId ? { commentaryItemId } : {}),
     }];
     chatStreamSegmentsRef.current = next;
     setChatStreamSegments(next);
@@ -884,6 +891,7 @@ export function useChatController({
     const streamText = sanitizeVisibleStreamText(presentation
       ? finalReplyTail(remembered.streamText ?? '', presentation.segments) : remembered.streamText);
     chatStreamRef.current = streamText;
+    liveCommentaryItemRef.current = null;
     setChatStream(streamText);
   }, [adapter]);
 
@@ -1727,21 +1735,26 @@ export function useChatController({
         recoveredTailTimestamp = recovered.tailTimestampMs;
       }
       recoverNativeParagraphs(text ?? '', identity);
-      const tail = text === null ? null : finalReplyTail(text, chatStreamSegmentsRef.current);
+      const tail = text === null ? null : finalReplyTail(text, replyTextSegments(chatStreamSegmentsRef.current));
       if (adapter?.connection.backendKind === 'codex') {
         const clock = validStreamTimestamp(recoveredTailTimestamp) ?? validStreamTimestamp(run.messageTimestampMs)
           ?? (previous?.runId === run.runId ? validStreamTimestamp(previous.streamTimestampMs) : undefined);
         chatStreamTimestampRef.current = tail?.trim() ? chatStreamTimestampRef.current ?? clock ?? Date.now() : null;
         setChatStreamTimestampMs(chatStreamTimestampRef.current);
       }
-      chatStreamRef.current = tail;
-      setChatStream(tail);
+      // Commentary is never in the reply snapshot: it stays the live paragraph
+      // until reply text follows it.
+      if (!liveCommentaryItemRef.current || tail?.trim()) {
+        if (liveCommentaryItemRef.current) commitCurrentStreamSegment();
+        chatStreamRef.current = tail;
+        setChatStream(tail);
+      }
       const remembered = sessionRunStateRef.current.get(snapshot.key);
       if (remembered) remembered.streamTimestampMs = chatStreamTimestampRef.current ?? undefined;
       lastRunSignalAtRef.current = Date.now();
     }
     setIsSending(true);
-  }, [adapter, history.activitySnapshot, history.sessionKey, clearActiveRunState, recoverNativeParagraphs]);
+  }, [adapter, history.activitySnapshot, history.sessionKey, clearActiveRunState, commitCurrentStreamSegment, recoverNativeParagraphs]);
 
   useEffect(() => {
     syncDerivedSessionActivity("messages-or-session");
@@ -1879,6 +1892,7 @@ export function useChatController({
           return true;
         case "run_started":
         case "agent_thought_chunk":
+        case "agent_commentary_chunk":
         case "tool_call":
         case "tool_call_update":
           return true;
@@ -2128,11 +2142,18 @@ export function useChatController({
         if (!matchesCurrentSession(update.sessionKey)) return;
         if (!acceptRun(update.sessionKey, update.runId)) return;
         if (update.textMode === 'snapshot') recoverNativeParagraphs(update.text, sessionRunStateRef.current.get(update.sessionKey));
-        // OpenClaw snapshots cover the entire run, including text already
-        // committed before tools. Delta backends must retain repeated tokens.
-        const nextText = update.textMode === 'snapshot'
-          ? finalReplyTail(update.text, chatStreamSegmentsRef.current)
+        // OpenClaw snapshots cover the entire run's reply text, including text
+        // committed before tools, but never commentary. Delta backends must
+        // retain repeated tokens.
+        const replyTail = () => update.textMode === 'snapshot'
+          ? finalReplyTail(update.text, replyTextSegments(chatStreamSegmentsRef.current))
           : mergeStreamText(chatStreamRef.current, update.text, update.textMode);
+        if (liveCommentaryItemRef.current) {
+          // A live commentary paragraph ends only when reply text follows it.
+          if (!replyTail().trim()) return;
+          commitCurrentStreamSegment();
+        }
+        const nextText = replyTail();
         if (adapter?.connection.backendKind === 'codex' && nextText.trim() && chatStreamTimestampRef.current === null) {
           chatStreamTimestampRef.current = validStreamTimestamp(update.timestampMs) ?? Date.now();
           setChatStreamTimestampMs(chatStreamTimestampRef.current);
@@ -2151,6 +2172,34 @@ export function useChatController({
           acceptRun(update.sessionKey, update.runId);
         }
         return;
+      case "agent_commentary_chunk": {
+        if (lastAdapterStateRef.current !== "ready") return;
+        markRunSignal();
+        markActivityStarted(update.sessionKey, update.runId);
+        if (!matchesCurrentSession(update.sessionKey)) return;
+        if (!acceptRun(update.sessionKey, update.runId) || !update.text.trim()) return;
+        // Each commentary item is its own paragraph. A late update refreshes the
+        // row that already shows it instead of opening a second one.
+        const outdated = (shown: string) => shown === update.text || shown.startsWith(update.text);
+        const settled = chatStreamSegmentsRef.current.findIndex((segment) => segment.commentaryItemId === update.itemId);
+        if (settled >= 0) {
+          if (outdated(chatStreamSegmentsRef.current[settled]!.text)) return;
+          const next = chatStreamSegmentsRef.current.map((segment, index) => index === settled ? { ...segment, text: update.text } : segment);
+          chatStreamSegmentsRef.current = next;
+          setChatStreamSegments(next);
+          return;
+        }
+        if (liveCommentaryItemRef.current !== update.itemId) {
+          // Reply text that turns out to be this commentary continues in place.
+          const shown = chatStreamRef.current?.trim() ?? "";
+          if (liveCommentaryItemRef.current || !shown || !update.text.startsWith(shown)) commitCurrentStreamSegment();
+          liveCommentaryItemRef.current = update.itemId;
+        } else if (outdated(chatStreamRef.current ?? "")) return;
+        chatStreamRef.current = update.text;
+        setChatStream(update.text);
+        setActivityLabel(null);
+        return;
+      }
       case "tool_call": {
         if (lastAdapterStateRef.current !== "ready") return;
         markRunSignal();
@@ -2285,6 +2334,8 @@ export function useChatController({
         if (activeRunStartedAt !== null && update.stopReason !== "cancelled" && conversationHapticsAllowed(hapticsFocusedRef)) {
           playRunEndHaptic(update.runId, endedRunHapticRef, update.stopReason === "error" ? triggerWarningHaptic : triggerSuccessHaptic);
         }
+        // Commentary still live at the end stays its own row, never the final reply.
+        if (liveCommentaryItemRef.current) commitCurrentStreamSegment();
         const streamText = chatStreamRef.current ?? "";
         const segments = chatStreamSegmentsRef.current;
         const tools = chatToolMessagesRef.current;
@@ -2295,7 +2346,7 @@ export function useChatController({
           const finalText = completed
             ? completedText : streamText;
           const rows = finishLiveRunPresentation({
-            segments, tools, tail: finalReplyTail(finalText, segments, streamText),
+            segments, tools, tail: finalReplyTail(finalText, replyTextSegments(segments), streamText),
             runId: update.runId, startedAt: activeRunStartedAt, turnId: finishedTurnId,
             finalMessage: completed ? update.finalMessage : undefined,
             cancelled: update.stopReason === "cancelled",
@@ -2752,6 +2803,7 @@ export function useChatController({
         streamStartedAtRef.current = submittedAt;
         lastRunSignalAtRef.current = submittedAt;
         chatStreamRef.current = "";
+        liveCommentaryItemRef.current = null;
         setChatStream("");
         sessionRunStateRef.current.set(sessionKey, {
           runId: idempotencyKey,

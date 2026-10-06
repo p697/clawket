@@ -4,6 +4,7 @@ import type { AdapterErrorCode, SessionUpdate, Usage } from '@clawket/agent-prot
 export type GatewayAdapterEvent =
   | { type: 'chatRunStart'; payload: { runId: string; sessionKey?: string } }
   | { type: 'chatDelta'; payload: { runId: string; sessionKey?: string; text: string } }
+  | { type: 'chatCommentary'; payload: { runId: string; sessionKey?: string; itemId: string; text: string } }
   | {
       type: 'chatTool';
       payload: {
@@ -87,6 +88,14 @@ export function mapGatewayAdapterEvent(
         type: 'agent_message_chunk',
         sessionKey,
         runId: event.payload.runId,
+        text: event.payload.text,
+      }];
+    case 'chatCommentary':
+      return [{
+        type: 'agent_commentary_chunk',
+        sessionKey,
+        runId: event.payload.runId,
+        itemId: event.payload.itemId,
         text: event.payload.text,
       }];
     case 'chatTool':

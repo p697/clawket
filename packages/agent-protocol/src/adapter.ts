@@ -36,6 +36,8 @@ export type SessionUpdate =
   | { type: 'agent_message_chunk'; sessionKey: string; runId: string; text: string; textMode?: 'snapshot' | 'delta'; timestampMs?: number;
       turnId?: string; inputMessageId?: string; inputMessageKey?: string }
   | { type: 'agent_thought_chunk'; sessionKey: string; runId: string; text: string }
+  /** A commentary paragraph streamed outside the reply text; `text` is that item's whole text so far. */
+  | { type: 'agent_commentary_chunk'; sessionKey: string; runId: string; itemId: string; text: string }
   | {
       type: 'tool_call';
       sessionKey: string;

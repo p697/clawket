@@ -304,6 +304,98 @@ describe('useChatController adapter event migration', () => {
       .map(message => message.timestampMs)).toEqual([firstAt, secondAt, thirdAt]);
   });
 
+  describe('OpenClaw commentary', () => {
+    const key = 'agent:main:main';
+    const user = { id: 'ask', role: 'user' as const, text: 'Run the commands', timestampMs: 1_000 };
+    const first = 'I will check the date.';
+    const second = 'The system has been running for eight days.';
+    const answer = 'All commands completed.';
+    const commentary = (itemId: string, text: string) => ({ type: 'agent_commentary_chunk', sessionKey: key, runId: 'run', itemId, text });
+    const reply = (text: string) => ({ type: 'agent_message_chunk', sessionKey: key, runId: 'run', text, textMode: 'snapshot' });
+    const tool = (status?: 'success') => status
+      ? { type: 'tool_call_update', sessionKey: key, runId: 'run', toolCallId: 'date', status }
+      : { type: 'tool_call', sessionKey: key, runId: 'run', toolCallId: 'date', title: 'exec' };
+    const transcript = (hasActiveRun: boolean, ...messages: any[]) => ({ type: 'history_reconciled', sessionKey: key,
+      history: { key, hasActiveRun, messages: [user, ...messages] } });
+    const nativeFirst = { id: 'native-c1', role: 'assistant', text: first, timestampMs: 2_000 };
+    const nativeTool = { id: 'toolcall_date', role: 'tool', text: '', timestampMs: 3_000, tool: { name: 'exec', callId: 'date', status: 'success' } };
+    // The Thread's empty reply placeholder is not a paragraph.
+    const texts = (rows: any[]) => rows.filter(row => row.role === 'assistant' && row.text).map(row => row.text);
+    const shown = (rows: any[]) => texts([...rows].reverse());
+    const start = () => {
+      jest.setSystemTime(1_000);
+      historyMock.messages = [user];
+      const rendered = renderController('openclaw');
+      const receive = (update: any) => act(() => rendered.handlers.onUpdate?.(mapAdapterSessionUpdate(update)));
+      act(() => rendered.handlers.onState?.('ready'));
+      receive({ type: 'run_started', sessionKey: key, runId: 'run' });
+      return { ...rendered, receive };
+    };
+
+    it('streams each commentary item as its own paragraph and keeps it through the run end', () => {
+      const { result, receive } = start();
+      receive(commentary('c1', 'I will check'));
+      receive(commentary('c1', first));
+      expect(result.current.listData.find(row => row.id === 'streaming')?.text).toBe(first);
+      receive(tool());
+      receive(tool('success'));
+      // Late updates for a settled item neither shorten it nor open a second row.
+      receive(commentary('c1', 'I will check'));
+      receive(commentary('c1', first));
+      expect(shown(result.current.listData)).toEqual([first]);
+      receive(commentary('c2', second));
+      receive(reply(answer));
+      expect(shown(result.current.listData)).toEqual([first, second, answer]);
+      expect(result.current.listData.find(row => row.id === 'streaming')?.text).toBe(answer);
+      receive({ type: 'run_finished', sessionKey: key, runId: 'run', stopReason: 'end_turn', message: { role: 'assistant', content: answer } });
+      expect(texts(historyMock.messages)).toEqual([first, second, answer]);
+      // The transcript brings the same paragraphs back: nothing is added or doubled.
+      receive(transcript(false, nativeFirst, nativeTool,
+        { id: 'native-c2', role: 'assistant', text: second, timestampMs: 4_000 },
+        { id: 'native-final', role: 'assistant', text: answer, timestampMs: 5_000 }));
+      expect(texts(historyMock.messages)).toEqual([first, second, answer]);
+    });
+
+    it('matches commentary the transcript already holds while the run continues', () => {
+      const { result, receive } = start();
+      receive(commentary('c1', first));
+      receive(tool());
+      receive(transcript(true, nativeFirst, nativeTool));
+      expect(shown(result.current.listData)).toEqual([first]);
+      receive(commentary('c2', second));
+      expect(shown(result.current.listData)).toEqual([first, second]);
+    });
+
+    it('keeps live commentary when a recovery read has no reply text yet', () => {
+      const { result, receive, rerender } = start();
+      receive(commentary('c1', first));
+      jest.setSystemTime(5_000);
+      historyMock.activitySnapshot = { key, messages: [user], hasActiveRun: true, requestedAtMs: 5_000,
+        activeRun: { runId: 'run', text: '', startedAtMs: 1_000 } } as any;
+      rerender({});
+      expect(result.current.listData.find(row => row.id === 'streaming')?.text).toBe(first);
+      receive(reply(answer));
+      expect(shown(result.current.listData)).toEqual([first, answer]);
+    });
+
+    it('continues a reply paragraph in place when it turns out to be commentary', () => {
+      const { result, receive } = start();
+      receive(reply('I will check'));
+      receive(commentary('c1', first));
+      expect(shown(result.current.listData)).toEqual([first]);
+      receive(tool());
+      receive(reply(answer));
+      expect(shown(result.current.listData)).toEqual([first, answer]);
+    });
+
+    it('keeps commentary still live at the run end as its own row', () => {
+      const { receive } = start();
+      receive(commentary('c1', first));
+      receive({ type: 'run_finished', sessionKey: key, runId: 'run', stopReason: 'end_turn', message: { role: 'assistant', content: answer } });
+      expect(texts(historyMock.messages)).toEqual([first, answer]);
+    });
+  });
+
   it.each([undefined, null, 0, -1, NaN, Infinity, 1e20, '123'])('keeps a fixed first-receipt Codex paragraph clock when Native omits or corrupts it: %j', timestampMs => {
     jest.setSystemTime(1_000);
     const { result, handlers } = renderController('codex');

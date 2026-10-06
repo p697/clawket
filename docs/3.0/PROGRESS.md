@@ -1,5 +1,10 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-06 OpenClaw 过程说明实时显示（负责人要求聊天里不再闪，PR205 真机录屏发现的后续）。
+  - 现场：测试会话走 OpenClaw 的 Codex 引擎，过程说明（commentary）只以 `agent` 事件 `stream: 'item'`、`kind: 'preamble'` 推送，从不进 `chat` 增量；手机端忽略这类事件，过程说明要等工具结束后的历史刷新才出现，最后一段没有后续工具，回合结束约 1 秒后才插到最终回复上方。
+  - 改动：Gateway 路由把 preamble update / end 转成 `chatCommentary`，适配器发 `agent_commentary_chunk{ itemId, text }`（agent-protocol 增量类型，Bridge 不产生）。控制器把每个过程说明当独立实时段落：遇到工具、正式回复文字或回合结束时收成一段；同一项的迟到更新只刷新已收的那段；正式回复的快照与最终消息只剥离回复段（`replyTextSegments`）；恢复读到空回复时保留正在显示的说明；先以回复文字出现、后被认定为说明的同一段原地继续。静默命令探测吞掉说明；会话活动视为「回复中」。
+  - 单文件串行通过：controller adapter-events 56（新增 5，去掉恢复保留与结束收段后对应 2 项失败）/ contract 117 / queue 112、liveRunThread 31（重基到 PR206 后复跑）、events 10、gateway-session-update 15、useAdapterChatEvents 40、run-activity 4、gateway-adapter lifecycle 57、gateway-adapters recorded 41、openclaw-artifacts 6、gateway-client recorded 8 / legacy-parity 139；文档检查通过。类型检查交 PR CI（heavy 由另一会话持有）。真机待验收；未打包、未发布。
+
 - 2026-10-06 Codex 流式消息排序与重复合并第一轮修复（负责人截图 15:39 回复跨过 15:33 用户消息、15:44 合并段落重复；负责人已授权先合 main 再测试）。
   - Bridge 原生历史只返回最近32项，却把活动缓存中缺失的早期项追加到页尾，原始输入及早期回复随页大小移位；改为按共同原生 ID 的后继锚点补入，保留原生页顺序与最新内容。Desktop 补到早期工具不再发出短累计前缀再恢复全文；初始快照不完整时，后续完整快照同步纠正缓存的首次到达顺序。
   - Mobile 一旦存在工具就跳过段落恢复，且已提交多段合并气泡无法被完整原生段落细化；现在已确认同回合的历史到达即可恢复，不等下一段文字，完整精确前缀才允许拆段，保留首个 cell 和当前工具结果；不完整、乱序或 live-only 边界继续保留。

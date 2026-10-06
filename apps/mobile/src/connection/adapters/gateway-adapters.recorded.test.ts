@@ -27,6 +27,7 @@ type GatewayEventName =
   | 'seqGap'
   | 'chatRunStart'
   | 'chatDelta'
+  | 'chatCommentary'
   | 'chatTool'
   | 'chatFinal'
   | 'chatAborted'
@@ -510,6 +511,12 @@ describe('OpenClawAdapter recorded v1 boundary', () => {
       sessionKey: 'agent:main:main',
       text: 'recorded delta',
     });
+    fake.emit('chatCommentary', {
+      runId: 'compat-run-1',
+      sessionKey: 'agent:main:main',
+      itemId: 'msg_1',
+      text: 'Checking the folder.',
+    });
     fake.emit('chatFinal', {
       runId: 'compat-run-1',
       sessionKey: 'agent:main:main',
@@ -517,6 +524,7 @@ describe('OpenClawAdapter recorded v1 boundary', () => {
     });
     expect(updates).toEqual([
       expect.objectContaining({ type: 'agent_message_chunk', text: 'recorded delta' }),
+      { type: 'agent_commentary_chunk', runId: 'compat-run-1', sessionKey: 'agent:main:main', itemId: 'msg_1', text: 'Checking the folder.' },
       expect.objectContaining({ type: 'run_finished', stopReason: 'end_turn' }),
     ]);
   });

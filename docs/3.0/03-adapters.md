@@ -33,6 +33,7 @@ OpenClaw 技能文档读写按当前握手 `features.methods` 分别开放 `skil
 |---|---|
 | `chatRunStart` | `run_started` |
 | `chatDelta` | `agent_message_chunk` |
+| `agent` 事件 `stream: 'item'`、`kind: 'preamble'`（update / end）→ `chatCommentary` | `agent_commentary_chunk{ itemId, text }`：过程说明不进 `chatDelta`，这是它在写入记录前唯一的实时副本（2026-10-06） |
 | `chatTool` phase start / update / result | `tool_call` / `tool_call_update` |
 | `chatFinal` | `run_finished{ stopReason: 'end_turn', message, usage }` |
 | `chatAborted` | `run_finished{ stopReason: 'cancelled' }` |
