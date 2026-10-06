@@ -8,6 +8,7 @@ import {
   areThreadRunSeedsEqual,
   copiedSessionTitle,
   deriveThreadContentState,
+  fitThreadHeaderName,
   placeTurnReceipts,
   withThreadRhythm,
   stabilizeThreadRows,
@@ -17,6 +18,7 @@ import {
   resolveThreadErrorDetail,
   resolveThreadHeaderName,
   resolveThreadHeaderSubtitle,
+  threadHeaderAgentLabel,
   displayProjectPath,
   THREAD_ERROR_COPY,
   groupThreadRuns,
@@ -208,9 +210,42 @@ describe('Thread model', () => {
   });
 
   it('adds a session title only for non-main sessions', () => {
-    expect(resolveThreadHeaderName('Atlas', 'Main', true)).toBe('Atlas');
-    expect(resolveThreadHeaderName('Atlas', 'Build release', false)).toBe('Atlas · Build release');
-    expect(resolveThreadHeaderName('Atlas', '  ', false)).toBe('Atlas');
+    expect(resolveThreadHeaderName('Atlas', 'Main', true)).toEqual({ agent: 'Atlas', session: null });
+    expect(resolveThreadHeaderName('Atlas', ' Build release ', false)).toEqual({ agent: 'Atlas', session: 'Build release' });
+    expect(resolveThreadHeaderName('Atlas', '  ', false)).toEqual({ agent: 'Atlas', session: null });
+    expect(resolveThreadHeaderName('Atlas', 'Atlas', false)).toEqual({ agent: 'Atlas', session: null });
+  });
+
+  it('drops only the Bridge-generated brand that the product face already shows', () => {
+    expect(threadHeaderAgentLabel('Codex · Lucy的Mac mini', 'Codex')).toBe('Lucy的Mac mini');
+    expect(threadHeaderAgentLabel('Claude Code · Lucy的MacBook Pro', 'Claude Code')).toBe('Lucy的MacBook Pro');
+    expect(threadHeaderAgentLabel('Pi · clawket', 'Pi')).toBe('clawket');
+    // A renamed connection, a bare brand, another brand or the Agent's own face keep the name.
+    expect(threadHeaderAgentLabel('Studio Codex', 'Codex')).toBe('Studio Codex');
+    expect(threadHeaderAgentLabel('Codex', 'Codex')).toBe('Codex');
+    expect(threadHeaderAgentLabel('Codex · Lucy的Mac mini', 'Claude Code')).toBe('Codex · Lucy的Mac mini');
+    expect(threadHeaderAgentLabel('Codex · Lucy的Mac mini', null)).toBe('Codex · Lucy的Mac mini');
+  });
+
+  it('shortens the Agent before the session title when the header line overflows', () => {
+    // 210 points: the title line of a 402-point iPhone at 15-point text.
+    const fit = (agent: string, session: string | null, width = 210, fontSize = 15) => (
+      fitThreadHeaderName({ agent, session }, width, fontSize)
+    );
+    expect(fit('Lucy的Mac mini', '修复 Claude 当前模型读取')).toBe('Lucy的M… · 修复 Claude 当前模型读取');
+    // A short session title leaves the Agent more than its 40% share.
+    expect(fit('Lucy的Mac mini', 'New session')).toBe('Lucy的Mac… · New session');
+    // Enlarged text keeps the same share of a line that holds fewer characters.
+    expect(fit('Lucy的Mac mini', '修复 Claude 当前模型读取', 210, 18)).toBe('Lucy的… · 修复 Claude 当前模型读取');
+    // A short Agent name, or a line with room for both, is left whole.
+    expect(fit('Molty', '每周例会纪要整理与待办跟进')).toBe('Molty · 每周例会纪要整理与待办跟进');
+    expect(fit('Atlas', 'Build release')).toBe('Atlas · Build release');
+    // The main conversation names only the Agent, and the native ellipsis guards it.
+    expect(fit('Lucy的Mac mini', null, 40)).toBe('Lucy的Mac mini');
+    for (const width of [Number.NaN, 0, -1]) {
+      expect(fit('Lucy的Mac mini', '修复 Claude 当前模型读取', width)).toBe('Lucy的Mac mini · 修复 Claude 当前模型读取');
+    }
+    expect(fit('Lucy的Mac mini', '修复 Claude 当前模型读取', 210, 0)).toBe('Lucy的Mac mini · 修复 Claude 当前模型读取');
   });
 
   it('defines product copy for the complete adapter error-code union', () => {

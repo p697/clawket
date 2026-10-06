@@ -21,8 +21,19 @@ import { SwapEntrance } from './SwapEntrance';
 
 /** The header avatar's diameter (`AgentAvatar` header variant). */
 const HEADER_AVATAR_SIZE = ControlSize.pill - Space.md;
+/** The pill's chrome beside its labels: leading padding, avatar, gap and trailing padding (`styles.pill`). */
+const LABEL_INSET = Space.sm + HEADER_AVATAR_SIZE + Space.sm + Space.md;
+const NAME_MAX_FONT_SCALE = 1.2;
 
 const PRESSED_OPACITY = 0.88;
+
+/** The name line's room in a pill whose slot is `slotWidth` wide, and the name's size at the system font scale. */
+export function resolveHeaderPillNameLine(slotWidth: number, fontScale: number): Readonly<{ width: number; fontSize: number }> {
+  return {
+    width: slotWidth - LABEL_INSET,
+    fontSize: FontSize.secondary * Math.min(fontScale > 0 ? fontScale : 1, NAME_MAX_FONT_SCALE),
+  };
+}
 
 export type HeaderPillProps = Readonly<{
   icon?: LucideIcon;
@@ -114,7 +125,7 @@ export function HeaderPill({
         ) : null}
       </View>
       <View style={styles.labels}>
-        <Text style={[styles.name, { color: theme.colors.ink }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>
+        <Text style={[styles.name, { color: theme.colors.ink }]} numberOfLines={1} maxFontSizeMultiplier={NAME_MAX_FONT_SCALE}>
           {name}
         </Text>
         {subtitle.trim() ? <SwapEntrance swapKey={subtitle} ready={subtitleReady} entering={statusRiseIn}

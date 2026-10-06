@@ -3,7 +3,7 @@ import { render } from '@testing-library/react-native';
 import { buildTheme } from '../../theme/theme';
 import { builtInAccents } from '../../theme/accents';
 import { ControlSize, Radius } from '../../theme/tokens';
-import { isProductFacePlatform, PlatformDisc, PlatformMark } from './PlatformMark';
+import { isProductFacePlatform, PlatformDisc, PlatformMark, productFaceBrand } from './PlatformMark';
 
 let mockScheme: 'light' | 'dark' = 'light';
 
@@ -75,6 +75,16 @@ describe('PlatformMark', () => {
     // OpenClaw Agents have identities of their own.
     for (const platform of ['openclaw', null, undefined] as const) {
       expect(isProductFacePlatform(platform)).toBe(false);
+    }
+  });
+
+  it('names the brand a product face shows; the local model and Agents with their own face show none', () => {
+    expect(productFaceBrand('codex')).toBe('Codex');
+    expect(productFaceBrand('claude-code')).toBe('Claude Code');
+    expect(productFaceBrand('pi')).toBe('Pi');
+    expect(productFaceBrand('hermes')).toBe('Hermes');
+    for (const platform of ['local-model', 'openclaw', null, undefined] as const) {
+      expect(productFaceBrand(platform)).toBeNull();
     }
   });
 

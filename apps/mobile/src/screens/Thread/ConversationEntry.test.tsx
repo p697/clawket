@@ -73,6 +73,12 @@ it('waits with the chat header and the shared Companion loading state, following
   expect(mockPill).toMatchObject({ name: 'Codex' });
 });
 
+it('names a product Agent the way the chat header will', () => {
+  mockSnapshot.roster[0].agents[0].agent.name = 'Codex · Lucy的Mac mini';
+  render(<ConversationEntry {...props} />);
+  expect(mockPill).toMatchObject({ name: 'Lucy的Mac mini', platform: 'codex' });
+});
+
 it('shows catalog progress as soon as the handshake is ready, while activation still awaits its list', async () => {
   mockRuntime.activate.mockReturnValueOnce(new Promise(() => {}));
   const view = render(<ConversationEntry {...props} />);

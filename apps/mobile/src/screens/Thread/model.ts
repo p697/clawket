@@ -12,6 +12,7 @@ import type { ConnectionState as LegacyConnectionState } from '../../types';
 import type { UiMessage } from '../../types/chat';
 import { renderKeyOf, type FoldedTurns, type TurnReceipt } from '../../components/chat/turn-work';
 import { toolCategory, unwrapToolCall } from '../../utils/tool-display';
+import { estimateTextWidth, truncateToEstimatedWidth } from '../../utils/text-width';
 import { resolveCronRunSessionKey } from '../../connection/adapters/cron-run-content';
 import { isSystemOwnedCronJob } from '../AgentSettings/cron-model';
 import { formatThreadTimestamp, localDayNumber, THREAD_TIME_GAP_MS } from './timestamps';
@@ -455,16 +456,49 @@ export function resolveContextRemainingPercent(
   return Math.round(Math.min(1, Math.max(0, remaining)) * 100);
 }
 
+const THREAD_HEADER_NAME_SEPARATOR = ' · ';
+/** The most of an overflowing header line the Agent's part keeps (owner decision 2026-10-06). */
+const THREAD_HEADER_AGENT_SHARE = 0.4;
+
+/** The header names the Agent, then the session unless it is the main conversation. */
+export type ThreadHeaderName = Readonly<{ agent: string; session: string | null }>;
+
 export function resolveThreadHeaderName(
   agentName: string,
   sessionTitle: string | null | undefined,
   isMainSession: boolean,
-): string {
+): ThreadHeaderName {
   const normalizedTitle = sessionTitle?.trim();
   if (!normalizedTitle || isMainSession || normalizedTitle === agentName.trim()) {
-    return agentName;
+    return { agent: agentName, session: null };
   }
-  return `${agentName} · ${normalizedTitle}`;
+  return { agent: agentName, session: normalizedTitle };
+}
+
+/**
+ * The Agent as the Thread header names it (owner decision 2026-10-06). Beside its product's own
+ * mark, a Bridge-generated `Codex · Lucy's Mac mini` reads as the computer or project alone; a
+ * renamed connection keeps its own words.
+ */
+export function threadHeaderAgentLabel(agentName: string, faceBrand: string | null | undefined): string {
+  const prefix = faceBrand ? `${faceBrand}${THREAD_HEADER_NAME_SEPARATOR}` : '';
+  if (!prefix || !agentName.startsWith(prefix)) return agentName;
+  return agentName.slice(prefix.length).trim() || agentName;
+}
+
+/**
+ * The header's one line (owner decision 2026-10-06). When `Agent · session` overflows, the
+ * Agent's part is shortened first, to at most 40% of the line unless a short session title leaves
+ * it more; the session title keeps the rest up to the line's own tail ellipsis, so neither part
+ * disappears.
+ */
+export function fitThreadHeaderName(name: ThreadHeaderName, lineWidth: number, fontSize: number): string {
+  if (!name.session) return name.agent;
+  const rest = `${THREAD_HEADER_NAME_SEPARATOR}${name.session}`;
+  if (!(lineWidth > 0) || !(fontSize > 0)) return `${name.agent}${rest}`;
+  const restWidth = estimateTextWidth(rest, fontSize);
+  const agentBudget = Math.max(lineWidth * THREAD_HEADER_AGENT_SHARE, lineWidth - restWidth);
+  return `${truncateToEstimatedWidth(name.agent, agentBudget, fontSize)}${rest}`;
 }
 
 /** Home-relative like a shell prompt, so the header shows the project rather than `/Users/<name>`. */

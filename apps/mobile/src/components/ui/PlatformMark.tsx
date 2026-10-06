@@ -1,5 +1,6 @@
 import React from 'react';
 import { Image, StyleSheet, View } from 'react-native';
+import { getGatewayBackendDescriptor } from '@clawket/agent-protocol';
 import Svg, { Path, Rect } from 'react-native-svg';
 import { ControlSize, Radius } from '../../theme/tokens';
 import { useAppTheme } from '../../theme';
@@ -24,6 +25,14 @@ const PRODUCT_FACE_PLATFORMS: ReadonlySet<Platform> = new Set(['hermes', 'codex'
 
 export function isProductFacePlatform(platform: Platform | null | undefined): platform is Platform {
   return platform != null && PRODUCT_FACE_PLATFORMS.has(platform);
+}
+
+/**
+ * The brand a product face shows, so a name beside it need not repeat it; null when the face is
+ * the Agent's own. The local model's chip names no brand.
+ */
+export function productFaceBrand(platform: Platform | null | undefined): string | null {
+  return isProductFacePlatform(platform) && platform !== 'local-model' ? getGatewayBackendDescriptor(platform).label : null;
 }
 
 /**

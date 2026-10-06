@@ -104,8 +104,8 @@ import {
 } from '../../components/ui/Composer';
 import { FloatingButton } from '../../components/ui/FloatingButton';
 import { HeaderTextAction } from '../../components/ui/HeaderTextAction';
-import { HeaderPill } from '../../components/ui/HeaderPill';
-import type { PlatformKind } from '../../components/ui/PlatformMark';
+import { HeaderPill, resolveHeaderPillNameLine } from '../../components/ui/HeaderPill';
+import { productFaceBrand, type PlatformKind } from '../../components/ui/PlatformMark';
 import { TurnReceiptChip } from '../../components/chat/TurnReceiptChip';
 import { WorkDock } from '../../components/chat/WorkDock';
 import { WorkPanel } from '../../components/chat/WorkPanel';
@@ -146,9 +146,11 @@ import {
 import { useMarkdownSelectionMenu } from '../../components/chat/useMarkdownSelectionMenu';
 import {
   buildThreadTimelineItems,
+  fitThreadHeaderName,
   groupThreadRuns,
   resolveThreadHeaderName,
   resolveThreadHeaderSubtitle,
+  threadHeaderAgentLabel,
   resolveThreadWorkingStatus,
   placeTurnReceipts,
   stabilizeThreadRows,
@@ -447,6 +449,9 @@ export function resolveThreadHeaderHeight(topInset: number): number {
   return topInset + Space.sm + ControlSize.floatingButton + Space.sm;
 }
 
+/** The header row around the pill's slot: side padding, the two 44-point circles and their gaps. */
+const HEADER_SLOT_INSET = 2 * Space.lg + 2 * ControlSize.floatingButton + 2 * Space.sm;
+
 /** Fade the timeline out under the header edge (spec: a 24-point canvas → clear gradient). */
 const HEADER_FADE_HEIGHT = Space.xl;
 /** Wallpaper scrim strength behind the header and the composer dock. */
@@ -651,11 +656,12 @@ export function ThreadView({
   const untitledSession = sessionTitle === sessionKey;
   const cronName = isCronSession && !untitledSession ? cronSessionName(sessionTitle) : '';
   const cronTitle = cronName ? t('Scheduled task: {{name}}', { name: cronName }) : t('Scheduled task');
-  const headerName = resolveThreadHeaderName(
-    agentName,
+  const headerNameLine = resolveHeaderPillNameLine((screenSize?.width ?? windowSize.width) - HEADER_SLOT_INSET, windowSize.fontScale);
+  const headerName = fitThreadHeaderName(resolveThreadHeaderName(
+    threadHeaderAgentLabel(agentName, productFaceBrand(agentPlatform)),
     sessionTitle && (isCronSession ? cronTitle : untitledSession ? t('New session') : sessionTitle),
     isMainSession,
-  );
+  ), headerNameLine.width, headerNameLine.fontSize);
   const replyEntrance = useReplyEntranceDelay(messages, sessionKey, messageSubmittedAt, reduceMotion);
   const presentedRunning = isRunning && !replyEntrance.holding;
   const awaitingInput = interactionAttention === 'input' || interactionAttention === 'approval';

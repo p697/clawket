@@ -1525,6 +1525,23 @@ describe('ThreadView', () => {
       .toBe('Atlas Agent');
   });
 
+  it('names a product Agent by its computer and shortens it before the session title', () => {
+    const view = render(<ThreadView {...createProps({
+      agentName: 'Codex · Lucy的Mac mini',
+      agentPlatform: 'codex',
+      sessionTitle: '修复 Claude 当前模型读取',
+      isMainSession: false,
+    })} />);
+
+    // A 393-point window leaves the title line 201 points: the computer keeps 40% of it.
+    expect(view.getByText('Lucy的M… · 修复 Claude 当前模型读取')).toBeTruthy();
+    expect(view.getByTestId('thread-screen-header-pill-avatar').props.accessibilityLabel)
+      .toBe('Codex · Lucy的Mac mini');
+    // The Thread's own width decides, as in a split workspace.
+    fireEvent(view.getByTestId('thread-screen'), 'layout', { nativeEvent: { layout: { width: 440, height: 956 } } });
+    expect(view.getByText('Lucy的Mac… · 修复 Claude 当前模型读取')).toBeTruthy();
+  });
+
   it('replaces session content without overlapping fade layers', () => {
     const view = render(<ThreadView {...createProps({ sessionKey: 'session-a' })} />);
     for (const sessionKey of ['session-b', 'session-a', 'session-b']) {

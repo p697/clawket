@@ -1,5 +1,10 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-06 聊天页顶部标题：连接名过长不再吞掉会话名（负责人看过对比图后要求落地）。
+  - 现场：Codex / Claude Code 的 Agent 名就是 Bridge 生成的连接名「Codex · 电脑名」，标题再接「 · 会话名」，402pt iPhone 上一行只有约 210pt，尾部省略把会话名整段吃掉。
+  - 头像已是官方图标时（Codex、Claude Code、Pi、Hermes），标题去掉「产品名 · 」前缀，自己改过的连接名不动；会话入口页同一个胶囊同样处理。一行放不下时先缩短 Agent 名，最多占这一行 40%（会话名短时可多用），会话名保留其余空间和原生行尾省略。宽度按 SF Pro / 苹方实测校准的字符宽度估算，按 Thread 自身宽度和上限 1.2 的字号缩放计算。第二行状态、胶囊尺寸、主会话只显示 Agent 名都不变。
+  - 逐文件 in-band：text-width 8、Thread model 32、ConversationEntry 37、ThreadView 222、PlatformMark 8、RosterPrimitives 39 项通过；类型检查与完整门禁交 PR CI（heavy 由另一会话持有）。未做真机验收，未构建或发布。
+
 - 2026-10-06 Claude Code 新建/已有会话开始时模型未读到（负责人要求修复）。
   - 原生 control 初始化只有目录，`system/init` 首次发送前不出现；owned SDK 现用有十秒上限的 summary 元数据读取实际模型，旧读回不覆盖较新的 init/选模。观测值单独持久化为 `observedModel`，不把默认值变成重启 launch pin，旧 `model` pin 保持兼容。
   - 原生会话只读最新主会话模型证据与成功 `/model` 的真实参数，排除子代理、工具和 synthetic；大文件保留 4 MiB tail 上限。目录 probe 使用会话所在项目，不接管或 resume 原 writer。未留下历史的新切换仍未知，不冒称实时读取另一个 owner 的设置。Mobile 仅模型读取等待增至有界 60 秒，普通 RPC 与写操作 deadline 保持。

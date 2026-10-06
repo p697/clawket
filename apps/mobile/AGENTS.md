@@ -557,6 +557,8 @@ Publish scoped session metadata updates into the roster immediately, including n
 
 Header title/subtitle leading is compact (18/16 points with no Android font padding); preserve the 40-point capsule and check both scripts and enlarged title text before changing these metrics.
 
+The Thread header title reads `Agent · session` (owner decision 2026-10-06). Beside a product face (Codex, Claude Code, Pi, Hermes; see `productFaceBrand`) it drops the Bridge-generated `Brand · ` prefix; renamed connections keep their words, and `ConversationEntry` names the Agent the same way. When the line overflows, `fitThreadHeaderName` shortens the Agent part first, to at most 40% of the title line unless a short session title leaves more; the session title keeps the rest and the native tail ellipsis, so neither part disappears. Widths are estimates (`utils/text-width`), sized from the Thread's own width and the capped font scale; keep the status line, capsule metrics and main-session naming unchanged.
+
 The Thread header's status sentence fades in and rises `Motion.status.rise` over 200 ms whenever it changes (reduced motion only fades), entering as its own view through `SwapEntrance` so the new words are never drawn before the fade starts; its presence ring fades in and out over the same 200 ms; the ring's own rotation and breathing stay in `PresenceRing`.
 
 Project-backed session rows stay at two text lines: title/time, then project and message preview sharing one line. Bound the project fragment so long names leave room for the preview; omit it when filtering to that project. Project direct/other sessions use the Terminal glyph, retaining existing main/channel/group kinds and attention/unread signals.

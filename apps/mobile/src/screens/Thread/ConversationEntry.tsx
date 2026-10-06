@@ -8,6 +8,7 @@ import { getConnectionRuntime, useConnections } from '../../connection';
 import { FloatingButton } from '../../components/ui/FloatingButton';
 import { HeaderPill } from '../../components/ui/HeaderPill';
 import { LoadingState, useLoadingHandoff } from '../../components/ui/LoadingState';
+import { productFaceBrand } from '../../components/ui/PlatformMark';
 import { SessionPanel } from '../SessionPanel';
 import { ManualSessions } from '../../services/manual-sessions';
 import { SessionPreferencesService } from '../../services/session-preferences';
@@ -20,6 +21,7 @@ import { useProPaywall } from '../../contexts/ProPaywallContext';
 import type { ThreadScreenProps } from './ThreadScreen';
 import type { RootStackParamList } from '../../navigation/root-stack';
 import { connectionSlowHintMs } from '../../connection/wait-policy';
+import { threadHeaderAgentLabel } from './model';
 
 /** Navigation only: never mounts a chat controller or creates a placeholder thread. */
 export function ConversationEntry({ navigation, route, locked, lockedReason = 'agents', onSessionAction, onSessionPanelAfterClose, pinnedSessionKeys }: ThreadScreenProps) {
@@ -45,7 +47,8 @@ export function ConversationEntry({ navigation, route, locked, lockedReason = 'a
   const stage = connections.activeConnectionId === connectionId && connections.activeState === 'ready' ? 'sessions' : 'connecting';
   const slowAfterMs = connectionSlowHintMs(rosterGroup?.connection.backendKind);
   const rosterAgent = rosterGroup?.agents.find(row => row.agent.agentId === agentId)?.agent;
-  const title = rosterAgent?.name ?? t('Sessions');
+  // Named as the Thread header names it, so opening a session only adds its title.
+  const title = rosterAgent ? threadHeaderAgentLabel(rosterAgent.name, productFaceBrand(rosterGroup?.connection.backendKind)) : t('Sessions');
   // The picker rising over the page is the success moment; a failed connect hands over at once, without the exit.
   const loaderPhase = useLoadingHandoff(loading, connections.activeConnectionId === connectionId && connections.activeState === 'ready');
 
