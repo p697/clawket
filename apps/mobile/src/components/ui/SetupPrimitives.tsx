@@ -27,7 +27,10 @@ export function PageIntro({ title, description }: { title: string; description?:
   </View>;
 }
 
-/** `locked` swaps the chevron for the Pro lock; the row stays pressable so the caller can open its paywall. */
+/**
+ * `locked` swaps the chevron for the Pro lock; the row stays pressable so the caller can open its paywall.
+ * `compact` grid cells carry no chevron (owner decision 2026-10-06): the official mark and name read as one tile.
+ */
 export function ChoiceRow({ icon: Icon, leading, title, description, locked = false, compact = false, onPress, testID }: { icon?: LucideIcon; leading?: React.ReactNode; title: string; description?: string; locked?: boolean; compact?: boolean; onPress: () => void; testID?: string }) {
   const { theme: { colors } } = useAppTheme();
   return <Pressable testID={testID} accessibilityRole="button" accessibilityLabel={description ? `${title}, ${description}` : title} onPress={onPress}
@@ -39,7 +42,7 @@ export function ChoiceRow({ icon: Icon, leading, title, description, locked = fa
     </View>
     {locked
       ? <Lock testID={testID ? `${testID}-lock-icon` : undefined} size={IconSize.sm} color={colors.inkTertiary} strokeWidth={2} />
-      : <ChevronRight size={IconSize.sm} color={colors.inkTertiary} strokeWidth={1.75} />}
+      : compact ? null : <ChevronRight size={IconSize.sm} color={colors.inkTertiary} strokeWidth={1.75} />}
   </Pressable>;
 }
 
@@ -74,7 +77,7 @@ export function CommandBlock({ command, onCopy, copied = false, prose = false, s
   return <View testID={testID} style={[styles.commandBlock, prose ? styles.proseBlock : null, stacked ? styles.commandStacked : null, { backgroundColor: colors.surface }]}>
     <Text selectable accessibilityLabel={accessibilityLabel ?? t('Pairing command')} style={[styles.command, prose ? styles.prose : null, stacked ? styles.commandFullWidth : null, { color: colors.ink }]}>{command}</Text>
     {onCopy ? stacked
-      ? <View style={[styles.commandCopy, footer ? styles.commandFooter : null]}>{footer ? <Text style={[styles.commandHint, { color: colors.inkSecondary }]}>{footer}</Text> : null}<Button testID={copyTestID} label={t(copied ? 'Copied' : 'Copy command')} icon={copied ? Check : Copy} variant="card" size="sm" multiline style={styles.commandCopyButton} haptic onPress={onCopy} accessibilityLabel={t(copied ? 'Copied' : 'Copy command')} /></View>
+      ? <View style={[styles.commandCopy, footer ? styles.commandFooter : null]}>{footer ? <Text style={[styles.commandHint, { color: colors.inkSecondary }]}>{footer}</Text> : null}<Button testID={copyTestID} label={t(copied ? 'Copied' : 'Copy')} icon={copied ? Check : Copy} variant="card" size="sm" multiline style={styles.commandCopyButton} haptic onPress={onCopy} accessibilityLabel={t(copied ? 'Copied' : 'Copy command')} /></View>
       : <FloatingButton testID={copyTestID} icon={copied ? Check : Copy} appearance="plain" onPress={onCopy} accessibilityLabel={t(copied ? 'Copied' : 'Copy command')} /> : null}
   </View>;
 }

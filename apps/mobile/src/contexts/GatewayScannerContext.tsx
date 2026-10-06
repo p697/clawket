@@ -48,8 +48,8 @@ type SecurePairingExpectation = Readonly<{
 }>;
 
 type GatewayScannerContextType = {
+  /** Opens the camera scanner; its photo action reads a saved QR through the same callbacks. */
   openGatewayScanner: (options: GatewayScannerOptions) => void;
-  importGatewayQrImage: (options?: GatewayScannerOptions) => Promise<void>;
   connectPairingLink: (url: string, expectation?: SecurePairingExpectation) => Promise<boolean>;
   connectPairingCode: (input: {
     serverUrl: string;
@@ -60,6 +60,9 @@ type GatewayScannerContextType = {
 };
 
 const GatewayScannerContext = React.createContext<GatewayScannerContextType | null>(null);
+
+/** The full-screen scanner slides away before its result, cancellation or photo picker runs. */
+const SCANNER_DISMISS_MS = 350;
 
 export function GatewayScannerProvider({ children }: { children: React.ReactNode }): React.JSX.Element {
   const [scannerVisible, setScannerVisible] = useState(false);
@@ -333,7 +336,7 @@ export function GatewayScannerProvider({ children }: { children: React.ReactNode
     setTimeout(() => {
       if (!options) return;
       void options.onScanned(result);
-    }, 350);
+    }, SCANNER_DISMISS_MS);
   }, [scannerOptions]);
 
   const handleCancel = useCallback(() => {
@@ -342,19 +345,31 @@ export function GatewayScannerProvider({ children }: { children: React.ReactNode
     setScannerOptions(null);
     setTimeout(() => {
       options?.onCancel?.();
-    }, 350);
+    }, SCANNER_DISMISS_MS);
   }, [scannerOptions]);
 
+  // The library opens only once the scanner has gone, so the native picker never presents over the
+  // closing modal; the opener's callbacks receive the photo's QR or its cancellation.
+  const handleChoosePhoto = useCallback(() => {
+    const options = scannerOptions;
+    setScannerVisible(false);
+    setScannerOptions(null);
+    setTimeout(() => {
+      if (!options) return;
+      void importGatewayQrImage(options);
+    }, SCANNER_DISMISS_MS);
+  }, [importGatewayQrImage, scannerOptions]);
+
   const value = useMemo(
-    () => ({ openGatewayScanner, importGatewayQrImage, connectPairingLink, connectPairingCode }),
-    [connectPairingCode, connectPairingLink, importGatewayQrImage, openGatewayScanner],
+    () => ({ openGatewayScanner, connectPairingLink, connectPairingCode }),
+    [connectPairingCode, connectPairingLink, openGatewayScanner],
   );
 
   return (
     <GatewayScannerContext.Provider value={value}>
       {children}
       <Modal visible={scannerVisible} animationType="slide" presentationStyle="fullScreen">
-        <QRScannerScreen onScanned={handleScanned} onCancel={handleCancel} />
+        <QRScannerScreen onScanned={handleScanned} onCancel={handleCancel} onChoosePhoto={handleChoosePhoto} />
       </Modal>
       <ConfirmationModal
         visible={pendingPairingConfirmation !== null}

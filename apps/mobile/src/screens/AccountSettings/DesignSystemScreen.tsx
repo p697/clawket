@@ -137,7 +137,7 @@ export function DesignSystemScreen({
 
   if (pagePreview) return <OnboardingScreen onClose={() => { setPagePreview(false); setPreviewError(false); }} environment="preview"
     status={previewError ? { kind: 'error', code: 'pairing_expired' } : { kind: 'idle' }}
-    onSubmitPairing={() => setPreviewError(true)} onScanQr={() => setPreviewError(true)} onImportQr={() => setPreviewError(true)}
+    onSubmitPairing={() => setPreviewError(true)} onScanQr={() => setPreviewError(true)}
     onOpenWebsite={() => setPagePreview(false)}
     onErrorAction={() => setPreviewError(false)} onPastePairingCode={() => '123456'} onCopyCommand={() => {}} onCopyAgentPrompt={() => {}} />;
 

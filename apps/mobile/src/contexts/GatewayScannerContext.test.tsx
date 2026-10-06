@@ -18,6 +18,10 @@ const mockLaunchImageLibrary = jest.fn();
 const mockScanFromUrl = jest.fn();
 const mockResolvePairingCode = jest.fn();
 const mockResolvePairingLink = jest.fn();
+const mockGetCameraPermissions = jest.fn();
+let mockPendingAddGateway = false;
+const mockClearPendingAddGateway = jest.fn(() => { mockPendingAddGateway = false; });
+let mockScannerScreenProps: { onChoosePhoto?: () => void } | null = null;
 let scanner: ReturnType<typeof useGatewayScanner> | null = null;
 
 jest.mock('react-native', () => {
@@ -25,9 +29,9 @@ jest.mock('react-native', () => {
   return {
     Alert: { alert: jest.fn() },
     Linking: { openSettings: jest.fn() },
-    Modal: ({ children }: { children?: React.ReactNode }) => ReactRuntime.createElement(
+    Modal: ({ children, visible }: { children?: React.ReactNode; visible: boolean }) => ReactRuntime.createElement(
       'Modal',
-      null,
+      { testID: 'gateway-scanner-modal', visible },
       children,
     ),
     Platform: { OS: 'ios', isMacCatalyst: false },
@@ -45,8 +49,8 @@ jest.mock('../connection', () => ({
 
 jest.mock('./AppContext', () => ({
   useAppContext: () => ({
-    pendingAddGateway: false,
-    clearPendingAddGateway: jest.fn(),
+    pendingAddGateway: mockPendingAddGateway,
+    clearPendingAddGateway: mockClearPendingAddGateway,
     debugMode: true,
   }),
 }));
@@ -68,7 +72,10 @@ jest.mock('../connection/pairing/gateway-scan-flow', () => ({
 }));
 
 jest.mock('../connection/pairing/QRScannerScreen', () => ({
-  QRScannerScreen: () => null,
+  QRScannerScreen: (props: { onChoosePhoto?: () => void }) => {
+    mockScannerScreenProps = props;
+    return null;
+  },
 }));
 
 jest.mock('../components/ui/ConfirmationModal', () => {
@@ -117,6 +124,7 @@ jest.mock('expo-image-picker', () => ({
 jest.mock('expo-camera', () => ({
   Camera: {
     scanFromURLAsync: (...args: unknown[]) => mockScanFromUrl(...args),
+    getCameraPermissionsAsync: () => mockGetCameraPermissions(),
   },
 }));
 
@@ -133,6 +141,11 @@ describe('GatewayScannerProvider pairing persistence', () => {
     consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
     consoleInfoSpy = jest.spyOn(console, 'info').mockImplementation(() => undefined);
     scanner = null;
+    mockPendingAddGateway = false;
+    mockClearPendingAddGateway.mockClear();
+    mockScannerScreenProps = null;
+    mockGetCameraPermissions.mockReset();
+    mockGetCameraPermissions.mockResolvedValue({ granted: true, canAskAgain: true });
     mockShowOverlay.mockReset();
     mockHideOverlay.mockReset();
     mockSavePairedConnection.mockReset();
@@ -157,7 +170,7 @@ describe('GatewayScannerProvider pairing persistence', () => {
     consoleInfoSpy.mockRestore();
   });
 
-  it('claims an imported legacy Relay QR and saves it through the connection runtime', async () => {
+  it('claims a legacy Relay QR read from a photo in the add-connection scanner and saves it', async () => {
     const claimed = {
       url: 'wss://relay.example/ws',
       backendKind: 'openclaw' as const,
@@ -180,15 +193,17 @@ describe('GatewayScannerProvider pairing persistence', () => {
       }),
     }]);
     mockClaimRelayPairing.mockResolvedValue(claimed);
-    render(
+    mockPendingAddGateway = true;
+    const view = render(
       <GatewayScannerProvider>
         <CaptureScanner />
       </GatewayScannerProvider>,
     );
 
-    await act(async () => {
-      await scanner?.importGatewayQrImage();
-    });
+    // A pending add-connection request opens the camera; its photo action reads the saved QR instead.
+    await waitFor(() => expect(view.getByTestId('gateway-scanner-modal').props.visible).toBe(true));
+    expect(mockClearPendingAddGateway).toHaveBeenCalledTimes(1);
+    act(() => mockScannerScreenProps?.onChoosePhoto?.());
 
     await waitFor(() => {
       expect(mockClaimRelayPairing).toHaveBeenCalledWith(
@@ -210,6 +225,53 @@ describe('GatewayScannerProvider pairing persistence', () => {
     });
     expect(mockShowOverlay).toHaveBeenCalledTimes(1);
     expect(mockHideOverlay).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes the camera before the photo library opens and keeps the opener callbacks', async () => {
+    mockScanFromUrl.mockResolvedValue([{
+      data: JSON.stringify({
+        kind: 'clawket_pair',
+        version: 1,
+        server: 'https://registry.example',
+        gatewayId: 'gateway-1',
+        accessCode: 'legacy-access-code',
+        relayUrl: 'wss://relay.example/ws',
+      }),
+    }]);
+    const onScanned = jest.fn();
+    const onCancel = jest.fn();
+    const view = render(
+      <GatewayScannerProvider>
+        <CaptureScanner />
+      </GatewayScannerProvider>,
+    );
+    const modal = () => view.getByTestId('gateway-scanner-modal');
+
+    await act(async () => {
+      await scanner?.openGatewayScanner({ onScanned, onCancel });
+    });
+    expect(modal().props.visible).toBe(true);
+    act(() => mockScannerScreenProps?.onChoosePhoto?.());
+    // The native picker never presents over the closing scanner.
+    expect(modal().props.visible).toBe(false);
+    expect(mockLaunchImageLibrary).not.toHaveBeenCalled();
+    await waitFor(() => expect(onScanned).toHaveBeenCalledWith(expect.objectContaining({
+      relay: expect.objectContaining({ gatewayId: 'gateway-1', accessCode: 'legacy-access-code' }),
+    })));
+    expect(mockLaunchImageLibrary).toHaveBeenCalledTimes(1);
+    expect(onCancel).not.toHaveBeenCalled();
+
+    // Dismissing the library reports the opener's cancellation, as closing the scanner would.
+    mockLaunchImageLibrary.mockResolvedValueOnce({ canceled: true, assets: [] });
+    await act(async () => {
+      await scanner?.openGatewayScanner({ onScanned, onCancel });
+    });
+    act(() => mockScannerScreenProps?.onChoosePhoto?.());
+    await waitFor(() => expect(onCancel).toHaveBeenCalledTimes(1));
+    expect(onScanned).toHaveBeenCalledTimes(1);
+    // Neither path claims or saves anything on the opener's behalf.
+    expect(mockClaimRelayPairing).not.toHaveBeenCalled();
+    expect(mockSavePairedConnection).not.toHaveBeenCalled();
   });
 
   it('requires app-owned confirmation before accepting secure pairing', async () => {

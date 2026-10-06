@@ -139,7 +139,6 @@ describe('OnboardingRoute', () => {
       connectPairingCode: jest.fn(async () => true),
       connectPairingLink: jest.fn(async () => true),
       openGatewayScanner: jest.fn(),
-      importGatewayQrImage: jest.fn(),
     };
     mockCoordinator.getSnapshot.mockReset();
     mockCoordinator.getSnapshot.mockReturnValue(connectionSnapshot({ state: 'idle' }));
@@ -437,11 +436,11 @@ describe('OnboardingRoute', () => {
     expect(mockScreenProps?.status).toEqual({ kind: 'error', code: 'unsupported', pairingReason: 'official_environment_mismatch' });
   });
 
+  // A photo chosen inside the scanner returns through these same callbacks (GatewayScannerContext tests).
   it.each([
     ['openclaw', 'camera'], ['codex', 'camera'],
-    ['openclaw', 'image'], ['codex', 'image'],
     ['openclaw', 'header'], ['codex', 'header'],
-    ['hermes', 'generic-image'], ['claude-code', 'generic-image'],
+    ['hermes', 'header'], ['claude-code', 'header'],
   ] as const)(
     'uses current settings for the first %s %s scan delivered after opening', async (backendKind, method) => {
       mockApp.debugMode = true;
@@ -456,12 +455,10 @@ describe('OnboardingRoute', () => {
       const props = createProps();
       const view = render(<OnboardingRoute {...props} />);
       act(() => {
-        if (method === 'generic-image') mockScreenProps?.onImportAnyQr?.();
-        else if (method === 'header') mockScreenProps?.onScanAnyQr?.();
-        else if (method === 'image') mockScreenProps?.onImportQr?.(backendKind);
+        if (method === 'header') mockScreenProps?.onScanAnyQr?.();
         else mockScreenProps?.onScanQr(backendKind);
       });
-      const firstCameraCallback = (method === 'image' || method === 'generic-image' ? mockScanner.importGatewayQrImage : mockScanner.openGatewayScanner).mock.calls[0][0].onScanned;
+      const firstCameraCallback = mockScanner.openGatewayScanner.mock.calls[0][0].onScanned;
       // Preserve the callback already held by the native camera, across a context update.
       mockApp.debugMode = false;
       view.rerender(<OnboardingRoute {...props} />);

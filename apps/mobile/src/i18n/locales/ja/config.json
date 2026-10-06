@@ -293,7 +293,6 @@
   "Run it myself": "自分で実行する",
   "Send this message to your agent": "このメッセージをエージェントに送る",
   "Copy this message": "このメッセージをコピー",
-  "Open Terminal and run this command.": "ターミナルを開き、このコマンドを実行します。",
   "Open Terminal in your project folder and run this command.": "プロジェクトのフォルダでターミナルを開き、このコマンドを実行します。",
   "Please run {{pairCommand}} on my computer to set up the open-source Clawket CLI and pair it with my phone. I authorize you to reply in this conversation with the temporary pairing code it prints (the line starting with \"Pairing code:\"). Send only the code and backend name, without other credentials.": "私のコンピューターで {{pairCommand}} を実行し、オープンソースの Clawket CLI を設定してスマートフォンとペアリングしてください。出力された一時的なペアリングコード（\"Pairing code:\" で始まる行）をこの会話で返信することを許可します。コードとバックエンド名のみを送り、ほかの認証情報は含めないでください。",
   "Message for your agent": "エージェントへのメッセージ",
@@ -386,13 +385,12 @@
   "Pattern": "パターン",
   "Photo": "写真",
   "Plain": "無地",
-  "Run in your computer terminal": "コンピューターのターミナルで実行",
+  "Run in your computer’s terminal": "コンピューターのターミナルで実行",
   "Scan the QR code in your terminal": "ターミナルのQRコードをスキャン",
   "Change platform": "プラットフォームを変更",
   "Choose the platform that printed your code.": "コードを生成したプラットフォームを選んでください。",
   "Enter pairing code": "ペアリングコードを入力",
-  "Automatically detect agents on your computer": "パソコン上のエージェントを自動検出",
-  "Find installed platforms, then choose one to pair.": "インストール済みのプラットフォームを検出し、選んでペアリング。",
+  "Or detect automatically": "または自動検出",
   "Select platform": "プラットフォームを選択",
   "Back to scanning": "スキャンに戻る"
 }

@@ -293,7 +293,6 @@
   "Run it myself": "سأشغّله بنفسي",
   "Send this message to your agent": "أرسل هذه الرسالة إلى وكيلك",
   "Copy this message": "نسخ هذه الرسالة",
-  "Open Terminal and run this command.": "افتح الطرفية وشغّل هذا الأمر.",
   "Open Terminal in your project folder and run this command.": "افتح الطرفية داخل مجلد مشروعك وشغّل هذا الأمر.",
   "Please run {{pairCommand}} on my computer to set up the open-source Clawket CLI and pair it with my phone. I authorize you to reply in this conversation with the temporary pairing code it prints (the line starting with \"Pairing code:\"). Send only the code and backend name, without other credentials.": "شغّل {{pairCommand}} على حاسوبي لإعداد Clawket CLI مفتوح المصدر وإقرانه بهاتفي. أفوّضك بالرد في هذه المحادثة برمز الاقتران المؤقت الذي يظهر (السطر الذي يبدأ بـ \"Pairing code:\"). أرسل الرمز واسم الخلفية فقط، دون بيانات اعتماد أخرى.",
   "Message for your agent": "رسالة لوكيلك",
@@ -386,13 +385,12 @@
   "Pattern": "نقش",
   "Photo": "صورة",
   "Plain": "سادة",
-  "Run in your computer terminal": "تشغيل في طرفية الكمبيوتر",
+  "Run in your computer’s terminal": "تشغيل في طرفية الكمبيوتر",
   "Scan the QR code in your terminal": "امسح رمز QR في الطرفية",
   "Change platform": "تغيير المنصة",
   "Choose the platform that printed your code.": "اختر المنصة التي أنشأت الرمز.",
   "Enter pairing code": "إدخال رمز الاقتران",
-  "Automatically detect agents on your computer": "اكتشاف الوكلاء على جهازك تلقائيًا",
-  "Find installed platforms, then choose one to pair.": "اعثر على المنصات المثبتة، ثم اختر منصة للإقران.",
+  "Or detect automatically": "أو الاكتشاف تلقائيًا",
   "Select platform": "اختيار المنصة",
   "Back to scanning": "العودة إلى المسح"
 }

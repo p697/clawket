@@ -379,10 +379,11 @@ describe('OnboardingScreen', () => {
     expect(view.getByTestId('onboarding-command-hint').props.children).toContain('OpenAI-compatible server');
     expect(view.getByText('npx @p697/clawket@latest pair --backend local-model --engine openai-compatible --base-url http://127.0.0.1:1234')).toBeTruthy();
 
-    // OpenClaw keeps its generic terminal hint and never shows the engine switch.
+    // OpenClaw's step title already says where to run it: no hint line and no engine switch.
     view.rerender(<OnboardingScreen {...createProps({ initialBackend: 'openclaw', onCopyCommand, onCopyAgentPrompt: undefined })} />);
     expect(view.queryByTestId('onboarding-local-model-engine')).toBeNull();
-    expect(view.getByTestId('onboarding-command-hint').props.children).toBe('Open Terminal and run this command.');
+    expect(view.queryByTestId('onboarding-command-hint')).toBeNull();
+    expect(view.getByText('Run in your computer’s terminal')).toBeTruthy();
   });
 
   it('shares one synchronous readiness guard across Enter, button, and input state', () => {
@@ -478,8 +479,10 @@ describe('OnboardingScreen', () => {
   it('tells Pi users to run the command from the project folder it pairs', () => {
     const pi = render(<OnboardingScreen {...createProps({ initialBackend: 'pi', onCopyAgentPrompt: undefined })} />);
     expect(pi.getByTestId('onboarding-command-hint').props.children).toBe('Open Terminal in your project folder and run this command.');
+    // Codex has nothing to add to the step title, so no hint repeats it.
     const codex = render(<OnboardingScreen {...createProps({ initialBackend: 'codex', onCopyAgentPrompt: undefined })} />);
-    expect(codex.getByTestId('onboarding-command-hint').props.children).toBe('Open Terminal and run this command.');
+    expect(codex.queryByTestId('onboarding-command-hint')).toBeNull();
+    expect(codex.getByText('Run in your computer’s terminal')).toBeTruthy();
   });
 
   it.each(['openclaw', 'hermes'] as const)('uses one native keyboard-avoidance owner on iPad for %s pairing', (backend) => {
@@ -577,7 +580,7 @@ describe('OnboardingScreen', () => {
 
       fireEvent.press(view.getByTestId('onboarding-pairing-method-terminal'));
       expect(view.queryByTestId('onboarding-agent-prompt')).toBeNull();
-      expect(view.getByText('Run in your computer terminal')).toBeTruthy();
+      expect(view.getByText('Run in your computer’s terminal')).toBeTruthy();
       expect(view.getByText('Scan the QR code in your terminal')).toBeTruthy();
       expect(view.getByText('npx @p697/clawket pair --preview --backend hermes')).toBeTruthy();
       fireEvent.press(view.getByTestId('onboarding-copy-command'));
@@ -640,9 +643,8 @@ describe('OnboardingScreen', () => {
   it('exposes interactive discovery to a person and requires an explicit backend for its code fallback', async () => {
     const onCopyCommand = jest.fn().mockResolvedValue(undefined);
     const onScanAnyQr = jest.fn();
-    const onImportAnyQr = jest.fn();
     const onSubmitPairing = jest.fn();
-    const view = render(<OnboardingScreen {...createProps({ initialBackend: undefined, onCopyCommand, onScanAnyQr, onImportAnyQr, onSubmitPairing })} />);
+    const view = render(<OnboardingScreen {...createProps({ initialBackend: undefined, onCopyCommand, onScanAnyQr, onSubmitPairing })} />);
     expect(view.getByText('npx @p697/clawket@latest pair choose')).toBeTruthy();
     expect(view.queryByTestId('onboarding-pairing-method-agent')).toBeNull();
     fireEvent.press(view.getByTestId('onboarding-copy-command'));
@@ -650,8 +652,6 @@ describe('OnboardingScreen', () => {
     await act(async () => { await Promise.resolve(); });
     fireEvent.press(view.getByTestId('onboarding-scan-any-qr'));
     expect(onScanAnyQr).toHaveBeenCalledTimes(1);
-    fireEvent.press(view.getByTestId('onboarding-import-qr'));
-    expect(onImportAnyQr).toHaveBeenCalledTimes(1);
     fireEvent.press(view.getByTestId('onboarding-show-code'));
     expect(view.queryByTestId('onboarding-pairing-code')).toBeNull();
     expect(view.queryByTestId('onboarding-code-backend-local-model')).toBeNull();
@@ -723,15 +723,43 @@ describe('OnboardingScreen', () => {
     expect(view.getByTestId('onboarding-agent-prompt')).toBeTruthy();
   });
 
-  it('keeps failed generic QR pairing on the home with its scan and image actions', () => {
-    const props = createProps({ initialBackend: undefined, onScanAnyQr: jest.fn(), onImportAnyQr: jest.fn() });
+  it('keeps failed generic QR pairing on the home with its scan action', () => {
+    const props = createProps({ initialBackend: undefined, onScanAnyQr: jest.fn() });
     const view = render(<OnboardingScreen {...props} />);
     view.rerender(<OnboardingScreen {...props} initialBackend="hermes" status={{ kind: 'connecting', phase: 'relay_connected' }} />);
     view.rerender(<OnboardingScreen {...props} initialBackend="hermes" status={{ kind: 'error', code: 'timeout' }} />);
     expect(view.getByTestId('onboarding-chooser')).toBeTruthy();
     expect(view.getByTestId('onboarding-scan-any-qr')).toBeTruthy();
-    expect(view.getByTestId('onboarding-import-qr')).toBeTruthy();
     expect(view.queryByTestId('onboarding-agent-prompt')).toBeNull();
+  });
+
+  it('keeps the home detection block to a heading, the command and where to run it', () => {
+    const view = render(<OnboardingScreen {...createProps({ initialBackend: undefined, onScanAnyQr: jest.fn(), onCopyCommand: jest.fn() })} />);
+    const detection = view.getByTestId('onboarding-auto-detect');
+    // The heading names an alternative to the platforms above; the terminal itself asks which Agent to pair.
+    const heading = within(detection).getByText('Or detect automatically');
+    expect(heading.props.accessibilityRole).toBe('header');
+    expect(within(detection).getByText('Run in your computer’s terminal')).toBeTruthy();
+    expect(within(detection).queryByText('Find installed platforms, then choose one to pair.')).toBeNull();
+    expect(within(detection).getAllByText(/./).map((node) => node.props.children)).toEqual([
+      'Or detect automatically',
+      'npx @p697/clawket@latest pair choose',
+      'Run in your computer’s terminal',
+      'Copy',
+    ]);
+    // The visible label is short beside the command; assistive technology still hears what it copies.
+    expect(view.getByTestId('onboarding-copy-command').props.accessibilityLabel).toBe('Copy command');
+    // Photos is the scanner's own action, so the home offers only code entry under Scan.
+    expect(view.queryByTestId('onboarding-import-qr')).toBeNull();
+    expect(view.getByTestId('onboarding-show-code')).toBeTruthy();
+  });
+
+  it.each(['codex', 'openclaw'] as const)('leaves photo import to the scanner on the %s step', (backend) => {
+    const onScanQr = jest.fn();
+    const view = render(<OnboardingScreen {...createProps({ initialBackend: backend, onScanQr })} />);
+    expect(view.queryByTestId('onboarding-import-qr')).toBeNull();
+    fireEvent.press(view.getByTestId('onboarding-scan-qr'));
+    expect(onScanQr).toHaveBeenCalledWith(backend);
   });
 
   it('ignores a late paste after the home platform changes', async () => {
@@ -817,7 +845,7 @@ describe('OnboardingScreen', () => {
       const choiceStyle = flattenStyle(view.getByTestId('onboarding-backend-openclaw').props.style);
       expect(choiceStyle.borderRadius).toBe(Radius.card);
       expect(choiceStyle).not.toHaveProperty('borderWidth');
-      expect(flattenStyle(view.getByText('Automatically detect agents on your computer').props.style)).toMatchObject({
+      expect(flattenStyle(view.getByText('Or detect automatically').props.style)).toMatchObject({
         color: mockTheme.colors.ink, fontSize: FontSize.body,
       });
       view.unmount();
@@ -834,6 +862,8 @@ describe('OnboardingScreen', () => {
       expect(choiceStyle.paddingVertical).toBe(Space.sm);
       expect(choiceStyle.minHeight).toBe(ControlSize.settingsRow);
       expect(flattenStyle(row.props.children[0].props.style).width).toBe(Space.xxl);
+      // Mark and name read as one tile; six chevrons in a grid were noise (owner decision 2026-10-06).
+      expect(row.props.children[2]).toBeNull();
     }
     // "No agent yet?" belongs to the choices; the open-source note follows it instead of anchoring to the bottom.
     const chooser = view.getByTestId('onboarding-chooser');
@@ -851,6 +881,8 @@ describe('OnboardingScreen', () => {
     const describedRow = described.getByTestId('described-choice');
     expect(flattenStyle(describedRow.props.style)).toMatchObject({ minHeight: ControlSize.rosterRow, paddingVertical: Space.lg });
     expect(flattenStyle(describedRow.props.children[0].props.style).width).toBe(ControlSize.settingsRow);
+    // List rows keep their chevron.
+    expect(describedRow.props.children[2]).toBeTruthy();
   });
 
   it('reports a page view once per mount', () => {

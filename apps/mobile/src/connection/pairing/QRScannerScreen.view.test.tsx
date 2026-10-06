@@ -43,4 +43,26 @@ describe('QRScannerScreen', () => {
     fireEvent.press(cancel);
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
+
+  it('offers photos beside Cancel as the same capsule and hands over only once', () => {
+    const onChoosePhoto = jest.fn();
+    const onCancel = jest.fn();
+    const view = render(<QRScannerScreen onScanned={jest.fn()} onCancel={onCancel} onChoosePhoto={onChoosePhoto} />);
+    const photos = view.getByTestId('qr-scanner-photos');
+    const cancel = view.getByTestId('qr-scanner-cancel');
+
+    expect(photos.props.accessibilityRole).toBe('button');
+    expect(view.getByText('Choose from photos')).toBeTruthy();
+    expect(flatten(photos.props.style({ pressed: false }))).toEqual(flatten(cancel.props.style({ pressed: false })));
+    fireEvent.press(photos);
+    fireEvent.press(photos);
+    expect(onChoosePhoto).toHaveBeenCalledTimes(1);
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it('shows no photo action when the opener cannot read one', () => {
+    const view = render(<QRScannerScreen onScanned={jest.fn()} onCancel={jest.fn()} />);
+    expect(view.queryByTestId('qr-scanner-photos')).toBeNull();
+    expect(view.getByTestId('qr-scanner-cancel')).toBeTruthy();
+  });
 });

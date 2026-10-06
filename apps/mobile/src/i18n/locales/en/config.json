@@ -293,7 +293,6 @@
   "Run it myself": "Run it myself",
   "Send this message to your agent": "Send this message to your agent",
   "Copy this message": "Copy this message",
-  "Open Terminal and run this command.": "Open Terminal and run this command.",
   "Open Terminal in your project folder and run this command.": "Open Terminal in your project folder and run this command.",
   "Please run {{pairCommand}} on my computer to set up the open-source Clawket CLI and pair it with my phone. I authorize you to reply in this conversation with the temporary pairing code it prints (the line starting with \"Pairing code:\"). Send only the code and backend name, without other credentials.": "Please run {{pairCommand}} on my computer to set up the open-source Clawket CLI and pair it with my phone. I authorize you to reply in this conversation with the temporary pairing code it prints (the line starting with \"Pairing code:\"). Send only the code and backend name, without other credentials.",
   "Message for your agent": "Message for your agent",
@@ -386,13 +385,12 @@
   "Pattern": "Pattern",
   "Photo": "Photo",
   "Plain": "Plain",
-  "Run in your computer terminal": "Run in your computer terminal",
+  "Run in your computer’s terminal": "Run in your computer’s terminal",
   "Scan the QR code in your terminal": "Scan the QR code in your terminal",
   "Change platform": "Change platform",
   "Choose the platform that printed your code.": "Choose the platform that printed your code.",
   "Enter pairing code": "Enter pairing code",
-  "Automatically detect agents on your computer": "Automatically detect agents on your computer",
-  "Find installed platforms, then choose one to pair.": "Find installed platforms, then choose one to pair.",
+  "Or detect automatically": "Or detect automatically",
   "Select platform": "Select platform",
   "Back to scanning": "Back to scanning"
 }

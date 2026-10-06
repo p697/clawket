@@ -103,7 +103,6 @@ export function OnboardingRoute({
     connectPairingCode: connectSecurePairingCode,
     connectPairingLink: connectSecurePairingLink,
     openGatewayScanner,
-    importGatewayQrImage,
   } = useGatewayScanner();
   const { isPro, requirePro } = useProPaywall();
   const environment: RelayServiceEnvironment = debugMode ? 'preview' : 'production';
@@ -270,7 +269,8 @@ export function OnboardingRoute({
     connectScannedPayloadRef.current = connectScannedPayload;
   }, [connectScannedPayload]);
 
-  const scanQr = useCallback((expectedBackendKind: PairableBackendKind, importImage = false) => {
+  // The scanner's own photo action delivers a saved QR through these same callbacks.
+  const scanQr = useCallback((expectedBackendKind: PairableBackendKind) => {
     const perform = () => {
       if (pairingRequestInFlightRef.current) return;
       onScanQrTapped?.(expectedBackendKind);
@@ -281,23 +281,21 @@ export function OnboardingRoute({
         errorCode: undefined,
         pairingReason: undefined,
       }));
-      const openScanner = importImage ? importGatewayQrImage : openGatewayScanner;
-      void openScanner({
+      void openGatewayScanner({
         onScanned: (result) => connectScannedPayloadRef.current(result, expectedBackendKind),
       });
     };
     if (!canBeginPairing(perform)) return;
     perform();
-  }, [canBeginPairing, onScanQrTapped, openGatewayScanner, importGatewayQrImage]);
+  }, [canBeginPairing, onScanQrTapped, openGatewayScanner]);
 
   // The chooser's generic scan (owner request 2026-09-28): every pairing QR names its backend, so
   // the scanned payload selects the step and then runs the same backend-checked claim path.
-  const scanAnyQr = useCallback((importImage = false) => {
+  const scanAnyQr = useCallback(() => {
     const perform = () => {
       if (pairingRequestInFlightRef.current) return;
       setOperation((current) => ({ ...current, active: false, errorCode: undefined }));
-      const openScanner = importImage ? importGatewayQrImage : openGatewayScanner;
-      void openScanner({
+      void openGatewayScanner({
         onScanned: (result) => {
           const backendKind = resolvePairingPayloadBackend(result);
           if (!backendKind) {
@@ -310,7 +308,7 @@ export function OnboardingRoute({
     };
     if (!canBeginPairing(perform)) return;
     perform();
-  }, [canBeginPairing, importGatewayQrImage, openGatewayScanner, t]);
+  }, [canBeginPairing, openGatewayScanner, t]);
 
   const connectFromPairingLink = useCallback(async (url: string, expectedBackendKind = initialBackend) => {
     const perform = async () => {
@@ -461,8 +459,6 @@ export function OnboardingRoute({
       onSubmitPairing={submitPairing}
       onScanQr={scanQr}
       onScanAnyQr={() => scanAnyQr()}
-      onImportAnyQr={() => scanAnyQr(true)}
-      onImportQr={(backend) => scanQr(backend, true)}
       onOpenWebsite={openWebsite}
       onErrorAction={(code) => {
         if (code === 'bridge_offline') {

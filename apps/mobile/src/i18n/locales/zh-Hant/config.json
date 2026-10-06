@@ -293,7 +293,6 @@
   "Run it myself": "自己執行指令",
   "Send this message to your agent": "把這段話發給你的 Agent",
   "Copy this message": "複製這段話",
-  "Open Terminal and run this command.": "開啟終端機，執行下面的指令。",
   "Open Terminal in your project folder and run this command.": "在專案資料夾中開啟終端機，執行下面的指令。",
   "Please run {{pairCommand}} on my computer to set up the open-source Clawket CLI and pair it with my phone. I authorize you to reply in this conversation with the temporary pairing code it prints (the line starting with \"Pairing code:\"). Send only the code and backend name, without other credentials.": "請在我的電腦上執行 {{pairCommand}}，設定開源的 Clawket CLI，供我的手機配對。我授權你在目前的對話中回覆它印出的臨時配對碼（以 \"Pairing code:\" 開頭的那一行）。只傳配對碼和對應的後端名稱，不附上其他憑證。",
   "Message for your agent": "發給 Agent 的訊息",
@@ -386,13 +385,12 @@
   "Pattern": "圖案",
   "Photo": "照片",
   "Plain": "純色",
-  "Run in your computer terminal": "在電腦終端機執行",
+  "Run in your computer’s terminal": "在電腦終端機執行",
   "Scan the QR code in your terminal": "掃描終端機裡的 QR 碼",
   "Change platform": "更換平台",
   "Choose the platform that printed your code.": "選擇產生配對碼的平台。",
   "Enter pairing code": "輸入配對碼",
-  "Automatically detect agents on your computer": "自動偵測電腦上的 Agent",
-  "Find installed platforms, then choose one to pair.": "找到已安裝的平台，選擇後即可配對。",
+  "Or detect automatically": "或者自動偵測",
   "Select platform": "選擇平台",
   "Back to scanning": "收合，改用掃碼"
 }

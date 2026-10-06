@@ -293,7 +293,6 @@
   "Run it myself": "Lo eseguo io",
   "Send this message to your agent": "Invia questo messaggio al tuo Agent",
   "Copy this message": "Copia questo messaggio",
-  "Open Terminal and run this command.": "Apri il Terminale ed esegui questo comando.",
   "Open Terminal in your project folder and run this command.": "Apri il Terminale nella cartella del progetto ed esegui questo comando.",
   "Please run {{pairCommand}} on my computer to set up the open-source Clawket CLI and pair it with my phone. I authorize you to reply in this conversation with the temporary pairing code it prints (the line starting with \"Pairing code:\"). Send only the code and backend name, without other credentials.": "Esegui {{pairCommand}} sul mio computer per configurare la CLI open source Clawket e abbinarla al mio telefono. Ti autorizzo a rispondere in questa conversazione con il codice temporaneo di abbinamento stampato (la riga che inizia con \"Pairing code:\"). Invia solo il codice e il nome del backend, senza altre credenziali.",
   "Message for your agent": "Messaggio per il tuo Agent",
@@ -386,13 +385,12 @@
   "Pattern": "Motivo",
   "Photo": "Foto",
   "Plain": "Tinta unita",
-  "Run in your computer terminal": "Esegui nel terminale del computer",
+  "Run in your computer’s terminal": "Esegui nel terminale del computer",
   "Scan the QR code in your terminal": "Scansiona il codice QR nel terminale",
   "Change platform": "Cambia piattaforma",
   "Choose the platform that printed your code.": "Scegli la piattaforma che ha generato il codice.",
   "Enter pairing code": "Inserisci il codice di abbinamento",
-  "Automatically detect agents on your computer": "Rileva automaticamente gli agenti sul computer",
-  "Find installed platforms, then choose one to pair.": "Trova le piattaforme installate e scegli quale abbinare.",
+  "Or detect automatically": "Oppure rileva automaticamente",
   "Select platform": "Scegli piattaforma",
   "Back to scanning": "Torna alla scansione"
 }

@@ -16,10 +16,8 @@ import {
   Check,
   ArrowUpRight,
   Copy,
-  ImagePlus,
   Palette,
   ScanLine,
-  Search,
   ChevronDown,
 } from 'lucide-react-native';
 import { CLAWKET_GITHUB_REPO_URL } from '../../config/app-links';
@@ -77,11 +75,10 @@ export type OnboardingScreenProps = Readonly<{
   onCopyAgentPrompt?: (prompt: string, backendKind: PairableBackendKind) => MaybePromise<void>;
   onPastePairingCode?: (backendKind: PairableBackendKind, isCurrent?: () => boolean) => MaybePromise<string | null>;
   onSubmitPairing: (submission: PairingSubmission) => MaybePromise<void>;
+  /** Opens the scanner, which also reads a QR from a saved photo. */
   onScanQr: (expectedBackendKind: PairableBackendKind) => void;
   /** The scanned QR names its own backend. */
   onScanAnyQr?: () => void;
-  onImportAnyQr?: () => void;
-  onImportQr?: (expectedBackendKind: PairableBackendKind) => void;
   onOpenWebsite: (backendKind: OnboardingWebsiteBackendKind) => void;
   onErrorAction?: (status: Extract<OnboardingStatus, { kind: 'error' }>['code']) => void;
   onRetry?: () => void;
@@ -141,8 +138,6 @@ export function OnboardingScreen({
   onSubmitPairing,
   onScanQr,
   onScanAnyQr,
-  onImportAnyQr,
-  onImportQr,
   onOpenWebsite,
   onErrorAction,
   onRetry,
@@ -188,10 +183,11 @@ export function OnboardingScreen({
   ], [t]);
   const localModelHint = backendKind === 'local-model' ? localModelEngines.find((engine) => engine.key === localModelEngine)?.hint : undefined;
   // Pi pairs the folder the command runs in (`--project` defaults to the working directory), so run from
-  // a home-directory terminal would authorize the whole home folder.
+  // a home-directory terminal would authorize the whole home folder. Other backends add no hint: the step
+  // title already says where to run the command (owner decision 2026-10-06).
   const commandHint = localModelHint ?? (backendKind === 'pi'
     ? t('Open Terminal in your project folder and run this command.')
-    : t('Open Terminal and run this command.'));
+    : undefined);
   const backendOptions = useMemo(() => [
     { ...BACKEND_OPTIONS[0], label: t('OpenClaw') },
     { ...BACKEND_OPTIONS[1], label: t('Hermes') },
@@ -345,7 +341,6 @@ export function OnboardingScreen({
   const agentMethod = agentMethodAvailable && pairingMethod === 'agent';
   const codeVisible = agentMethod || codeExpanded;
   const scan = choosing ? onScanAnyQr : () => onScanQr(backendKind);
-  const importQr = choosing ? onImportAnyQr : onImportQr ? () => onImportQr(backendKind) : undefined;
   const methodAction = agentMethodAvailable ? (agentMethod
     ? <Button testID="onboarding-pairing-method-terminal" label={t('Run it myself')} variant="text" size="sm" multiline style={styles.methodSwitch} onPress={() => { Keyboard.dismiss(); setPairingMethod('terminal'); }} />
     : <Button testID="onboarding-pairing-method-agent" label={t('Send to my agent')} variant="text" size="sm" multiline style={styles.methodSwitch} onPress={() => setPairingMethod('agent')} />) : undefined;
@@ -374,7 +369,6 @@ export function OnboardingScreen({
         ? <Button testID={choosing ? 'onboarding-hide-code' : 'onboarding-scan-qr'} label={choosing ? t('Back to scanning') : t('Scan to connect')} icon={ScanLine} variant="text"
             onPress={choosing ? () => { formRevisionRef.current += 1; Keyboard.dismiss(); setCodeExpanded(false); } : scan} />
         : <Button testID="onboarding-show-code" label={t('Enter pairing code')} variant="text" onPress={() => setCodeExpanded(true)} />}
-      {importQr ? <Button testID="onboarding-import-qr" label={t('Choose from photos')} icon={ImagePlus} variant="text" onPress={importQr} /> : null}
     </View>
   </>;
   return (
@@ -407,12 +401,11 @@ export function OnboardingScreen({
               })}
             </View>
             <View style={styles.chooserActions}>
+              {/* An alternative to the platforms above, not a next step: one heading, the command and where
+                  to run it (owner decision 2026-10-06); the terminal itself asks which Agent to pair. */}
               {environment === 'production' ? <View testID="onboarding-auto-detect" style={styles.autoDetect}>
-                <View style={styles.autoDetectHeader}><Search size={Space.lg} color={theme.colors.inkSecondary} strokeWidth={1.75} />
-                  <Text accessibilityRole="header" style={styles.autoDetectTitle}>{t('Automatically detect agents on your computer')}</Text>
-                </View>
-                <Text style={styles.subtitle}>{t('Find installed platforms, then choose one to pair.')}</Text>
-                <CommandBlock stacked command={PAIRING_CHOOSE_COMMAND} footer={t('Run in your computer terminal')} copied={copied}
+                <Text accessibilityRole="header" style={styles.autoDetectTitle}>{t('Or detect automatically')}</Text>
+                <CommandBlock stacked command={PAIRING_CHOOSE_COMMAND} footer={t('Run in your computer’s terminal')} copied={copied}
                   onCopy={onCopyCommand ? () => { void Promise.resolve(onCopyCommand(PAIRING_CHOOSE_COMMAND)).then(flashCopied, () => setLocalError(true)); } : undefined} />
               </View> : null}
               {pairingControls}
@@ -435,11 +428,11 @@ export function OnboardingScreen({
               onToggle={() => setAgentPromptExpanded((expanded) => !expanded)} accessibilityLabel={t('Message for your agent')} />
             <Button testID="onboarding-copy-agent-prompt" label={agentPromptCopied ? t('Copied') : t('Copy this message')} icon={agentPromptCopied ? Check : Copy}
               variant="neutral" haptic accessibilityLabel={t('Copy this message')} onPress={copyAgentPrompt} />
-          </FormStep> : <FormStep number="01" title={t('Run in your computer terminal')} action={methodAction}>
+          </FormStep> : <FormStep number="01" title={t('Run in your computer’s terminal')} action={methodAction}>
             {backendKind === 'local-model'
               ? <SegmentedTabs testID="onboarding-local-model-engine" size="sm" tabs={localModelEngines} active={localModelEngine} onSwitch={setLocalModelEngine} />
               : null}
-            <Text testID="onboarding-command-hint" style={styles.subtitle}>{commandHint}</Text>
+            {commandHint ? <Text testID="onboarding-command-hint" style={styles.subtitle}>{commandHint}</Text> : null}
             <CommandBlock stacked command={effectiveCommand} copied={copied} onCopy={onCopyCommand ? () => {
               void Promise.resolve(onCopyCommand(effectiveCommand)).then(flashCopied, () => setLocalError(true));
             } : undefined} />
@@ -665,8 +658,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     platformCell: { width: '50%', paddingEnd: Space.sm },
     platformPickerContent: { paddingHorizontal: Space.xl, paddingBottom: Space.md, gap: Space.sm },
     autoDetect: { gap: Space.sm },
-    autoDetectHeader: { flexDirection: 'row', alignItems: 'center', gap: Space.sm },
-    autoDetectTitle: { flex: 1, color: colors.ink, fontSize: FontSize.body, lineHeight: LineHeight.body, fontWeight: FontWeight.semibold },
+    autoDetectTitle: { color: colors.ink, fontSize: FontSize.body, lineHeight: LineHeight.body, fontWeight: FontWeight.semibold },
     secondaryActions: { gap: Space.sm },
     openSource: { paddingTop: Space.lg, paddingBottom: Space.lg, alignItems: 'center', gap: Space.xs },
     openSourceTitle: { color: colors.inkSecondary, fontSize: FontSize.secondary, lineHeight: LineHeight.secondary, fontWeight: FontWeight.semibold, textAlign: 'center' },

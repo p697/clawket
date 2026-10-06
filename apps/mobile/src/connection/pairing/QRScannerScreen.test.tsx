@@ -184,6 +184,43 @@ it('ignores buffered native results after cancel', () => {
   expect(onScanned).not.toHaveBeenCalled();
 });
 
+it('ignores buffered native results after choosing a photo', () => {
+  const onScanned = jest.fn();
+  const onChoosePhoto = jest.fn();
+  const view = render(<QRScannerScreen onScanned={onScanned} onCancel={jest.fn()} onChoosePhoto={onChoosePhoto} />);
+  measure(view);
+  const callback = view.UNSAFE_getByType(CameraView).props.onBarcodeScanned;
+  fireEvent.press(view.getByTestId('qr-scanner-photos'));
+  act(() => callback(barcode(productionCodex)));
+  expect(onChoosePhoto).toHaveBeenCalledTimes(1);
+  expect(onScanned).not.toHaveBeenCalled();
+});
+
+it('does not open the library once a QR has been delivered', () => {
+  const onScanned = jest.fn();
+  const onChoosePhoto = jest.fn();
+  const view = render(<QRScannerScreen onScanned={onScanned} onCancel={jest.fn()} onChoosePhoto={onChoosePhoto} />);
+  measure(view);
+  emit(view, barcode(productionCodex));
+  fireEvent.press(view.getByTestId('qr-scanner-photos'));
+  expect(onScanned).toHaveBeenCalledTimes(1);
+  expect(onChoosePhoto).not.toHaveBeenCalled();
+});
+
+it('lets photos replace an open invalid-QR retry without resuming the camera', () => {
+  const onScanned = jest.fn();
+  const onChoosePhoto = jest.fn();
+  const view = render(<QRScannerScreen onScanned={onScanned} onCancel={jest.fn()} onChoosePhoto={onChoosePhoto} />);
+  measure(view);
+  emit(view, barcode('not a pairing code'));
+  const retry = (Alert.alert as jest.Mock).mock.calls[0][2][0].onPress;
+  fireEvent.press(view.getByTestId('qr-scanner-photos'));
+  act(retry);
+  emit(view, barcode(productionCodex));
+  expect(onChoosePhoto).toHaveBeenCalledTimes(1);
+  expect(onScanned).not.toHaveBeenCalled();
+});
+
 it('ignores buffered native results after the scanner unmounts', () => {
   const onScanned = jest.fn();
   const view = render(<QRScannerScreen onScanned={onScanned} onCancel={jest.fn()} />);

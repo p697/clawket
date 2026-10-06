@@ -293,7 +293,6 @@
   "Run it myself": "मैं खुद चलाऊँगा",
   "Send this message to your agent": "यह संदेश अपने Agent को भेजें",
   "Copy this message": "यह संदेश कॉपी करें",
-  "Open Terminal and run this command.": "Terminal खोलें और यह कमांड चलाएँ।",
   "Open Terminal in your project folder and run this command.": "अपने प्रोजेक्ट फ़ोल्डर में Terminal खोलें और यह कमांड चलाएँ।",
   "Please run {{pairCommand}} on my computer to set up the open-source Clawket CLI and pair it with my phone. I authorize you to reply in this conversation with the temporary pairing code it prints (the line starting with \"Pairing code:\"). Send only the code and backend name, without other credentials.": "मेरे कंप्यूटर पर {{pairCommand}} चलाकर ओपन-सोर्स Clawket CLI सेट अप करें और मेरे फ़ोन से पेयर करें। मैं आपको इसका दिखाया गया अस्थायी पेयरिंग कोड (\"Pairing code:\" से शुरू होने वाली पंक्ति) इसी बातचीत में भेजने की अनुमति देता हूँ। केवल कोड और बैकएंड का नाम भेजें, अन्य क्रेडेंशियल नहीं।",
   "Message for your agent": "आपके Agent के लिए संदेश",
@@ -386,13 +385,12 @@
   "Pattern": "पैटर्न",
   "Photo": "फ़ोटो",
   "Plain": "सादा",
-  "Run in your computer terminal": "कंप्यूटर के टर्मिनल में चलाएँ",
+  "Run in your computer’s terminal": "कंप्यूटर के टर्मिनल में चलाएँ",
   "Scan the QR code in your terminal": "टर्मिनल में QR कोड स्कैन करें",
   "Change platform": "प्लेटफ़ॉर्म बदलें",
   "Choose the platform that printed your code.": "जिस प्लेटफ़ॉर्म ने कोड बनाया है, उसे चुनें।",
   "Enter pairing code": "पेयरिंग कोड दर्ज करें",
-  "Automatically detect agents on your computer": "कंप्यूटर पर एजेंट अपने आप ढूँढें",
-  "Find installed platforms, then choose one to pair.": "इंस्टॉल किए गए प्लेटफ़ॉर्म ढूँढें, फिर पेयर करने के लिए एक चुनें।",
+  "Or detect automatically": "या अपने आप ढूँढें",
   "Select platform": "प्लेटफ़ॉर्म चुनें",
   "Back to scanning": "स्कैन पर वापस जाएँ"
 }

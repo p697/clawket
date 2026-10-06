@@ -293,7 +293,6 @@
   "Run it myself": "รันด้วยตัวเอง",
   "Send this message to your agent": "ส่งข้อความนี้ให้ Agent ของคุณ",
   "Copy this message": "คัดลอกข้อความนี้",
-  "Open Terminal and run this command.": "เปิด Terminal แล้วรันคำสั่งนี้",
   "Open Terminal in your project folder and run this command.": "เปิด Terminal ในโฟลเดอร์โปรเจกต์ของคุณ แล้วรันคำสั่งนี้",
   "Please run {{pairCommand}} on my computer to set up the open-source Clawket CLI and pair it with my phone. I authorize you to reply in this conversation with the temporary pairing code it prints (the line starting with \"Pairing code:\"). Send only the code and backend name, without other credentials.": "โปรดเรียกใช้ {{pairCommand}} บนคอมพิวเตอร์ของฉันเพื่อตั้งค่า Clawket CLI แบบโอเพนซอร์สและจับคู่กับโทรศัพท์ของฉัน ฉันอนุญาตให้คุณตอบในบทสนทนานี้ด้วยรหัสจับคู่ชั่วคราวที่แสดงออกมา (บรรทัดที่ขึ้นต้นด้วย \"Pairing code:\") ส่งเฉพาะรหัสและชื่อแบ็กเอนด์ โดยไม่แนบข้อมูลรับรองอื่น",
   "Message for your agent": "ข้อความสำหรับ Agent ของคุณ",
@@ -386,13 +385,12 @@
   "Pattern": "ลวดลาย",
   "Photo": "รูปภาพ",
   "Plain": "สีพื้น",
-  "Run in your computer terminal": "เรียกใช้ในเทอร์มินัลบนคอมพิวเตอร์",
+  "Run in your computer’s terminal": "เรียกใช้ในเทอร์มินัลบนคอมพิวเตอร์",
   "Scan the QR code in your terminal": "สแกนคิวอาร์โค้ดในเทอร์มินัล",
   "Change platform": "เปลี่ยนแพลตฟอร์ม",
   "Choose the platform that printed your code.": "เลือกแพลตฟอร์มที่สร้างรหัสของคุณ",
   "Enter pairing code": "ป้อนรหัสจับคู่",
-  "Automatically detect agents on your computer": "ตรวจหา Agent บนคอมพิวเตอร์อัตโนมัติ",
-  "Find installed platforms, then choose one to pair.": "ค้นหาแพลตฟอร์มที่ติดตั้งแล้วเลือกแพลตฟอร์มที่จะจับคู่",
+  "Or detect automatically": "หรือตรวจหาอัตโนมัติ",
   "Select platform": "เลือกแพลตฟอร์ม",
   "Back to scanning": "กลับไปสแกน"
 }

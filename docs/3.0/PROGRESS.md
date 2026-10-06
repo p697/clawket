@@ -1,5 +1,11 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-06 配对首页文案与布局精简（负责人看过真机截图后批准全部建议）。
+  - 两列平台格子去掉右侧箭头（`ChoiceRow compact` 不画 chevron，带说明的列表行保留）。「自动检测电脑上的 Agent」改为「或者自动检测」/ `Or detect automatically`，点明它和上面的平台二选一；删掉放大镜和「发现已安装的平台，选择后即可配对。」，选哪个 Agent 由终端询问。命令卡脚注英文改为 `Run in your computer’s terminal`（中文不变），复制胶囊显示「复制」，读屏仍读「复制命令」。
+  - 「从相册选择」从首页和平台步骤页移进扫码页，与「取消」并排成同款媒体胶囊：扫码页先关闭（与扫码结果、取消同一 350ms 时序）再打开相册，识别结果和取消都回到打开扫码时的同一组回调，后端与环境校验不变；重复点击、已交付二维码或无效码重试都不会再开相册或恢复相机。`useGatewayScanner` 不再对外提供 `importGatewayQrImage`（Mac Catalyst 与待添加连接流程仍在内部使用）。英文 `Enter pairing code` 保留全称：相册移走后它独占一行，并与终端打印的 `Pairing code:` 对应，原先缩短它只是为了和相册挤进一行。
+  - 平台步骤页去掉通用的「打开终端，运行下面的命令。」（步骤标题已说明），保留 Pi 项目文件夹提示和本地模型引擎提示。19 语言新增 1 条、改键 1 条、删除 3 条；README 中英、Mobile AGENTS、设计系统、设计落地和页面规格同步。
+  - 逐文件 in-band：OnboardingScreen 48、OnboardingRoute 28、QRScannerScreen 15、QRScannerScreen.view 3、GatewayScannerContext 5 项（共 99）通过；heavy 租约下 Mobile 类型检查通过（首跑发现设计图库仍传已删除的 `onImportQr`，已修正后重跑），i18n strict（19 语言、0 missing）、UI style（257 文件）、设计系统文档、agent 文档（8 对 / 5 例）与 whitespace 通过。完整门禁由 PR CI 验证。未做真机视觉验收，未构建或发布；已安装的 App 需新版本才会看到。
+
 - 2026-10-06 — Bridge legacy npm executable-link update fix (issue #182).
   - 本机 Codex Bridge 3.1.10 通过 npm `.bin/clawket` 启动，链接和真实 bundle 均存在；3.1.12 升级器仅匹配 `dist/index.js`，在入口发现阶段误拒绝。已用认证停止、更新、显式启动完成该实例迁移，运行版本 3.1.12 / 本机 doctor healthy，配置与会话文件 SHA-256 不变；手机端收发未实测。
   - 候选源码对 npm `.bin` / 全局 `bin` 链接解析真实 bundle，并校验有界 package/bin 清单；保留精确 backend/config、重复 owner、认证和 idle/rollback 保护。错误只添加后端与固定 scope 类别，不输出路径或凭据。回归覆盖 OpenClaw/Hermes/Codex/Claude Code/Pi、链接与直路径重复、坏链接/目录/假包、scope/命令拒绝和 lifecycle 捕获。

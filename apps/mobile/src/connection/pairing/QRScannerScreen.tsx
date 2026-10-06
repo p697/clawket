@@ -10,9 +10,11 @@ import { isBarcodeInsideScanFrame, type QrScanFrame } from './qr-scan-frame';
 type Props = {
   onScanned: (result: QRScanResult) => void;
   onCancel: () => void;
+  /** Reads the QR from a saved image instead; the scanner stops before handing over. */
+  onChoosePhoto?: () => void;
 };
 
-export function QRScannerScreen({ onScanned, onCancel }: Props): React.JSX.Element {
+export function QRScannerScreen({ onScanned, onCancel, onChoosePhoto }: Props): React.JSX.Element {
   const { theme: { colors } } = useAppTheme();
   const { t } = useTranslation('config');
   const [scanned, setScanned] = useState(false);
@@ -45,13 +47,24 @@ export function QRScannerScreen({ onScanned, onCancel }: Props): React.JSX.Eleme
     };
   }, []);
 
-  const cancelScan = useCallback(() => {
+  const retireScan = useCallback(() => {
     scanRetiredRef.current = true;
     ++measurementGenerationRef.current;
     scanFrameRef.current = null;
     scanAcceptedRef.current = true;
+  }, []);
+
+  const cancelScan = useCallback(() => {
+    retireScan();
     onCancel();
-  }, [onCancel]);
+  }, [onCancel, retireScan]);
+
+  // One handover per scanner: a second tap or a QR already delivered must not open the library again.
+  const choosePhoto = useCallback(() => {
+    if (!onChoosePhoto || scanned || scanRetiredRef.current) return;
+    retireScan();
+    onChoosePhoto();
+  }, [onChoosePhoto, retireScan, scanned]);
 
   const handleBarCodeScanned = useCallback(
     (result: BarcodeScanningResult) => {
@@ -107,10 +120,16 @@ export function QRScannerScreen({ onScanned, onCancel }: Props): React.JSX.Eleme
         </View>
         <View style={styles.overlayBottom}>
           <Text style={styles.hint}>{t('Scan the pairing QR code')}</Text>
-          {/* A filled media capsule, like the viewer's image actions: buttons carry no outline (owner decision 2026-09-30). */}
-          <Pressable testID="qr-scanner-cancel" accessibilityRole="button" onPress={cancelScan} style={({ pressed }) => [styles.cancelButton, pressed ? styles.cancelPressed : null]}>
-            <Text style={styles.cancelText}>{t('Cancel', { ns: 'common' })}</Text>
-          </Pressable>
+          {/* Filled media capsules, like the viewer's image actions: buttons carry no outline (owner decision 2026-09-30).
+              Photos lives here rather than on each pairing page (owner decision 2026-10-06), as in other scanners. */}
+          <View style={styles.actions}>
+            {onChoosePhoto ? <Pressable testID="qr-scanner-photos" accessibilityRole="button" onPress={choosePhoto} style={({ pressed }) => [styles.capsule, pressed ? styles.capsulePressed : null]}>
+              <Text style={styles.capsuleText}>{t('Choose from photos')}</Text>
+            </Pressable> : null}
+            <Pressable testID="qr-scanner-cancel" accessibilityRole="button" onPress={cancelScan} style={({ pressed }) => [styles.capsule, pressed ? styles.capsulePressed : null]}>
+              <Text style={styles.capsuleText}>{t('Cancel', { ns: 'common' })}</Text>
+            </Pressable>
+          </View>
         </View>
       </View>
     </View>
@@ -121,16 +140,16 @@ const SCAN_SIZE = 250;
 
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  cancelButton: {
+  actions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: Space.md, marginTop: Space.lg, paddingHorizontal: Space.xl },
+  capsule: {
     minHeight: ControlSize.floatingButton,
-    marginTop: Space.lg,
     paddingHorizontal: Space.xl,
     borderRadius: Radius.full,
     justifyContent: 'center',
     backgroundColor: PresentationColor.mediaControl,
   },
-  cancelPressed: { opacity: Motion.pressedOpacity },
-  cancelText: { color: PresentationColor.onMedia, fontSize: FontSize.secondary, lineHeight: LineHeight.secondary, fontWeight: FontWeight.semibold },
+  capsulePressed: { opacity: Motion.pressedOpacity },
+  capsuleText: { color: PresentationColor.onMedia, fontSize: FontSize.secondary, lineHeight: LineHeight.secondary, fontWeight: FontWeight.semibold },
   overlay: { ...StyleSheet.absoluteFill },
   overlayTop: { flex: 1, backgroundColor: PresentationColor.mediaOverlayStrong },
   overlayMiddle: { flexDirection: 'row', height: SCAN_SIZE },
