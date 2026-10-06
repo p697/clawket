@@ -86,7 +86,6 @@ import {
   mergeNewestFirstMessages,
   StreamSegment,
 } from "./liveRunThread";
-import { liveTailBeforeFinal } from "./streamText";
 import {
   clearSessionRunState,
   markSessionRunDelta,
@@ -2277,21 +2276,12 @@ export function useChatController({
         const tools = chatToolMessagesRef.current;
         const hasFinalAttachments = Boolean(update.finalMessage?.artifactAttachments?.length || update.finalMessage?.imageUris?.length || update.finalMessage?.fileAttachments?.length);
         const completedText = hasFinalAttachments ? update.finalMessage!.text : (update.finalMessage?.text || streamText);
-        const completed = update.stopReason !== "cancelled" && update.stopReason !== "error";
-        const finalText = completed ? completedText : streamText;
-        const tail = finalReplyTail(finalText, segments, streamText);
-        // A final that repeats only the live tail's last paragraphs keeps the
-        // earlier ones as their own row, in the bubble that showed them.
-        const preface = completed ? liveTailBeforeFinal(streamText, tail) : undefined;
-        if (segments.length > 0 || tools.length > 0 || preface) {
-          const prefaceAt = chatStreamTimestampRef.current ?? Date.now();
-          const finishedSegments = preface ? [...segments, {
-            id: `stream_segment_${prefaceAt}_${segments.length}`,
-            renderKey: liveReplyRenderKey(activeRunStartedAt, update.runId, segments.length),
-            text: preface, timestampMs: prefaceAt, afterToolCount: tools.length,
-          }] : segments;
+        if (segments.length > 0 || tools.length > 0) {
+          const completed = update.stopReason !== "cancelled" && update.stopReason !== "error";
+          const finalText = completed
+            ? completedText : streamText;
           const rows = finishLiveRunPresentation({
-            segments: finishedSegments, tools, tail,
+            segments, tools, tail: finalReplyTail(finalText, segments, streamText),
             runId: update.runId, startedAt: activeRunStartedAt, turnId: finishedTurnId,
             finalMessage: completed ? update.finalMessage : undefined,
             cancelled: update.stopReason === "cancelled",
@@ -2312,6 +2302,7 @@ export function useChatController({
             role: "assistant", text: streamText, timestampMs: Date.now(), ...(finishedTurnId ? { turnId: finishedTurnId } : {}),
           }));
         } else if (update.stopReason !== "error") {
+          const finalText = completedText;
           if (finalText.trim() || hasFinalAttachments) {
             const finalMessage: UiMessage = {
               ...(update.finalMessage ?? { id: `final_${update.runId}`, role: "assistant" as const, timestampMs: Date.now() }),

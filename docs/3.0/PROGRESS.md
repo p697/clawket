@@ -1,11 +1,11 @@
 # PROGRESS · Clawket 3.0 进度日志
 
 - 2026-10-06 工作过程动效、去掉新步骤提示、失败不再标红（负责人要求，「你来把控」）。
-  - 真机录屏逐帧（Android QA 包，OpenClaw 新测试会话 6 步）定位三处闪动：新行插入时下方各行一帧跳一整行再淡入；「思考中」与运行步骤来回替换时整行先消失再从透明淡入；同一步骤被历史以 `toolresult_` 身份替换后又淡入一次。另见回合结束时最后一段之前的那段文字消失约 0.6 秒、随历史插回中间。
+  - 真机录屏逐帧（Android QA 包，OpenClaw 新测试会话 6 步）定位三处闪动：新行插入时下方各行一帧跳一整行再淡入；「思考中」与运行步骤来回替换时整行先消失再从透明淡入；同一步骤被历史以 `toolresult_` 身份替换后又淡入一次。另见回合结束时一段过程说明约 1 秒后才插到最终回复上方：OpenClaw Codex 引擎的过程说明只以 `item`/`preamble` 进度事件推送，手机端目前只靠历史补上，另起任务处理。
   - 工作过程：顶部 24 行 `LinearTransition` 平滑让位（200 ms），新行仍从上方滑入，「思考中」与步骤交叉淡化，步骤结束时图标和时间淡入替换；减动效只淡入淡出；步骤按工具调用 ID 保持身份；往下翻看时用 `maintainVisibleContentPosition` 原位不动且不做让位动画。删掉「N 个新步骤」浮层与 3 个文案键（19 语言）。面板收起时保留这一轮的状态和说明，不再闪回「思考中」。
   - 失败步骤：工作过程行改为普通命令样式，右侧写「失败」（与时长同色），不再显示红叉和红色原因；回执即使最后一步失败也保持普通摘要；步骤详情状态用次要文字色。删掉不再使用的 `failureReason` / `describeFailedStep` 和回执的 `failed` 字段。
-  - 聊天：回执落在已显示的回复下时淡入 200 ms；回合结束时若最终回复只是实时尾段的最后几段，前面的段落保留为自己的气泡（`liveTailBeforeFinal`，只在段落边界拆分），不再先消失再插回。
-  - 单文件串行通过：ThreadView 224、controller adapter-events 55 / contract 115 / queue 112、WorkPanel 1（新增）、streamText 7（新增）、turn-work 24、tool-activity-model 11、ToolDetailModal 6、Thread model 30；i18n 严格检查、UI 样式检查通过。真机动效观感待负责人验收；未打包、未发布。
+  - 聊天：回执落在已显示的回复下时淡入 200 ms。
+  - 单文件串行通过（重基到 PR204/207 之后复跑受影响文件）：ThreadView 225、Thread model 32、toolGrouping 7、WorkPanel 1（新增）、turn-work 24、tool-activity-model 11、ToolDetailModal 6；i18n 严格检查、UI 样式检查通过。Android QA 包真机录屏确认新行滑入与让位、「思考中」交叉淡化、收起保留「正在回复… 5 步」、回执普通样式；iPhone 观感待负责人验收；未打包、未发布。
 
 - 2026-10-06 聊天页顶部标题：连接名过长不再吞掉会话名（负责人看过对比图后要求落地）。
   - 现场：Codex / Claude Code 的 Agent 名就是 Bridge 生成的连接名「Codex · 电脑名」，标题再接「 · 会话名」，402pt iPhone 上一行只有约 210pt，尾部省略把会话名整段吃掉。
