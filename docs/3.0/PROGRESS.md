@@ -1,5 +1,10 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-06 负责人授权基于最新 main 发布 Bridge 3.1.16 patch。
+  - 起点 `be4ca502`（PR208），纳入 Claude 首次输入前模型读取、Codex 流式段落/分页历史排序与官方 clawket.ai 域名映射；仅公开 CLI manifest/lock、publish guard 升版，内部 workspace/App 版本保持。
+  - 发布前验证与固定候选准备中；要求 v1 回放、最新只读生产快照矩阵、双锁文件审计、精确源码 CI（含桌面）、包 provenance、固定包 dry-run、空认证候选与公共安装。详细记录见[发布记录](../3.1/bridge-3.1.16-release.md)。本次发布不更新或重启现有 Bridge、不分发 App、不部署 Worker，手机/Desktop 验收保持独立。
+
+
 - 2026-10-06 官方连接域名统一（负责人授权分阶段方案与 Cloudflare 操作）。
   - 统一 OpenClaw/Hermes/Codex/Claude Code/Pi Production 与 Preview、本地模型独立服务的 22 个入口为 clawket.ai；18 个新增域名绑定至原 Worker，最终新/旧 TLS/JSON health 各 22/22 通过。WAF 精确域名集覆盖 v1/v2 API、WS/health/关联文件/邀请页，原有 120/min WS、20/min 配对限流动作/阈值与 Speech 例外保留。
   - Core 唯一纯域名映射供 CLI/Mobile/Registry 使用；旧官方地址运行时迁移、手机地址事务迁移、Registry 旧记录返回新 Relay，保留连接 ID/凭据/邀请与自建地址。去掉 OpenClaw Workers challenge fallback；Pi/本地模型同 Registry 重配复用身份。11 Registry 固定候选与 9 Relay 配置更新已上线，2 个 Production Relay 无需更新；22 项绑定/源码 hash/部署/迁移锚点读回通过。11 组旧注册配对完成新旧域名双向 WS 与保存 token 重连，9 组加密六位码/邀请通过；33 个专属测试 KV 键清理且读回不存在，测试凭据文件删除。v1 42 项、生产快照矩阵 4 用例/24 阶段与定向测试/类型检查通过，完整门禁由 PR208 CI 执行，详见[迁移记录](../3.1/connection-domains.md)。

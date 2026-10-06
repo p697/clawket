@@ -58,7 +58,7 @@ test('blocks before reading or changing the package when compatibility fails', a
   assert.equal(wrote, false);
 });
 
-test('publishes the decision-locked 3.1.15 version without mutating the manifest', async () => {
+test('publishes the decision-locked 3.1.16 version without mutating the manifest', async () => {
   const calls = [];
   const output = [];
 
@@ -66,7 +66,7 @@ test('publishes the decision-locked 3.1.15 version without mutating the manifest
     env: {
       CLAWKET_PACKAGE_DEFAULT_REGISTRY_URL: 'https://registry.example.com',
     },
-    readText: async () => JSON.stringify({ name: '@p697/clawket', version: '3.1.15' }),
+    readText: async () => JSON.stringify({ name: '@p697/clawket', version: '3.1.16' }),
     spawn: (command, args, options) => {
       calls.push({ command, args, options });
       return { status: 0 };
@@ -79,7 +79,7 @@ test('publishes the decision-locked 3.1.15 version without mutating the manifest
     ['npm', ['run', 'test:compat']],
     ['npm', ['run', '--workspace', '@p697/clawket', 'publish:dry-run']],
   ]);
-  assert.match(output.join(''), /Publishing @p697\/clawket version: 3\.1\.15/);
+  assert.match(output.join(''), /Publishing @p697\/clawket version: 3\.1\.16/);
 });
 
 test('fails closed when the package version would violate the 3.1 release', async () => {
@@ -88,10 +88,10 @@ test('fails closed when the package version would violate the 3.1 release', asyn
       env: {
         CLAWKET_PACKAGE_DEFAULT_REGISTRY_URL: 'https://registry.example.com',
       },
-      readText: async () => JSON.stringify({ name: '@p697/clawket', version: '3.1.16' }),
+      readText: async () => JSON.stringify({ name: '@p697/clawket', version: '3.1.17' }),
       spawn: () => ({ status: 0 }),
       stdout: { write() {} },
     }),
-    /Expected @p697\/clawket version 3\.1\.15, found 3\.1\.16/,
+    /Expected @p697\/clawket version 3\.1\.16, found 3\.1\.17/,
   );
 });
