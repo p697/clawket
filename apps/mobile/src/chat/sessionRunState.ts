@@ -1,4 +1,6 @@
 import { validTurnIdentity } from './turnIdentity';
+import type { StreamSegment } from './liveRunThread';
+import type { UiMessage } from '../types/chat';
 
 export type SessionRunState = {
   runId: string;
@@ -8,6 +10,8 @@ export type SessionRunState = {
   streamText: string | null;
   startedAt: number;
   streamTimestampMs?: number;
+  /** Scoped in-memory Codex rows; streamText retains the cumulative wire snapshot. */
+  presentation?: { owner: object; segments: StreamSegment[]; tools: UiMessage[] };
 };
 
 function shouldReplaceStreamText(previous: string | null, next: string): boolean {
@@ -24,7 +28,7 @@ export function markSessionRunStarted(
   const prev = map.get(sessionKey);
   const next: SessionRunState = {
     runId,
-    ...(prev?.runId === runId ? { turnId: prev.turnId, inputMessageId: prev.inputMessageId, inputMessageKey: prev.inputMessageKey } : {}),
+    ...(prev?.runId === runId ? { turnId: prev.turnId, inputMessageId: prev.inputMessageId, inputMessageKey: prev.inputMessageKey, presentation: prev.presentation } : {}),
     streamText: prev?.runId === runId ? prev.streamText : null,
     startedAt: prev?.runId === runId ? prev.startedAt : startedAt,
     streamTimestampMs: prev?.runId === runId ? prev.streamTimestampMs : undefined,
@@ -45,7 +49,7 @@ export function markSessionRunDelta(
   const prev = map.get(sessionKey);
   const next: SessionRunState = {
     runId,
-    ...(prev?.runId === runId ? { turnId: prev.turnId, inputMessageId: prev.inputMessageId, inputMessageKey: prev.inputMessageKey } : {}),
+    ...(prev?.runId === runId ? { turnId: prev.turnId, inputMessageId: prev.inputMessageId, inputMessageKey: prev.inputMessageKey, presentation: prev.presentation } : {}),
     streamText: prev?.runId === runId
       ? (authoritative || shouldReplaceStreamText(prev.streamText, text) ? text : prev.streamText)
       : text,

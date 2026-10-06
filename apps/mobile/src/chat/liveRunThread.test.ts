@@ -64,6 +64,28 @@ describe('buildLiveRunListData', () => {
     expect(rows.at(-1)?.renderKey).toBe(liveReplyRenderKey(1000, 'bridge-main', 2));
   });
 
+  it('keeps distinct native paragraphs without tools or guides out of the growing cumulative bubble', () => {
+    const history = sameRunHistory().filter(row => row.role === 'assistant' || row.id === 'main');
+    const text = 'Checking.\n\nContinuing.\n\nStill waiting. More text.';
+    const recovered = recoverLiveRunPresentation(text, history, 'native-main', 'main');
+    expect(recovered.segments.map(row => row.id)).toEqual(['a', 'b']);
+    expect(recovered.tail).toBe('Still waiting. More text.');
+    const rows = buildLiveRunListData({ historyMessages: history, streamSegments: [], toolMessages: [],
+      liveStreamText: text, liveStreamStartedAt: 1000, activeRunId: 'bridge-main',
+      activeTurnId: 'native-main', inputMessageId: 'main' }).reverse();
+    expect(rows.map(row => row.text)).toEqual(['Main task', 'Checking.', 'Continuing.', 'Still waiting. More text.']);
+  });
+
+  it('retains intentional repeated native prose as separate paragraphs within the confirmed turn', () => {
+    const history: UiMessage[] = [{ id: 'main', role: 'user', text: 'Task', turnId: 'turn' },
+      { id: 'a', role: 'assistant', text: 'Still checking.', turnId: 'turn' },
+      { id: 'b', role: 'assistant', text: 'Still checking.', turnId: 'turn' }];
+    const text = 'Still checking.\n\nStill checking. More text.';
+    const recovered = recoverLiveRunPresentation(text, history, 'turn', 'main');
+    expect(recovered.segments.map(row => row.id)).toEqual(['a']);
+    expect(recovered.tail).toBe('Still checking. More text.');
+  });
+
   it.each([undefined, 0, Number.NaN])('keeps an unreported or invalid canonical tail clock on the established fallback (%s)', timestampMs => {
     const history = sameRunHistory().filter(row => row.role !== 'tool');
     history.at(-1)!.timestampMs = timestampMs;

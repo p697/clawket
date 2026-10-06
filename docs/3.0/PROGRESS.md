@@ -1,5 +1,11 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-06 Codex 长回合重复/合并文本：手机控制器已确定复现并修复两个边界丢失问题。
+  - 重连清空已显示段落/工具，只记住尾段；历史未返回时累计 snapshot 被重新当作整段显示。新增真实 controller 两种文本/工具先到的12段回归，旧实现均红；当前同 adapter/run 的段落、工具顺序、render key/首见时钟保存在内存，累计 wire 文本不再被尾段覆盖，返回会话也可减去已显示前缀。只保存展示状态，不持久化、不重发或恢复 Native writer。
+  - 原生多段 commentary 没有工具/guide 间隔时，恢复未把独立同回合 assistant item 当作段落；纯投影旧实现回归红。现在显式原始输入/turn 锚点与精确有序前缀可确认段落并逐次延长；保留当前尾段 cell，重复原生正文仍独立，缺锚点/不完整页不能猜测或删除 live-only 内容。退休 adapter 不能恢复这批展示行。
+  - 单文件串行通过 controller 115、liveRunThread 24、sessionRunState 8、historyMergePolicy 97（244项，7项新增），覆盖历史等待、无工具多段、结束累计回复、跨会话后台增长、重复正文、OpenClaw/Hermes既有路径。Mobile 类型、UI和文档检查通过；完整门禁交给 PR CI，未跑本地全套。此为确定性控制器/展示证据，不冒称真机长回合已验收。
+  - 仅 Mobile 展示逻辑与相应规则/规格更新，保持 Bridge/Relay/协议/版本。安装客户端需后续授权更新才能收到；本轮不构建分发包、OTA、发布或替换运行中 Bridge，网络断连调查继续暂缓。
+
 - 2026-10-06 手机 Codex 续聊后 Desktop 整页错误已定位到文本输入协议缺字段，Bridge 窄修完成。
   - 当前会话 Native turn/start 在01:21:51.579UTC成功，34ms后Desktop错误边界；01:27另两次相同静态栈。安装版26.930.51102/build13100的continuation detector读取text_elements.some，而Clawket start/steer和快照投影允许缺该数组。推理接受不等于Desktop渲染兼容，不归因网络或两端只能择一连接。
   - 本地/桌面owner的普通文本start/steer显式空数组；快照仅补缺失数组，双表示保留既有合法元数据、原文、图片与Native身份，畸形既有数组在广播前拒绝。不改Native文件/ownership/replay/其他后端。原代码回归先红：快照5项、实际service dispatch2项；修后desktop-state12与service339项逐文件串行通过，窄修门禁继续。
@@ -1849,6 +1855,7 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 
 | 编号 | 事项 | 怎么做 | 验证方法 | 状态 |
 |---|---|---|---|---|
+| HT-CODEX-PARAGRAPHS-1006 | Codex 长回合多段回复的手机验收 | 用包含本轮修复的开发客户端或后续授权更新，在独立会话观察多段 commentary/工具回复；过程中重连、切换会话再返回，并继续到结束。 | 各段只显示一次，段落/工具顺序、原气泡 identity/时间保持；历史分批回来不会新增累计大气泡，结束不会重复全文。 | 244项窄回归、类型与本地文档/UI检查通过；物理手机长回合待负责人验收。本轮不发起分发或Bridge/服务端发布。 |
 | HT-SEND-SHEET-AUDIT-1006 | Send 弹窗 PR 的依赖审计阻挡决策 | 已由独立PR #181修复source-map-js/tinypool并合入main，负责人确认继续。 | UI PR rebase fresh main 后完整 required CI 通过才合并。 | 人工决策已完成；PR #179已重基，代理继续CI与合并，无发布动作。 |
 | HT-CODEX-DESKTOP-SEND-1005 | 修复交付后已有 Desktop 会话的手机验收 | 3.1.12已公开；负责人用原scope/config更新 Bridge，保持当前客户端，在受影响旧会话续聊两轮并打开原桌面会话。 | 原 ID/历史保留，两轮均成功；IPC 恢复后没有重复发送，桌面重开正常。旧失败消息先核对实际历史，未知执行不重发。 | 已完成只读真实owner对照与407项窄回归，公开Bridge3.1.12包含修复；运行中3.1.11尚未替换，phone/GUI验收待更新后进行。 |
 | HT-CODEX-DESKTOP-REOPEN-1005 | 连续远程发消息后原 Desktop 会话重开的真实验收 | 负责人在正常桌面界面打开同一自有 QA 会话；若报错，保留页面与重试结果。Desktop GUI 控制此前被拒绝，本轮不退出或重启 Desktop 绕过该限制。 | 对照手机原始 turn/receipt 与桌面重开、Retry；新候选成功不能替代原故障复现。 | ownership/history-generation 修复与 CI 通过；真实 Desktop 重开 checkpoint 待负责人，未宣称问题已解决。 |

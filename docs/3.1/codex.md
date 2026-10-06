@@ -56,6 +56,8 @@ Visiting old chats must not permanently consume Desktop subscriptions. The 64-fo
 
 Steering echoes have no ordinary-send key. Mobile retains the acknowledged local row when a stale history read contains an identical earlier guide with valid clocks more than 60 seconds apart; missing send metadata cannot give that earlier native item the later row's render key. A subsequent matching native guide can adopt the local identity, and an already known exact native/history identity still owns its canonical clock. Missing clocks and ordinary legacy send matching retain their existing behavior. This prevents a reproducible presentation-alias error; a completed history read does not establish which items the phone received while the turn was active.
 
+Mobile retains Codex paragraph/tool boundaries in memory across same-adapter reconnects and session visits, preserving row identities and paragraph clocks while keeping cumulative wire text separate from the visible tail. A later snapshot subtracts those ordered boundaries before displaying new text, even when history is still pending. Confirmed native assistant items within the original input's turn also establish paragraph boundaries when no tool or guide intervenes. Recovery extends only a matching canonical prefix; incomplete pages cannot erase live-only rows or invent an original input, and repeated native prose stays distinct. This is client presentation state, not persisted native history or permission to resume/replay work.
+
 Codex Registry/Relay resources, room classes, pairing state, secrets and Preview deployment units are isolated from OpenClaw, Hermes and Pi. Existing clients and transports keep their contracts and 8 MiB frame limits.
 
 ## Research baseline

@@ -6,6 +6,19 @@ import {
 } from './sessionRunState';
 
 describe('sessionRunState', () => {
+  it('retains in-memory paragraph rows only for the same run and clears them on retirement', () => {
+    const map = new Map();
+    const state = markSessionRunDelta(map, 'chat', 'run', 'A.\n\nB.', 1000);
+    const presentation = { owner: {}, segments: [{ id: 'a', text: 'A.', timestampMs: 1000 }], tools: [] };
+    state.presentation = presentation;
+    expect(markSessionRunStarted(map, 'chat', 'run', 2000).presentation).toBe(presentation);
+    const next = markSessionRunDelta(map, 'chat', 'run', 'A.\n\nB. More.', 3000, true);
+    expect(next.presentation).toBe(presentation);
+    expect(next.streamText).toBe('A.\n\nB. More.');
+    expect(markSessionRunStarted(map, 'chat', 'new-run', 4000).presentation).toBeUndefined();
+    clearSessionRunState(map, 'chat', 'new-run');
+    expect(map.has('chat')).toBe(false);
+  });
   it('enriches only the original run and retains its text and clock across repeated starts', () => {
     const map = new Map();
     markSessionRunDelta(map, 'chat', 'run', 'A before the tool', 1000);

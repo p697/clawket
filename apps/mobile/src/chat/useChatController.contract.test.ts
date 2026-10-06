@@ -2963,6 +2963,113 @@ it('does not restore an old history snapshot after a live terminal event', async
     expect(adapter.prompt).not.toHaveBeenCalled();
   });
 
+  it.each(['text', 'tool'] as const)('keeps long Codex paragraph boundaries when %s arrives before reconnect history', async first => {
+    const adapter = createAdapter('ready', 'codex');
+    historyMock.messages = [{ id: 'main', role: 'user', text: 'Long task', turnId: 'native-turn' }];
+    const { result } = renderHook(() => useChatController({ adapter: adapter as any, debugMode: false, showAgentAvatar: true }));
+    const events = () => jest.mocked(useAdapterChatEvents).mock.calls.at(-1)![0];
+    const run = { sessionKey: 'agent:main:main', runId: 'run', activeRunId: 'run', isSending: true as const,
+      turnId: 'native-turn', inputMessageId: 'main' };
+    const paragraphs = Array.from({ length: 12 }, (_, index) => `Paragraph ${index}: checking the long task.`);
+    const chunk = (count: number) => events().onUpdate?.({ type: 'agent_message_chunk', ...run,
+      visible: true, textMode: 'snapshot', text: paragraphs.slice(0, count).join('\n\n') });
+    const tool = (index: number) => events().onUpdate?.({ type: 'tool_call', ...run, toolCallId: `step-${index}`, merge: false,
+      message: { id: `toolcall_step-${index}`, role: 'tool', text: '', toolName: 'exec', toolStatus: 'running' } });
+    await act(async () => {
+      events().onState?.('ready');
+      events().onUpdate?.({ type: 'run_started', ...run, startedAtMs: Date.now() });
+      for (let count = 1; count <= 10; count++) { chunk(count); tool(count); }
+      chunk(11);
+    });
+    const before = [...result.current.listData].reverse();
+    expect(before.filter(row => row.role === 'assistant').map(row => row.text)).toEqual(paragraphs.slice(0, 11));
+    const keys = before.filter(row => row.role === 'assistant').map(row => row.renderKey ?? row.id);
+    // The cache contains separately persisted native rows, as in the phone
+    // screenshots. A pending head must not display them again in a rollup.
+    historyMock.messages = before.map((row, index) => row.role === 'assistant'
+      ? { ...row, id: `native-${index}`, renderKey: undefined, turnId: 'native-turn' } : row);
+    const pendingHistory = deferred<void>();
+    historyMock.loadSessionsAndHistory.mockReturnValueOnce(pendingHistory.promise);
+    await act(async () => { events().onState?.('reconnecting'); });
+    await act(async () => { events().onState?.('ready'); });
+    await act(async () => { if (first === 'tool') tool(11); chunk(12); });
+    const rows = [...result.current.listData].reverse();
+    expect(rows.filter(row => row.role === 'assistant').map(row => row.text)).toEqual(first === 'tool'
+      ? paragraphs : [...paragraphs.slice(0, 10), paragraphs.slice(10).join('\n\n')]);
+    expect(rows.filter(row => row.role === 'assistant').slice(0, 10).map(row => row.renderKey ?? row.id)).toEqual(keys.slice(0, 10));
+    expect(rows.filter(row => row.role === 'tool').map(row => row.id)).toEqual(Array.from({ length: first === 'tool' ? 11 : 10 }, (_, index) => `toolcall_step-${index + 1}`));
+    await act(async () => { pendingHistory.resolve(); await pendingHistory.promise; });
+    expect(adapter.prompt).not.toHaveBeenCalled();
+  });
+
+  it('extends native commentary boundaries without tools across successive history reads and completion', async () => {
+    const adapter = createAdapter('ready', 'codex');
+    const turnId = 'native-turn';
+    const paragraphs = ['First update.', 'Second update.', 'Third update.', 'Final answer.'];
+    const user = { id: 'main', role: 'user', text: 'Task', turnId };
+    const native = (count: number) => [user, ...paragraphs.slice(0, count).map((text, index) => ({
+      id: `native-${index}`, role: 'assistant', text, turnId, timestampMs: 1000 + index * 1000,
+    }))];
+    historyMock.messages = native(2);
+    const { result, rerender } = renderHook(() => useChatController({ adapter: adapter as any, debugMode: false, showAgentAvatar: true }));
+    const events = () => jest.mocked(useAdapterChatEvents).mock.calls.at(-1)![0];
+    const run = { sessionKey: 'agent:main:main', runId: 'run', activeRunId: 'run', isSending: true as const,
+      turnId, inputMessageId: 'main' };
+    await act(async () => {
+      events().onState?.('ready');
+      events().onUpdate?.({ type: 'run_started', ...run, startedAtMs: 1000 });
+      events().onUpdate?.({ type: 'agent_message_chunk', ...run, visible: true, textMode: 'snapshot', text: paragraphs.slice(0, 2).join('\n\n') });
+    });
+    expect([...result.current.listData].reverse().filter(row => row.role === 'assistant').map(row => row.text)).toEqual(paragraphs.slice(0, 2));
+    const initialKeys = [...result.current.listData].reverse().filter(row => row.role === 'assistant').map(row => row.renderKey ?? row.id);
+    historyMock.messages = native(3); rerender({});
+    await act(async () => {
+      events().onUpdate?.({ type: 'agent_message_chunk', ...run, visible: true, textMode: 'snapshot', text: paragraphs.slice(0, 3).join('\n\n') });
+      events().onUpdate?.({ type: 'tool_call', ...run, toolCallId: 'step', merge: false,
+        message: { id: 'toolcall_step', role: 'tool', text: '', toolName: 'exec', toolStatus: 'running' } });
+      events().onUpdate?.({ type: 'agent_message_chunk', ...run, visible: true, textMode: 'snapshot', text: paragraphs.join('\n\n') });
+    });
+    expect([...result.current.listData].reverse().filter(row => row.role === 'assistant').map(row => row.text)).toEqual(paragraphs);
+    expect([...result.current.listData].reverse().filter(row => row.role === 'assistant').slice(0, 2).map(row => row.renderKey ?? row.id)).toEqual(initialKeys);
+    await act(async () => {
+      events().onUpdate?.({ type: 'run_finished', sessionKey: run.sessionKey, runId: run.runId, activeRunId: null,
+        isSending: false, stopReason: 'end_turn', finalMessage: { id: 'final', role: 'assistant', text: paragraphs.join('\n\n') } });
+    });
+    expect(historyMock.messages.filter(row => row.role === 'assistant').map(row => row.text)).toEqual(paragraphs);
+    expect(adapter.prompt).not.toHaveBeenCalled();
+  });
+
+  it('restores Codex rows after a session visit while consuming newer cumulative offscreen text', async () => {
+    const adapter = createAdapter('ready', 'codex');
+    historyMock.messages = [{ id: 'main', role: 'user', text: 'Task', turnId: 'turn' }];
+    const { result, rerender } = renderHook(() => useChatController({ adapter: adapter as any, debugMode: false, showAgentAvatar: true }));
+    const events = () => jest.mocked(useAdapterChatEvents).mock.calls.at(-1)![0];
+    const run = { sessionKey: 'agent:main:main', runId: 'run', activeRunId: 'run', isSending: true as const,
+      turnId: 'turn', inputMessageId: 'main' };
+    const chunk = (text: string) => events().onUpdate?.({ type: 'agent_message_chunk', ...run,
+      visible: true, textMode: 'snapshot', text });
+    await act(async () => {
+      events().onState?.('ready');
+      events().onUpdate?.({ type: 'run_started', ...run, startedAtMs: Date.now() });
+      chunk('Before.');
+      events().onUpdate?.({ type: 'tool_call', ...run, toolCallId: 'step', merge: false,
+        message: { id: 'toolcall_step', role: 'tool', text: '', toolName: 'exec', toolStatus: 'running' } });
+      chunk('Before.\n\nAfter.');
+    });
+    const original = [...result.current.listData].reverse();
+    await act(async () => { result.current.switchSession({ key: 'other', kind: 'direct' } as any); });
+    historyMock.messages = [{ id: 'other-user', role: 'user', text: 'Other task' }]; rerender({});
+    expect(result.current.listData.some(row => row.text === 'Before.')).toBe(false);
+    await act(async () => { chunk('Before.\n\nAfter. More text.'); });
+    await act(async () => { result.current.switchSession({ key: run.sessionKey, kind: 'direct' } as any); });
+    historyMock.messages = [original[0]]; rerender({});
+    const restored = [...result.current.listData].reverse();
+    expect(restored.filter(row => row.role === 'assistant').map(row => row.text)).toEqual(['Before.', 'After. More text.']);
+    expect(restored.find(row => row.text === 'Before.')?.renderKey).toBe(original.find(row => row.text === 'Before.')?.renderKey);
+    expect(restored.filter(row => row.role === 'tool').map(row => row.id)).toEqual(['toolcall_step']);
+    expect(adapter.prompt).not.toHaveBeenCalled();
+  });
+
   it('recovers a cold active Codex transcript across two same-turn user guides', async () => {
     const adapter = createAdapter('ready', 'codex');
     historyMock.messages = [{ id: 'main', role: 'user', text: 'Task', turnId: 'native-turn' },

@@ -780,15 +780,19 @@ export function useChatController({
         sessionRunStateRef.current.delete(key);
         return;
       }
+      const previous = sessionRunStateRef.current.get(key);
+      const codex = adapter?.connection.backendKind === 'codex';
       sessionRunStateRef.current.set(key, {
-        ...(sessionRunStateRef.current.get(key)?.runId === runId ? sessionRunStateRef.current.get(key) : {}),
+        ...(previous?.runId === runId ? previous : {}),
         runId,
-        streamText: chatStreamRef.current,
+        streamText: codex && previous?.runId === runId ? previous.streamText : chatStreamRef.current,
         startedAt: streamStartedAtRef.current ?? Date.now(),
         streamTimestampMs: chatStreamTimestampRef.current ?? undefined,
+        ...(codex ? { presentation: { owner: adapter!, segments: chatStreamSegmentsRef.current,
+          tools: chatToolMessagesRef.current } } : {}),
       });
     },
-    [],
+    [adapter],
   );
 
   const {
@@ -1182,12 +1186,21 @@ export function useChatController({
       setChatStreamTimestampMs(chatStreamTimestampRef.current);
       lastRunSignalAtRef.current = Date.now();
       lastRunRecoveryProbeAtRef.current = 0;
-      const streamText = sanitizeVisibleStreamText(remembered.streamText);
+      const presentation = adapter?.connection.backendKind === 'codex' && remembered.presentation?.owner === adapter
+        ? remembered.presentation : undefined;
+      if (presentation) {
+        chatStreamSegmentsRef.current = presentation.segments;
+        setChatStreamSegments(presentation.segments);
+        chatToolMessagesRef.current = presentation.tools;
+        setChatToolMessages(presentation.tools);
+      }
+      const streamText = sanitizeVisibleStreamText(presentation
+        ? finalReplyTail(remembered.streamText ?? '', presentation.segments) : remembered.streamText);
       chatStreamRef.current = streamText;
       setChatStream(streamText);
       setIsSending(true);
     },
-    [clearTransientRunPresentation],
+    [adapter, clearTransientRunPresentation],
   );
 
   useEffect(() => {
@@ -1630,6 +1643,31 @@ export function useChatController({
     showDebug,
   ]);
 
+  const recoverNativeParagraphs = useCallback((text: string, identity?: SessionRunState) => {
+    if (adapter?.connection.backendKind !== 'codex' || chatToolMessagesRef.current.length
+      || !identity?.turnId || !identity.inputMessageId) return;
+    const recovered = recoverLiveRunPresentation(text, history.messages, identity?.turnId, identity?.inputMessageId, identity?.inputMessageKey);
+    const previous = chatStreamSegmentsRef.current;
+    if (recovered.segments.length <= previous.length
+      || !previous.every((segment, index) => segment.text === recovered.segments[index]?.text)) return;
+    // Extend only a confirmed ordered prefix. Keep already mounted cells and
+    // don't replace live-only boundaries with an incomplete canonical page.
+    const tail = chatStreamRef.current?.trim();
+    const runId = currentRunIdRef.current;
+    const additions = recovered.segments.slice(previous.length).map((segment, index) => {
+      if (index !== 0 || !runId || !tail || !(segment.text.trim().startsWith(tail) || tail.startsWith(segment.text.trim()))) return segment;
+      return { ...segment, renderKey: liveReplyRenderKey(streamStartedAtRef.current, runId, previous.length),
+        timestampMs: chatStreamTimestampRef.current ?? segment.timestampMs };
+    });
+    const segments = [...previous, ...additions];
+    chatStreamSegmentsRef.current = segments;
+    setChatStreamSegments(segments);
+    chatToolMessagesRef.current = recovered.tools;
+    setChatToolMessages(recovered.tools);
+    chatStreamTimestampRef.current = validStreamTimestamp(recovered.tailTimestampMs) ?? null;
+    setChatStreamTimestampMs(chatStreamTimestampRef.current);
+  }, [adapter, history.messages]);
+
   useEffect(() => {
     const snapshot = history.activitySnapshot;
     if (!snapshot || snapshot.key !== history.sessionKey) return;
@@ -1668,6 +1706,7 @@ export function useChatController({
         setChatToolMessages(recovered.tools);
         recoveredTailTimestamp = recovered.tailTimestampMs;
       }
+      recoverNativeParagraphs(text ?? '', identity);
       const tail = text === null ? null : finalReplyTail(text, chatStreamSegmentsRef.current);
       if (adapter?.connection.backendKind === 'codex') {
         const clock = validStreamTimestamp(recoveredTailTimestamp) ?? validStreamTimestamp(run.messageTimestampMs)
@@ -1682,7 +1721,7 @@ export function useChatController({
       lastRunSignalAtRef.current = Date.now();
     }
     setIsSending(true);
-  }, [adapter, history.activitySnapshot, history.sessionKey, clearActiveRunState]);
+  }, [adapter, history.activitySnapshot, history.sessionKey, clearActiveRunState, recoverNativeParagraphs]);
 
   useEffect(() => {
     syncDerivedSessionActivity("messages-or-session");
@@ -1899,13 +1938,7 @@ export function useChatController({
     if (previous !== "ready") return;
     const sessionKey = sessionKeyRef.current;
     if (sessionKey && currentRunIdRef.current) {
-      sessionRunStateRef.current.set(sessionKey, {
-        ...(sessionRunStateRef.current.get(sessionKey)?.runId === currentRunIdRef.current ? sessionRunStateRef.current.get(sessionKey) : {}),
-        runId: currentRunIdRef.current,
-        streamText: chatStreamRef.current,
-        startedAt: streamStartedAtRef.current ?? Date.now(),
-        streamTimestampMs: chatStreamTimestampRef.current ?? undefined,
-      });
+      persistCurrentRunState(sessionKey);
     }
     agentActivityRef.current.clear();
     childSessionActivityRef.current.clear();
@@ -1924,6 +1957,7 @@ export function useChatController({
     onChildSessionActivityChange,
     resetAgentActiveCount,
     restoreRunStateForSession,
+    persistCurrentRunState,
     setAgents,
     setCurrentAgentId,
   ]);
@@ -2073,6 +2107,7 @@ export function useChatController({
         }
         if (!matchesCurrentSession(update.sessionKey)) return;
         if (!acceptRun(update.sessionKey, update.runId)) return;
+        if (update.textMode === 'snapshot') recoverNativeParagraphs(update.text, sessionRunStateRef.current.get(update.sessionKey));
         // OpenClaw snapshots cover the entire run, including text already
         // committed before tools. Delta backends must retain repeated tokens.
         const nextText = update.textMode === 'snapshot'
@@ -2407,6 +2442,7 @@ export function useChatController({
   }, [
     adoptPendingRunId,
     adapter,
+    recoverNativeParagraphs,
     clearActiveRunState,
     clearToolSettledRecoveryTimer,
     clearTransientRunPresentation,

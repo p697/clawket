@@ -43,6 +43,11 @@ export function recoverLiveRunPresentation(text: string, history: UiMessage[], t
     } else if (message.role === 'assistant' && message.text.trim()) {
       const prefix = message.text.trim();
       if (!tail.trimStart().startsWith(prefix)) break;
+      // A positively anchored native item is itself a paragraph boundary,
+      // even when the assistant did no tool work between commentary items.
+      if (turnId && original >= 0 && message.turnId === turnId && segments.length > 0) {
+        committedSegments = segments.length;
+      }
       tail = tail.trimStart().slice(prefix.length).trimStart();
       const clock = finiteTimestamp(message);
       paragraphClocks.push(clock !== undefined && clock > 0 ? clock : undefined);
