@@ -127,7 +127,7 @@ export function ConnectionScreen({
     <View testID="connection-screen" style={[styles.screen, { backgroundColor: colors.canvasGrouped }]}>
       <AccountSettingsPageHeader testID="connection" title={t('Connection', { ns: 'common' })} onBack={onBack} />
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + Space.xl }]}>
-        {onUpgradeBridge ? <Banner testID="connection-bridge-upgrade" message={t('Your older Bridge can keep working. Update it for the new features.', { ns: 'chat' })} actionLabel={t('Update your Bridge', { ns: 'chat' })} onAction={onUpgradeBridge} /> : null}
+        {onUpgradeBridge ? <Banner testID="connection-bridge-upgrade" message={t('New Bridge version', { ns: 'chat' })} actionLabel={t('Update', { ns: 'common' })} onAction={onUpgradeBridge} /> : null}
         <View style={styles.hero}>
           <View style={[styles.symbol, { backgroundColor: colors.surfaceFloating }]}><PlatformMark platform={connection.backendKind} /></View>
           <Text testID="connection-label" style={[styles.name, { color: colors.ink }]}>{connection.label}</Text>

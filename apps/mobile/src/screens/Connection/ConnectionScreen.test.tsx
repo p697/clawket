@@ -81,8 +81,13 @@ jest.mock('../../components/ui/Button', () => {
 });
 jest.mock('../../components/ui/Banner', () => {
   const ReactRuntime = require('react');
-  const { Text } = require('react-native');
-  return { Banner: ({ message }: { message: string }) => ReactRuntime.createElement(Text, null, message) };
+  const { Text, Pressable } = require('react-native');
+  return { Banner: ({ message, actionLabel, onAction }: { message: string; actionLabel?: string; onAction?: () => void }) => ReactRuntime.createElement(
+    ReactRuntime.Fragment,
+    null,
+    ReactRuntime.createElement(Text, null, message),
+    actionLabel ? ReactRuntime.createElement(Pressable, { testID: 'banner-action', onPress: onAction }, ReactRuntime.createElement(Text, null, actionLabel)) : null,
+  ) };
 });
 jest.mock('../../components/ui/ConfirmationModal', () => {
   const ReactRuntime = require('react');
@@ -301,5 +306,18 @@ describe('ConnectionScreen', () => {
     view.rerender(<ConnectionScreen {...props({ freeSlot: { current: true, switchAvailable: true, switching: false } })} />);
     expect(view.getByTestId('connection-free-current')).toBeTruthy();
     expect(view.getByText('Current')).toBeTruthy();
+  });
+
+  it('links an outdated Bridge to the shared guide with one short banner', async () => {
+    const onUpgradeBridge = jest.fn();
+    const view = render(<ConnectionScreen {...props()} />);
+    await flush();
+    expect(view.queryByText('New Bridge version')).toBeNull();
+
+    view.rerender(<ConnectionScreen {...props({ onUpgradeBridge })} />);
+    expect(view.getByText('New Bridge version')).toBeTruthy();
+    expect(view.getByText('Update')).toBeTruthy();
+    fireEvent.press(view.getByTestId('banner-action'));
+    expect(onUpgradeBridge).toHaveBeenCalledTimes(1);
   });
 });

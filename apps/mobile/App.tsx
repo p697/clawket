@@ -1,7 +1,7 @@
 import { resetSessionHistory } from './src/connection/session-reset';
 import { useBridgeRelease } from './src/features/app-updates/useBridgeRelease';
 import { useBridgeVersions } from './src/features/app-updates/useBridgeVersions';
-import { newerVersion, usesBridge, stableVersion } from './src/features/app-updates/bridge-release';
+import { newerVersion, usesBridge } from './src/features/app-updates/bridge-release';
 import * as Clipboard from 'expo-clipboard';
 import { BridgeUpgradeScreen } from './src/features/app-updates/BridgeUpgradeScreen';
 import { useBridgeUpgrade } from './src/features/app-updates/useBridgeUpgrade';
@@ -1952,7 +1952,7 @@ function AppContent({
                   {({ navigation }) => <DesignSystemScreen onBack={navigation.goBack} />}
                 </RootStack.Screen>
                 <RootStack.Screen name="BridgeUpgrade">
-                  {({ navigation }) => <BridgeUpgradeScreen onBack={navigation.goBack} connections={connections.connections} versions={bridgeVersions} {...bridgeRelease} onCheck={() => { void bridgeRelease.refresh(); }} readyId={connections.activeState === 'ready' && connections.activeConnectionId && stableVersion(connections.connectionDetails[connections.activeConnectionId]?.bridgeVersion) ? connections.activeConnectionId : null} />}
+                  {({ navigation }) => <BridgeUpgradeScreen onBack={navigation.goBack} connections={connections.connections} versions={bridgeVersions} outdatedIds={bridgeUpgradeIds} {...bridgeRelease} onCheck={() => { void bridgeRelease.refresh(); }} onOpenConnection={(connectionId) => navigation.navigate('Connection', { connectionId })} />}
                 </RootStack.Screen>
                 <RootStack.Screen name="Connection">
                   {({ navigation, route }) => {
@@ -1966,7 +1966,7 @@ function AppContent({
                       paused={connections.pausedConnectionIds?.includes(connection.id) ?? false}
                       agentNames={connections.roster.find((group) => group.connection.id === connection.id)?.agents.map(({ agent }) => agent.name) ?? []}
                       details={connections.connectionDetails[connection.id]}
-                      onUpgradeBridge={bridgeUpgradeIds.includes(connection.id) ? () => navigation.navigate('BridgeUpgrade') : undefined}
+                      onUpgradeBridge={bridgeUpgradeIds.includes(connection.id) ? () => navigation.navigate('BridgeUpgrade', undefined, { pop: true }) : undefined}
                       {...(freeSlot ? { freeSlot, onUseAsFreeConnection: () => switchToFreeConnection(connection.id) } : {})}
                       onBack={navigation.goBack} onReconnect={() => resumeConnection(connection.id, true)} onResume={() => resumeConnection(connection.id)}
                       onPause={() => runtime.pauseConnection(connection.id)}

@@ -37,7 +37,9 @@ Local-model processes started by the new ordinary CLI participate through the sa
 
 ## Phone settings
 
-Settings permanently links to Bridge and updates. The guide lists saved Bridge connections, authenticated current or last-confirmed versions, and the latest stable npm release. Direct OpenClaw Gateway connections are excluded. Credential-free version evidence is pruned when connections disappear. Unknown/offline state never proves an outdated Bridge; Gateway version is never used as Bridge version.
+Settings permanently links to Bridge updates; the row shows an attention dot and `New version` only while a saved connection has authenticated evidence of an older Bridge (a pre-3.0 generation or a version below the checked release). Direct OpenClaw Gateway connections are excluded. Credential-free version evidence is pruned when connections disappear. Unknown/offline state never proves an outdated Bridge; Gateway version is never used as Bridge version.
+
+The page is state-driven (owner decision 2026-10-06). With an outdated Bridge it leads with those connections, then the update command with Copy and Send to computer, then the remaining connections. Otherwise it is a status page — up to date only when every listed version is confirmed, the latest version when some are unknown — and shows no command. Each row shows its last authenticated version and opens the Connection page; reconnecting there refreshes saved evidence, because only the active connection's handshake records a version. A connection that was outdated while the page is open and reconnects on the latest version is marked updated. The Connection page banner links back to this page.
 
 Latest release checks cache for 24 hours and can be retried manually. Failure preserves previous evidence and shows an explicit check failure. Only a published update-protocol marker enables the unified command, pinned to the checked version. Older releases receive original-deployment guidance; the old fixed 3.0.0 command is removed. Copying/sharing does not change versions or report update success.
 

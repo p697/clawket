@@ -4,7 +4,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import { Languages, Cable, Palette, CircleHelp, Info, SunMoon, Image, Download } from 'lucide-react-native';
+import { Languages, Cable, Palette, CircleHelp, Info, SunMoon, Image, MonitorUp } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -242,10 +242,10 @@ export function AccountSettingsScreen({
                     <>
                       <SettingsDivider inset="icon" />
                       <SettingsRow testID="account-settings-bridge-upgrade"
-                        title={t('Bridge and updates', { ns: 'chat' })}
-                        value={bridgeUpdateAvailable ? t('Bridge update available', { ns: 'chat' }) : undefined}
+                        title={t('Bridge updates', { ns: 'chat' })}
+                        value={bridgeUpdateAvailable ? t('New version', { ns: 'chat' }) : undefined}
                         attention={bridgeUpdateAvailable}
-                        leading={<SettingsIcon icon={Download} tone="neutral" size={20} strokeWidth={1.75} />}
+                        leading={<SettingsIcon icon={MonitorUp} tone="neutral" size={20} strokeWidth={1.75} />}
                         showChevron onPress={onUpgradeBridge} />
                     </>
                   ) : null}

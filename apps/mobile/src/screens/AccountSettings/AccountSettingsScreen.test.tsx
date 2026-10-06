@@ -214,6 +214,12 @@ it('keeps the Bridge guide discoverable in settings only while an upgrade is ava
   expect(view.queryByTestId('account-settings-bridge-upgrade')).toBeNull();
   const onUpgradeBridge = jest.fn();
   view.rerender(<AccountSettingsScreen {...props} onUpgradeBridge={onUpgradeBridge} />);
+  expect(view.getByText('Bridge updates')).toBeTruthy();
+  expect(view.queryByText('New version')).toBeNull();
+  expect(view.queryByTestId('account-settings-bridge-upgrade-attention')).toBeNull();
+  view.rerender(<AccountSettingsScreen {...props} onUpgradeBridge={onUpgradeBridge} bridgeUpdateAvailable />);
+  expect(view.getByText('New version')).toBeTruthy();
+  expect(view.getByTestId('account-settings-bridge-upgrade-attention')).toBeTruthy();
   fireEvent.press(view.getByTestId('account-settings-bridge-upgrade'));
   expect(onUpgradeBridge).toHaveBeenCalledTimes(1);
   view.rerender(<AccountSettingsScreen {...props} />);

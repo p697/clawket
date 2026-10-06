@@ -530,7 +530,9 @@ The adaptive sheet clips the complete animated panel with `Radius.bottomSheet`. 
 
 ## Bridge upgrade guide
 
-The 3.0 announcement conditionally adds one existing entry row for verified old Bridge connections. The guide reuses the connection page header, PageIntro, two FormStep sections and CommandBlock. Keep commands selectable and copyable, share through the native sheet, preserve pairing in the copy, and avoid progress indicators or unverified success states. Settings home keeps a conditional standard SettingsRow directly below My connections, with a neutral download icon and chevron; the entire row opens the guide. It remains discoverable after the announcement closes and disappears once no verified legacy connections remain. Connection details retain their scoped entry.
+The 3.0 announcement conditionally adds one existing entry row for verified old Bridge connections. Settings home keeps a standard SettingsRow directly below My connections (`Bridge updates`, neutral `MonitorUp` icon, chevron); while an older Bridge is verified it adds the attention dot and the `New version` tail. Connection details show a one-sentence banner whose action returns to the guide.
+
+The guide (owner decision 2026-10-06) is a grouped page with two text tiers: section labels and footnotes on the card text edge, no PageIntro, step numbers or bottom button. With an outdated Bridge it shows `Update to {version}` with only those rows (attention dot, version tail), `Run on the computer with your Agent` with the selectable command in a white card, one row of equal `card` capsules (Copy command, Send to computer) and one footnote, then `Up to date` / `Other connections`, then the Docker footnote. Otherwise it is a centered status (Connection-page hero symbol, `good` check only when every version is confirmed) above the version card and a ghost `Check for updates`. Rows open the Connection page; a row updated while the page is open gains a `good` check. Avoid progress indicators or success states that no handshake confirmed.
 
 ### Create Agent keyboard handling — 2026-09-22
 
