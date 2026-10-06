@@ -1,8 +1,8 @@
 # PROGRESS · Clawket 3.0 进度日志
 
-- 2026-10-06 负责人授权基于最新main发布Bridge3.1.14，发布准备进行中。
+- 2026-10-06 负责人授权基于最新main发布Bridge3.1.14，发布检查完成，等待npm安全密钥认证。
   - 起点干净main350c0aa8，发布前刷新至5ba5be00纳入PR194 Codex原生步骤时钟；包含PR191 Claude历史缺省cwd修复、PR192 Codex完成回合后更新误报忙修复；仅公开CLI/守卫升patch，内部workspace/App版本保持。
-  - 串行发布检查、当前Production只读快照矩阵、CI、固定包及公开安装验证待完成；结果记入[发布记录](../3.1/bridge-3.1.14-release.md)。本任务不替换运行中Bridge、打包App或部署Worker，手机验收继续保留。
+  - source f320cbf5的CI37412432814十一项通过；六guard、八指令对/五checker、v1五文件41项、最新生产快照四用例24阶段、审计零阻挡（沿用两例外）、包provenance141输入、固定包dry-run与空认证候选安装通过。初始候选在PR194合入后废弃未上传；当前280,493B候选等待npm安全密钥认证，公开包及安装验证待完成。结果记入[发布记录](../3.1/bridge-3.1.14-release.md)。本任务不替换运行中Bridge、打包App或部署Worker，手机验收继续保留。
 
 - 2026-10-06 手机一键更新 Bridge（负责人决定落地）。
   - 当前连接所在电脑的 Bridge 旧了，并且在握手时声明 `bridge.remote-update.v1`，「Bridge 更新」页就显示「立即更新」，命令收在「改用命令更新」后面，失败后自动展开。手机只能发不带参数的 `bridge.update.start`（OpenClaw 走 Relay control）和只读的 `bridge.update.status`；私有 owner `stop` 仍只在本机，手机不能指定版本、路径或命令。
