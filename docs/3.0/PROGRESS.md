@@ -1,7 +1,7 @@
 # PROGRESS · Clawket 3.0 进度日志
 
 - 2026-10-06 负责人授权基于最新 main 的 Bridge 3.1.15 小发布，准备中。
-  - 干净基线 `44db3569`，纳入 PR196 手机触发更新、PR197 更新/重新配对立即执行及退出 owner/服务停止清理修复；只升公开 CLI 与守卫 patch，内部 workspace/App 不升。
+  - 干净基线 `44db3569`，打包前刷新至 `19ec342e`（PR199 CI 构建/回放修复），纳入 PR196 手机触发更新、PR197 更新/重新配对立即执行及退出 owner/服务停止清理修复；只升公开 CLI 与守卫 patch，内部 workspace/App 不升。
   - 独立 worktree 准备版本及[发布记录](../3.1/bridge-3.1.15-release.md)。本地发布校验/固定包和完整 CI 待完成；另一会话的 QA APK 持 heavy 锁，先做独立准备。运行中 Bridge 未更新，App 与 Worker 发布不在本任务范围。
 
 - 2026-10-06 CI 追踪追加：本地模型 supervisor 并发启动竞态（QQ 邮箱调查后继续验证 main）。

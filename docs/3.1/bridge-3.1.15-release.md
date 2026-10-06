@@ -1,6 +1,6 @@
 # Bridge 3.1.15 release
 
-The owner authorized a small Bridge publication from latest main on 2026-10-06. The clean source base is `44db3569` (PR197). Only the public CLI patch version and publish guard advance to 3.1.15; internal workspace and App versions remain unchanged.
+The owner authorized a small Bridge publication from latest main on 2026-10-06. The clean source base is `44db3569` (PR197), refreshed to `19ec342e` (PR199) before packaging. Only the public CLI patch version and publish guard advance to 3.1.15; internal workspace and App versions remain unchanged.
 
 ## Scope
 
