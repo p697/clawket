@@ -1868,6 +1868,7 @@ export function ThreadView({
       <WorkRecordSheet
         visible={workRecord.entries.length > 0}
         work={workRecord}
+        locale={locale}
         onClose={() => setWorkRecordAnchor(null)}
         onOpenStep={(message) => setSelectedToolMessageId(message.id)}
       />
@@ -1917,6 +1918,7 @@ export function ThreadView({
       phase={dockPhase}
       work={liveWork}
       startedAt={runStartedAt}
+      locale={locale}
       onClose={closeWorkPanel}
       onOpenStep={(message) => setSelectedToolMessageId(message.id)}
     />

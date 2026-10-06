@@ -493,5 +493,9 @@
   "Check for Bridge updates": "Bridge の更新を確認",
   "Could not check Bridge updates. Try again later.": "更新を確認できません。後でもう一度お試しください。",
   "The unified updater is available in newer Bridge releases. Use your original deployment method for this release.": "新しい Bridge リリースでは統合アップデーターを利用できます。このリリースは従来の導入方法で更新してください。",
-  "Confirm the current version here after reconnecting.": "再接続後、ここで現在のバージョンを確認してください。"
+  "Confirm the current version here after reconnecting.": "再接続後、ここで現在のバージョンを確認してください。",
+  "Now": "現在",
+  "1 new step": "新しいステップ 1件",
+  "{{count}} new steps": "新しいステップ {{count}}件",
+  "You: “{{text}}”": "あなた：「{{text}}」"
 }

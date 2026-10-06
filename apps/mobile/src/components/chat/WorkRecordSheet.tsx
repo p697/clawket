@@ -7,7 +7,8 @@ import type { UiMessage } from '../../types/chat';
 import { Space } from '../../theme/tokens';
 import { formatTurnReceipt } from './tool-activity-model';
 import type { TurnWork } from './turn-work';
-import { WorkEntryRow, WorkSheetHeading } from './WorkPanel';
+import { WorkSheetHeading } from './WorkPanel';
+import { WorkTimeline } from './WorkTimeline';
 
 // A long run outgrows the screen: scroll inside fixed detents with the
 // Gorhom-integrated scroll view rather than a plain ScrollView the sheet drag steals.
@@ -17,6 +18,8 @@ export type WorkRecordSheetProps = Readonly<{
   visible: boolean;
   /** The finished turn a receipt or pill stands for. */
   work: TurnWork;
+  /** The conversation's locale, for each row's clock. */
+  locale?: string;
   onClose: () => void;
   onOpenStep: (message: UiMessage) => void;
 }>;
@@ -24,10 +27,12 @@ export type WorkRecordSheetProps = Readonly<{
 /**
  * Everything the Agent did for one prompt (A+ chat design 2026-09-30; rows
  * shared with the live work panel since tool process design C, 2026-10-02):
- * each step, the Agent's words between steps and the approvals, in order.
- * The receipt's own sentence heads it; each step opens its full input and output.
+ * each step, the Agent's words between steps and the approvals, on the same
+ * newest-first timeline as the work panel, from where the turn ended down to
+ * where it started (owner decision 2026-10-06). The receipt's own sentence
+ * heads it; each step opens its full input and output.
  */
-export function WorkRecordSheet({ visible, work, onClose, onOpenStep }: WorkRecordSheetProps): React.JSX.Element {
+export function WorkRecordSheet({ visible, work, locale, onClose, onOpenStep }: WorkRecordSheetProps): React.JSX.Element {
   const { t } = useTranslation('chat');
   // Keep the last turn while the sheet animates away.
   const shown = useRef(work);
@@ -46,14 +51,13 @@ export function WorkRecordSheet({ visible, work, onClose, onOpenStep }: WorkReco
       testID="work-record-sheet"
     >
       <BottomSheetScrollView testID="work-record-scroll" contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {turn.entries.map((entry) => (
-          <WorkEntryRow key={`${entry.kind}:${entry.message.renderKey ?? entry.message.id}`} entry={entry} onOpenStep={onOpenStep} />
-        ))}
+        <WorkTimeline work={turn} locale={locale} onOpenStep={onOpenStep} />
       </BottomSheetScrollView>
     </Sheet>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: Space.sm, paddingBottom: Space.xl, gap: 2 },
+  // Rows on the rail sit flush so the line stays unbroken.
+  content: { paddingHorizontal: Space.sm, paddingBottom: Space.xl },
 });

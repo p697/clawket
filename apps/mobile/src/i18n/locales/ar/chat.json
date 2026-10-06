@@ -493,5 +493,9 @@
   "Check for Bridge updates": "التحقق من تحديثات Bridge",
   "Could not check Bridge updates. Try again later.": "تعذر التحقق من التحديثات. حاول لاحقًا.",
   "The unified updater is available in newer Bridge releases. Use your original deployment method for this release.": "تدعم إصدارات Bridge الأحدث أداة التحديث الموحدة. لهذا الإصدار، استخدم طريقة النشر المعتادة.",
-  "Confirm the current version here after reconnecting.": "بعد إعادة الاتصال، أكد الإصدار الحالي هنا."
+  "Confirm the current version here after reconnecting.": "بعد إعادة الاتصال، أكد الإصدار الحالي هنا.",
+  "Now": "الآن",
+  "1 new step": "خطوة جديدة واحدة",
+  "{{count}} new steps": "خطوات جديدة: {{count}}",
+  "You: “{{text}}”": "أنت: «{{text}}»"
 }

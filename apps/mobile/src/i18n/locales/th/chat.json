@@ -493,5 +493,9 @@
   "Check for Bridge updates": "ตรวจสอบอัปเดต Bridge",
   "Could not check Bridge updates. Try again later.": "ตรวจสอบอัปเดตไม่สำเร็จ โปรดลองภายหลัง",
   "The unified updater is available in newer Bridge releases. Use your original deployment method for this release.": "Bridge รุ่นใหม่รองรับตัวอัปเดตรวม สำหรับรุ่นนี้ ให้ใช้วิธีติดตั้งเดิมเพื่ออัปเดต",
-  "Confirm the current version here after reconnecting.": "หลังเชื่อมต่ออีกครั้ง ให้ยืนยันเวอร์ชันปัจจุบันที่นี่"
+  "Confirm the current version here after reconnecting.": "หลังเชื่อมต่ออีกครั้ง ให้ยืนยันเวอร์ชันปัจจุบันที่นี่",
+  "Now": "ตอนนี้",
+  "1 new step": "1 ขั้นตอนใหม่",
+  "{{count}} new steps": "{{count}} ขั้นตอนใหม่",
+  "You: “{{text}}”": "คุณ: “{{text}}”"
 }

@@ -493,5 +493,9 @@
   "Check for Bridge updates": "Kiểm tra cập nhật Bridge",
   "Could not check Bridge updates. Try again later.": "Không thể kiểm tra cập nhật. Hãy thử lại sau.",
   "The unified updater is available in newer Bridge releases. Use your original deployment method for this release.": "Các bản Bridge mới hơn hỗ trợ trình cập nhật hợp nhất. Với bản này, hãy dùng phương thức triển khai ban đầu.",
-  "Confirm the current version here after reconnecting.": "Sau khi kết nối lại, xác nhận phiên bản hiện tại tại đây."
+  "Confirm the current version here after reconnecting.": "Sau khi kết nối lại, xác nhận phiên bản hiện tại tại đây.",
+  "Now": "Bây giờ",
+  "1 new step": "1 bước mới",
+  "{{count}} new steps": "{{count}} bước mới",
+  "You: “{{text}}”": "Bạn: “{{text}}”"
 }

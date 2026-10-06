@@ -493,5 +493,9 @@
   "Check for Bridge updates": "Перевірити оновлення Bridge",
   "Could not check Bridge updates. Try again later.": "Не вдалося перевірити оновлення. Спробуйте пізніше.",
   "The unified updater is available in newer Bridge releases. Use your original deployment method for this release.": "Нові версії Bridge підтримують єдине оновлення. Цю версію оновіть звичним способом розгортання.",
-  "Confirm the current version here after reconnecting.": "Після повторного підключення перевірте тут поточну версію."
+  "Confirm the current version here after reconnecting.": "Після повторного підключення перевірте тут поточну версію.",
+  "Now": "Зараз",
+  "1 new step": "1 новий крок",
+  "{{count}} new steps": "Нових кроків: {{count}}",
+  "You: “{{text}}”": "Ви: «{{text}}»"
 }

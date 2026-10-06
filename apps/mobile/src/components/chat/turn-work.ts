@@ -103,6 +103,10 @@ export type TurnWork = Readonly<{
   firstStepAt?: number;
   /** An approval of this turn still waiting for the user. */
   pendingApproval?: UiMessage;
+  /** The prompt that opened the turn, when the loaded page holds it: where its timeline starts. */
+  prompt?: UiMessage;
+  /** A finished turn's newest message (its last reply, else its last step): where its timeline ends. */
+  endedAt?: number;
 }>;
 
 export const EMPTY_TURN_WORK: TurnWork = Object.freeze({ entries: [], steps: [], running: 0 });
@@ -113,7 +117,7 @@ export const EMPTY_TURN_WORK: TurnWork = Object.freeze({ entries: [], steps: [],
  * history reloads mid-run): when nothing else runs, the newest such legacy
  * step is still working. Explicit unknown state is never execution evidence.
  */
-function buildTurnWork(turn: ReadonlyArray<UiMessage>, live = false): TurnWork {
+function buildTurnWork(turn: ReadonlyArray<UiMessage>, live = false, prompt?: UiMessage): TurnWork {
   if (turn.length === 0) return EMPTY_TURN_WORK;
   const entries: TurnEntry[] = [];
   const steps: UiMessage[] = [];
@@ -149,12 +153,20 @@ function buildTurnWork(turn: ReadonlyArray<UiMessage>, live = false): TurnWork {
   }
   entries.reverse();
   steps.reverse();
-  return { entries, steps, current, running, firstStepAt, pendingApproval };
+  const endedAt = live ? undefined : validTime(turn[0]!.timestampMs);
+  return { entries, steps, current, running, firstStepAt, pendingApproval, prompt, endedAt };
+}
+
+/** The prompt that opened the newest turn; a partial page that lacks it has none. */
+function liveTurnPrompt(messages: ReadonlyArray<UiMessage>, active?: RunWorkIdentity): UiMessage | undefined {
+  if (active && originalRunUserIndex(messages, active.turnId, active.inputMessageId, active.inputMessageKey) < 0) return undefined;
+  const end = workBoundaries(messages, active).indexOf(true);
+  return end < 0 ? undefined : messages[end];
 }
 
 /** The newest turn: everything after the latest prompt the Agent received. */
 export function collectLiveTurnWork(messages: ReadonlyArray<UiMessage>, active?: RunWorkIdentity): TurnWork {
-  return buildTurnWork(liveTurnMessages(messages, active), true);
+  return buildTurnWork(liveTurnMessages(messages, active), true, liveTurnPrompt(messages, active));
 }
 
 /**
@@ -169,7 +181,8 @@ export function collectTurnWorkAround(messages: ReadonlyArray<UiMessage>, anchor
   while (newest > 0 && !boundaries[newest - 1]) newest -= 1;
   let oldest = anchor;
   while (oldest < messages.length - 1 && !boundaries[oldest + 1]) oldest += 1;
-  return buildTurnWork(messages.slice(newest, oldest + 1));
+  const prompt = oldest + 1 < messages.length && boundaries[oldest + 1] ? messages[oldest + 1] : undefined;
+  return buildTurnWork(messages.slice(newest, oldest + 1), false, prompt);
 }
 
 export type TurnReceipt = Readonly<{

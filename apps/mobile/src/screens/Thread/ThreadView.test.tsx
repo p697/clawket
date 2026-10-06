@@ -3128,6 +3128,31 @@ it('keeps a failure the Agent moved past quiet and turns the receipt of a turn t
   expect(view.getByTestId('thread-receipt-trying').props.accessibilityLabel).toBe('Work record: gh pr checks 50 failed');
 });
 
+it('reads a finished turn from where it ended down to where it started', () => {
+  const at = (minute: number) => new Date(2026, 9, 6, 9, minute).getTime();
+  const ask: UiMessage = { id: 'ask', role: 'user', text: 'Check CI', timestampMs: at(21) };
+  const a: UiMessage = { id: 'a', role: 'tool', text: '', toolName: 'exec', toolArgs: JSON.stringify({ command: 'gh pr view 50' }), toolStatus: 'success', timestampMs: at(22) };
+  const b: UiMessage = { ...a, id: 'b', toolArgs: JSON.stringify({ command: 'gh pr checks 50' }), timestampMs: at(23) };
+  const answer: UiMessage = { id: 'answer', role: 'assistant', text: 'CI is green.', timestampMs: at(25) };
+  const view = render(<ThreadView {...createProps({ locale: 'en-US', messages: [answer, b, a, ask] })} />);
+  fireEvent.press(view.getByTestId('thread-receipt-answer'));
+  const order = within(view.getByTestId('work-record-sheet')).getAllByTestId(/^(thread-run-|work-said-|work-timeline-)/)
+    .map((node) => node.props.testID);
+  expect(order).toEqual(['work-timeline-end', 'thread-run-b', 'thread-run-a', 'work-timeline-start']);
+  expect(within(view.getByTestId('work-timeline-end')).getByText('Finished')).toBeTruthy();
+  expect(within(view.getByTestId('work-timeline-end')).getByText('09:25')).toBeTruthy();
+  expect(within(view.getByTestId('thread-run-b')).getByText('09:23')).toBeTruthy();
+  expect(within(view.getByTestId('work-timeline-start')).getByText('09:21')).toBeTruthy();
+  expect(view.queryByTestId('work-timeline-now')).toBeNull();
+
+  // A finished turn never left a step running: one stopped mid-run reads as having no result.
+  const stopped: UiMessage = { ...a, id: 'stopped', toolStatus: 'running', timestampMs: at(24) };
+  view.rerender(<ThreadView {...createProps({ locale: 'en-US', messages: [answer, stopped, b, a, ask] })} />);
+  const row = within(view.getByTestId('thread-run-stopped'));
+  expect(row.getByText('Result unavailable')).toBeTruthy();
+  expect(row.queryByText('Now')).toBeNull();
+});
+
 describe('work dock', () => {
   const prompt: UiMessage = { id: 'ask', role: 'user', text: 'Fix the tests' };
   const read: UiMessage = { id: 'r', role: 'tool', text: '', toolName: 'read', toolArgs: JSON.stringify({ path: 'a.ts' }), toolStatus: 'success' };
@@ -3326,6 +3351,56 @@ describe('work dock', () => {
     fireEvent.press(dock);
     expect(mockScrollToEnd).toHaveBeenCalledTimes(1);
     expect(view.queryByTestId('work-panel')).toBeNull();
+  });
+
+  it('lists the turn newest first, from what runs now down to where it started', () => {
+    const asked: UiMessage = { ...prompt, timestampMs: new Date(2026, 9, 6, 9, 21).getTime() };
+    const view = render(<ThreadView {...createProps({ isRunning: true, locale: 'en-US', messages: [run, said, read, asked] })} />);
+    fireEvent.press(view.getByTestId('thread-screen-work-dock'));
+    const order = within(view.getByTestId('work-panel')).getAllByTestId(/^(thread-run-|work-said-|work-timeline-)/)
+      .map((node) => node.props.testID);
+    expect(order).toEqual(['thread-run-x', 'work-said-said', 'thread-run-r', 'work-timeline-start']);
+    expect(within(view.getByTestId('thread-run-x')).getByText('Now')).toBeTruthy();
+    const start = within(view.getByTestId('work-timeline-start'));
+    expect(start.getByText('Started')).toBeTruthy();
+    expect(start.getByText('You: “Fix the tests”')).toBeTruthy();
+    expect(start.getByText('09:21')).toBeTruthy();
+  });
+
+  it('keeps what runs now at the top, even a step that started before later ones finished', () => {
+    const waiting: UiMessage = { ...run, id: 'login', toolArgs: JSON.stringify({ command: 'npm login' }) };
+    const later: UiMessage = { ...run, id: 'checks', toolArgs: JSON.stringify({ command: 'gh pr checks 50' }), toolStatus: 'success' };
+    const view = render(<ThreadView {...createProps({ isRunning: true, messages: [later, waiting, prompt] })} />);
+    fireEvent.press(view.getByTestId('thread-screen-work-dock'));
+    const order = within(view.getByTestId('work-panel')).getAllByTestId(/^(thread-run-|work-said-|work-timeline-)/)
+      .map((node) => node.props.testID);
+    expect(order).toEqual(['thread-run-login', 'thread-run-checks', 'work-timeline-start']);
+    expect(within(view.getByTestId('thread-run-login')).getByText('Now')).toBeTruthy();
+  });
+
+  it('starts the timeline at what the dock says between steps', () => {
+    const view = render(<ThreadView {...createProps({ isRunning: true, messages: [{ ...run, toolStatus: 'success' }, prompt] })} />);
+    fireEvent.press(view.getByTestId('thread-screen-work-dock'));
+    const now = within(view.getByTestId('work-timeline-now'));
+    expect(now.getByText('Thinking…')).toBeTruthy();
+    expect(now.getByText('Now')).toBeTruthy();
+    expect(within(view.getByTestId('thread-run-x')).queryByText('Now')).toBeNull();
+  });
+
+  it('keeps the reader\'s place below the top and counts the steps that arrive above', () => {
+    const props = createProps({ isRunning: true, messages: [run, prompt] });
+    const view = render(<ThreadView {...props} />);
+    fireEvent.press(view.getByTestId('thread-screen-work-dock'));
+    const scroll = () => view.getByTestId('work-panel-scroll');
+    expect(scroll().props.maintainVisibleContentPosition).toEqual({ minIndexForVisible: 0, autoscrollToTopThreshold: Space.xl });
+    act(() => scroll().props.onScroll({ nativeEvent: { contentOffset: { y: 200 } } }));
+    expect(view.queryByTestId('work-panel-new-steps')).toBeNull();
+    const next: UiMessage = { ...run, id: 'y', toolArgs: JSON.stringify({ command: 'npm run lint' }) };
+    view.rerender(<ThreadView {...props} messages={[next, { ...run, toolStatus: 'success' }, prompt]} />);
+    expect(within(view.getByTestId('work-panel-new-steps')).getByText('1 new step')).toBeTruthy();
+    // Back at the top the newest steps are in view: the chip goes.
+    act(() => scroll().props.onScroll({ nativeEvent: { contentOffset: { y: 0 } } }));
+    expect(view.queryByTestId('work-panel-new-steps')).toBeNull();
   });
 
   it('makes way for a waiting question and shrinks to one line while typing', () => {

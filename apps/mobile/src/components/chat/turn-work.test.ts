@@ -249,3 +249,27 @@ describe('native work turn identity', () => {
     expect(collectLiveTurnWork(newestFirst(old, current, guide)).steps).toEqual([]);
   });
 });
+
+describe('turn timeline ends', () => {
+  it('carries the prompt that opened each turn, and where a finished turn ended', () => {
+    const ask = prompt('fix it', { timestampMs: 1_000 });
+    const step = call('exec', {}, { timestampMs: 2_000 });
+    const answer = reply('Fixed.', { timestampMs: 3_000 });
+    const next = prompt('next', { timestampMs: 4_000 });
+    const live = call('exec', {}, { toolStatus: 'running', timestampMs: 5_000 });
+    const messages = newestFirst(ask, step, answer, next, live);
+    const running = collectLiveTurnWork(messages);
+    expect(running.prompt).toBe(next);
+    expect(running.endedAt).toBeUndefined();
+    const finished = collectTurnWorkAround(messages, step.id);
+    expect(finished.prompt).toBe(ask);
+    expect(finished.endedAt).toBe(3_000);
+  });
+
+  it('has no prompt when the loaded page starts inside the turn', () => {
+    const step = call('exec', {}, { timestampMs: 2_000 });
+    const finished = collectTurnWorkAround(newestFirst(step, reply('Done.', { timestampMs: 3_000 })), step.id);
+    expect(finished.prompt).toBeUndefined();
+    expect(finished.endedAt).toBe(3_000);
+  });
+});

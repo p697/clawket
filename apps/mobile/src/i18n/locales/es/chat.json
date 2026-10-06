@@ -493,5 +493,9 @@
   "Check for Bridge updates": "Buscar actualizaciones de Bridge",
   "Could not check Bridge updates. Try again later.": "No se pudieron comprobar las actualizaciones. Inténtalo más tarde.",
   "The unified updater is available in newer Bridge releases. Use your original deployment method for this release.": "Las versiones más recientes de Bridge ofrecen el actualizador unificado. Para esta versión, usa tu método de despliegue habitual.",
-  "Confirm the current version here after reconnecting.": "Tras reconectar, confirma aquí la versión actual."
+  "Confirm the current version here after reconnecting.": "Tras reconectar, confirma aquí la versión actual.",
+  "Now": "Ahora",
+  "1 new step": "1 paso nuevo",
+  "{{count}} new steps": "{{count}} pasos nuevos",
+  "You: “{{text}}”": "Tú: «{{text}}»"
 }

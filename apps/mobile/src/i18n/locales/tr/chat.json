@@ -493,5 +493,9 @@
   "Check for Bridge updates": "Bridge güncellemelerini denetle",
   "Could not check Bridge updates. Try again later.": "Güncellemeler denetlenemedi. Daha sonra tekrar deneyin.",
   "The unified updater is available in newer Bridge releases. Use your original deployment method for this release.": "Daha yeni Bridge sürümleri birleşik güncelleyiciyi destekler. Bu sürümü mevcut dağıtım yönteminizi kullanarak güncelleyin.",
-  "Confirm the current version here after reconnecting.": "Yeniden bağlandıktan sonra geçerli sürümü burada doğrulayın."
+  "Confirm the current version here after reconnecting.": "Yeniden bağlandıktan sonra geçerli sürümü burada doğrulayın.",
+  "Now": "Şimdi",
+  "1 new step": "1 yeni adım",
+  "{{count}} new steps": "{{count}} yeni adım",
+  "You: “{{text}}”": "Siz: “{{text}}”"
 }

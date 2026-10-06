@@ -493,5 +493,9 @@
   "Check for Bridge updates": "Bridge अपडेट जाँचें",
   "Could not check Bridge updates. Try again later.": "अपडेट जाँचे नहीं जा सके। बाद में फिर कोशिश करें।",
   "The unified updater is available in newer Bridge releases. Use your original deployment method for this release.": "नए Bridge संस्करणों में एकीकृत अपडेटर उपलब्ध है। इस संस्करण के लिए अपनी मूल डिप्लॉयमेंट विधि इस्तेमाल करें।",
-  "Confirm the current version here after reconnecting.": "दोबारा कनेक्ट होने के बाद यहाँ वर्तमान संस्करण की पुष्टि करें।"
+  "Confirm the current version here after reconnecting.": "दोबारा कनेक्ट होने के बाद यहाँ वर्तमान संस्करण की पुष्टि करें।",
+  "Now": "अभी",
+  "1 new step": "1 नया चरण",
+  "{{count}} new steps": "{{count}} नए चरण",
+  "You: “{{text}}”": "आप: “{{text}}”"
 }
