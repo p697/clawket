@@ -1,8 +1,9 @@
 # PROGRESS · Clawket 3.0 进度日志
 
-- 2026-10-06 负责人授权基于最新 main 的 Bridge 3.1.15 小发布，准备中。
+- 2026-10-06 负责人授权基于最新 main 的 Bridge 3.1.15 小发布；固定候选已通过，等待 npm 浏览器认证。
   - 干净基线 `44db3569`，打包前刷新至 `19ec342e`（PR199 CI 构建/回放修复），纳入 PR196 手机触发更新、PR197 更新/重新配对立即执行及退出 owner/服务停止清理修复；只升公开 CLI 与守卫 patch，内部 workspace/App 不升。
-  - 独立 worktree 准备版本及[发布记录](../3.1/bridge-3.1.15-release.md)。本地发布校验/固定包和完整 CI 待完成；另一会话的 QA APK 持 heavy 锁，先做独立准备。运行中 Bridge 未更新，App 与 Worker 发布不在本任务范围。
+  - source `56991532` 的 CI37423086387 十一项全绿；六 guard、八指令对/五 checker、v1 五文件42项、最新生产快照四用例24阶段、两份 lockfile 零阻挡（沿用两例外）、包 provenance143输入、固定包 dry-run 与空认证候选安装通过。固定包284,360B，SHA-256 `4b9440c2…`，详见[发布记录](../3.1/bridge-3.1.15-release.md)。六个生产 Worker 源码/配置/部署与前版一致，未部署。负责人授权协调后取得 heavy，串行验证完成即释放。
+  - npm 上传进程等待负责人浏览器二次认证；尚未声称公开发布成功。运行中 Bridge 未更新，App 与 Worker 发布不在本任务范围。
 
 - 2026-10-06 CI 追踪追加：本地模型 supervisor 并发启动竞态（QQ 邮箱调查后继续验证 main）。
   - CI 精简 PR #199 在最新 main 上 11 项全部通过，已合并为 19ec342e；此前 main run 37422232668 又在 macOS concurrent-start 进程测试退出 1。原日志没有内部错误，不能仅由退出码认定原因；新增真 socket 回归固定复现「读旧 credential、连接新 owner 被拒绝」的启动失败，旧实现先红、修复后绿。
@@ -1946,6 +1947,7 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 
 | 编号 | 事项 | 怎么做 | 验证方法 | 状态 |
 |---|---|---|---|---|
+| HT-BRIDGE-315-AUTH-1006 | Bridge 3.1.15 npm 发布认证 | 完成本次 npm 浏览器安全密钥/双重认证，沿用固定候选。 | 上传接受后，公开 version/latest、完整无认证下载 hash 与候选一致，再独立安装。 | 所有候选门禁通过；认证待负责人，公开发布尚未完成。 |
 | HT-CLAUDE-HISTORY-1006 | Claude历史列表修复发布与手机验收 | 明确更新到公开Bridge3.1.14后，使用当前App与原配对，在All projects和单项目刷新历史、打开旧会话、返回再刷新。 | 正常历史能完整分页；缺省cwd不再令全列表失败；原scope/owner保护和新聊天保持。 | 候选真实只读目录156条/2页及86项窄回归、最终CI十一项通过；PR191已合并。3.1.14公开version/latest及完整包hash已核验；运行中Bridge未替换，手机验收待明确更新。 |
 | HT-CODEX-PARAGRAPHS-1006 | Codex 长回合多段回复的手机验收 | 用包含本轮修复的开发客户端或后续授权更新，在独立会话观察多段 commentary/工具回复；过程中重连、切换会话再返回，并继续到结束。 | 各段只显示一次，段落/工具顺序、原气泡 identity/时间保持；历史分批回来不会新增累计大气泡，结束不会重复全文。 | 244项窄回归、类型与本地文档/UI检查通过；物理手机长回合待负责人验收。本轮不发起分发或Bridge/服务端发布。 |
 | HT-SEND-SHEET-AUDIT-1006 | Send 弹窗 PR 的依赖审计阻挡决策 | 已由独立PR #181修复source-map-js/tinypool并合入main，负责人确认继续。 | UI PR rebase fresh main 后完整 required CI 通过才合并。 | 人工决策已完成；PR #179已重基，代理继续CI与合并，无发布动作。 |

@@ -18,6 +18,14 @@ Require six publish-guard cases, documentation rules, both lockfile dependency a
 
 Retain public 3.1.14 as the previous package for deliberate recovery; its updater/shutdown defects remain documented in [Bridge updates](../bridge-updates.md). An explicit managed update must retain the original backend/config/project/environment and verify the authenticated running version. Replies still running are interrupted. Keep existing Claude history and two-computer Codex continuation/Desktop reopen acceptance checkpoints; compatible Mobile delivery is separate. This publication does not execute a runtime update.
 
-## Verification status
+## Verified candidate
 
-Version preparation is complete. Local checks and packaging await the existing QA build's heavy lease; CI and publication evidence will be recorded before declaring this release complete.
+Immutable source `56991532c948874dadc685cbb691da52f041add7` passes all eleven jobs in [CI37423086387](https://github.com/p697/clawket/actions/runs/37423086387), including Windows/macOS and v1 replay, and contains latest main `19ec342e`. Six publish-guard cases, eight instruction pairs/five documentation checker cases, local v1 five files/42 cases and fresh Production snapshot compatibility four cases/24 phases pass. Both lockfile audits have zero blocking advisories with the two existing owner-approved exceptions.
+
+Package verification covers three files, four runtime boundaries, 92 modules and 143 provenance inputs. The fixed-tarball dry run and a fresh empty-auth isolated candidate install pass package identity, exact bundle bytes, update protocol and CLI help. The fixed candidate is `p697-clawket-3.1.15.tgz`, 284,360 bytes, SHA-256 `4b9440c27f6ea713d63e4ca2ffa5fddef1d9b0aacddaef882642658c48795902`, SHA-1 `ee962ed4b492c4cf3f9e0b2b591bad169fc27b49`. Bundle SHA-256 is `0786e2c1d90caa44ae0cb9428da6ef3a16e4f14d212b9a718d6537a69846bfc7`, provenance digest `c291800d78266fcc1364cb8424555ac32de76b7cc7aae3dd3535aa38079ca175`. Delivery-record edits do not rebuild or replace this artifact.
+
+Fresh read-only verification confirms all six Production Worker source/config hashes, deployment anchors and observability settings match the prior release. No Worker was deployed.
+
+## Publication status
+
+The fixed candidate has reached npm's browser authentication challenge. Upload acceptance, public version/latest, complete public download and independent public installation are still pending; this is not yet a verified public release. Running Bridges have not been updated or restarted.
