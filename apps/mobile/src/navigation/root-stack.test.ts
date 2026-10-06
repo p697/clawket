@@ -4,6 +4,7 @@ describe('3.0 root navigation', () => {
   it('uses one stack without any legacy tab route', () => {
     expect(ROOT_ROUTE_NAMES).toEqual([
       'Onboarding',
+      'OpenClawDirect',
       'Roster',
       'Thread',
       'AgentSettings',
