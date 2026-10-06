@@ -40,6 +40,14 @@ export function affectsDesktop(paths, packageJson) {
   return { desktop: matched.length > 0, matched, reason: matched.length ? 'desktop paths changed' : 'no desktop paths changed' };
 }
 
+/** Keep protected OS names even when only lightweight no-desktop jobs are needed. */
+export function desktopJobMatrix(decision) {
+  const runDesktop = decision?.desktop !== false;
+  return { include: ['windows-latest', 'macos-latest'].map((os) => ({
+    os, runner: runDesktop ? os : 'ubuntu-latest', runDesktop,
+  })) };
+}
+
 function changedPaths(base, head) {
   if (!/^[0-9a-f]{40}$/.test(base ?? '') || !/^[0-9a-f]{40}$/.test(head ?? '')) return null;
   try {
@@ -68,5 +76,5 @@ if (isMain) {
     for (const entry of decision.matched.slice(0, 20)) console.error(`  ${entry}`);
   }
   console.error(`desktop jobs: ${decision.desktop ? 'run' : 'skip'} (${decision.reason})`);
-  process.stdout.write(`desktop=${decision.desktop}\n`);
+  process.stdout.write(`desktop=${decision.desktop}\ndesktop_matrix=${JSON.stringify(desktopJobMatrix(decision))}\n`);
 }

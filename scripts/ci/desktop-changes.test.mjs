@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { affectsDesktop, postinstallScripts } from './desktop-changes.mjs';
+import { affectsDesktop, postinstallScripts, desktopJobMatrix } from './desktop-changes.mjs';
 
 const manifest = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
 
-test('mobile, documentation and speech-only changes skip the desktop jobs', () => {
+test('mobile, documentation and speech-only changes skip the desktop suites', () => {
   for (const paths of [
     ['apps/mobile/src/components/ui/Button.tsx', 'apps/mobile/AGENTS.md'],
     ['docs/3.0/PROGRESS.md', 'README.md', 'README.zh-CN.md', 'AGENTS.md'],
@@ -45,5 +45,32 @@ test('scripts the root postinstall runs count as desktop changes', () => {
 test('an unknown or corrupted change list runs the desktop jobs', () => {
   for (const paths of [undefined, null, [], [''], 'apps/mobile/App.tsx', [42]]) {
     assert.equal(affectsDesktop(paths, manifest).desktop, true, JSON.stringify(paths));
+  }
+});
+
+
+test('mobile-only jobs still generate both protected OS check names on lightweight runners', () => {
+  const decision = affectsDesktop(['apps/mobile/src/connection/index.ts'], manifest);
+  assert.deepEqual(desktopJobMatrix(decision), { include: [
+    { os: 'windows-latest', runner: 'ubuntu-latest', runDesktop: false },
+    { os: 'macos-latest', runner: 'ubuntu-latest', runDesktop: false },
+  ] });
+});
+
+test('desktop changes run the unchanged real platform suites', () => {
+  const matrix = desktopJobMatrix(affectsDesktop(['.github/workflows/required-checks.yml'], manifest));
+  assert.deepEqual(matrix.include.map(({ os, runner, runDesktop }) => [os, runner, runDesktop]), [
+    ['windows-latest', 'windows-latest', true], ['macos-latest', 'macos-latest', true],
+  ]);
+});
+
+test('missing or corrupted selector decisions fail closed on both desktop platforms', () => {
+  for (const input of [undefined, null, {}, { desktop: 'false' }, { desktop: 0 }, { desktop: null }]) {
+    const matrix = desktopJobMatrix(input);
+    assert.equal(matrix.include.length, 2);
+    for (const job of matrix.include) {
+      assert.equal(job.runner, job.os);
+      assert.equal(job.runDesktop, true);
+    }
   }
 });

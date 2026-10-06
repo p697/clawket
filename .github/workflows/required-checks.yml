@@ -41,6 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       desktop: ${{ steps.detect.outputs.desktop }}
+      desktop_matrix: ${{ steps.detect.outputs.desktop_matrix }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -57,29 +58,41 @@ jobs:
   desktop:
     name: Bridge and Relay compatibility (${{ matrix.os }})
     needs: changes
-    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.desktop != 'false') }}
-    runs-on: ${{ matrix.os }}
+    if: ${{ !cancelled() }}
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
-      matrix:
-        os: [windows-latest, macos-latest]
+      # A failed selector falls back to real checks on both desktop platforms.
+      matrix: ${{ fromJSON(needs.changes.outputs.desktop_matrix || '{"include":[{"os":"windows-latest","runner":"windows-latest","runDesktop":true},{"os":"macos-latest","runner":"macos-latest","runDesktop":true}]}') }}
     steps:
+      - name: No desktop-affecting changes
+        if: ${{ !matrix.runDesktop }}
+        run: echo 'Desktop tests are unnecessary for this change; preserving both protected check names.'
       - uses: actions/checkout@v4
+        if: ${{ matrix.runDesktop }}
         with:
           fetch-depth: 0
       - uses: actions/setup-node@v4
+        if: ${{ matrix.runDesktop }}
         with:
           node-version: 22
           cache: npm
       - uses: actions/setup-python@v5
+        if: ${{ matrix.runDesktop }}
         with:
           python-version: '3.12'
       - run: npm ci
+        if: ${{ matrix.runDesktop }}
       - run: npm run bridge:build
+        if: ${{ matrix.runDesktop }}
       - run: npm run bridge:test:required
+        if: ${{ matrix.runDesktop }}
       - run: node --test scripts/bridge/local-model-supervisor.test.mjs
+        if: ${{ matrix.runDesktop }}
       - run: npm run test:compat
+        if: ${{ matrix.runDesktop }}
       - run: npx vitest run tests/integration/local-model.e2e.test.ts
+        if: ${{ matrix.runDesktop }}
 
   # `npm run check:required` split into parallel jobs; the gate job below keeps the required name.
   typecheck:
