@@ -419,5 +419,5 @@
   "Gateway password": "รหัสผ่าน Gateway",
   "Hide setup help": "ซ่อนวิธีตั้งค่า",
   "How to set up your Gateway": "วิธีตั้งค่า Gateway",
-  "Read your Gateway token on the OpenClaw computer. For password authentication, use gateway.auth.password. The Gateway must listen on an address your phone can reach.": "อ่านโทเค็นบนคอมพิวเตอร์ OpenClaw สำหรับการยืนยันด้วยรหัสผ่าน ให้ใช้ gateway.auth.password Gateway ต้องรับฟังบนที่อยู่ที่โทรศัพท์เข้าถึงได้"
+  "Open the configuration file shown here and copy gateway.auth.token or gateway.auth.password. The Gateway must listen on an address your phone can reach.": "เปิดไฟล์การตั้งค่าที่แสดง แล้วคัดลอก gateway.auth.token หรือ gateway.auth.password Gateway ต้องรับฟังบนที่อยู่ที่โทรศัพท์เข้าถึงได้"
 }

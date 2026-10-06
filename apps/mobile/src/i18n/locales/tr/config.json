@@ -419,5 +419,5 @@
   "Gateway password": "Ağ geçidi parolası",
   "Hide setup help": "Kurulum yardımını gizle",
   "How to set up your Gateway": "Ağ geçidini kurma",
-  "Read your Gateway token on the OpenClaw computer. For password authentication, use gateway.auth.password. The Gateway must listen on an address your phone can reach.": "OpenClaw bilgisayarında ağ geçidi belirtecini okuyun. Parola doğrulaması için gateway.auth.password kullanın. Ağ geçidi telefonun erişebildiği bir adreste dinlemelidir."
+  "Open the configuration file shown here and copy gateway.auth.token or gateway.auth.password. The Gateway must listen on an address your phone can reach.": "Gösterilen yapılandırma dosyasını açıp gateway.auth.token veya gateway.auth.password değerini kopyalayın. Ağ geçidi telefonun erişebildiği bir adreste dinlemelidir."
 }

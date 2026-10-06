@@ -419,5 +419,5 @@
   "Gateway password": "Mật khẩu Gateway",
   "Hide setup help": "Ẩn trợ giúp thiết lập",
   "How to set up your Gateway": "Cách thiết lập Gateway",
-  "Read your Gateway token on the OpenClaw computer. For password authentication, use gateway.auth.password. The Gateway must listen on an address your phone can reach.": "Đọc token trên máy tính OpenClaw. Với xác thực mật khẩu, dùng gateway.auth.password. Gateway phải lắng nghe tại địa chỉ điện thoại truy cập được."
+  "Open the configuration file shown here and copy gateway.auth.token or gateway.auth.password. The Gateway must listen on an address your phone can reach.": "Mở tệp cấu hình được hiển thị và sao chép gateway.auth.token hoặc gateway.auth.password. Gateway phải lắng nghe tại địa chỉ điện thoại truy cập được."
 }

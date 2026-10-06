@@ -419,5 +419,5 @@
   "Gateway password": "Пароль шлюза",
   "Hide setup help": "Скрыть справку",
   "How to set up your Gateway": "Настройка шлюза",
-  "Read your Gateway token on the OpenClaw computer. For password authentication, use gateway.auth.password. The Gateway must listen on an address your phone can reach.": "Прочитайте токен на компьютере с OpenClaw. Для входа по паролю используйте gateway.auth.password. Шлюз должен слушать адрес, доступный телефону."
+  "Open the configuration file shown here and copy gateway.auth.token or gateway.auth.password. The Gateway must listen on an address your phone can reach.": "Откройте указанный файл конфигурации и скопируйте gateway.auth.token или gateway.auth.password. Шлюз должен слушать адрес, доступный телефону."
 }

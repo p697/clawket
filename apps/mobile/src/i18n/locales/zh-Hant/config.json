@@ -419,5 +419,5 @@
   "Gateway password": "閘道密碼",
   "Hide setup help": "收起設定說明",
   "How to set up your Gateway": "如何設定閘道",
-  "Read your Gateway token on the OpenClaw computer. For password authentication, use gateway.auth.password. The Gateway must listen on an address your phone can reach.": "在 OpenClaw 電腦上讀取閘道 Token。使用密碼驗證時，改為讀取 gateway.auth.password。閘道必須監聽手機可存取的位址。"
+  "Open the configuration file shown here and copy gateway.auth.token or gateway.auth.password. The Gateway must listen on an address your phone can reach.": "開啟命令顯示的設定檔，複製 gateway.auth.token 或 gateway.auth.password。閘道必須監聽手機可存取的位址。"
 }

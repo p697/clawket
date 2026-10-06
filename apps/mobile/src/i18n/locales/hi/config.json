@@ -419,5 +419,5 @@
   "Gateway password": "Gateway पासवर्ड",
   "Hide setup help": "सेटअप सहायता छिपाएँ",
   "How to set up your Gateway": "Gateway कैसे सेट करें",
-  "Read your Gateway token on the OpenClaw computer. For password authentication, use gateway.auth.password. The Gateway must listen on an address your phone can reach.": "OpenClaw कंप्यूटर पर Gateway टोकन देखें। पासवर्ड प्रमाणीकरण के लिए gateway.auth.password इस्तेमाल करें। Gateway को फ़ोन से पहुँच योग्य पते पर सुनना होगा।"
+  "Open the configuration file shown here and copy gateway.auth.token or gateway.auth.password. The Gateway must listen on an address your phone can reach.": "दिखाई गई कॉन्फ़िगरेशन फ़ाइल खोलें और gateway.auth.token या gateway.auth.password कॉपी करें। Gateway को फ़ोन से पहुँच योग्य पते पर सुनना होगा।"
 }

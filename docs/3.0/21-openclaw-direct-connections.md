@@ -12,7 +12,7 @@ Connect completes only after the current target's OpenClaw handshake reaches `re
 
 - Wi-Fi: both devices share a reachable LAN. OpenClaw must listen on LAN (`gateway.bind=lan`) or a custom reachable address, not loopback only. The host firewall and Wi-Fi client isolation must permit the Gateway port (normally 18789).
 - `clawket pair local --backend openclaw` remains the local-QR setup flow and can be scanned through the existing OpenClaw guide. It can configure local access and emits the address and authenticated QR; it does not print the token separately.
-- Manual Token authentication: retrieve the credential privately on the computer with `openclaw config get gateway.auth.token`. For Password, use `openclaw config get gateway.auth.password`. Never paste credentials into issue descriptions or logs.
+- Manual authentication: use `openclaw config file` on the computer, then privately read `gateway.auth.token` or `gateway.auth.password` in that file (or resolve its configured secret reference). Current `openclaw config get` redacts credentials, so the help does not promise a plaintext token from that command. Never paste credentials into issue descriptions or logs.
 - Tailscale: both devices must be authorized in the same Tailnet. Use `ws://<Tailscale-IP>:18789` with a Gateway bound to `tailnet`, or the trusted `https://<machine>.<tailnet>.ts.net` Serve endpoint (normalized to `wss`). Native Gateway clients still supply Gateway authentication. This page neither installs Tailscale nor changes ACLs.
 - Custom: use a reachable Gateway endpoint, preferably `wss` with a certificate trusted by the phone. TLS trust is never disabled. Device approval, when requested, remains on the OpenClaw computer.
 

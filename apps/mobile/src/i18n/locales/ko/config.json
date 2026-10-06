@@ -419,5 +419,5 @@
   "Gateway password": "게이트웨이 비밀번호",
   "Hide setup help": "설정 도움말 숨기기",
   "How to set up your Gateway": "게이트웨이 설정 방법",
-  "Read your Gateway token on the OpenClaw computer. For password authentication, use gateway.auth.password. The Gateway must listen on an address your phone can reach.": "OpenClaw 컴퓨터에서 게이트웨이 토큰을 확인하세요. 비밀번호 인증은 gateway.auth.password를 사용하세요. 게이트웨이는 휴대폰에서 접근 가능한 주소로 수신해야 합니다."
+  "Open the configuration file shown here and copy gateway.auth.token or gateway.auth.password. The Gateway must listen on an address your phone can reach.": "표시된 설정 파일을 열고 gateway.auth.token 또는 gateway.auth.password를 복사하세요. 게이트웨이는 휴대폰에서 접근 가능한 주소로 수신해야 합니다."
 }

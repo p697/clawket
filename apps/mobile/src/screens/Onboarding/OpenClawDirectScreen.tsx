@@ -80,8 +80,8 @@ export function OpenClawDirectScreen({ busy, error, onBack, onDraftChanged, onSu
         </FormStep>
         <Button testID="direct-help" label={help ? t('Hide setup help') : t('How to set up your Gateway')} variant="text" onPress={() => setHelp(!help)} />
         {help ? <View style={styles.help}>
-          <Text style={[styles.hint, { color: colors.inkSecondary }]}>{t('Read your Gateway token on the OpenClaw computer. For password authentication, use gateway.auth.password. The Gateway must listen on an address your phone can reach.')}</Text>
-          <CommandBlock stacked command="openclaw config get gateway.auth.token" onCopy={() => onCopyCommand('openclaw config get gateway.auth.token')} />
+          <Text style={[styles.hint, { color: colors.inkSecondary }]}>{t('Open the configuration file shown here and copy gateway.auth.token or gateway.auth.password. The Gateway must listen on an address your phone can reach.')}</Text>
+          <CommandBlock stacked command="openclaw config file" onCopy={() => onCopyCommand('openclaw config file')} />
           <Text style={[styles.hint, { color: colors.inkSecondary }]}>{t('For Tailscale, use the computer’s Tailscale IP with the Gateway port, or its HTTPS Serve address. Gateway authentication is still required.')}</Text>
           <Text style={[styles.hint, { color: colors.inkSecondary }]}>{t('For wss://, use a certificate trusted by your phone. Self-signed certificates are not accepted.')}</Text>
         </View> : null}

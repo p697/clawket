@@ -419,5 +419,5 @@
   "Gateway password": "ゲートウェイパスワード",
   "Hide setup help": "設定ヘルプを閉じる",
   "How to set up your Gateway": "ゲートウェイの設定方法",
-  "Read your Gateway token on the OpenClaw computer. For password authentication, use gateway.auth.password. The Gateway must listen on an address your phone can reach.": "OpenClaw のパソコンでゲートウェイトークンを確認します。パスワード認証の場合は gateway.auth.password を使用します。ゲートウェイはスマートフォンから到達できるアドレスで待ち受ける必要があります。"
+  "Open the configuration file shown here and copy gateway.auth.token or gateway.auth.password. The Gateway must listen on an address your phone can reach.": "表示された設定ファイルを開き、gateway.auth.token または gateway.auth.password をコピーします。ゲートウェイはスマートフォンから到達できるアドレスで待ち受ける必要があります。"
 }

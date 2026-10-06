@@ -419,5 +419,5 @@
   "Gateway password": "Contraseña de la gateway",
   "Hide setup help": "Ocultar ayuda",
   "How to set up your Gateway": "Configurar la gateway",
-  "Read your Gateway token on the OpenClaw computer. For password authentication, use gateway.auth.password. The Gateway must listen on an address your phone can reach.": "Consulta el token en la computadora OpenClaw. Para autenticación con contraseña, usa gateway.auth.password. El gateway debe escuchar en una dirección accesible desde el teléfono."
+  "Open the configuration file shown here and copy gateway.auth.token or gateway.auth.password. The Gateway must listen on an address your phone can reach.": "Abre el archivo de configuración indicado y copia gateway.auth.token o gateway.auth.password. El gateway debe escuchar en una dirección accesible desde el teléfono."
 }

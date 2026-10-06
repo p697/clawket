@@ -419,5 +419,5 @@
   "Gateway password": "网关密码",
   "Hide setup help": "收起设置帮助",
   "How to set up your Gateway": "如何设置网关",
-  "Read your Gateway token on the OpenClaw computer. For password authentication, use gateway.auth.password. The Gateway must listen on an address your phone can reach.": "在 OpenClaw 电脑上读取网关 Token。使用密码鉴权时，改为读取 gateway.auth.password。网关必须监听手机可访问的地址。"
+  "Open the configuration file shown here and copy gateway.auth.token or gateway.auth.password. The Gateway must listen on an address your phone can reach.": "打开命令显示的配置文件，复制 gateway.auth.token 或 gateway.auth.password。网关必须监听手机可访问的地址。"
 }

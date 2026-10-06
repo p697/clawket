@@ -419,5 +419,5 @@
   "Gateway password": "كلمة مرور البوابة",
   "Hide setup help": "إخفاء مساعدة الإعداد",
   "How to set up your Gateway": "كيفية إعداد البوابة",
-  "Read your Gateway token on the OpenClaw computer. For password authentication, use gateway.auth.password. The Gateway must listen on an address your phone can reach.": "اقرأ رمز البوابة على كمبيوتر OpenClaw. للمصادقة بكلمة مرور استخدم gateway.auth.password. يجب أن تستمع البوابة على عنوان يمكن للهاتف الوصول إليه."
+  "Open the configuration file shown here and copy gateway.auth.token or gateway.auth.password. The Gateway must listen on an address your phone can reach.": "افتح ملف الإعدادات المشار إليه وانسخ gateway.auth.token أو gateway.auth.password. يجب أن تستمع البوابة على عنوان يمكن للهاتف الوصول إليه."
 }

@@ -226,6 +226,6 @@ describe('direct connection form', () => {
     expect(p.onBack).toHaveBeenCalled();
     fireEvent.press(view.getByTestId('direct-help'));
     fireEvent.press(view.getByTestId('onboarding-copy-command'));
-    expect(p.onCopyCommand).toHaveBeenCalledWith('openclaw config get gateway.auth.token');
+    expect(p.onCopyCommand).toHaveBeenCalledWith('openclaw config file');
   });
 });
