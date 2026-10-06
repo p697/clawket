@@ -461,7 +461,6 @@
   "Editing {{detail}}": "กำลังแก้ไข {{detail}}",
   "Searching {{detail}}": "กำลังค้นหา {{detail}}",
   "Opening {{detail}}": "กำลังเปิด {{detail}}",
-  "{{detail}} failed": "{{detail}} ล้มเหลว",
   "Work record": "บันทึกการทำงาน",
   "1 step": "1 ขั้นตอน",
   "{{count}} steps": "{{count}} ขั้นตอน",
@@ -514,7 +513,5 @@
   "Could not check Bridge updates. Try again later.": "ตรวจสอบอัปเดตไม่สำเร็จ โปรดลองภายหลัง",
   "The unified updater is available in newer Bridge releases. Use your original deployment method for this release.": "Bridge รุ่นใหม่รองรับตัวอัปเดตรวม สำหรับรุ่นนี้ ให้ใช้วิธีติดตั้งเดิมเพื่ออัปเดต",
   "Now": "ตอนนี้",
-  "1 new step": "1 ขั้นตอนใหม่",
-  "{{count}} new steps": "{{count}} ขั้นตอนใหม่",
   "You: “{{text}}”": "คุณ: “{{text}}”"
 }

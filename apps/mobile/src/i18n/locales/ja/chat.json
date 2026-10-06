@@ -461,7 +461,6 @@
   "Editing {{detail}}": "{{detail}} を編集中",
   "Searching {{detail}}": "{{detail}} を検索中",
   "Opening {{detail}}": "{{detail}} を開いています",
-  "{{detail}} failed": "{{detail}} に失敗",
   "Work record": "作業記録",
   "1 step": "1ステップ",
   "{{count}} steps": "{{count}}ステップ",
@@ -514,7 +513,5 @@
   "Could not check Bridge updates. Try again later.": "更新を確認できません。後でもう一度お試しください。",
   "The unified updater is available in newer Bridge releases. Use your original deployment method for this release.": "新しい Bridge リリースでは統合アップデーターを利用できます。このリリースは従来の導入方法で更新してください。",
   "Now": "現在",
-  "1 new step": "新しいステップ 1件",
-  "{{count}} new steps": "新しいステップ {{count}}件",
   "You: “{{text}}”": "あなた：「{{text}}」"
 }

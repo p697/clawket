@@ -57,6 +57,11 @@ it('heads a call the Agent named with its title and keeps the tool name beside t
 it('does not report success when a failed or running tool has no output', () => {
   const view = render(<ToolDetailModal {...props} status="error" args={undefined} />);
   expect(view.getByText('Failed')).toBeTruthy();
+  // A failed step reads like any other: its status says so, never in red (owner decision 2026-10-06).
+  const colors = require('../../theme/theme').buildTheme('light', 'light', require('../../theme/accents').resolveAccentScale('purple')).colors;
+  const statusColor = [view.getByText('Failed').props.style].flat(Infinity).reduce((color: unknown, style: any) => style?.color ?? color, undefined);
+  expect(statusColor).toBe(colors.inkSecondary);
+  expect(statusColor).not.toBe(colors.bad);
   expect(view.getByText('No output recorded.')).toBeTruthy();
   expect(view.queryByText('No output — tool completed successfully.')).toBeNull();
   view.rerender(<ToolDetailModal {...props} status="running" durationMs={20} />);

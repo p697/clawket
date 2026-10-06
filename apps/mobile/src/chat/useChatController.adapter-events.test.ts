@@ -564,6 +564,55 @@ describe('useChatController adapter event migration', () => {
     expect(historyMock.messages[1]).toEqual(expect.objectContaining({ role: 'assistant', text: 'OK' }));
     });
 
+  it.each([
+    ['codex', true], ['codex', false], ['openclaw', true],
+  ] as const)('keeps the paragraphs a %s live tail showed before a final that repeats only its last one (tool: %s)', (backend, withTool) => {
+    const { result, handlers } = renderController(backend);
+    const startedAt = Date.UTC(2026, 9, 6, 7, 40, 0);
+    const user = { id: 'native-user', role: 'user' as const, text: 'Run the checks', timestampMs: startedAt };
+    historyMock.messages = [user];
+    const receive = (update: any, at: number) => {
+      jest.setSystemTime(at);
+      act(() => handlers.onUpdate?.(mapAdapterSessionUpdate(update, { now: () => at })));
+    };
+    act(() => handlers.onState?.('ready'));
+    receive({ type: 'run_started', sessionKey: 'agent:main:main', runId: 'tail-run' }, startedAt);
+    const before = withTool ? 'The date is October 6.\n\n' : '';
+    if (withTool) {
+      receive({ type: 'agent_message_chunk', sessionKey: 'agent:main:main', runId: 'tail-run', textMode: 'snapshot', text: 'The date is October 6.' }, startedAt + 2_000);
+      receive({ type: 'tool_call', sessionKey: 'agent:main:main', runId: 'tail-run', toolCallId: 'uptime', title: 'exec' }, startedAt + 3_000);
+      receive({ type: 'tool_call_update', sessionKey: 'agent:main:main', runId: 'tail-run', toolCallId: 'uptime', status: 'success' }, startedAt + 4_000);
+    }
+    receive({ type: 'agent_message_chunk', sessionKey: 'agent:main:main', runId: 'tail-run', textMode: 'snapshot',
+      text: `${before}The system has been up for eight days.\n\nAll six commands completed.` }, startedAt + 6_000);
+    const tail = result.current.listData.find(message => message.id === 'streaming');
+    expect(tail?.text).toBe('The system has been up for eight days.\n\nAll six commands completed.');
+    // The backend's final carries only its last message.
+    receive({ type: 'run_finished', sessionKey: 'agent:main:main', runId: 'tail-run', stopReason: 'end_turn',
+      message: { role: 'assistant', content: 'All six commands completed.' } }, startedAt + 8_000);
+    const replies = historyMock.messages.filter(message => message.role === 'assistant');
+    expect(replies.map(message => message.text)).toEqual([
+      ...(withTool ? ['The date is October 6.'] : []), 'The system has been up for eight days.', 'All six commands completed.',
+    ]);
+    // The earlier paragraph stays in the bubble that showed it; the final takes its own.
+    expect(replies.at(-2)?.renderKey).toBe(tail?.renderKey);
+    expect(replies.at(-1)?.renderKey).not.toBe(tail?.renderKey);
+  });
+
+  it('keeps a final that repeats the whole live tail as one reply', () => {
+    const { handlers } = renderController('codex');
+    historyMock.messages = [{ id: 'native-user', role: 'user' as const, text: 'Run the checks' }];
+    act(() => {
+      handlers.onState?.('ready');
+      handlers.onUpdate?.(mapAdapterSessionUpdate({ type: 'run_started', sessionKey: 'agent:main:main', runId: 'whole-run' }));
+      handlers.onUpdate?.(mapAdapterSessionUpdate({ type: 'agent_message_chunk', sessionKey: 'agent:main:main', runId: 'whole-run', textMode: 'snapshot',
+        text: 'Checked it.\n\nAll done.' }));
+      handlers.onUpdate?.(mapAdapterSessionUpdate({ type: 'run_finished', sessionKey: 'agent:main:main', runId: 'whole-run', stopReason: 'end_turn',
+        message: { role: 'assistant', content: 'Checked it.\n\nAll done.' } }));
+    });
+    expect(historyMock.messages.filter(message => message.role === 'assistant').map(message => message.text)).toEqual(['Checked it.\n\nAll done.']);
+  });
+
   it.each([false, true])('retains the final reply completion clock and separator through repeated canonical reloads (tool: %s)', withTool => {
     const { result, adapter, handlers } = renderController('codex');
     const startedAt = 1727996280000, completedAt = startedAt + 31 * 60_000;

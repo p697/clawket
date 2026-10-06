@@ -461,7 +461,6 @@
   "Editing {{detail}}": "Đang sửa {{detail}}",
   "Searching {{detail}}": "Đang tìm {{detail}}",
   "Opening {{detail}}": "Đang mở {{detail}}",
-  "{{detail}} failed": "{{detail}} thất bại",
   "Work record": "Nhật ký làm việc",
   "1 step": "1 bước",
   "{{count}} steps": "{{count}} bước",
@@ -514,7 +513,5 @@
   "Could not check Bridge updates. Try again later.": "Không thể kiểm tra cập nhật. Hãy thử lại sau.",
   "The unified updater is available in newer Bridge releases. Use your original deployment method for this release.": "Các bản Bridge mới hơn hỗ trợ trình cập nhật hợp nhất. Với bản này, hãy dùng phương thức triển khai ban đầu.",
   "Now": "Bây giờ",
-  "1 new step": "1 bước mới",
-  "{{count}} new steps": "{{count}} bước mới",
   "You: “{{text}}”": "Bạn: “{{text}}”"
 }

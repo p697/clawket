@@ -3112,37 +3112,33 @@ it('names Codex js calls by their titles in the work dock, the work record and t
   }
 });
 
-it('keeps a failure the Agent moved past quiet and turns the receipt of a turn that ended on one red', () => {
+it('reads a failed step as an ordinary step whose status says Failed, never in red', () => {
   const prompt: UiMessage = { id: 'ask', role: 'user', text: 'Check CI' };
   const ok: UiMessage = { id: 'a', role: 'tool', text: '', toolName: 'exec', toolArgs: JSON.stringify({ command: 'gh pr view 50' }), toolStatus: 'success' };
-  const failed: UiMessage = { ...ok, id: 'b', toolArgs: JSON.stringify({ command: 'gh pr checks 50' }), toolStatus: 'error' };
+  const failed: UiMessage = { ...ok, id: 'b', toolArgs: JSON.stringify({ command: 'gh pr checks 50' }), toolStatus: 'error', toolDetail: 'Error: checks failed' };
   const view = render(<ThreadView {...createProps({ messages: [failed, ok, prompt] })} />);
   const keys = () => view.getByTestId('thread-screen-timeline').props.data.map((item: any) => item.key);
+  const theme = buildTheme(mockScheme, mockScheme, builtInAccents.iceBlue).colors;
   // Nothing was said: the receipt stands in the Agent's own bubble, never a centred pill.
   expect(keys()).toEqual(['message:ask', 'receipt:a']);
+  // Even a turn that ended on a failed step keeps the ordinary receipt (owner decision 2026-10-06).
   const chip = view.getByTestId('thread-receipt:a-chip');
-  expect(chip.props.accessibilityLabel).toBe('Work record: gh pr checks 50 failed');
-  expect(view.getByTestId('thread-receipt:a-chip-glyph').type).toBe('CircleAlert');
-  // Red glyph on a soft red fill; the words keep the bubble's text color, never red on red.
-  const bad = buildTheme(mockScheme, mockScheme, builtInAccents.iceBlue).colors.bad;
-  expect(view.getByTestId('thread-receipt:a-chip-glyph').props.color).toBe(bad);
-  expect(flattenStyle(within(chip).getByText('gh pr checks 50', { exact: false }).props.style).color).not.toBe(bad);
-  expect(view.getByTestId('thread-receipt:a')).toBeTruthy();
+  expect(chip.props.accessibilityLabel).toBe('Work record: Ran 2 commands');
+  expect(view.getByTestId('thread-receipt:a-chip-glyph').type).toBe('Layers');
+  expect(view.getByTestId('thread-receipt:a-chip-glyph').props.color).not.toBe(theme.bad);
   fireEvent.press(chip);
-  expect(view.getByTestId('thread-run-a')).toBeTruthy();
+  // The failed step reads like the others: its command, then "Failed" where a duration would be.
+  const row = within(view.getByTestId('thread-run-b'));
+  expect(row.getByText('gh pr checks 50')).toBeTruthy();
+  expect(row.queryByText('Error: checks failed')).toBeNull();
+  expect(flattenStyle(row.getByText('Failed').props.style).color).toBe(theme.inkTertiary);
   expect(view.getByTestId('thread-run-b').props.accessibilityLabel).toContain('Failed');
 
-  const answer: UiMessage = { id: 'answer', role: 'assistant', text: 'CI is green now.' };
-  view.rerender(<ThreadView {...createProps({ messages: [answer, { ...ok, id: 'c' }, failed, ok, prompt] })} />);
-  expect(keys()).toEqual(['message:ask', 'message:answer']);
-  expect(within(view.getByTestId('thread-receipt-answer')).getByText('Ran 3 commands')).toBeTruthy();
-  expect(view.getByTestId('thread-receipt-answer-glyph').type).toBe('Layers');
-
-  // Words said before a final failed step carry the receipt, red.
+  // Words said before a final failed step carry the same ordinary receipt.
   const trying: UiMessage = { id: 'trying', role: 'assistant', text: 'Checking CI.' };
   view.rerender(<ThreadView {...createProps({ messages: [failed, trying, prompt] })} />);
   expect(keys()).toEqual(['message:ask', 'message:trying']);
-  expect(view.getByTestId('thread-receipt-trying').props.accessibilityLabel).toBe('Work record: gh pr checks 50 failed');
+  expect(view.getByTestId('thread-receipt-trying').props.accessibilityLabel).toBe('Work record: Ran a command');
 });
 
 it('reads a finished turn from where it ended down to where it started', () => {
@@ -3404,20 +3400,80 @@ describe('work dock', () => {
     expect(within(view.getByTestId('thread-run-x')).queryByText('Now')).toBeNull();
   });
 
-  it('keeps the reader\'s place below the top and counts the steps that arrive above', () => {
+  it('glides rows to make room at the top and holds the reader\'s place further down, with no new-steps chip', () => {
     const props = createProps({ isRunning: true, messages: [run, prompt] });
     const view = render(<ThreadView {...props} />);
     fireEvent.press(view.getByTestId('thread-screen-work-dock'));
     const scroll = () => view.getByTestId('work-panel-scroll');
-    expect(scroll().props.maintainVisibleContentPosition).toEqual({ minIndexForVisible: 0, autoscrollToTopThreshold: Space.xl });
+    const motion = (id: string) => view.getByTestId(`work-motion-${id}`);
+    // At the top an arrival pushes the rest down: they glide, so the view need not hold anything.
+    expect(scroll().props.maintainVisibleContentPosition).toBeUndefined();
+    expect(motion('x').props.layout).toMatchObject({ name: 'LinearTransition', durationMs: Motion.duration.normal });
     act(() => scroll().props.onScroll({ nativeEvent: { contentOffset: { y: 200 } } }));
-    expect(view.queryByTestId('work-panel-new-steps')).toBeNull();
+    // Reading further down, the view keeps the reader's rows still and nothing glides.
+    expect(scroll().props.maintainVisibleContentPosition).toEqual({ minIndexForVisible: 0 });
+    expect(motion('x').props.layout).toBeUndefined();
     const next: UiMessage = { ...run, id: 'y', toolArgs: JSON.stringify({ command: 'npm run lint' }) };
     view.rerender(<ThreadView {...props} messages={[next, { ...run, toolStatus: 'success' }, prompt]} />);
-    expect(within(view.getByTestId('work-panel-new-steps')).getByText('1 new step')).toBeTruthy();
-    // Back at the top the newest steps are in view: the chip goes.
+    expect(view.queryByText('1 new step')).toBeNull();
     act(() => scroll().props.onScroll({ nativeEvent: { contentOffset: { y: 0 } } }));
-    expect(view.queryByTestId('work-panel-new-steps')).toBeNull();
+    expect(scroll().props.maintainVisibleContentPosition).toBeUndefined();
+  });
+
+  it('crosses "Thinking…" with the step that starts and fades it back in when the step ends', () => {
+    const done = { ...run, toolStatus: 'success' as const };
+    const props = createProps({ isRunning: true, messages: [done, prompt] });
+    const view = render(<ThreadView {...props} />);
+    fireEvent.press(view.getByTestId('thread-screen-work-dock'));
+    const now = () => view.getByTestId('work-motion-now');
+    // Shown when the panel opened: it stays still.
+    expect(now().props.entering).toBeUndefined();
+    expect(now().props.exiting).toMatchObject({ name: 'FadeOut', durationMs: Motion.duration.fast });
+    const next: UiMessage = { ...run, id: 'y', toolArgs: JSON.stringify({ command: 'npm run lint' }) };
+    view.rerender(<ThreadView {...props} messages={[next, done, prompt]} />);
+    expect(view.queryByTestId('work-timeline-now')).toBeNull();
+    const entering = view.getByTestId('work-motion-y').props.entering as () => { initialValues: unknown };
+    expect(entering().initialValues).toEqual({ opacity: 0, transform: [{ translateY: -Motion.step.rise }] });
+    view.rerender(<ThreadView {...props} messages={[{ ...next, toolStatus: 'success' }, done, prompt]} />);
+    expect(now().props.entering).toMatchObject({ name: 'FadeIn', durationMs: Motion.step.duration });
+    // The finished step changes its glyph and time in a quick fade where it stands.
+    const settled = within(view.getByTestId('thread-run-y')).getByText('npm run lint');
+    expect(settled).toBeTruthy();
+  });
+
+  it('fades a receipt in when it lands under a reply already on screen, never one that arrives with its reply', () => {
+    const answer: UiMessage = { id: 'answer', role: 'assistant', text: 'All green.' };
+    const done = { ...run, toolStatus: 'success' as const };
+    const props = createProps({ messages: [answer, prompt] });
+    const view = render(<ThreadView {...props} />);
+    view.rerender(<ThreadView {...props} messages={[answer, done, prompt]} />);
+    expect(view.getByTestId('thread-receipt-answer-motion').props.entering).toMatchObject({ name: 'FadeIn', durationMs: Motion.duration.normal });
+    view.unmount();
+
+    const fresh = render(<ThreadView {...createProps({ messages: [answer, done, prompt] })} />);
+    expect(fresh.getByTestId('thread-receipt-answer-motion').props.entering).toBeUndefined();
+    fresh.unmount();
+
+    mockReducedMotion = true;
+    try {
+      const still = render(<ThreadView {...props} />);
+      still.rerender(<ThreadView {...props} messages={[answer, done, prompt]} />);
+      expect(still.getByTestId('thread-receipt-answer-motion').props.entering).toBeUndefined();
+    } finally {
+      mockReducedMotion = false;
+    }
+  });
+
+  it('keeps one row for a step whose live row history replaces under another id', () => {
+    const props = createProps({ isRunning: true, messages: [{ ...run, id: 'toolcall_x', toolStatus: 'success' }, prompt] });
+    const view = render(<ThreadView {...props} />);
+    fireEvent.press(view.getByTestId('thread-screen-work-dock'));
+    const next: UiMessage = { ...run, id: 'toolcall_y', toolArgs: JSON.stringify({ command: 'npm run lint' }) };
+    view.rerender(<ThreadView {...props} messages={[next, { ...run, id: 'toolcall_x', toolStatus: 'success' }, prompt]} />);
+    expect(view.getByTestId('work-motion-toolcall_y').props.entering).toBeDefined();
+    // History brings the finished step back as a result row: the same row, which does not enter again.
+    view.rerender(<ThreadView {...props} messages={[{ ...next, id: 'toolresult_y', toolStatus: 'success' }, { ...run, id: 'toolcall_x', toolStatus: 'success' }, prompt]} />);
+    expect(view.getByTestId('work-motion-toolresult_y').props.entering).toBeUndefined();
   });
 
   it('makes way for a waiting question and shrinks to one line while typing', () => {

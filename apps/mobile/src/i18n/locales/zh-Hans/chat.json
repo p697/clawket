@@ -461,7 +461,6 @@
   "Editing {{detail}}": "正在修改 {{detail}}",
   "Searching {{detail}}": "正在搜索 {{detail}}",
   "Opening {{detail}}": "正在打开 {{detail}}",
-  "{{detail}} failed": "{{detail}} 失败",
   "Work record": "工作记录",
   "1 step": "1 步",
   "{{count}} steps": "{{count}} 步",
@@ -514,7 +513,5 @@
   "Could not check Bridge updates. Try again later.": "无法检查 Bridge 更新，请稍后重试。",
   "The unified updater is available in newer Bridge releases. Use your original deployment method for this release.": "较新的 Bridge 版本支持统一升级。此版本请使用原来的部署方式更新。",
   "Now": "现在",
-  "1 new step": "1 个新步骤",
-  "{{count}} new steps": "{{count}} 个新步骤",
   "You: “{{text}}”": "你：“{{text}}”"
 }

@@ -188,8 +188,6 @@ export function collectTurnWorkAround(messages: ReadonlyArray<UiMessage>, anchor
 export type TurnReceipt = Readonly<{
   /** The turn's tool calls, oldest first. */
   steps: ReadonlyArray<UiMessage>;
-  /** The turn ended on a failed step with nothing said after it: the one time a turn reads red. */
-  failed: boolean;
 }>;
 
 export type FoldedTurns = Readonly<{
@@ -210,8 +208,7 @@ const NO_RECEIPTS: ReadonlyMap<string, TurnReceipt> = new Map();
  * Takes tool steps out of the conversation. A finished turn puts its receipt
  * under its last words, even when they came before its last step; a turn
  * that said nothing keeps the receipt standing where its newest step was.
- * The receipt reads red only when the turn ended on a failed step. The running
- * turn (`liveTurnOpen`) shows nothing for its steps: the dock does. Approvals
+ * The running turn (`liveTurnOpen`) shows nothing for its steps: the dock does. Approvals
  * and everything said stay where they are.
  */
 export function foldTurnSteps(messages: ReadonlyArray<UiMessage>, liveTurnOpen: boolean, active?: RunWorkIdentity): FoldedTurns {
@@ -243,9 +240,7 @@ export function foldTurnSteps(messages: ReadonlyArray<UiMessage>, liveTurnOpen: 
     } else if (live) {
       for (const message of turn) if (!isTurnStep(message)) shown.push(message);
     } else {
-      const steps = turn.filter(isTurnStep).reverse();
-      const newestWork = turn.find((message) => isTurnStep(message) || saysSomething(message))!;
-      const receipt = { steps, failed: newestWork === newestStep && newestStep.toolStatus === 'error' };
+      const receipt = { steps: turn.filter(isTurnStep).reverse() };
       const lastWords = turn.find(saysSomething);
       if (lastWords) {
         receipts.set(renderKeyOf(lastWords), receipt);

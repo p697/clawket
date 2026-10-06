@@ -461,7 +461,6 @@
   "Editing {{detail}}": "Modifica di {{detail}}",
   "Searching {{detail}}": "Ricerca di {{detail}}",
   "Opening {{detail}}": "Apertura di {{detail}}",
-  "{{detail}} failed": "{{detail}} non riuscito",
   "Work record": "Registro attività",
   "1 step": "1 passaggio",
   "{{count}} steps": "{{count}} passaggi",
@@ -514,7 +513,5 @@
   "Could not check Bridge updates. Try again later.": "Impossibile verificare gli aggiornamenti. Riprova più tardi.",
   "The unified updater is available in newer Bridge releases. Use your original deployment method for this release.": "Le versioni più recenti del Bridge offrono un aggiornamento unificato. Per questa versione usa il metodo di distribuzione abituale.",
   "Now": "Ora",
-  "1 new step": "1 nuovo passaggio",
-  "{{count}} new steps": "{{count}} nuovi passaggi",
   "You: “{{text}}”": "Tu: «{{text}}»"
 }

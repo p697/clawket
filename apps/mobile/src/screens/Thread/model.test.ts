@@ -475,7 +475,7 @@ describe('Thread model', () => {
     ]);
     const receipt = timeline[0]?.type === 'message' ? timeline[0].receipt : undefined;
     expect(receipt?.steps.map((step) => step.id)).toEqual(['failed', 'exec-1', 'exec-2']);
-    expect(receipt?.failed).toBe(false);
+    expect(receipt).toEqual({ steps: receipt?.steps });
   });
 
   it('keeps an approval prompt inside the Agent turn regardless of its wire role', () => {

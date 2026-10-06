@@ -461,7 +461,6 @@
   "Editing {{detail}}": "{{detail}} düzenleniyor",
   "Searching {{detail}}": "{{detail}} aranıyor",
   "Opening {{detail}}": "{{detail}} açılıyor",
-  "{{detail}} failed": "{{detail}} başarısız",
   "Work record": "Çalışma kaydı",
   "1 step": "1 adım",
   "{{count}} steps": "{{count}} adım",
@@ -514,7 +513,5 @@
   "Could not check Bridge updates. Try again later.": "Güncellemeler denetlenemedi. Daha sonra tekrar deneyin.",
   "The unified updater is available in newer Bridge releases. Use your original deployment method for this release.": "Daha yeni Bridge sürümleri birleşik güncelleyiciyi destekler. Bu sürümü mevcut dağıtım yönteminizi kullanarak güncelleyin.",
   "Now": "Şimdi",
-  "1 new step": "1 yeni adım",
-  "{{count}} new steps": "{{count}} yeni adım",
   "You: “{{text}}”": "Siz: “{{text}}”"
 }

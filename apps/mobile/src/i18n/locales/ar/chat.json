@@ -461,7 +461,6 @@
   "Editing {{detail}}": "جارٍ تعديل {{detail}}",
   "Searching {{detail}}": "جارٍ البحث عن {{detail}}",
   "Opening {{detail}}": "جارٍ فتح {{detail}}",
-  "{{detail}} failed": "فشل {{detail}}",
   "Work record": "سجل العمل",
   "1 step": "خطوة واحدة",
   "{{count}} steps": "عدد الخطوات: {{count}}",
@@ -514,7 +513,5 @@
   "Could not check Bridge updates. Try again later.": "تعذر التحقق من التحديثات. حاول لاحقًا.",
   "The unified updater is available in newer Bridge releases. Use your original deployment method for this release.": "تدعم إصدارات Bridge الأحدث أداة التحديث الموحدة. لهذا الإصدار، استخدم طريقة النشر المعتادة.",
   "Now": "الآن",
-  "1 new step": "خطوة جديدة واحدة",
-  "{{count}} new steps": "خطوات جديدة: {{count}}",
   "You: “{{text}}”": "أنت: «{{text}}»"
 }

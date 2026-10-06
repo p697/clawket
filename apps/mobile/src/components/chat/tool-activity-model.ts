@@ -170,23 +170,6 @@ export function formatTurnReceipt(steps: ReadonlyArray<UiMessage>, t: Translate)
   return parts.join(' · ');
 }
 
-/**
- * One line that says why a step failed: the first output line that names an
- * error, else the last line, clipped. Nothing when the step left no output.
- */
-const REASON_LIMIT = 80;
-
-export function failureReason(detail: string | undefined): string | undefined {
-  // Progress meters redraw with carriage returns: each redraw is its own line.
-  const lines = (detail ?? '').split(/[\r\n]+/).map((line) => line.trim()).filter(Boolean);
-  if (lines.length === 0) return undefined;
-  const named = [...lines].reverse().find((line) => (
-    /error|failed|failure|denied|not found|no such|cannot|can't|could not|couldn't|unable|refused|timed out|permission|错误|失败/i.test(line)
-  ));
-  const line = (named ?? lines[lines.length - 1]!).replace(/\s+/g, ' ');
-  return line.length > REASON_LIMIT ? `${line.slice(0, REASON_LIMIT - 1)}…` : line;
-}
-
 /** Joined phrases continue a sentence; scripts without case are unchanged. */
 function lowerFirst(value: string): string {
   const first = value.charAt(0);
@@ -227,14 +210,6 @@ export function describeLiveStep(message: UiMessage, t: Translate): TemplatePart
   const template = LIVE_COPY[activityKind(toolCategory(name))];
   if (!template || !detail) return null;
   return splitTemplate((placeholder) => t(template, { ns: 'chat', detail: placeholder }), clip(detail));
-}
-
-/** A failed step's pill: what failed, with its command or path styled as code when known. */
-export function describeFailedStep(message: UiMessage, fallbackName: string, t: Translate): TemplateParts & { code: boolean } {
-  const { name, args } = effectiveTool(message);
-  const detail = resolveToolDetail(name, args);
-  const parts = splitTemplate((placeholder) => t('{{detail}} failed', { ns: 'chat', detail: placeholder }), clip(detail ?? fallbackName));
-  return { ...parts, code: Boolean(detail) };
 }
 
 function renderKeyOf(message: UiMessage): string {

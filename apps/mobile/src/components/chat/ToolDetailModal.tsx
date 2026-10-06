@@ -86,7 +86,8 @@ export function ToolDetailModal(props: Props): React.JSX.Element {
   const duration = s.status === 'running' ? undefined : formatToolDuration(s.durationMs);
   const statusLabel = s.status === 'running' ? t('Running') : s.status === 'error' ? t('Failed') : s.status === 'unknown' ? t('Result unavailable') : t('Completed');
   const StateIcon = s.status === 'error' || s.status === 'unknown' ? CircleAlert : Check;
-  const stateColor = s.status === 'error' ? theme.colors.bad : theme.colors.inkSecondary;
+  // A failed step reads like any other; its status says so (owner decision 2026-10-06: no red).
+  const stateColor = theme.colors.inkSecondary;
   const date = (ms?: number) => typeof ms === 'number' && Number.isFinite(ms) && ms > 0
     ? new Intl.DateTimeFormat(i18n.language, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(ms)
     : undefined;

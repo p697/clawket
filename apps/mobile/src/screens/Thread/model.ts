@@ -822,7 +822,7 @@ function hasSameMessages(left: ReadonlyArray<UiMessage>, right: ReadonlyArray<Ui
 function hasSameReceipt(left: TurnReceipt | undefined, right: TurnReceipt | undefined): boolean {
   if (left === right) return true;
   if (!left || !right) return false;
-  return left.failed === right.failed && hasSameMessages(left.steps, right.steps);
+  return hasSameMessages(left.steps, right.steps);
 }
 
 function reuseThreadRow(previous: ThreadTimelineRow, next: ThreadTimelineRow): ThreadTimelineRow {

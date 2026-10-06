@@ -461,7 +461,6 @@
   "Editing {{detail}}": "{{detail}} बदल रहे हैं",
   "Searching {{detail}}": "{{detail}} खोज रहे हैं",
   "Opening {{detail}}": "{{detail}} खोल रहे हैं",
-  "{{detail}} failed": "{{detail}} विफल",
   "Work record": "कार्य रिकॉर्ड",
   "1 step": "1 चरण",
   "{{count}} steps": "{{count}} चरण",
@@ -514,7 +513,5 @@
   "Could not check Bridge updates. Try again later.": "अपडेट जाँचे नहीं जा सके। बाद में फिर कोशिश करें।",
   "The unified updater is available in newer Bridge releases. Use your original deployment method for this release.": "नए Bridge संस्करणों में एकीकृत अपडेटर उपलब्ध है। इस संस्करण के लिए अपनी मूल डिप्लॉयमेंट विधि इस्तेमाल करें।",
   "Now": "अभी",
-  "1 new step": "1 नया चरण",
-  "{{count}} new steps": "{{count}} नए चरण",
   "You: “{{text}}”": "आप: “{{text}}”"
 }

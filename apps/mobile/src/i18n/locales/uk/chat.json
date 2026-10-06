@@ -461,7 +461,6 @@
   "Editing {{detail}}": "Змінюю {{detail}}",
   "Searching {{detail}}": "Шукаю {{detail}}",
   "Opening {{detail}}": "Відкриваю {{detail}}",
-  "{{detail}} failed": "Збій: {{detail}}",
   "Work record": "Журнал роботи",
   "1 step": "1 крок",
   "{{count}} steps": "Кроків: {{count}}",
@@ -514,7 +513,5 @@
   "Could not check Bridge updates. Try again later.": "Не вдалося перевірити оновлення. Спробуйте пізніше.",
   "The unified updater is available in newer Bridge releases. Use your original deployment method for this release.": "Нові версії Bridge підтримують єдине оновлення. Цю версію оновіть звичним способом розгортання.",
   "Now": "Зараз",
-  "1 new step": "1 новий крок",
-  "{{count}} new steps": "Нових кроків: {{count}}",
   "You: “{{text}}”": "Ви: «{{text}}»"
 }

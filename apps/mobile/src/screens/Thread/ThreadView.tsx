@@ -37,6 +37,7 @@ import { FlashList, type FlashListProps, type FlashListRef, type ListRenderItemI
 import { EnrichedMarkdownText } from 'react-native-enriched-markdown';
 import Animated, {
   Easing,
+  FadeIn,
   FadeOut,
   useAnimatedStyle,
   useReducedMotion,
@@ -2717,6 +2718,8 @@ const ThreadReceiptTimelineItem = React.memo(function ThreadReceiptTimelineItem(
   );
 });
 
+const receiptFade = FadeIn.duration(Motion.duration.normal);
+
 function AssistantBubble({
   message,
   showIdentity = true,
@@ -2738,6 +2741,14 @@ function AssistantBubble({
   const { fontSize, identity } = useChatPresentation();
   const time = useMessageClock(message);
   const selectionMenu = useMarkdownSelectionMenu();
+  const reduceMotion = useReducedMotion();
+  // A receipt that lands under a reply already on screen fades in; a reply
+  // that scrolls into view, or a recycled cell, shows its receipt at once.
+  const bubbleKey = renderKeyOf(message);
+  const shownReceipt = useRef<{ key: string; receipt: boolean } | null>(null);
+  const receiptArrives = Boolean(receipt) && !reduceMotion
+    && shownReceipt.current?.key === bubbleKey && !shownReceipt.current.receipt;
+  useEffect(() => { shownReceipt.current = { key: bubbleKey, receipt: Boolean(receipt) }; });
   const markdownStyle = useMemo(
     () => createChatMarkdownStyle(theme.colors, fontSize),
     [theme.colors, fontSize],
@@ -2793,7 +2804,9 @@ function AssistantBubble({
         />
         {receipt ? (
           <View style={stylesStatic.receiptRow}>
-            <TurnReceiptChip testID={`thread-receipt-${message.id}`} receipt={receipt} onPress={onOpenReceipt} />
+            <Animated.View testID={`thread-receipt-${message.id}-motion`} entering={receiptArrives ? receiptFade : undefined} style={stylesStatic.receiptChip}>
+              <TurnReceiptChip testID={`thread-receipt-${message.id}`} receipt={receipt} onPress={onOpenReceipt} />
+            </Animated.View>
             {time ? <MessageMeta testID={`thread-meta-${message.id}`} time={time} style={stylesStatic.receiptTime} /> : null}
           </View>
         ) : time ? (
@@ -2926,6 +2939,12 @@ const stylesStatic = StyleSheet.create({
     alignItems: 'center',
     gap: Space.sm,
     marginTop: Space.xs + 2,
+  },
+  // The chip keeps its own width and may still shrink beside the time.
+  receiptChip: {
+    flexShrink: 1,
+    minWidth: 0,
+    alignItems: 'flex-start',
   },
   receiptTime: {
     marginLeft: 'auto',

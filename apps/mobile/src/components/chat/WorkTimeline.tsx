@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import Animated, { Easing, FadeIn, useReducedMotion, withTiming, type EntryExitAnimationFunction } from 'react-native-reanimated';
-import { Ellipsis, MessageSquare, ShieldCheck, ShieldX, X } from 'lucide-react-native';
+import Animated, { Easing, FadeIn, FadeOut, LinearTransition, useReducedMotion, withTiming, type EntryExitAnimationFunction } from 'react-native-reanimated';
+import { Ellipsis, MessageSquare, ShieldCheck, ShieldX } from 'lucide-react-native';
 import { resolveChatPresenceColors } from '../../features/chat-appearance/resolver';
 import { useAppTheme } from '../../theme';
 import { withAlpha } from '../../theme/color';
@@ -10,7 +10,7 @@ import { FontSize, FontWeight, LineHeight, Motion, Radius, Space } from '../../t
 import { formatThreadClockTime } from '../../screens/Thread/timestamps';
 import type { UiMessage } from '../../types/chat';
 import { formatToolDisplayName, resolveQuestionExchange, resolveToolDetail, resolveToolTitle, unwrapShellCommand } from '../../utils/tool-display';
-import { effectiveTool, failureReason, formatActivityDuration, stepDurationMs } from './tool-activity-model';
+import { effectiveTool, formatActivityDuration, stepDurationMs } from './tool-activity-model';
 import { useConversationTheme } from './ChatPresentation';
 import { toolIcon } from './toolIcon';
 import { renderKeyOf, type TurnEntry, type TurnWork } from './turn-work';
@@ -50,8 +50,14 @@ function validTime(value: number | undefined): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
 }
 
+/**
+ * A row's identity. A step keeps its tool call's through the live row and the
+ * history row that replaces it (`toolcall_` / `toolresult_`), so a finished
+ * step never enters a second time (device check 2026-10-06).
+ */
 function entryKey(entry: TurnEntry): string {
-  return `${entry.kind}:${renderKeyOf(entry.message)}`;
+  const call = entry.kind === 'step' ? /^tool(?:call|result)_(.+)$/.exec(entry.message.id)?.[1] : undefined;
+  return call ? `step:${call}` : `${entry.kind}:${renderKeyOf(entry.message)}`;
 }
 
 /** When an entry happened: a step when it started, anything else when it arrived. */
@@ -73,6 +79,15 @@ const enterFromTop: EntryExitAnimationFunction = () => {
   };
 };
 const fadeIntoTop = FadeIn.duration(Motion.step.duration);
+/** Rows make way for an arrival by gliding, never by jumping a row in one frame. */
+const glide = LinearTransition.duration(Motion.duration.normal).easing(Easing.out(Easing.cubic));
+/** Only rows near the top can be on screen when one arrives; the rest move without work. */
+const GLIDING_ROWS = 24;
+/** "Thinking…" and a step that starts cross in the same place. */
+const nowIn = FadeIn.duration(Motion.step.duration);
+const nowOut = FadeOut.duration(Motion.duration.fast);
+/** A step that stops running changes its glyph and time in a quick fade, not a swap. */
+const settleIn = FadeIn.duration(Motion.duration.fast);
 
 /**
  * One row on the rail: its node centred on a line that joins the row above
@@ -182,6 +197,10 @@ function WorkEntryRow({ entry, top, running: runningNow = false, locale, onOpenS
   const { theme } = useAppTheme();
   const { colors } = theme;
   const working = useWorkingColor();
+  // The glyph and time fade over only when the step stops or starts running while shown.
+  const shownRunning = useRef(runningNow);
+  const switched = shownRunning.current !== runningNow;
+  useEffect(() => { shownRunning.current = runningNow; }, [runningNow]);
   const message = entry.message;
   const at = formatThreadClockTime(entryTime(entry), locale) || undefined;
 
@@ -237,7 +256,6 @@ function WorkEntryRow({ entry, top, running: runningNow = false, locale, onOpenS
   const tool = effectiveTool(message);
   const name = tool.name || t('Tool');
   const Icon = toolIcon(name);
-  const failed = message.toolStatus === 'error';
   const running = runningNow;
   const unknown = !running && (message.toolStatus === 'unknown' || message.toolStatus === 'running');
   const displayName = formatToolDisplayName(name, t);
@@ -246,44 +264,44 @@ function WorkEntryRow({ entry, top, running: runningNow = false, locale, onOpenS
   const stepTitle = exchange?.question ?? resolveToolTitle(tool.args) ?? displayName;
   const target = exchange ? (exchange.answer ? t('Your answer: {{answer}}', { answer: exchange.answer }) : undefined)
     : singleLine(resolveToolDetail(name, tool.args));
-  const reason = failed ? failureReason(message.toolDetail) : undefined;
-  const status = failed ? t('Failed') : unknown ? t('Result unavailable') : undefined;
+  // A failed step is an ordinary step whose status says so (owner decision 2026-10-06: no red).
+  const status = message.toolStatus === 'error' ? t('Failed') : unknown ? t('Result unavailable') : undefined;
+  const settle = switched ? settleIn : undefined;
   return (
     <RailRow
       testID={`thread-run-${message.id}`}
       top={top}
       bottom={false}
-      accessibilityLabel={[stepTitle, stepTitle !== displayName ? displayName : undefined, target, reason, status, running ? t('Now') : at]
+      accessibilityLabel={[stepTitle, stepTitle !== displayName ? displayName : undefined, target, status, running ? t('Now') : at]
         .filter(Boolean).join(', ')}
       onPress={onOpenStep ? () => onOpenStep(message) : undefined}
       node={(
-        <Well
-          backgroundColor={failed ? colors.badSoft : running ? withAlpha(working, 0.12) : colors.surface}
-          ring={running ? working : undefined}
-        >
-          {running ? <ActivityIndicator size="small" color={working} style={styles.spinner} />
-            : failed ? <X size={15} color={colors.bad} strokeWidth={2.4} />
+        <Animated.View key={running ? 'running' : 'settled'} entering={settle}>
+          <Well backgroundColor={running ? withAlpha(working, 0.12) : colors.surface} ring={running ? working : undefined}>
+            {running ? <ActivityIndicator size="small" color={working} style={styles.spinner} />
               : <Icon size={15} color={colors.inkSecondary} strokeWidth={1.75} />}
-        </Well>
+          </Well>
+        </Animated.View>
       )}
-      trailing={running ? (
-        <>
-          <Text style={[styles.time, styles.now, { color: working }]}>{t('Now')}</Text>
-          <RunningFor message={message} color={colors.inkTertiary} />
-        </>
-      ) : (
-        <TimeLines
-          first={at}
-          second={status ?? formatStepDuration(stepDurationMs(message), t)}
-          firstColor={colors.inkTertiary}
-          secondColor={failed ? colors.bad : colors.inkTertiary}
-        />
+      trailing={(
+        <Animated.View key={running ? 'running' : 'settled'} entering={settle} style={styles.trailingColumn}>
+          {running ? (
+            <>
+              <Text style={[styles.time, styles.now, { color: working }]}>{t('Now')}</Text>
+              <RunningFor message={message} color={colors.inkTertiary} />
+            </>
+          ) : (
+            <TimeLines
+              first={at}
+              second={status ?? formatStepDuration(stepDurationMs(message), t)}
+              firstColor={colors.inkTertiary}
+            />
+          )}
+        </Animated.View>
       )}
     >
       <Text numberOfLines={1} style={[styles.title, { color: colors.ink }, running ? styles.titleLive : null]}>{stepTitle}</Text>
-      {reason ? (
-        <Text numberOfLines={1} style={[styles.reason, { color: colors.bad }]}>{reason}</Text>
-      ) : target ? (
+      {target ? (
         <Text numberOfLines={1} style={[exchange ? styles.answer : styles.code, { color: colors.inkSecondary }]}>{target}</Text>
       ) : null}
     </RailRow>
@@ -366,14 +384,18 @@ function StartRow({ prompt, at }: Readonly<{ prompt?: UiMessage; at?: string }>)
  * running turn starts at what is happening now — the running step ringed and
  * marked "Now", or what the dock says between steps — and a finished one at
  * where it ended; the rail runs down through every step, the Agent's words
- * and approvals, each with its time, to where the turn started. Rows that
- * arrive while it is open slide down into the top. Returns the rows as direct
- * children of the scroll view, so it can keep the reader's place.
+ * and approvals, each with its time, to where the turn started. A row that
+ * arrives while it is open slides down into place while the rows below glide
+ * to make room (`glide`, while the reader is at the top), and "Thinking…"
+ * crosses with the step that replaces it. Returns the rows as direct children
+ * of the scroll view, so it can keep the reader's place.
  */
-export function WorkTimeline({ work, live, locale, onOpenStep }: Readonly<{
+export function WorkTimeline({ work, live, glideRows = false, locale, onOpenStep }: Readonly<{
   work: TurnWork;
   /** The running turn's dock phase; without it the turn is finished. */
   live?: WorkDockPhase;
+  /** Rows glide to make room for an arrival; off while the reader holds a place further down. */
+  glideRows?: boolean;
   locale?: string;
   onOpenStep?: (message: UiMessage) => void;
 }>): React.JSX.Element {
@@ -386,6 +408,7 @@ export function WorkTimeline({ work, live, locale, onOpenStep }: Readonly<{
   const entries = live ? [...newestFirst.filter(runsNow), ...newestFirst.filter((entry) => !runsNow(entry))] : newestFirst;
   // Rows there when the timeline mounted stay still; later ones enter.
   const known = useRef<Set<string> | null>(null);
+  const mounted = known.current !== null;
   known.current ??= new Set(entries.map(entryKey));
   useEffect(() => {
     for (const entry of entries) known.current!.add(entryKey(entry));
@@ -395,20 +418,28 @@ export function WorkTimeline({ work, live, locale, onOpenStep }: Readonly<{
     : formatThreadClockTime(work.endedAt ?? (entries[0] ? entryTime(entries[0]) : undefined), locale) || undefined;
   const oldest = newestFirst[newestFirst.length - 1];
   const started = formatThreadClockTime(validTime(work.prompt?.timestampMs) ?? (oldest ? entryTime(oldest) : undefined), locale) || undefined;
+  const moving = Boolean(live) && glideRows && !reduceMotion;
+  const layoutAt = (index: number) => (moving && index < GLIDING_ROWS ? glide : undefined);
   return (
     <>
-      {head ? <NowRow key="now" phase={head} /> : null}
+      {head ? (
+        <Animated.View key="now" testID="work-motion-now" layout={layoutAt(0)} entering={mounted ? nowIn : undefined} exiting={live ? nowOut : undefined}>
+          <NowRow phase={head} />
+        </Animated.View>
+      ) : null}
       {live ? null : <EndRow key="end" at={ended} />}
       {entries.map((entry, index) => {
         const key = entryKey(entry);
         const arriving = Boolean(live) && !known.current!.has(key);
         return (
-          <Animated.View key={key} entering={arriving ? (reduceMotion ? fadeIntoTop : enterFromTop) : undefined}>
+          <Animated.View key={key} testID={`work-motion-${entry.message.id}`} layout={layoutAt(index + 1)} entering={arriving ? (reduceMotion ? fadeIntoTop : enterFromTop) : undefined}>
             <WorkEntryRow entry={entry} top={index === 0 && Boolean(live) && !head} running={runsNow(entry)} locale={locale} onOpenStep={onOpenStep} />
           </Animated.View>
         );
       })}
-      <StartRow key="start" prompt={work.prompt} at={started} />
+      <Animated.View key="start" testID="work-motion-start" layout={layoutAt(entries.length + 1)}>
+        <StartRow prompt={work.prompt} at={started} />
+      </Animated.View>
     </>
   );
 }
@@ -492,6 +523,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: Space.sm - 1,
   },
+  trailingColumn: {
+    alignItems: 'flex-end',
+  },
   title: {
     fontSize: FontSize.secondary,
     lineHeight: LineHeight.secondary,
@@ -502,10 +536,6 @@ const styles = StyleSheet.create({
   code: {
     fontFamily: CODE_FONT,
     fontSize: FontSize.meta,
-    lineHeight: 17,
-  },
-  reason: {
-    fontSize: FontSize.caption,
     lineHeight: 17,
   },
   answer: {
