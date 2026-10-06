@@ -17,7 +17,7 @@ import { fastServiceTier, isFastServiceTier, hasServiceTier } from './speed.js';
 import { CodexProfile } from './profile.js';
 import { CodexRpc } from './rpc.js';
 import { codexMessages, codexGeneratedImage, codexTool, codexTurnFailure, codexReplyTimestamp, codexFinalReplyId, codexItemClock, codexItemTimestamp,
-  codexToolTiming, codexDesktopItemClock, type CodexItemClock } from './history.js';
+  codexToolTiming, codexDesktopItemClock, mergeCodexLiveItems, type CodexItemClock } from './history.js';
 import { loadDesktopHistory } from './desktop-history.js';
 import { nativeResumeSpeed } from './resume-settings.js';
 import { desktopTurns, desktopState } from './desktop-state.js';
@@ -821,8 +821,11 @@ export class CodexService extends EventEmitter {
     const messages: string[] = [];
     // Phone text after a tool is one tail dated by its first paragraph.
     let tailClock: number | undefined, tailOpen = false;
-    const publishText = () => {
+    const publishText = (beforeTool = false) => {
       const text = messages.join('\n\n').slice(-128000);
+      // An earlier tool can appear after this follower already saw later text.
+      // Its boundary must not replay a shorter prefix as a new live paragraph.
+      if (beforeTool && (text === '' || run.text.startsWith(text + '\n\n'))) return;
       if (text !== run.text) { run.text = text; this.update({ type: 'agent_message_chunk', sessionKey: r.id, runId: run.id, ...identity, text, textMode: 'snapshot',
         ...(tailClock !== undefined ? { timestampMs: tailClock } : {}) }); }
     };
@@ -843,7 +846,7 @@ export class CodexService extends EventEmitter {
       if (!old) {
         // Mobile commits the current text at a new tool boundary. Replaying
         // a caught-up snapshot must publish only the preceding words first.
-        publishText();
+        publishText(true);
         this.update({ type: 'tool_call', sessionKey: r.id, runId: run.id, ...identity, toolCallId: item.id, title: tool.name, rawInput: tool.input, status: tool.status,
           ...(timing.startedAtMs !== undefined ? { startedAtMs: timing.startedAtMs } : {}) });
       }
@@ -1432,9 +1435,7 @@ export class CodexService extends EventEmitter {
     const active = owned ? this.runs.get(owned.id) : undefined;
     const liveTurn = active?.turnId && turns.find(t => t.id === active.turnId);
     if (liveTurn && active && page.native === undefined) {
-      const combined = new Map((liveTurn.items ?? []).map((item: any) => [item.id, item]));
-      for (const [id, item] of active.items) combined.set(id, item);
-      liveTurn.items = [...combined.values()];
+      liveTurn.items = mergeCodexLiveItems(liveTurn.items ?? [], active.items);
       liveTurn.itemClocks ??= new Map();
       // Persisted native clocks win; live clocks cover items not yet recorded.
       for (const [id, clock] of active.itemClocks ?? []) if (!liveTurn.itemClocks.has(id)) liveTurn.itemClocks.set(id, clock);

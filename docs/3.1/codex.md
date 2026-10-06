@@ -159,3 +159,11 @@ A Codex turn can contain multiple user items from Current/steer. History items c
 ### 工作胶囊的同回合引导边界
 
 Mobile 以当前控制器的会话、执行、原生 turn 与原始输入身份保持工作胶囊的总计时、步骤编号及首次看到工具后的 1 秒等待。当前回合的引导不会重开工作记录；不同 turn、显式不同发送 key、旧后端无 turn 元数据仍保持新回合边界。分页缺少原始输入时只沿用已知执行计时和同 turn 的已证工具，不把首条引导当作原始输入。当前会话的有效待处理审批独立保留提醒与 Review 定位，遵守页面相同的能力、状态和有效期规则；缺少 turn 元数据不阻断审批，也不将请求猜作原生回合或收据的一部分。切换会话、控制器或执行及确认终态退出相应显示状态；各工具自身计时独立保留。此修复封闭已复现的组件条件，017 录像的具体运行时触发和真实设备体验仍需单独验收。
+
+### Active transcript ordering
+
+An active turn can exceed the native 32-item head page. Merge its observed item cache into that page using shared native item identities: insert missing earlier items before their next shared row, retain native-only rows and overlay current values in place. Appending the entire missing cache at the end moves the original user input below its own replies. Optional lifecycle clocks still apply within their existing validation rules; a missing clock never permits ordering by receipt time. Desktop catch-up of an earlier tool also must not publish a shorter already displayed text prefix.
+
+On Mobile, canonical history refines the live paragraph prefix even after tools have appeared and even when no new text arrives. A previously committed multi-paragraph bubble can split only when the complete ordered canonical text covers it exactly, within the proven original input/turn. Keep the existing first cell, each confirmed paragraph clock, and current tool results; missing, reordered or unmatched live-only boundaries prevent refinement. OpenClaw/Hermes text semantics and native dispatch are unchanged.
+
+Regression coverage includes 37-item turns across changing head-page sizes, late earlier tools, history between text events, committed rollups, repeated prose and incomplete prefixes. This is deterministic service/controller evidence; phone acceptance still requires a long running task with several commentary paragraphs and tools, then a history refresh and a leave/return while streaming. Both Bridge and Mobile fixes require updated local builds; this task does not publish or restart either.

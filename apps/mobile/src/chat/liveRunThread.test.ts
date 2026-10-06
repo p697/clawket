@@ -1,5 +1,34 @@
 import { UiMessage } from '../types/chat';
-import { buildLiveRunListData, finalReplyTail, finishLiveRunPresentation, liveReplyRenderKey, mergeNewestFirstMessages, recoverLiveRunPresentation } from './liveRunThread';
+import { buildLiveRunListData, extendRecoveredLiveRun, finalReplyTail, finishLiveRunPresentation, liveReplyRenderKey, mergeNewestFirstMessages, recoverLiveRunPresentation } from './liveRunThread';
+
+describe('canonical live paragraph refinement', () => {
+  const tool = (id: string): UiMessage => ({ id: `toolcall_${id}`, role: 'tool', text: '', toolName: 'exec', toolStatus: 'success' });
+  const segments = [
+    { id: 'a', text: 'Repeated.', timestampMs: 2000, afterToolCount: 0 },
+    { id: 'b', text: 'Repeated.', timestampMs: 3000, afterToolCount: 1 },
+    { id: 'c', text: 'Last.', timestampMs: 4000, afterToolCount: 1 },
+  ];
+  const recovered = { segments, tools: [tool('one'), tool('two')], tail: '', tailTimestampMs: undefined };
+  it('splits an exact rollup with native clocks and keeps its existing cell on the first paragraph', () => {
+    const result = extendRecoveredLiveRun(recovered, [{ id: 'local', renderKey: 'mounted',
+      text: 'Repeated.\n\nRepeated.\n\nLast.', timestampMs: 9000, afterToolCount: 0 }], recovered.tools)!;
+    expect(result.segments.map(row => [row.text, row.timestampMs, row.afterToolCount])).toEqual([
+      ['Repeated.', 2000, 0], ['Repeated.', 3000, 1], ['Last.', 4000, 1],
+    ]);
+    expect(result.segments[0].renderKey).toBe('mounted');
+    expect(result.segments[1].id).toBe('b');
+  });
+  it.each(['Changed.', 'Repeated.\n\nMissing.', 'Repeated.\n\nRepeated.\n\nLast.\n\nLive-only.'])('does not discard unmatched committed text (%s)', text => {
+    expect(extendRecoveredLiveRun(recovered, [{ id: 'local', text, timestampMs: 9000 }], recovered.tools)).toBeUndefined();
+  });
+  it.each([{ tools: [tool('one'), tool('live-only')] }, { tools: [tool('two'), tool('one')] }])('does not erase or reorder independently observed tools', ({ tools }) => {
+    expect(extendRecoveredLiveRun(recovered, [segments[0]], tools)).toBeUndefined();
+  });
+  it('retains a current tool result while learning new canonical boundaries', () => {
+    const current = { ...tool('one'), toolDetail: 'Live result', toolFinishedAt: 5000 };
+    expect(extendRecoveredLiveRun(recovered, [segments[0]], [current])!.tools[0]).toBe(current);
+  });
+});
 
 describe('buildLiveRunListData', () => {
   const sameRunHistory = (): UiMessage[] => [

@@ -82,6 +82,7 @@ import {
   liveReplyRenderKey,
   finalReplyTail,
   recoverLiveRunPresentation,
+  extendRecoveredLiveRun,
   finishLiveRunPresentation,
   mergeNewestFirstMessages,
   StreamSegment,
@@ -1650,29 +1651,42 @@ export function useChatController({
   ]);
 
   const recoverNativeParagraphs = useCallback((text: string, identity?: SessionRunState) => {
-    if (adapter?.connection.backendKind !== 'codex' || chatToolMessagesRef.current.length
+    if (adapter?.connection.backendKind !== 'codex'
       || !identity?.turnId || !identity.inputMessageId) return;
     const recovered = recoverLiveRunPresentation(text, history.messages, identity?.turnId, identity?.inputMessageId, identity?.inputMessageKey);
     const previous = chatStreamSegmentsRef.current;
-    if (recovered.segments.length <= previous.length
-      || !previous.every((segment, index) => segment.text === recovered.segments[index]?.text)) return;
+    const extended = extendRecoveredLiveRun(recovered, previous, chatToolMessagesRef.current);
+    if (!extended) return;
     // Extend only a confirmed ordered prefix. Keep already mounted cells and
     // don't replace live-only boundaries with an incomplete canonical page.
     const tail = chatStreamRef.current?.trim();
     const runId = currentRunIdRef.current;
-    const additions = recovered.segments.slice(previous.length).map((segment, index) => {
-      if (index !== 0 || !runId || !tail || !(segment.text.trim().startsWith(tail) || tail.startsWith(segment.text.trim()))) return segment;
+    const segments = extended.segments.map((segment, index) => {
+      if (index !== extended.retainedCount || !runId || !tail || !(segment.text.trim().startsWith(tail) || tail.startsWith(segment.text.trim()))) return segment;
       return { ...segment, renderKey: liveReplyRenderKey(streamStartedAtRef.current, runId, previous.length),
         timestampMs: chatStreamTimestampRef.current ?? segment.timestampMs };
     });
-    const segments = [...previous, ...additions];
     chatStreamSegmentsRef.current = segments;
     setChatStreamSegments(segments);
-    chatToolMessagesRef.current = recovered.tools;
-    setChatToolMessages(recovered.tools);
+    chatToolMessagesRef.current = extended.tools;
+    setChatToolMessages(extended.tools);
     chatStreamTimestampRef.current = validStreamTimestamp(recovered.tailTimestampMs) ?? null;
     setChatStreamTimestampMs(chatStreamTimestampRef.current);
+    return true;
   }, [adapter, history.messages]);
+
+  // A history response can land between text chunks (or while tools run).
+  // Refine presentation immediately even if newer live activity fences its
+  // execution snapshot; the next text event may be minutes away.
+  useEffect(() => {
+    const identity = history.sessionKey ? sessionRunStateRef.current.get(history.sessionKey) : undefined;
+    if (!identity || identity.runId !== currentRunIdRef.current || !identity.streamText) return;
+    if (!recoverNativeParagraphs(identity.streamText, identity)) return;
+    const tail = finalReplyTail(identity.streamText, chatStreamSegmentsRef.current);
+    chatStreamRef.current = tail;
+    setChatStream(tail);
+    identity.streamTimestampMs = chatStreamTimestampRef.current ?? undefined;
+  }, [history.sessionKey, recoverNativeParagraphs]);
 
   useEffect(() => {
     const snapshot = history.activitySnapshot;

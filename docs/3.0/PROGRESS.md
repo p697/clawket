@@ -1,5 +1,11 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-06 Codex 流式消息排序与重复合并第一轮修复（负责人截图 15:39 回复跨过 15:33 用户消息、15:44 合并段落重复；负责人先测试）。
+  - Bridge 原生历史只返回最近32项，却把活动缓存中缺失的早期项追加到页尾，原始输入及早期回复随页大小移位；改为按共同原生 ID 的后继锚点补入，保留原生页顺序与最新内容。Desktop 补到早期工具不再发出短累计前缀再恢复全文。
+  - Mobile 一旦存在工具就跳过段落恢复，且已提交多段合并气泡无法被完整原生段落细化；现在已确认同回合的历史到达即可恢复，不等下一段文字，完整精确前缀才允许拆段，保留首个 cell 和当前工具结果；不完整、乱序或 live-only 边界继续保留。
+  - 四个真实 service/controller 新场景在旧实现上先红，修后单文件串行通过 Codex service350/history110、Mobile controller contract117/adapter-events51、liveRunThread31、historyMergePolicy97，共756项；agent-doc8对/5项与whitespace通过。另一会话持heavy，类型与完整后端/v1门禁交PR CI。无原生发消息/重放/owner变更，保持 OpenClaw/Hermes 语义。
+  - 按负责人“我来测试”交付草稿PR，待手机长回合验收；本轮不合并、不打分发包、不发布或重启Bridge。生效需后续包含修复的 Bridge 与 Mobile 构建，详见[Codex规格](../3.1/codex.md)。
+
 - 2026-10-06 工作过程动效、去掉新步骤提示、失败不再标红（负责人要求，「你来把控」）。
   - 真机录屏逐帧（Android QA 包，OpenClaw 新测试会话 6 步）定位三处闪动：新行插入时下方各行一帧跳一整行再淡入；「思考中」与运行步骤来回替换时整行先消失再从透明淡入；同一步骤被历史以 `toolresult_` 身份替换后又淡入一次。另见回合结束时一段过程说明约 1 秒后才插到最终回复上方：OpenClaw Codex 引擎的过程说明只以 `item`/`preamble` 进度事件推送，手机端目前只靠历史补上，另起任务处理。
   - 工作过程：顶部 24 行 `LinearTransition` 平滑让位（200 ms），新行仍从上方滑入，「思考中」与步骤交叉淡化，步骤结束时图标和时间淡入替换；减动效只淡入淡出；步骤按工具调用 ID 保持身份；往下翻看时用 `maintainVisibleContentPosition` 原位不动且不做让位动画。删掉「N 个新步骤」浮层与 3 个文案键（19 语言）。面板收起时保留这一轮的状态和说明，不再闪回「思考中」。
@@ -7,10 +13,12 @@
   - 聊天：回执落在已显示的回复下时淡入 200 ms。
   - 单文件串行通过（重基到 PR204/207 之后复跑受影响文件）：ThreadView 225、Thread model 32、toolGrouping 7、WorkPanel 1（新增）、turn-work 24、tool-activity-model 11、ToolDetailModal 6；i18n 严格检查、UI 样式检查通过。Android QA 包真机录屏确认新行滑入与让位、「思考中」交叉淡化、收起保留「正在回复… 5 步」、回执普通样式；iPhone 观感待负责人验收；未打包、未发布。
 
+
 - 2026-10-06 聊天页顶部标题：连接名过长不再吞掉会话名（负责人看过对比图后要求落地）。
   - 现场：Codex / Claude Code 的 Agent 名就是 Bridge 生成的连接名「Codex · 电脑名」，标题再接「 · 会话名」，402pt iPhone 上一行只有约 210pt，尾部省略把会话名整段吃掉。
   - 头像已是官方图标时（Codex、Claude Code、Pi、Hermes），标题去掉「产品名 · 」前缀，自己改过的连接名不动；会话入口页同一个胶囊同样处理。一行放不下时先缩短 Agent 名，最多占这一行 40%（会话名短时可多用），会话名保留其余空间和原生行尾省略。宽度按 SF Pro / 苹方实测校准的字符宽度估算，按 Thread 自身宽度和上限 1.2 的字号缩放计算。第二行状态、胶囊尺寸、主会话只显示 Agent 名都不变。
   - 逐文件 in-band：text-width 8、Thread model 32、ConversationEntry 37、ThreadView 222、PlatformMark 8、RosterPrimitives 39 项通过；类型检查与完整门禁交 PR CI（heavy 由另一会话持有）。未做真机验收，未构建或发布。
+
 
 - 2026-10-06 Claude Code 新建/已有会话开始时模型未读到（负责人要求修复）。
   - 原生 control 初始化只有目录，`system/init` 首次发送前不出现；owned SDK 现用有十秒上限的 summary 元数据读取实际模型，旧读回不覆盖较新的 init/选模。观测值单独持久化为 `observedModel`，不把默认值变成重启 launch pin，旧 `model` pin 保持兼容。
@@ -1975,6 +1983,8 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 
 | 编号 | 事项 | 怎么做 | 验证方法 | 状态 |
 |---|---|---|---|---|
+| HT-CODEX-STREAM-ORDER-1006 | 本轮 Codex 流式排序修复真机验收 | 在含本草稿修复的 Bridge 与 Mobile 中启动持续多步骤任务，观察多段 commentary、刷新历史、运行中切出再进入。 | 原始输入在其回复前；段落不在工具/刷新时重复合并或反复换位，时间与已确认段落对应；再验一次完成后历史。 | 等负责人测试；草稿不合并，无构建分发/发布/运行中 Bridge 重启。 |
+
 | HT-OPENCLAW-DIRECT-1006 | Tailscale 与 iOS 物理验收 | 两台设备先加入同一 Tailnet，测试 Tailnet IP 与 HTTPS Serve；iOS 验证首次局域网授权、拒绝/重新授权与证书行为。 | 完成原生 Gateway 握手、会话发现与真实请求，LAN 成功不作为 Tailnet/iOS 证据。 | 负责人已选择先测 Wi-Fi；当前两台设备未加入 Tailnet。自动配置/隔离覆盖已完成，物理验证待环境。 |
 | HT-BRIDGE-315-AUTH-1006 | Bridge 3.1.15 npm 发布认证 | 负责人已完成本次 npm 浏览器二次认证，沿用固定候选。 | 公开 version/latest、完整无认证下载 hash 与候选一致，再独立安装。 | 已完成；15:38:32 JST 公开包验证、15:38:49 空认证公共安装通过。运行中 Bridge 更新与既有手机验收另行进行。 |
 | HT-CLAUDE-HISTORY-1006 | Claude历史列表修复发布与手机验收 | 明确更新到公开Bridge3.1.14后，使用当前App与原配对，在All projects和单项目刷新历史、打开旧会话、返回再刷新。 | 正常历史能完整分页；缺省cwd不再令全列表失败；原scope/owner保护和新聊天保持。 | 候选真实只读目录156条/2页及86项窄回归、最终CI十一项通过；PR191已合并。3.1.14公开version/latest及完整包hash已核验；运行中Bridge未替换，手机验收待明确更新。 |

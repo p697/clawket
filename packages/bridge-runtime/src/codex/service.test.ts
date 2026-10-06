@@ -1369,6 +1369,53 @@ describe('device project discovery and desktop routing', () => {
     await service.stop(); service = new CodexService({ project, directory: join(root, 'device'), device: true, env: { CODEX_HOME: root }, desktop: desktop as any });
     return desktop;
   }
+  it('keeps the original input and early replies before a paged native tail during an active Desktop run', async () => {
+    const desktop = await device();
+    const original = mock.request.getMockImplementation()!;
+    const items = [
+      { id: 'prompt', type: 'userMessage', content: [{ type: 'text', text: 'Fix this' }] },
+      { id: 'a', type: 'agentMessage', text: 'First update.' },
+      ...Array.from({ length: 34 }, (_, i) => ({ id: `step-${i}`, type: 'commandExecution', command: 'true', status: 'completed', exitCode: 0 })),
+      { id: 'b', type: 'agentMessage', text: 'Later update.' },
+    ];
+    let tailSize = 32;
+    mock.request.mockImplementation(async (method, params) => {
+      if (method === 'thread/list') return { data: [{ id: threadId, cwd: project, updatedAt: 1 }] };
+      if (method === 'thread/items/list') return { data: items.slice(-tailSize).reverse().map(item => ({ turnId: 'long-turn', item })), nextCursor: 'older' };
+      if (method === 'thread/turns/list') return { data: [{ id: 'long-turn', status: 'inProgress', startedAt: 100 }] };
+      return original(method, params);
+    });
+    await request('sessions.list');
+    await request('chat.history', { sessionKey: `native:${threadId}` });
+    desktop.emit('snapshot', threadId, { fresh: true, state: { turns: [{ id: 'long-turn', status: 'inProgress', itemsView: 'full', items }], requests: [] } });
+    const expected = items.map(item => item.type === 'commandExecution' ? `toolcall_${item.id}` : item.id);
+    for (tailSize of [32, 18, 1, 32]) {
+      const history = await request('chat.history', { sessionKey: `native:${threadId}` });
+      expect(history.messages.map((message: any) => message.id)).toEqual(expected);
+      expect(history.activeRun).toMatchObject({ inputMessageId: 'prompt', text: 'First update.\n\nLater update.' });
+    }
+  });
+
+  it('does not rewind cumulative Desktop text when a previously missing earlier tool arrives', async () => {
+    const desktop = await device();
+    service.on('update', update => updates.push(update));
+    const original = mock.request.getMockImplementation()!;
+    mock.request.mockImplementation((method, params) => method === 'thread/list'
+      ? Promise.resolve({ data: [{ id: threadId, cwd: project, updatedAt: 1 }] }) : original(method, params));
+    await request('sessions.list');
+    await request('chat.history', { sessionKey: `native:${threadId}` });
+    const first = { id: 'a', type: 'agentMessage', text: 'First update.' };
+    const second = { id: 'b', type: 'agentMessage', text: 'Later update.' };
+    const snapshot = (items: any[]) => desktop.emit('snapshot', threadId, { fresh: true, state: {
+      turns: [{ id: 'turn', status: 'inProgress', items }], requests: [],
+    } });
+    snapshot([first, second]);
+    updates.length = 0;
+    snapshot([first, { id: 'late', type: 'commandExecution', command: 'true', status: 'completed', exitCode: 0 }, second]);
+    expect(updates.filter(update => update.type === 'agent_message_chunk')).toEqual([]);
+    expect(updates.filter(update => update.type === 'tool_call').map(update => update.toolCallId)).toEqual(['late']);
+  });
+
   it('replays caught-up Desktop text and tools in native item order without replaying unchanged snapshots', async () => {
     const desktop = await device();
     service.on('update', update => updates.push(update));

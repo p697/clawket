@@ -3,6 +3,7 @@ import { finalReplyTail } from './streamText';
 import { UiMessage } from '../types/chat';
 import { isSilentReplyPrefixText, isSilentReplyText } from '../utils/chat-message';
 import { isNewUserTurn, originalRunUserIndex } from './turnIdentity';
+import { sameLiveToolCall } from './liveToolMessages';
 
 export { finalReplyTail } from './streamText';
 
@@ -66,6 +67,37 @@ function finiteTimestamp(message: UiMessage): number | undefined {
   return typeof message.timestampMs === 'number' && Number.isFinite(message.timestampMs)
     ? message.timestampMs
     : undefined;
+}
+
+/** Refine an exact canonical prefix without losing any live-only boundary. */
+export function extendRecoveredLiveRun(
+  recovered: ReturnType<typeof recoverLiveRunPresentation>,
+  previous: StreamSegment[],
+  tools: UiMessage[],
+): { segments: StreamSegment[]; tools: UiMessage[]; retainedCount: number } | undefined {
+  if (recovered.segments.length <= previous.length) return undefined;
+  const toolPositions = tools.map(tool => recovered.tools.findIndex(candidate => sameLiveToolCall(tool, candidate)));
+  if (toolPositions.some((position, index) => position < 0 || (index > 0 && position <= toolPositions[index - 1]!))) return undefined;
+  const segments: StreamSegment[] = [];
+  let cursor = 0;
+  for (const old of previous) {
+    const start = cursor;
+    let remaining = old.text.trim();
+    while (remaining && cursor < recovered.segments.length) {
+      const part = recovered.segments[cursor]!;
+      if (!remaining.startsWith(part.text.trim())) return undefined;
+      remaining = remaining.slice(part.text.trim().length).trimStart();
+      cursor++;
+    }
+    if (remaining || cursor === start) return undefined;
+    const parts = recovered.segments.slice(start, cursor);
+    segments.push(...parts.map((part, index) => parts.length === 1
+      ? { ...old, afterToolCount: part.afterToolCount }
+      : { ...part, ...(index === 0 ? { renderKey: old.renderKey ?? old.id } : {}) }));
+  }
+  segments.push(...recovered.segments.slice(cursor));
+  return { segments, retainedCount: cursor,
+    tools: recovered.tools.map(tool => tools.find(candidate => sameLiveToolCall(tool, candidate)) ?? tool) };
 }
 
 /** Stable merge for two newest-first streams without reordering untimed live rows. */

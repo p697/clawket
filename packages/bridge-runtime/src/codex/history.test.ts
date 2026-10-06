@@ -1,5 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { codexDesktopItemClock, codexItemClock, codexMessages, codexTool, codexToolTiming, codexTurnFailure } from './history.js';
+import { codexDesktopItemClock, codexItemClock, codexMessages, codexTool, codexToolTiming, codexTurnFailure, mergeCodexLiveItems } from './history.js';
+
+describe('active Codex history overlay', () => {
+  it('places missing cached prefixes and gaps by shared identities, retaining native-only rows and live values', () => {
+    const history = Object.freeze([{ id: 'a', text: 'Old' }, { id: 'native-only' }, { id: 'c' }].map(Object.freeze));
+    const live = new Map(['prompt', 'a', 'b', 'c', 'tail'].map(id => [id, Object.freeze({ id, text: 'Current' })]));
+    const result = mergeCodexLiveItems([...history], live);
+    expect(result.map(item => item.id)).toEqual(['prompt', 'a', 'native-only', 'b', 'c', 'tail']);
+    expect(result.find(item => item.id === 'a')?.text).toBe('Current');
+    expect(history[0].text).toBe('Old');
+    expect([...live.keys()]).toEqual(['prompt', 'a', 'b', 'c', 'tail']);
+  });
+  it('preserves native order on conflicting anchors and appends only unanchored live rows', () => {
+    const live = new Map(['a', 'late', 'b', 'tail'].map(id => [id, { id }]));
+    expect(mergeCodexLiveItems([{ id: 'b' }, { id: 'a' }], live).map(item => item.id)).toEqual(['late', 'b', 'a', 'tail']);
+    expect(mergeCodexLiveItems([{ id: 'native-only' }], live).map(item => item.id)).toEqual(['native-only', 'a', 'late', 'b', 'tail']);
+    expect(mergeCodexLiveItems([], live).map(item => item.id)).toEqual([...live.keys()]);
+  });
+});
 
 describe('Codex tool execution evidence', () => {
   it.each([

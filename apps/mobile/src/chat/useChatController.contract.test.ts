@@ -3002,6 +3002,41 @@ it('does not restore an old history snapshot after a live terminal event', async
     expect(adapter.prompt).not.toHaveBeenCalled();
   });
 
+  it.each([false, true])('recovers successive native paragraphs after tools even when they were already committed together (%s)', async committed => {
+    const adapter = createAdapter('ready', 'codex');
+    const turnId = 'native-turn';
+    const user = { id: 'main', role: 'user', text: 'Fix this', turnId, timestampMs: 1000 };
+    const paragraphs = ['First update.', 'Second update.', 'Third update.'];
+    const tool = (id: string) => ({ id: `toolcall_${id}`, role: 'tool', text: '', toolName: 'exec', toolStatus: 'running', turnId });
+    historyMock.messages = [user];
+    const { result, rerender } = renderHook(() => useChatController({ adapter: adapter as any, debugMode: false, showAgentAvatar: true }));
+    const events = () => jest.mocked(useAdapterChatEvents).mock.calls.at(-1)![0];
+    const run = { sessionKey: 'agent:main:main', runId: 'run', activeRunId: 'run', isSending: true as const, turnId, inputMessageId: 'main' };
+    const chunk = (count: number) => events().onUpdate?.({ type: 'agent_message_chunk', ...run, visible: true,
+      textMode: 'snapshot', text: paragraphs.slice(0, count).join('\n\n'), timestampMs: 2000 + (count - 1) * 1000 });
+    const step = (id: string) => events().onUpdate?.({ type: 'tool_call', ...run, toolCallId: id, merge: false, message: tool(id) as any });
+    await act(async () => {
+      events().onState?.('ready');
+      events().onUpdate?.({ type: 'run_started', ...run, startedAtMs: 1000 });
+      chunk(1); step('one'); chunk(2); chunk(3);
+      if (committed) step('two');
+    });
+    const firstKey = [...result.current.listData].reverse().find(row => row.role === 'assistant' && row.text.trim())!.renderKey;
+    historyMock.messages = [user, { id: 'a', role: 'assistant', text: paragraphs[0], turnId, timestampMs: 2000 }, tool('one'),
+      { id: 'b', role: 'assistant', text: paragraphs[1], turnId, timestampMs: 3000 },
+      { id: 'c', role: 'assistant', text: paragraphs[2], turnId, timestampMs: 4000 }, ...(committed ? [tool('two')] : [])];
+    rerender({});
+    const rows = [...result.current.listData].reverse();
+    expect(rows.filter(row => row.role === 'assistant' && row.text.trim()).map(row => row.text)).toEqual(paragraphs);
+    expect(rows.filter(row => row.role === 'assistant' && row.text.trim()).map(row => row.timestampMs)).toEqual([2000, 3000, 4000]);
+    expect(rows[0].id).toBe('main');
+    expect(rows.find(row => row.role === 'assistant' && row.text.trim())!.renderKey).toBe(firstKey);
+    expect(new Set(rows.map(row => row.renderKey ?? row.id)).size).toBe(rows.length);
+    await act(async () => { chunk(3); });
+    expect([...result.current.listData].reverse().filter(row => row.role === 'assistant' && row.text.trim()).map(row => row.text)).toEqual(paragraphs);
+    expect(adapter.prompt).not.toHaveBeenCalled();
+  });
+
   it('extends native commentary boundaries without tools across successive history reads and completion', async () => {
     const adapter = createAdapter('ready', 'codex');
     const turnId = 'native-turn';

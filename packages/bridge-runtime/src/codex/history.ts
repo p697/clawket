@@ -156,6 +156,21 @@ function codexStartOrder(items: any[], clocks: Map<string, CodexItemClock> | und
     .sort((a, b) => a.at - b.at || a.index - b.index).map(entry => entry.item);
 }
 
+/** Overlay current items without appending an older cached prefix after a native head page. */
+export function mergeCodexLiveItems(history: any[], live: ReadonlyMap<string, any>): any[] {
+  const present = new Set(history.map(item => item.id));
+  const before = new Map<string | undefined, any[]>();
+  let next: string | undefined;
+  for (const item of [...live.values()].reverse()) {
+    if (present.has(item.id)) { next = item.id; continue; }
+    const pending = before.get(next) ?? [];
+    pending.push(item);
+    before.set(next, pending);
+  }
+  return history.flatMap(item => [...(before.get(item.id) ?? []).reverse(), live.get(item.id) ?? item])
+    .concat((before.get(undefined) ?? []).reverse());
+}
+
 export function codexMessages(turns: any[], options: { unconfirmedLegacyTurnId?: string } = {}): ChatMessage[] {
   const messages: ChatMessage[] = [];
   for (const turn of turns) {
