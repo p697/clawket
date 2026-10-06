@@ -25,15 +25,28 @@ function paths(config) {
 }
 export async function control(config, action) {
   const p = paths(config);
-  const token = JSON.parse(readFileSync(join(p.directory, 'control.json'), 'utf8')).token;
+  const state = join(p.directory, 'control.json');
+  const token = JSON.parse(readFileSync(state, 'utf8')).token;
   return new Promise((resolveResult, reject) => {
+    const rejectResponse = error => {
+      // A replacement can publish its credential between our file read and connect.
+      // Only a proven generation change may be retried; unchanged invalid replies fail.
+      try {
+        const currentToken = JSON.parse(readFileSync(state, 'utf8')).token;
+        if (typeof currentToken === 'string' && currentToken !== token) {
+          reject(Object.assign(new Error('Control generation changed'), { code: 'ECLAWKET_CONTROL_REPLACED' }));
+          return;
+        }
+      } catch {}
+      reject(error);
+    };
     const socket = connect(p.pipe);
     let data = '';
     socket.setTimeout(action === 'stop' ? 15_000 : 3000, () => socket.destroy(new Error('Control timeout')));
     socket.on('connect', () => socket.write(JSON.stringify({ action, token }) + '\n'));
     socket.on('data', chunk => { data += chunk; if (data.length > 4096) socket.destroy(new Error('Invalid control response')); });
-    socket.on('end', () => { try { resolveResult(JSON.parse(data)); } catch { reject(new Error('Invalid control response')); } });
-    socket.on('error', reject);
+    socket.on('end', () => { try { resolveResult(JSON.parse(data)); } catch { rejectResponse(new Error('Invalid control response')); } });
+    socket.on('error', error => error.code === 'ECONNRESET' ? rejectResponse(error) : reject(error));
   });
 }
 export async function supervise(config) {
@@ -70,7 +83,10 @@ export async function supervise(config) {
   });
   await new Promise((yes, no) => { server.once('error', no); server.listen(p.pipe, yes); });
   // The exclusive pipe is acquired before publishing control state or spawning.
-  writeFileSync(join(p.directory, 'control.json'), JSON.stringify({ token }), { mode: 0o600 });
+  const state = join(p.directory, 'control.json');
+  const temporary = `${state}.${process.pid}`;
+  writeFileSync(temporary, JSON.stringify({ token }), { mode: 0o600 });
+  renameSync(temporary, state);
   const finished = () => {
     if (stopDeadline) clearTimeout(stopDeadline);
     server.close();
@@ -143,8 +159,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
           const status = await control(config, 'status');
           if (!status.stopping) { running = status; break; }
         } catch (error) {
-          if (!['ENOENT', 'ECONNREFUSED'].includes(error?.code)) throw error;
-          if (!launched) {
+          if (!['ENOENT', 'ECONNREFUSED', 'ECLAWKET_CONTROL_REPLACED'].includes(error?.code)) throw error;
+          if (error?.code !== 'ECLAWKET_CONTROL_REPLACED' && !launched) {
             const child = spawn(process.execPath, [fileURLToPath(import.meta.url), 'run', resolve(config)], { detached: true, windowsHide: true, stdio: 'ignore' });
             child.on('error', () => {}); child.unref(); launched = true;
           }

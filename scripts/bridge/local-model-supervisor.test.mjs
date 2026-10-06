@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, realpathSync } from 'node:fs';
+import { createServer } from 'node:net';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
@@ -21,8 +23,49 @@ test('bounded retry and diagnostic redaction', () => {
   assert.equal(diagnostic('error: Local model Bridge is running. secret'), 'child_output_redacted');
   assert.equal(diagnostic('local-model relay transport connected'), 'socket_open');
 });
+test('start rereads a replaced control credential without launching another owner', async t => {
+  const root = mkdtempSync(join(tmpdir(), 'ck-gen-'));
+  const config = join(root, 'runtime.json');
+  const dir = join(root, 'windows-service');
+  mkdirSync(dir); writeFileSync(config, '{}');
+  const canonical = realpathSync(config);
+  const key = createHash('sha256').update(process.platform === 'win32' ? canonical.toLowerCase() : canonical).digest('hex').slice(0, 24);
+  const pipe = process.platform === 'win32' ? `\\\\.\\pipe\\clawket-local-model-${key}` : join(dir, 'control.sock');
+  const state = join(dir, 'control.json');
+  writeFileSync(state, JSON.stringify({ token: 'old-generation' }));
+  let requests = 0;
+  const server = createServer(socket => {
+    let input = '';
+    socket.on('data', chunk => {
+      input += chunk;
+      if (!input.includes('\n')) return;
+      const request = JSON.parse(input);
+      requests++;
+      if (requests === 1) {
+        assert.equal(request.token, 'old-generation');
+        writeFileSync(state, JSON.stringify({ token: 'new-generation' }));
+        socket.end(); // The replacement rejects a credential read from the previous owner.
+      } else {
+        assert.equal(request.token, 'new-generation');
+        socket.end(JSON.stringify({ pid: process.pid, childPid: null, stopping: false, ready: true, attempts: 0 }));
+      }
+    });
+  });
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(pipe, resolve); });
+  t.after(async () => { await new Promise(resolve => server.close(resolve)); rmSync(root, { recursive: true, force: true }); });
+  const child = spawn(process.execPath, [fileURLToPath(supervisor), 'start', config]);
+  let output = ''; child.stdout.on('data', chunk => { output += chunk; });
+  child.stderr.resume();
+  assert.equal((await once(child, 'close'))[0], 0);
+  assert.equal(JSON.parse(output).pid, process.pid);
+  assert.equal(requests, 2);
+  // An unchanged credential with a malformed reply is still an immediate failure.
+  server.removeAllListeners('connection');
+  server.on('connection', socket => { socket.on('data', () => socket.end('invalid')); });
+  await assert.rejects(control(config, 'status'), /Invalid control response/);
+});
 test('real processes: exclusive owner, ready-only reset, graceful stop and no retry after stop', async t => {
-  const root = mkdtempSync(join(tmpdir(), 'clawket-supervisor-'));
+  const root = mkdtempSync(join(tmpdir(), 'ck-sup-'));
   const config = join(root, 'runtime.json');
   const dir = join(root, 'windows-service');
   mkdirSync(dir); writeFileSync(config, '{}');
@@ -70,7 +113,7 @@ test('real processes: exclusive owner, ready-only reset, graceful stop and no re
 
 
 test('stop completion and immediate/concurrent start never leave the service offline', async t => {
-  const root = mkdtempSync(join(tmpdir(), 'clawket-restart-'));
+  const root = mkdtempSync(join(tmpdir(), 'ck-rst-'));
   const config = join(root, 'runtime.json');
   const dir = join(root, 'windows-service');
   mkdirSync(dir); writeFileSync(config, '{}');

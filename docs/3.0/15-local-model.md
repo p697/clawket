@@ -116,6 +116,13 @@ a debug APK. After installing it on a device, `npm run mobile:dev:android`
 configures adb reverse and starts Metro; use `ANDROID_SERIAL` when multiple
 devices are connected. iOS native builds still require macOS/Xcode.
 
+The managed supervisor publishes its control credential atomically after acquiring
+the exclusive pipe/socket. Concurrent start during owner replacement may read
+the previous credential before connecting to the new owner. A rejected response
+is retried only when the saved credential demonstrably changed, within the existing
+15-second start budget; that retry does not spawn another owner. Unchanged invalid
+responses still fail. Status and stop do not silently retry across generations.
+
 ## Windows acceptance evidence (2026-09-11)
 
 - Real public Preview run: CLI six-digit proof/claim, actual Mobile adapter,

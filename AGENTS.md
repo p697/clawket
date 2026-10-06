@@ -160,6 +160,8 @@ When implementation, architecture, or release behavior changes, update the close
 
 `relay:test:integration` runs self-contained local Relay/model servers and recorded mobile adapters. Real local-model inference uses `test:local-model:recovery` (`CLAWKET_RECOVERY_CONFIG`) or `test:local-model:preview` (`CLAWKET_LOCAL_MODEL_PREVIEW_SMOKE=1`, optional model endpoint configuration); these commands fail when prerequisites are absent, never silently skip.
 
+Local-model supervisor start retries a rejected control response only after a proven credential-generation change, within its existing 15-second budget and without launching another owner for that retry. Publish control credentials atomically; unchanged invalid responses still fail. Keep process-test socket paths within the macOS Unix socket limit.
+
 Windows ACL assertions must fail on command/module errors or missing paths. When invoking Windows PowerShell from PowerShell 7, resolve its security module from the invoked shell's `$PSHOME`; inherited module paths must not produce a false zero-access result.
 
 ## Local Test Resource Rule

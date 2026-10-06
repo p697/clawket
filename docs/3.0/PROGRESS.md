@@ -1,5 +1,10 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-06 CI 追踪追加：本地模型 supervisor 并发启动竞态（QQ 邮箱调查后继续验证 main）。
+  - CI 精简 PR #199 在最新 main 上 11 项全部通过，已合并为 19ec342e；此前 main run 37422232668 又在 macOS concurrent-start 进程测试退出 1。原日志没有内部错误，不能仅由退出码认定原因；新增真 socket 回归固定复现「读旧 credential、连接新 owner 被拒绝」的启动失败，旧实现先红、修复后绿。
+  - 控制 credential 在取得独占 socket 后原子发布；只有保存的 credential 确实换代才重新读取连接，仍受原有 15 秒 start 总预算约束，换代重试不另启 owner。未换代的无效回复依然立即失败，status/stop 不跨代静默重试。测试临时目录前缀缩短，避免 macOS canonical Unix socket 路径超限；不改停止/并发恢复断言。
+  - 单文件 local-model-supervisor.test.mjs 4 项通过（含真实进程 30 秒恢复、并发/顺序 Stop→Start 与换代/畸形回复）；完整平台门禁交本 PR CI。未打包、发布、部署或改通知设置。
+
 - 2026-10-06 QQ 邮箱 PR 失败邮件与 CI 提速精简（负责人要求调查并修复）。
   - 最近 100 次 Actions：72 成功、19 失败、7 取消、2 当时运行中。11 次审计阻挡来自已修复/已获负责人例外的旧依赖；5 次提交中的断言、mock、覆盖率与 Windows child-exit race 已有后续绿灯；3 次为 Windows 原生测试超时、Wrangler 端口竞争、旧端回放 idle 断言。逐类证据与限制见 [CI 说明](../ci.md)，没有把失败邮件全部归为误报。
   - Windows/macOS 合并为同名必需检查的 OS matrix、fail-fast=false；根 build/typecheck 不再重复编译 CLI 自己会编译的依赖；Ubuntu source 测试和 replay 仅预建 Core；无需历史的三个 job 改浅 checkout。桌面相关完整 workflow 少 12 次 TypeScript 编译与 2 次多余 bundle。测试、覆盖阈值、漏洞审计、secret scan 与 v1 回放均保留。
