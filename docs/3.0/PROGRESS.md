@@ -1,6 +1,7 @@
 # PROGRESS · Clawket 3.0 进度日志
 
 - 2026-10-06 Codex Send 弹窗布局优化：截图中的 Current task / Next message 直接使用无水平内边距的 plain 行，图标贴屏幕边缘；固定 32% 高度留下大块空白。改为随内容高度的 grouped Sheet，16pt 内容边距、comfortable 圆角白色按钮组、64pt 最小点击行与统一图标列/内缩分隔线，长翻译与大字自然换行。保持 Current 待确认禁用/Sending…、Next 可选和关闭后 scope-fenced 发送交接。独占 heavy 串行验证 ThreadSheets.test.tsx 12项、Mobile types、UI257文件/984token来源、8对指令文档/5检查、设计系统文档/5检查与 whitespace 通过；完整门禁交 CI。无版本、打包或发布动作，真机观感待负责人验收。
+  - PR #179 / `83c30bbf` 的 CI37399938834 全仓 types、三 Mobile 分片、功能/static、v1 与 secret scan 通过（纯 Mobile 改动两桌面任务按规则跳过）；依赖审计因既有 source-map-js GHSA-68fv-2mgg-jv7q / tinypool GHSA-5gmw-xhrv-c9v3、GHSA-85c8-ppgw-ccpr 失败。公开修补分别为1.2.2及2.1.2；当前 tinypool1.1.1来自Vitest3.2.7，主版本工具升级独立于本UI任务。未改依赖、批准例外或绕过保护；等待负责人决定独立修复范围，尚未合并。
 
 - 2026-10-06 Codex Agent profile: Memory entry and quota reset countdown.
   - Owner-requested home tile label now uses the shared localized Memory label; its existing native instruction-file route, filenames and editing gates are unchanged. The confusing quota explanation is replaced with a localized countdown from the existing native Unix-second reset timestamp for the same limiting window as the percentage. Equal limits use the latest reset, unknown tied resets remain unknown; elapsed timestamps never imply replenishment. The minute timer stops offscreen/background/offline and is removed on unmount. No Bridge, protocol or other-backend behavior changes.
@@ -1842,6 +1843,7 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 
 | 编号 | 事项 | 怎么做 | 验证方法 | 状态 |
 |---|---|---|---|---|
+| HT-SEND-SHEET-AUDIT-1006 | Send 弹窗 PR 的依赖审计阻挡决策 | 负责人决定是否独立修复 source-map-js 与 tinypool/Vitest 工具链；UI任务不擅自扩展到主版本升级或新增安全例外。 | 两份 lockfile 审计通过；UI PR rebase fresh main 后完整 required CI 再通过才合并。 | PR #179 功能/types/static/v1通过；现有依赖审计失败，尚未合并、未发布。 |
 | HT-CODEX-DESKTOP-SEND-1005 | 修复交付后已有 Desktop 会话的手机验收 | 3.1.12已公开；负责人用原scope/config更新 Bridge，保持当前客户端，在受影响旧会话续聊两轮并打开原桌面会话。 | 原 ID/历史保留，两轮均成功；IPC 恢复后没有重复发送，桌面重开正常。旧失败消息先核对实际历史，未知执行不重发。 | 已完成只读真实owner对照与407项窄回归，公开Bridge3.1.12包含修复；运行中3.1.11尚未替换，phone/GUI验收待更新后进行。 |
 | HT-CODEX-DESKTOP-REOPEN-1005 | 连续远程发消息后原 Desktop 会话重开的真实验收 | 负责人在正常桌面界面打开同一自有 QA 会话；若报错，保留页面与重试结果。Desktop GUI 控制此前被拒绝，本轮不退出或重启 Desktop 绕过该限制。 | 对照手机原始 turn/receipt 与桌面重开、Retry；新候选成功不能替代原故障复现。 | ownership/history-generation 修复与 CI 通过；真实 Desktop 重开 checkpoint 待负责人，未宣称问题已解决。 |
 | HT-PICKER-MIME-1004 | 相册导出 MIME 真机验收 | 在负责人合入本修复的 QA App，从系统相册选择小 GIF 与 PNG；仅自建 QA 会话发送一次，未知不重发。 | 观察实际 base64 签名和发送 MIME 一致、视觉首帧正确、取消/scope/六图上限保持；不宣称恢复 GIF 动画或制造容量超限。 | hook/发送 wire 回归已通过；真机 gallery 输出待负责人验收。本轮没有设备或发布动作。 |
