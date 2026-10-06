@@ -10,6 +10,8 @@ Connect completes only after the current target's OpenClaw handshake reaches `re
 
 Pending device approval is an explicit adapter event, not necessarily a runtime error. The coordinator retains only a boolean for its current adapter, clearing it on resolution, ready or retirement. The direct page shows computer approval instructions from this flag even if a pending socket closes with no error text. It never guesses approval from a network timeout.
 
+The coordinator's optional save callback reports the persisted descriptor before waiting for native readiness. This gives setup its exact target for cancellation and for the approval deadline. A late save callback cannot reclaim a successor attempt's ownership.
+
 ## Gateway setup
 
 - Wi-Fi: both devices share a reachable LAN. OpenClaw must listen on LAN (`gateway.bind=lan`) or a custom reachable address, not loopback only. The host firewall and Wi-Fi client isolation must permit the Gateway port (normally 18789).

@@ -7,8 +7,8 @@ function runtime(records: Array<{ id: string; backendKind: string; transportKind
   return {
     getSnapshot: () => state,
     getRuntimeConnectionRecord: jest.fn(async (id: string) => records.find(r => r.id === id)),
-    replaceConnection: jest.fn(async (id: string) => descriptor(id)),
-    addConnection: jest.fn(async () => { state.activeConnectionId = 'new'; return descriptor('new'); }),
+    replaceConnection: jest.fn(async (id: string, _input: unknown, onSaved?: (connection: ReturnType<typeof descriptor>) => void) => { const saved = descriptor(id); onSaved?.(saved); return saved; }),
+    addConnection: jest.fn(async (_input: unknown, onSaved?: (connection: ReturnType<typeof descriptor>) => void) => { state.activeConnectionId = 'new'; const saved = descriptor('new'); onSaved?.(saved); return saved; }),
     activate: jest.fn(async (id: string) => { state.activeConnectionId = id; }),
     probeActive: jest.fn(async () => true),
     pauseConnection: jest.fn(async () => { state.activeConnectionId = null; }),
@@ -38,7 +38,7 @@ describe('OpenClaw direct connections', () => {
   it('reuses an endpoint and replaces obsolete auth, preserving its label', async () => {
     const r = runtime([{ id: 'old', backendKind: 'openclaw', transportKind: 'tailscale', url: draft.url + '/' }]);
     await connect(r, { draft: { ...draft, authMethod: 'password', credential: 'new-password' } });
-    expect(r.replaceConnection).toHaveBeenCalledWith('old', expect.objectContaining({ auth: { password: 'new-password' }, label: 'My computer' }));
+    expect(r.replaceConnection).toHaveBeenCalledWith('old', expect.objectContaining({ auth: { password: 'new-password' }, label: 'My computer' }), expect.any(Function));
     expect(r.addConnection).not.toHaveBeenCalled();
     expect(r.activate).toHaveBeenCalledWith('old');
   });
@@ -50,7 +50,7 @@ describe('OpenClaw direct connections', () => {
   });
   it('retires a saved but cancelled first connection before it can activate', async () => {
     const r = runtime(); let current = true;
-    r.addConnection.mockImplementation(async () => { current = false; r.getSnapshot().activeConnectionId = 'new'; return descriptor('new'); });
+    r.addConnection.mockImplementation(async (_input, onSaved) => { current = false; r.getSnapshot().activeConnectionId = 'new'; const saved = descriptor('new'); onSaved?.(saved); return saved; });
     expect(await connect(r, { isCurrent: () => current })).toBeNull();
     expect(r.pauseConnection).toHaveBeenCalledWith('new');
     expect(r.activate).not.toHaveBeenCalled();
@@ -69,6 +69,18 @@ describe('OpenClaw direct connections', () => {
     const oldAttempt = connect(r, { isCurrent: () => current });
     await probing; current = false;
     await connect(r); finish(true);
+    expect(await oldAttempt).toBeNull(); expect(r.pauseConnection).not.toHaveBeenCalled();
+  });
+  it('does not let a late save callback reclaim a successor retry', async () => {
+    const r = runtime([{ id: 'old', backendKind: 'openclaw', transportKind: 'local', url: draft.url }]);
+    let current = true; let finish!: () => void; let entered!: () => void;
+    const saving = new Promise<void>(resolve => { entered = resolve; });
+    r.replaceConnection.mockImplementationOnce((id, _input, onSaved) => new Promise(resolve => {
+      finish = () => { const saved = descriptor(id); onSaved?.(saved); resolve(saved); }; entered();
+    }));
+    const oldAttempt = connect(r, { isCurrent: () => current });
+    await saving; current = false;
+    await connect(r); finish();
     expect(await oldAttempt).toBeNull(); expect(r.pauseConnection).not.toHaveBeenCalled();
   });
   it.each([

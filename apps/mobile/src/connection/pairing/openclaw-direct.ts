@@ -79,15 +79,18 @@ export async function connectOpenClawDirect(input: Readonly<{
   attemptOwners.set(runtime, owners);
   const owner = Symbol('direct-attempt');
   if (existing) owners.set(existing.id, owner);
+  const saved = (connection: ConnectionDescriptor) => {
+    if (existing && owners.get(connection.id) !== owner) return;
+    if (!existing) owners.set(connection.id, owner);
+    if (isCurrent()) input.onSaved(connection);
+  };
   const connection = existing
-    ? await runtime.replaceConnection(existing.id, { ...record, label: existing.label })
-    : await runtime.addConnection(record);
-  if (!existing) owners.set(connection.id, owner);
+    ? await runtime.replaceConnection(existing.id, { ...record, label: existing.label }, saved)
+    : await runtime.addConnection(record, saved);
   const retire = async () => {
     if (owners.get(connection.id) === owner && runtime.getSnapshot().activeConnectionId === connection.id) await runtime.pauseConnection(connection.id);
   };
-  if (!isCurrent()) { await retire(); return null; }
-  input.onSaved(connection);
+  if (!isCurrent() || owners.get(connection.id) !== owner) { await retire(); return null; }
   await runtime.activate(connection.id);
   if (!isCurrent()) { await retire(); return null; }
   await runtime.probeActive(12_000);

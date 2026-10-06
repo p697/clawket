@@ -460,8 +460,10 @@ export class ConnectionCoordinator {
     return this.snapshot;
   }
 
-  async addConnection(input: NewConnectionRecord): Promise<ConnectionDescriptor> {
+  async addConnection(input: NewConnectionRecord, onSaved?: (connection: ConnectionDescriptor) => void): Promise<ConnectionDescriptor> {
     const descriptor = await this.store.add(input);
+    // Setup owns the persisted target before waiting for a native handshake.
+    onSaved?.(descriptor);
     await this.whenIdle();
     return descriptor;
   }
@@ -479,8 +481,10 @@ export class ConnectionCoordinator {
   async replaceConnection(
     connectionId: string,
     replacement: ConnectionRecordReplacement,
+    onSaved?: (connection: ConnectionDescriptor) => void,
   ): Promise<ConnectionDescriptor> {
     const descriptor = await this.store.replace(connectionId, replacement);
+    onSaved?.(descriptor);
     if (this.active?.connectionId === connectionId) {
       this.disconnectActiveImmediately();
       this.scheduleReconcile();
@@ -1446,7 +1450,7 @@ export class ConnectionCoordinator {
         : patch.freeConnectionId,
       activeAdapter: this.active?.adapter ?? null,
       activeState: this.active?.adapter.state ?? 'idle',
-      activePairingRequired: this.active?.pairingRequired ?? false,
+      activePairingRequired: Boolean(this.active?.connectionId === activeConnectionId && this.active?.pairingRequired),
       runActivities: this.runActivities,
       recovering: this.recovery.phase === 'recovering',
       recoveryFailed: this.recovery.phase === 'failed',

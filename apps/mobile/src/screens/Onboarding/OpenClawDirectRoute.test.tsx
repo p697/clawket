@@ -93,6 +93,15 @@ describe('direct setup lifecycle', () => {
     expect(mockProps.error).toBe('network'); expect(mockPause).toHaveBeenCalledWith('direct');
     expect(p.onConnected).not.toHaveBeenCalled(); view.unmount(); jest.useRealTimers();
   });
+  it('keeps explicit approval instructions when a pending handshake reaches its deadline', async () => {
+    jest.useFakeTimers();
+    mockConnect.mockImplementation((input) => { input.onSaved(saved); mockSnapshot.activeConnectionId = 'direct'; mockSnapshot.activePairingRequired = true; return new Promise(() => {}); });
+    const p = props(); const view = render(<OpenClawDirectRoute {...(p as unknown as React.ComponentProps<typeof OpenClawDirectRoute>)} />);
+    act(() => mockProps.onSubmit(draft));
+    await act(async () => { jest.advanceTimersByTime(30_000); });
+    expect(mockProps.error).toBe('pairing_required'); expect(mockPause).toHaveBeenCalledWith('direct');
+    expect(p.onConnected).not.toHaveBeenCalled(); view.unmount(); jest.useRealTimers();
+  });
   it('allows reopening the existing free endpoint without a Pro paywall', async () => {
     mockSnapshot.connections = [saved]; mockFind.mockResolvedValue({ id: 'direct', isFreeSlot: true });
     const p = props(); render(<OpenClawDirectRoute {...(p as unknown as React.ComponentProps<typeof OpenClawDirectRoute>)} />);

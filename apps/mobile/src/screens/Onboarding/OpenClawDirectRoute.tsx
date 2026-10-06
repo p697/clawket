@@ -54,7 +54,9 @@ export function OpenClawDirectRoute({ navigation, onConnected, onOpenPaywall }: 
       const isCurrent = () => focused.current && current === generation.current;
       timer.current = setTimeout(() => {
         if (!isCurrent()) return;
-        retire(); inFlight.current = null; setBusy(false); setError('network');
+        const snapshot = getConnectionRuntime().getSnapshot();
+        const pendingApproval = target.current && snapshot.activeConnectionId === target.current && snapshot.activePairingRequired;
+        retire(); inFlight.current = null; setBusy(false); setError(pendingApproval ? 'pairing_required' : 'network');
       }, 30_000);
       try {
         const coordinator = getConnectionRuntime();
