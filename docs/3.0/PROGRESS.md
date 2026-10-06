@@ -1,8 +1,9 @@
 # PROGRESS · Clawket 3.0 进度日志
 
-- 2026-10-06 负责人授权基于最新 main 发布 Bridge 3.1.16 patch。
+- 2026-10-06 Bridge 3.1.16 patch 已公开发布，公共安装验证通过（负责人授权基于最新 main）。
   - 起点 `be4ca502`（PR208），纳入 Claude 首次输入前模型读取、Codex 流式段落/分页历史排序与官方 clawket.ai 域名映射；仅公开 CLI manifest/lock、publish guard 升版，内部 workspace/App 版本保持。
-  - 发布前验证与固定候选准备中；要求 v1 回放、最新只读生产快照矩阵、双锁文件审计、精确源码 CI（含桌面）、包 provenance、固定包 dry-run、空认证候选与公共安装。详细记录见[发布记录](../3.1/bridge-3.1.16-release.md)。本次发布不更新或重启现有 Bridge、不分发 App、不部署 Worker，手机/Desktop 验收保持独立。
+  - 固定源码 `ee2e3508` 的 CI37441584545 十一项全绿，包含 Windows/macOS；六 guard、八指令对/五 checker、v1 五文件42项、最新生产快照矩阵4用例/24阶段、双锁文件审计零阻挡（沿用两例外）、92模块/144输入 provenance、固定包 dry-run、空认证候选安装通过。首次本地回放缺少新 worktree 的 Core 构建，补齐后两次完整回放全绿。
+  - 负责人完成 npm 安全密钥认证后，npm 接受固定286,625B包；初始公开404已保留。2026-10-06 18:22:43 JST，公开 version/latest=3.1.16，完整无认证下载逐字节/SHA-256/SHA-1/SHA-512匹配候选，18:23:03公共独立安装通过identity、exact bundle、updateProtocol与CLI help。六生产 Worker 源码/config哈希、部署锚点和观测设置前后未变；交付记录不替换包。源码与交付记录见[PR #210](https://github.com/p697/clawket/pull/210)，详细记录见[发布记录](../3.1/bridge-3.1.16-release.md)。本次未更新或重启现有 Bridge、未分发 App、未部署 Worker，手机/Desktop 验收保持独立。
 
 
 - 2026-10-06 官方连接域名统一（负责人授权分阶段方案与 Cloudflare 操作）。
