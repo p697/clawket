@@ -559,6 +559,38 @@ describe('SessionPanelView', () => {
     expect(view.getByText('Main session')).toBeTruthy();
   });
 
+  it('opens the lone Agent profile from the pill and closes the panel first', () => {
+    const builderOnly = source.agents[1]!;
+    const onClose = jest.fn();
+    const onOpenAgentProfile = jest.fn();
+    const single = {
+      rows: rows.filter((row) => row.agentId === 'builder' && row.kind === 'main'),
+      agents: [builderOnly.agent],
+      currentAgentId: 'builder',
+      currentSessionKey: 'agent:builder:main',
+    };
+    const view = render(<SessionPanelView {...props({ ...single, onClose, onOpenAgentProfile })} />);
+    expect(view.getByLabelText('Agent settings')).toBeTruthy();
+    fireEvent.press(view.getByTestId('session-panel-agent-pill'));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onOpenAgentProfile).toHaveBeenCalledWith(builderOnly.agent);
+    expect(onClose.mock.invocationCallOrder[0]).toBeLessThan(onOpenAgentProfile.mock.invocationCallOrder[0]!);
+
+    // Without the handler, or while sessions need permission, the pill stays a label.
+    view.rerender(<SessionPanelView {...props({ ...single, onClose })} />);
+    expect(view.queryByLabelText('Agent settings')).toBeNull();
+    view.rerender(<SessionPanelView {...props({ ...single, state: 'permission', onClose, onOpenAgentProfile })} />);
+    expect(view.queryByLabelText('Agent settings')).toBeNull();
+  });
+
+  it('keeps the Agent switcher on the pill when several Agents share the panel', () => {
+    const onOpenAgentProfile = jest.fn();
+    const view = render(<SessionPanelView {...props({ onOpenAgentProfile })} />);
+    fireEvent.press(view.getByTestId('session-panel-agent-pill'));
+    expect(view.getByTestId('session-panel-agent-menu')).toBeTruthy();
+    expect(onOpenAgentProfile).not.toHaveBeenCalled();
+  });
+
   it('selects sessions and reports the panel as the source', async () => {
     const onSelectSession = jest.fn(async () => undefined);
     const onClose = jest.fn();

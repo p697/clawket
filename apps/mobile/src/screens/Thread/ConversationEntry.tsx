@@ -38,6 +38,7 @@ export function ConversationEntry({ navigation, route, locked, lockedReason = 'a
   const [loading, setLoading] = useState(true);
   const closed = useRef(false);
   const pending = useRef<RootStackParamList['Thread'] | null>(null);
+  const pendingProfile = useRef<RootStackParamList['AgentSettings'] | null>(null);
   const scope = useRef({ connectionId, agentId, focused });
   scope.current = { connectionId, agentId, focused };
   const rosterGroup = connections.roster.find(group => group.connection.id === connectionId);
@@ -55,6 +56,7 @@ export function ConversationEntry({ navigation, route, locked, lockedReason = 'a
     setLoading(true);
     setVisible(false);
     pending.current = null;
+    pendingProfile.current = null;
     void (async () => {
       if (locked) return;
       const runtime = getConnectionRuntime();
@@ -137,9 +139,13 @@ export function ConversationEntry({ navigation, route, locked, lockedReason = 'a
       onAfterClose={() => {
         if (!scope.current.focused) return;
         const target = pending.current;
+        const profile = pendingProfile.current;
         pending.current = null;
+        pendingProfile.current = null;
         onSessionPanelAfterClose?.();
         if (target) navigation.replace('Thread', target);
+        // Pushed over the entry, so Back from the profile reopens this picker.
+        else if (profile) navigation.navigate('AgentSettings', profile);
         else if (!loading) navigation.goBack();
       }}
       onSelectSession={row => choose(row.key)}
@@ -156,7 +162,8 @@ export function ConversationEntry({ navigation, route, locked, lockedReason = 'a
         await onSessionAction(row, action, payload);
         if (action === 'export') close();
       } : undefined}
-      onOpenPermission={() => showPaywall(lockedReason)} />
+      onOpenPermission={() => showPaywall(lockedReason)}
+      onOpenAgentProfile={agent => { pendingProfile.current = { connectionId: agent.connectionId, agentId: agent.agentId }; }} />
   </View>;
 }
 

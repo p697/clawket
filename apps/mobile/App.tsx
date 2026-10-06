@@ -2160,6 +2160,16 @@ function AppContent({
                     ? 'gatewayConnections'
                     : 'agents',
                 )}
+                onOpenAgentProfile={(agent) => {
+                  const open = () => {
+                    if (rootNavigationRef.isReady()) {
+                      rootNavigationRef.navigate('AgentSettings', { connectionId: agent.connectionId, agentId: agent.agentId });
+                    }
+                  };
+                  if (!canAccessRosterAgent(agent.connectionId, agent.agentId)) {
+                    presentPaywall(canAccessConnection(agent.connectionId) ? 'agents' : 'gatewayConnections', open);
+                  } else open();
+                }}
               />
               <ConversationExportSheet target={exportTarget && !paywallVisible && canExportSession(exportTarget) ? exportTarget : null}
                 adapter={connections.activeAdapter?.connection.id === exportTarget?.connectionId ? connections.activeAdapter : null}

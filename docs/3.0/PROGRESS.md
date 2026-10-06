@@ -1,5 +1,10 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-06 会话面板顶部 Agent 胶囊可点开资料页（负责人要求）。
+  - 连接只有一个 Agent 时，胶囊从纯标签改为按钮（无障碍名「Agent 设置」）：先关闭面板，再打开该 Agent 的 `AgentSettings`，与线程头部胶囊同一入口；会话需要权限时保持不可点，无权访问的 Agent 先走付费墙。多 Agent 时胶囊仍打开切换菜单，行为不变。
+  - 线程里打开的面板直接跳转；首页进入的 `ConversationEntry` 等面板收起后再推入资料页，从资料页返回会重新弹出会话面板。
+  - 单文件串行通过 SessionPanel 47（新增 2）、ConversationEntry 36（新增 1）；heavy 租约被其他会话占用，类型检查交给 PR CI。仅 Mobile，安装客户端需后续授权的新版本才能收到。
+
 - 2026-10-06 负责人授权的 Bridge `3.1.13` 已公开发布。
   - 包含PR184的Codex start/steer文本数组与双表示快照兼容修复，以及PR183旧npm启动链接的升级器修复；保留writer、跨后端认证/scope/回退，不重放已提交输入。仅公开CLI/发布守卫升版，内部workspace/App版本保持。
   - 固定source `d4087ffc` 的CI37404766720十一项全部通过；六发布门禁、八指令对/五checker、v1五文件41项、当前Production快照四用例24阶段、两lockfile审计零阻挡（沿用两例外）通过。后续main同步仅Mobile/文档，141个bundle输入一致、包验证继续通过；六Production Worker源码/config/锚点保持，无部署。

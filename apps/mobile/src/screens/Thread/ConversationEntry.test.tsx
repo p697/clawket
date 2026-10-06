@@ -144,6 +144,16 @@ it('waits for sheet dismissal before opening the selected conversation', async (
   act(() => mockPanel.onAfterClose());
   expect(navigation.replace).toHaveBeenCalledWith('Thread', expect.objectContaining({ sessionKey: 'existing' }));
 });
+it('opens the Agent profile over the entry once the sheet has gone', async () => {
+  render(<ConversationEntry {...props} />);
+  await waitFor(() => expect(mockPanel.visible).toBe(true));
+  act(() => { mockPanel.onClose(); mockPanel.onOpenAgentProfile({ connectionId: 'c', agentId: 'codex' }); });
+  expect(navigation.navigate).not.toHaveBeenCalledWith('AgentSettings', expect.anything());
+  act(() => mockPanel.onAfterClose());
+  expect(navigation.navigate).toHaveBeenCalledWith('AgentSettings', { connectionId: 'c', agentId: 'codex' });
+  expect(navigation.goBack).not.toHaveBeenCalled();
+  expect(navigation.replace).not.toHaveBeenCalled();
+});
 it('creates only on explicit request, using the selected project', async () => {
   render(<ConversationEntry {...props} />);
   await waitFor(() => expect(mockPanel.visible).toBe(true));

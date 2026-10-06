@@ -147,6 +147,8 @@ export type SessionPanelViewProps = Readonly<{
   onRetry?: () => MaybePromise;
   onOpenBridgeHelp?: () => void;
   onOpenPermission?: () => void;
+  /** Opens the Agent's profile page; the panel closes itself first. */
+  onOpenAgentProfile?: (agent: AgentDescriptor) => void;
   /** The connection's backend: a product Agent wears its official mark in the pill, menu and main row. */
   platform?: PlatformKind | null;
 }>;
@@ -168,6 +170,7 @@ export type SessionPanelProps = Readonly<{
   onSessionAction?: SessionPanelActionHandler;
   onOpenBridgeHelp?: () => void;
   onOpenPermission?: () => void;
+  onOpenAgentProfile?: (agent: AgentDescriptor) => void;
 }>;
 
 type Translate = ReturnType<typeof useTranslation>['t'];
@@ -485,11 +488,14 @@ function AgentPill({
   switchable,
   expanded,
   onPress,
+  onOpenProfile,
 }: Readonly<{
   agent: AgentDescriptor;
   switchable: boolean;
   expanded: boolean;
   onPress: () => void;
+  /** A lone Agent has nothing to switch to, so the pill opens its profile instead. */
+  onOpenProfile?: () => void;
 }>): React.JSX.Element {
   const { theme } = useAppTheme();
   const { t } = useTranslation('common');
@@ -514,6 +520,19 @@ function AgentPill({
     </>
   );
   const chrome = [styles.agentPill, { backgroundColor: theme.colors.surface }];
+  if (!switchable && onOpenProfile) {
+    return (
+      <Pressable
+        testID="session-panel-agent-pill"
+        accessibilityRole="button"
+        accessibilityLabel={t('Agent settings')}
+        onPress={onOpenProfile}
+        style={({ pressed }) => [...chrome, pressed ? styles.pressed : null]}
+      >
+        {content}
+      </Pressable>
+    );
+  }
   if (!switchable) {
     return (
       <View testID="session-panel-agent-pill" accessibilityLabel={agent.name} style={chrome}>
@@ -835,6 +854,7 @@ export function SessionPanelView({
   onRetry,
   onOpenBridgeHelp,
   onOpenPermission,
+  onOpenAgentProfile,
   platform = null,
   activityAdapter,
   activityLive = state === 'ready',
@@ -1156,6 +1176,10 @@ export function SessionPanelView({
               switchable={switchable}
               expanded={agentMenuOpen}
               onPress={() => setAgentMenuOpen((current) => !current)}
+              onOpenProfile={onOpenAgentProfile && state !== 'permission' ? () => {
+                onClose();
+                onOpenAgentProfile(viewAgent);
+              } : undefined}
             />
           </SessionPanelPlatform.Provider>
         ) : undefined}
@@ -1355,6 +1379,7 @@ export function SessionPanel({
   onSessionAction,
   onOpenBridgeHelp,
   onOpenPermission,
+  onOpenAgentProfile,
 }: SessionPanelProps): React.JSX.Element {
   const connections = useConnections();
   const roster = useRoster();
@@ -1439,6 +1464,7 @@ export function SessionPanel({
       }}
       onOpenBridgeHelp={onOpenBridgeHelp}
       onOpenPermission={onOpenPermission}
+      onOpenAgentProfile={onOpenAgentProfile}
       platform={group?.connection.backendKind ?? null}
     />
   );
