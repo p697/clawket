@@ -63,7 +63,7 @@ jobs:
     strategy:
       fail-fast: false
       # A failed selector falls back to real checks on both desktop platforms.
-      matrix: ${{ fromJSON(needs.changes.outputs.desktop_matrix || '{"include":[{"os":"windows-latest","runner":"windows-latest","runDesktop":true},{"os":"macos-latest","runner":"macos-latest","runDesktop":true}]}') }}
+      matrix: ${{ fromJSON(needs.changes.result == 'success' && needs.changes.outputs.desktop_matrix || '{"include":[{"os":"windows-latest","runner":"windows-latest","runDesktop":true},{"os":"macos-latest","runner":"macos-latest","runDesktop":true}]}') }}
     steps:
       - name: No desktop-affecting changes
         if: ${{ !matrix.runDesktop }}
