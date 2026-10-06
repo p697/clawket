@@ -8,6 +8,8 @@ Matching OpenClaw direct endpoints are reused. Retry may change the attempted ad
 
 Connect completes only after the current target's OpenClaw handshake reaches `ready`. Duplicate submissions are serialized, failures preserve the form, and a 30-second presentation deadline retires the attempt. Back, blur, unmount and timeout fence late completions and pause only that attempt's active connection; ownership generations prevent an older probe from pausing a successor retry. Existing adapter reconnection, device identity, device approval and functional capabilities remain authoritative.
 
+Pending device approval is an explicit adapter event, not necessarily a runtime error. The coordinator retains only a boolean for its current adapter, clearing it on resolution, ready or retirement. The direct page shows computer approval instructions from this flag even if a pending socket closes with no error text. It never guesses approval from a network timeout.
+
 ## Gateway setup
 
 - Wi-Fi: both devices share a reachable LAN. OpenClaw must listen on LAN (`gateway.bind=lan`) or a custom reachable address, not loopback only. The host firewall and Wi-Fi client isolation must permit the Gateway port (normally 18789).
@@ -20,7 +22,7 @@ Connect completes only after the current target's OpenClaw handshake reaches `re
 
 `app.json` string-loads `plugins/with-openclaw-direct-networking`. This idempotent plugin is the native source of truth; generated Android/iOS files remain ignored. Android's main manifest permits cleartext because user-selected IP endpoints cannot be represented by static domain exceptions. This is an application-wide OS permission; the new product entry is OpenClaw-only, while existing transport policies continue unchanged. The plugin rejects a competing network security configuration for review.
 
-iOS declares Local Network usage, retains `NSAllowsLocalNetworking`, and adds insecure-load exceptions for private IPv4, link-local, loopback, Tailscale CGNAT and private/link-local IPv6 ranges for iOS 17+. Public arbitrary loads remain disabled. Custom public DNS endpoints should use `wss`. Unknown/malformed manifest or ATS input fails prebuild. A native rebuild is needed for installed clients to receive this policy; OTA alone cannot change it.
+iOS declares Local Network usage, retains `NSAllowsLocalNetworking`, and adds insecure-load exceptions for private IPv4, link-local, loopback, Tailscale CGNAT and private/link-local IPv6 ranges for iOS 17+ ([Apple IP/CIDR exception rules](https://developer.apple.com/documentation/BundleResources/Information-Property-List/NSAppTransportSecurity/NSExceptionDomains)). Public arbitrary loads remain disabled. Custom public DNS endpoints should use `wss`. Unknown/malformed manifest or ATS input fails prebuild. A native rebuild is needed for installed clients to receive this policy; OTA alone cannot change it.
 
 ## Acceptance
 

@@ -282,6 +282,35 @@ async function flushMaintenance(): Promise<void> {
 }
 
 describe('ConnectionCoordinator', () => {
+  it.each(['openclaw', 'hermes'] as const)('publishes only the current %s adapter device-approval state', async (backendKind) => {
+    const harness = await createHarness();
+    const adapter = createMockAdapter({
+      connection: { ...connectionInput('alpha'), backendKind, isFreeSlot: true },
+      agents: [agent('alpha')], sessions: [session('alpha', 20)],
+      timeline: [
+        { atMs: 1, update: { type: 'pairing_required' } },
+        { atMs: 2, update: { type: 'pairing_resolved', decision: 'approved' } },
+        { atMs: 3, update: { type: 'pairing_required' } },
+      ],
+    });
+    harness.coordinator.setAdapterFactory(() => adapter);
+    await harness.coordinator.start();
+    adapter.replayTimeline(1);
+    expect(harness.coordinator.getSnapshot().activePairingRequired).toBe(true);
+    adapter.replayTimeline(2);
+    expect(harness.coordinator.getSnapshot().activePairingRequired).toBe(false);
+    adapter.replayTimeline(3);
+    adapter.disconnect();
+    await adapter.connect();
+    expect(harness.coordinator.getSnapshot().activePairingRequired).toBe(false);
+    adapter.replayTimeline(3);
+    await harness.coordinator.pauseConnection('alpha');
+    expect(harness.coordinator.getSnapshot().activePairingRequired).toBe(false);
+    adapter.replayTimeline();
+    expect(harness.coordinator.getSnapshot().activePairingRequired).toBe(false);
+    await harness.coordinator.stop();
+  });
+
   it('publishes scoped session patches immediately and fences stale roster polling', async () => {
     const harness = await createHarness();
     const created = { ...session('alpha', 30), key: 'new-chat', title: 'New chat', canContinue: false, continuationBlockedReason: 'in_use' as const,

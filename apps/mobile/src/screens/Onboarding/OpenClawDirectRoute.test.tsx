@@ -4,7 +4,7 @@ import { OpenClawDirectRoute } from './OpenClawDirectRoute';
 import type { OpenClawDirectScreenProps } from './OpenClawDirectScreen';
 
 let mockProps: OpenClawDirectScreenProps;
-let mockSnapshot: { connections: unknown[]; activeConnectionId: string | null; activeState: string; error: { message: string } | null };
+let mockSnapshot: { connections: unknown[]; activeConnectionId: string | null; activeState: string; activePairingRequired?: boolean; error: { message: string } | null };
 let mockIsPro = false;
 const mockConnect = jest.fn();
 const mockFind = jest.fn(async (..._args: unknown[]) => undefined as { id: string; isFreeSlot: boolean } | undefined);
@@ -62,6 +62,18 @@ describe('direct setup lifecycle', () => {
     await waitFor(() => expect(mockConnect).toHaveBeenCalledTimes(2));
     expect(p.onOpenPaywall).not.toHaveBeenCalled();
     expect(mockConnect.mock.calls[1][0].retryConnectionId).toBe('direct');
+  });
+  it('shows device approval even when the pending handshake has no runtime error', async () => {
+    mockConnect.mockImplementation(async (input) => {
+      input.onSaved(saved); mockSnapshot.activeConnectionId = saved.id;
+      mockSnapshot.activeState = 'offline'; mockSnapshot.activePairingRequired = true;
+      return saved;
+    });
+    const p = props(); render(<OpenClawDirectRoute {...(p as unknown as React.ComponentProps<typeof OpenClawDirectRoute>)} />);
+    act(() => mockProps.onSubmit(draft));
+    await waitFor(() => expect(mockProps.busy).toBe(false));
+    expect(mockProps.error).toBe('pairing_required');
+    expect(p.onConnected).not.toHaveBeenCalled();
   });
   it('gates an additional connection and retires a paywall continuation on departure', async () => {
     mockSnapshot.connections = [saved];

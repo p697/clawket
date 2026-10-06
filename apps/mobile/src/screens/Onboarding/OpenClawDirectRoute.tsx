@@ -69,11 +69,15 @@ export function OpenClawDirectRoute({ navigation, onConnected, onOpenPaywall }: 
           target.current = undefined;
           onConnected({ connectionId: connection.id, backendKind: 'openclaw' });
         } else {
-          setError(classifyOpenClawDirectFailure(snapshot.error));
+          setError(snapshot.activeConnectionId === connection.id && snapshot.activePairingRequired
+            ? 'pairing_required' : classifyOpenClawDirectFailure(snapshot.error));
         }
       } catch (failure) {
         if (isCurrent()) {
-          setError(failure instanceof DirectConnectionInputError ? failure.field : classifyOpenClawDirectFailure(failure));
+          const snapshot = getConnectionRuntime().getSnapshot();
+          setError(failure instanceof DirectConnectionInputError ? failure.field
+            : target.current && snapshot.activeConnectionId === target.current && snapshot.activePairingRequired
+              ? 'pairing_required' : classifyOpenClawDirectFailure(failure));
         }
       } finally {
         if (inFlight.current === current) inFlight.current = null;
