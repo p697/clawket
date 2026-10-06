@@ -86,15 +86,7 @@ beforeAll(async () => {
     openClawRelayPort,
     hermesRegistryPort,
     hermesRelayPort,
-    openClawRegistryInspectorPort,
-    openClawRelayInspectorPort,
-    hermesRegistryInspectorPort,
-    hermesRelayInspectorPort,
   ] = await Promise.all([
-    getFreePort(),
-    getFreePort(),
-    getFreePort(),
-    getFreePort(),
     getFreePort(),
     getFreePort(),
     getFreePort(),
@@ -108,7 +100,6 @@ beforeAll(async () => {
       cwd: process.cwd(),
       configPath: 'apps/relay-registry/wrangler.toml',
       port: openClawRegistryPort,
-      inspectorPort: openClawRegistryInspectorPort,
       persistencePath: openClawPersistence,
       envVars: {
         RELAY_REGION_MAP: relayMap(openClawRelayUrl),
@@ -120,7 +111,6 @@ beforeAll(async () => {
       cwd: process.cwd(),
       configPath: 'apps/relay-registry/wrangler.hermes.toml',
       port: hermesRegistryPort,
-      inspectorPort: hermesRegistryInspectorPort,
       persistencePath: hermesPersistence,
       envVars: {
         RELAY_REGION_MAP: relayMap(hermesRelayUrl),
@@ -135,7 +125,6 @@ beforeAll(async () => {
       cwd: process.cwd(),
       configPath: 'apps/relay-worker/wrangler.toml',
       port: openClawRelayPort,
-      inspectorPort: openClawRelayInspectorPort,
       persistencePath: openClawPersistence,
       envVars: {
         REGISTRY_VERIFY_URL: openClawRegistry.baseUrl,
@@ -151,7 +140,6 @@ beforeAll(async () => {
       cwd: process.cwd(),
       configPath: 'apps/relay-worker/wrangler.hermes.toml',
       port: hermesRelayPort,
-      inspectorPort: hermesRelayInspectorPort,
       persistencePath: hermesPersistence,
       envVars: {
         REGISTRY_VERIFY_URL: hermesRegistry.baseUrl,
@@ -434,8 +422,11 @@ describe('v1 compatibility live replay', () => {
       gatewayUrl: `ws://127.0.0.1:${gatewayPort}`,
       reconnectBaseDelayMs: 100,
       reconnectMaxDelayMs: 500,
-      heartbeatIntervalMs: 250,
-      heartbeatTimeoutMs: 5_000,
+      // This replay tests client compatibility, not the owner's fast watchdog.
+      // Keep owner health on the normal deadline while the client pong test
+      // below still proves the 1.2-second negotiated expiry and legacy exemption.
+      heartbeatIntervalMs: 1_000,
+      heartbeatTimeoutMs: 35_000,
       createWebSocket: (url, options) => {
         if (url.startsWith(paired.relayUrl)) bridgeRelayConnections.push(connectionPayload(url, options?.headers));
         return new WebSocket(url, options);

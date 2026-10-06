@@ -54,34 +54,15 @@ jobs:
 
   # The desktop Bridge ships to Windows and macOS users. These jobs run for changes that can
   # affect it (scripts/ci/desktop-changes.mjs) and on every push to main; a failed selector runs them.
-  desktop-windows:
-    name: Bridge and Relay compatibility (windows-latest)
+  desktop:
+    name: Bridge and Relay compatibility (${{ matrix.os }})
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.desktop != 'false') }}
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - run: npm ci
-      - run: npm run bridge:build
-      - run: npm run bridge:test:required
-      - run: node --test scripts/bridge/local-model-supervisor.test.mjs
-      - run: npm run test:compat
-      - run: npx vitest run tests/integration/local-model.e2e.test.ts
-
-  desktop-macos:
-    name: Bridge and Relay compatibility (macos-latest)
-    needs: changes
-    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.desktop != 'false') }}
-    runs-on: macos-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -106,8 +87,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -126,8 +105,6 @@ jobs:
         shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -140,8 +117,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -151,9 +126,9 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      # bridge-runtime tests import @clawket/bridge-core through its built dist entry;
-      # in the unsplit gate, typecheck built it first.
-      - run: npm run bridge:build
+      # Runtime tests import source, but bridge-core resolves through its dist entry.
+      # The CLI test command builds its own runtime dependencies later.
+      - run: npm run --workspace @clawket/bridge-core build
       - run: npm run test:required:rest
       - run: npm run check:static
 
@@ -169,7 +144,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run bridge:build
+      # Replay imports current runtime source and builds the pinned historical Bridges itself.
+      - run: npm run --workspace @clawket/bridge-core build
       - run: npm run test:compat
 
   required:

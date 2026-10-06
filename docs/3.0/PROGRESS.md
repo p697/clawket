@@ -1,5 +1,11 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-06 QQ 邮箱 PR 失败邮件与 CI 提速精简（负责人要求调查并修复）。
+  - 最近 100 次 Actions：72 成功、19 失败、7 取消、2 当时运行中。11 次审计阻挡来自已修复/已获负责人例外的旧依赖；5 次提交中的断言、mock、覆盖率与 Windows child-exit race 已有后续绿灯；3 次为 Windows 原生测试超时、Wrangler 端口竞争、旧端回放 idle 断言。逐类证据与限制见 [CI 说明](../ci.md)，没有把失败邮件全部归为误报。
+  - Windows/macOS 合并为同名必需检查的 OS matrix、fail-fast=false；根 build/typecheck 不再重复编译 CLI 自己会编译的依赖；Ubuntu source 测试和 replay 仅预建 Core；无需历史的三个 job 改浅 checkout。桌面相关完整 workflow 少 12 次 TypeScript 编译与 2 次多余 bundle。测试、覆盖阈值、漏洞审计、secret scan 与 v1 回放均保留。
+  - 回放 inspector 默认由 OS 原子分配（port 0），并行 OpenClaw/Hermes 的真服务启动/失败清理验证通过；Runtime Vitest 最多两 worker，Windows 原生测试/清理预算 15 秒，POSIX 保持；旧端 replay owner 使用正常 35 秒 deadline，client 300ms tick/1.2s expiry 与旧端 idle 豁免保持，Production 不改。
+  - 本地逐文件 fixture 9 项通过；两个 lockfile 审计零阻挡，沿用现有 2 个有期限例外；完整 Linux/Windows/macOS 门禁交本 PR CI。未关闭通知、改产品版本或发布/部署。
+
 - 2026-10-06 Bridge 更新和重新配对改为立即执行、不再等回复（负责人：允许中断进行中的连接）；同时修复 3.1.14 在负责人电脑上更新到 OpenClaw 时回滚的问题。
   - 现场（只读核查）：在 clawket 仓库目录里执行 `npx -y @p697/clawket@3.1.14 update` 时，npx 选中了版本号相同的工作区包，也就是 9 月 30 日的旧 dist（没有 update 命令），所以只打印帮助。换目录后，Codex 3.1.12 误报忙约 10 秒后被放行，全部运行时停旧、启新，但 OpenClaw 3.1.14 一启动就回滚。根因：停服务会连发 SIGTERM（PID 文件、launchctl、进程清扫）；旧 OpenClaw 收到第一次后就摘掉了信号处理器，第二次直接被杀，没来得及删 owner 记录和 socket（`/tmp` 里留着 12:16 的 socket）。新版验证读到这份旧记录，判定 Unexpected replacement owner；回滚时又因为旧记录联系不上，没能停掉新服务。结果 OpenClaw 和 Hermes Relay 留在 3.1.14，Hermes、Claude Code、Pi 是 3.1.13，Codex 是 3.1.12，全部在线。
   - 更新器：不再等回复。owner 拒绝私有 stop（真忙或旧版误报）时：Codex、Claude Code、Pi 走生命周期 `bridge.stop`；其他运行时，或 `bridge.stop` 失败时，只向认证 `info` 确认过的 PID 发 SIGTERM。进程已退出的 owner 记录视为不存在，确认退出后删除记录和 socket；OpenClaw 回滚时，即使新服务还没登记也能停掉服务。删去 2 分钟等待、Codex 3.1.11–3.1.13 的 sessions 绕行、`busy` 原因和等待进度行；命令首行改为说明进行中的回复会被中断。OpenClaw 服务退出期间保留信号处理器，重复信号不再打断清理。

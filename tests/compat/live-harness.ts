@@ -9,7 +9,7 @@ export type CompatWranglerDevParams = {
   cwd: string;
   configPath: string;
   port: number;
-  inspectorPort: number;
+  inspectorPort?: number;
   persistencePath?: string;
   envVars?: Record<string, string>;
 };
@@ -40,7 +40,7 @@ export class CompatWranglerDevProcess {
       params.cwd,
       params.configPath,
       params.port,
-      params.inspectorPort,
+      params.inspectorPort ?? 0,
       tempDirectory,
       envFilePath,
       params.persistencePath ?? join(tempDirectory, 'state'),
@@ -93,6 +93,8 @@ export class CompatWranglerDevProcess {
       '--cwd', this.cwd,
       '--port', String(this.port),
       '--ip', '127.0.0.1',
+      // Port 0 is allocated atomically by the OS; a probe-then-close port can
+      // be taken by another Wrangler/workerd before this child binds it.
       '--inspector-port', String(this.inspectorPort),
       '--inspector-ip', '127.0.0.1',
       '--local',

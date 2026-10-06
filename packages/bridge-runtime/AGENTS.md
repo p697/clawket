@@ -90,6 +90,7 @@ Only an explicit validated Relay client-count of zero may suppress local periodi
 3. `npm test` is the broad suite and includes both self-contained and integration tests. Do not silently skip an external integration test or replace it with a stub to obtain a green run.
 4. Keep tests beside the module they cover and add regressions for both OpenClaw and Hermes whenever shared Relay or frame behavior changes.
 5. Export only runtime contracts consumed outside their implementation module. Keep implementation-only helpers and record shapes private so the published surface does not grow accidentally.
+6. Self-contained Vitest runs use at most two workers. Windows native Python/SQLite tests allow 15 seconds for test and hook startup; POSIX keeps its existing budgets. Keep real protocol deadlines in dedicated liveness tests, independent of compatibility replay scheduling.
 
 ## OpenClaw handshake recovery
 

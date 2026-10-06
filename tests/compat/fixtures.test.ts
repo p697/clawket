@@ -42,6 +42,22 @@ describe('v1 compatibility fixtures', () => {
     })).toThrow(/recordedAt.*sources.*frames/s);
   });
 
+  it('starts isolated backend workers with OS-assigned inspector ports', async () => {
+    const [openClawPort, hermesPort] = await Promise.all([getFreePort(), getFreePort()]);
+    const workers = await startCompatWranglerDevProcesses([
+      { cwd: process.cwd(), configPath: 'apps/relay-registry/wrangler.toml', port: openClawPort },
+      { cwd: process.cwd(), configPath: 'apps/relay-registry/wrangler.hermes.toml', port: hermesPort },
+    ]);
+    try {
+      for (const worker of workers) {
+        const health = await fetch(`${worker.baseUrl}/v1/health`);
+        expect(health.ok).toBe(true);
+      }
+    } finally {
+      await Promise.allSettled(workers.map(worker => worker.stop()));
+    }
+  }, 30_000);
+
   it('cleans a partially started Wrangler group when a sibling fails closed', async () => {
     const [healthyPort, healthyInspectorPort, failedPort, failedInspectorPort] = await Promise.all([
       getFreePort(),
