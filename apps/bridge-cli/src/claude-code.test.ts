@@ -148,11 +148,11 @@ it('uses a distinct registration when the requested environment changes', async 
   expect(JSON.parse(mock.fetch.mock.calls[0][1].body)).toEqual({ displayName: 'Claude Code · 工作室 Mac' });
   expect(JSON.parse(readFileSync(path, 'utf8')).relay.gatewayId).toBe('preview-id');
 });
-it('does not stop an active task to refresh pairing', async () => {
+it('restarts this Bridge to refresh pairing without waiting for running tasks', async () => {
   saved({}); mock.control.mockImplementation(async (_config, method) => method === 'sessions.list' ? [{ hasActiveRun: true }] : { modelReady: true });
-  await expect(handleClaudeCommand(['pair', '--project', project, '--config', path])).rejects.toThrow('Finish the current');
-  expect(mock.control.mock.calls.some(c => c[1] === 'bridge.stop')).toBe(false);
-  expect(mock.background).not.toHaveBeenCalled(); expect(mock.fetch).not.toHaveBeenCalled();
+  await handleClaudeCommand(['pair', '--project', project, '--config', path]);
+  expect(mock.control.mock.calls.map(c => c[1])).toEqual([undefined, 'bridge.stop']);
+  expect(mock.background).toHaveBeenCalledOnce();
 });
 it('isolates the default Preview and Production pairing files', async () => {
   await handleClaudeCommand(['pair', '--project', project, '--preview']);

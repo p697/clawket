@@ -75,8 +75,8 @@ async function runCodexCommand(args: string[], progress: Progress): Promise<void
       }
     }
     if (command === 'pair' && health) {
-      const sessions = await codexControl(config, 'sessions.list') as unknown as Array<{ hasActiveRun?: boolean }>;
-      if (sessions.some(s => s.hasActiveRun)) throw new Error('Finish the current Codex task before refreshing pairing. Existing phone connections remain usable.');
+      // Refreshing pairing never waits for tasks (owner decision 2026-10-06): restarting this Bridge interrupts only
+      // its own turns; Codex Desktop keeps running the threads it owns.
       progress.update('Stopping the previous Codex bridge…');
       await codexControl(config, 'bridge.stop');
       stoppedOwned = true;

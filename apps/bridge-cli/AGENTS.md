@@ -101,7 +101,7 @@ Pair chooser and pairing use the shared Codex executable resolver, including mac
 
 `clawket codex pair` / `clawket pair --backend codex` creates a device connection by default, with a persistent `~/Documents/Clawket/Chats` fallback. Explicit `--project` retains project-only authorization. Existing `--config` files never widen silently. Device lifecycle/state lives under `~/.clawket/codex/device/<environment>`; legacy project configuration stays in its hashed directory. Reuse the installed Codex credentials; never migrate them or change another client process. Local and Relay pairing must report readiness only after native initialization. `--preview` must use the isolated Codex Preview Registry.
 
-Codex default state and listen ports are isolated by project and service environment. Refresh pairing through the existing Registry access-code endpoint so previously paired clients retain their identity; refuse refresh while a task is active.
+Codex default state and listen ports are isolated by project and service environment. Refresh pairing through the existing Registry access-code endpoint so previously paired clients retain their identity. Codex and Claude Code refresh by restarting this Bridge without waiting for tasks (owner decision 2026-10-06): only this Bridge's own turns are interrupted, never Desktop- or terminal-owned work.
 
 Codex first-time detached pairing must carry the resolved device scope into the child when adding a not-yet-created `--config` path. Repeated default pairing reuses that state; explicit project scope remains restricted.
 

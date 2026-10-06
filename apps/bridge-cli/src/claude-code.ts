@@ -71,8 +71,8 @@ async function runClaudeCommand(args: string[], progress: Progress): Promise<voi
       catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ECONNREFUSED') throw error; }
     }
     if (command === 'pair' && health) {
-      const sessions = await claudeControl(config, 'sessions.list') as unknown as Array<{ hasActiveRun?: boolean }>;
-      if (sessions.some(s => s.hasActiveRun)) throw new Error('Finish the current Claude Code task before refreshing pairing. Existing phone connections remain usable.');
+      // Refreshing pairing never waits for tasks (owner decision 2026-10-06): restarting this Bridge interrupts only
+      // its own replies; Claude Code conversations running in the app or a terminal are separate processes.
       progress.update('Stopping the previous Claude Code bridge…');
       await claudeControl(config, 'bridge.stop'); stoppedOwned = true;
     }

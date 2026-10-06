@@ -71,7 +71,8 @@ it('signals a busy owner without a lifecycle stop only after its authenticated r
   const target = await createUpdateTarget({ backend: 'local-model', configPath: scope, probe: async () => ({}), start: async () => {} });
   await target.stop();
   expect(running.methods).toEqual(['info', 'stop', 'info']);
-  expect(running.child.exitCode !== null || running.child.signalCode !== null).toBe(true);
+  // Windows can report the pid gone before Node delivers the child's exit event.
+  if (running.child.exitCode === null && running.child.signalCode === null) await once(running.child, 'exit');
 });
 
 it('falls back to the verified signal when the lifecycle stop is unavailable', async () => {
