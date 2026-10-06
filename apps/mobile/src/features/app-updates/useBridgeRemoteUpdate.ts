@@ -6,7 +6,7 @@ export type RemoteUpdateView =
   | { phase: 'idle' }
   | { phase: 'running'; connectionId: string; status: BridgeUpdateStatus | null; reconnecting: boolean }
   | { phase: 'updated'; connectionId: string; status: BridgeUpdateStatus }
-  | { phase: 'failed'; connectionId: string; reason: RemoteUpdateFailure; waitingFor?: string };
+  | { phase: 'failed'; connectionId: string; reason: RemoteUpdateFailure };
 
 const POLL_MS = 2_000;
 /** A Bridge restart normally takes well under a minute; never spin forever on a computer that went away. */
@@ -52,7 +52,7 @@ export function useBridgeRemoteUpdate(resolve: (connectionId: string) => BridgeU
       current.id = status.id; current.last = status;
       if (status.state === 'updated') { finish({ phase: 'updated', connectionId: current.connectionId, status }); return; }
       if (status.state === 'failed') {
-        finish({ phase: 'failed', connectionId: current.connectionId, reason: status.reason ?? 'error', ...(status.waitingFor ? { waitingFor: status.waitingFor } : {}) });
+        finish({ phase: 'failed', connectionId: current.connectionId, reason: status.reason ?? 'error' });
         return;
       }
     }

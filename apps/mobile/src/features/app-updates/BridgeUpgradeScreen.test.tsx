@@ -70,7 +70,7 @@ it('copies and shares the pinned command without reporting an update', async () 
   expect(Clipboard.setStringAsync).toHaveBeenCalledWith(command);
   expect(view.getByText('Copied')).toBeTruthy();
   await act(async () => { fireEvent.press(view.getByTestId('bridge-upgrade-share')); });
-  expect(Share.share).toHaveBeenCalledWith({ message: ['Run on the computer with your Agent', command, 'Run it after the current reply finishes. Clawket reconnects on its own, no pairing needed.'].join('\n\n') });
+  expect(Share.share).toHaveBeenCalledWith({ message: ['Run on the computer with your Agent', command, 'Replies still in progress are interrupted. Clawket reconnects on its own, no pairing needed.'].join('\n\n') });
   expect(view.getByTestId('bridge-version-lucy-attention')).toBeTruthy();
   expect(view.queryByText('Update complete')).toBeNull();
   (Clipboard.setStringAsync as jest.Mock).mockRejectedValueOnce(new Error('denied'));
@@ -151,7 +151,7 @@ describe('phone-started update', () => {
     const controls = remote({ phase: 'idle' });
     const view = render(<BridgeUpgradeScreen {...props} remoteUpdate={controls} />);
     expect(view.getByText('Update now')).toBeTruthy();
-    expect(view.getByText('Updates every Bridge on the computer running Codex · Mac mini. They restart after the current reply finishes.')).toBeTruthy();
+    expect(view.getByText('Updates every Bridge on the computer running Codex · Mac mini. Replies still in progress are interrupted.')).toBeTruthy();
     expect(view.queryByTestId('bridge-upgrade-command')).toBeNull();
     fireEvent.press(view.getByTestId('bridge-remote-update-start'));
     expect(controls.onStart).toHaveBeenCalledTimes(1);
@@ -172,8 +172,6 @@ describe('phone-started update', () => {
     expect(statusText(view)).toBe('Checking the new version…');
     view.rerender(<BridgeUpgradeScreen {...props} remoteUpdate={remote(running({ id: 'x', state: 'installing', startedAt: 1, version: '3.1.14' }))} />);
     expect(statusText(view)).toBe('Downloading 3.1.14…');
-    view.rerender(<BridgeUpgradeScreen {...props} remoteUpdate={remote(running({ id: 'x', state: 'waiting', startedAt: 1, waitingFor: 'claude-code' }))} />);
-    expect(statusText(view)).toBe('Waiting for Claude Code to finish its task…');
     view.rerender(<BridgeUpgradeScreen {...props} remoteUpdate={remote(running({ id: 'x', state: 'installing', startedAt: 1 }, true))} />);
     expect(statusText(view)).toBe('Restarting Bridge…');
     view.rerender(<BridgeUpgradeScreen {...props} remoteUpdate={remote({ phase: 'updated', connectionId: 'lucy', status: { id: 'x', state: 'updated', startedAt: 1, version: '3.1.14' } })} />);
@@ -182,10 +180,10 @@ describe('phone-started update', () => {
   });
 
   it('explains a failure, offers a retry and brings the command back', () => {
-    const controls = remote({ phase: 'failed', connectionId: 'lucy', reason: 'busy', waitingFor: 'codex' });
+    const controls = remote({ phase: 'failed', connectionId: 'lucy', reason: 'download' });
     const view = render(<BridgeUpgradeScreen {...props} remoteUpdate={controls} />);
     expect(view.getByText('The update did not finish')).toBeTruthy();
-    expect(view.getByTestId('bridge-remote-update-reason').props.children).toBe('Codex is still running a task, so nothing was updated.');
+    expect(view.getByTestId('bridge-remote-update-reason').props.children).toBe("Couldn't download the new version. Check the computer's network.");
     expect(view.getByTestId('bridge-upgrade-command')).toBeTruthy();
     fireEvent.press(view.getByTestId('bridge-remote-update-retry'));
     expect(controls.onStart).toHaveBeenCalledTimes(1);

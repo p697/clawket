@@ -4,15 +4,19 @@ import { isBridgeUpdateFinished, parseBridgeUpdateStart, parseBridgeUpdateStatus
 const id = '5b0c7a0e-3c1f-4e8e-9b2a-6f1d2c3b4a59';
 describe('phone-started Bridge update status', () => {
   it('keeps only bounded, allowlisted fields', () => {
-    expect(parseBridgeUpdateStatus({ id, state: 'waiting', startedAt: 1, version: '3.1.14', waitingFor: 'codex', reason: 'busy', path: '/Users/private', token: 'secret',
-      results: [{ backend: 'codex', state: 'failed', reason: 'busy', version: '3.1.13', message: 'native error' }, { backend: '/tmp/x', state: 'updated' }] }))
-      .toEqual({ id, state: 'waiting', startedAt: 1, version: '3.1.14', waitingFor: 'codex', reason: 'busy', results: [{ backend: 'codex', state: 'failed', reason: 'busy', version: '3.1.13' }] });
+    expect(parseBridgeUpdateStatus({ id, state: 'failed', startedAt: 1, version: '3.1.14', waitingFor: 'codex', reason: 'not_confirmed', path: '/Users/private', token: 'secret',
+      results: [{ backend: 'codex', state: 'failed', reason: 'stop_unverified', version: '3.1.13', message: 'native error' }, { backend: '/tmp/x', state: 'updated' }] }))
+      .toEqual({ id, state: 'failed', startedAt: 1, version: '3.1.14', reason: 'not_confirmed', results: [{ backend: 'codex', state: 'failed', reason: 'stop_unverified', version: '3.1.13' }] });
     expect(parseBridgeUpdateStatus({ id, state: 'updated', startedAt: 1, finishedAt: 2, version: 'latest', reason: 'Error: EACCES /Users/private', results: Array(17).fill({ backend: 'pi', state: 'updated' }) }))
       .toEqual({ id, state: 'updated', startedAt: 1, finishedAt: 2 });
   });
 
   it('rejects malformed status and start replies', () => {
     for (const value of [null, [], { id: 'not-an-id', state: 'updated', startedAt: 1 }, { id, state: 'done', startedAt: 1 }, { id, state: 'updated', startedAt: -1 }]) expect(parseBridgeUpdateStatus(value)).toBeNull();
+    // Updates no longer wait for replies, so the retired waiting stage and busy outcome are never shown.
+    expect(parseBridgeUpdateStatus({ id, state: 'waiting', startedAt: 1 })).toBeNull();
+    expect(parseBridgeUpdateStatus({ id, state: 'failed', startedAt: 1, reason: 'busy', results: [{ backend: 'codex', state: 'failed', reason: 'busy' }] }))
+      .toEqual({ id, state: 'failed', startedAt: 1, results: [{ backend: 'codex', state: 'failed' }] });
     expect(parseBridgeUpdateStart({ accepted: true })).toBeNull();
     expect(parseBridgeUpdateStart({ accepted: false, reason: 'whatever' })).toBeNull();
     expect(parseBridgeUpdateStart({ accepted: false, reason: 'disabled' })).toEqual({ accepted: false, reason: 'disabled' });
@@ -33,7 +37,7 @@ describe('phone-started Bridge update status', () => {
   });
 
   it('treats only updated and failed as finished', () => {
-    expect(['checking', 'installing', 'waiting', 'restarting'].some(state => isBridgeUpdateFinished({ id, state: state as any, startedAt: 1 }))).toBe(false);
-    expect(isBridgeUpdateFinished({ id, state: 'failed', startedAt: 1, reason: 'busy' })).toBe(true);
+    expect(['checking', 'installing', 'restarting'].some(state => isBridgeUpdateFinished({ id, state: state as any, startedAt: 1 }))).toBe(false);
+    expect(isBridgeUpdateFinished({ id, state: 'failed', startedAt: 1, reason: 'download' })).toBe(true);
   });
 });

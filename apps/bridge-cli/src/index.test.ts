@@ -1366,6 +1366,8 @@ describe('cli pairing output', () => {
     const processOnSpy = vi.spyOn(process, 'on')
       .mockImplementation(((event: NodeJS.Signals, listener: () => void) => {
         if (event === 'SIGTERM') {
+          // A service stop signals more than once; the repeat must not run a second shutdown.
+          queueMicrotask(listener);
           queueMicrotask(listener);
         }
         return process;
@@ -1401,6 +1403,7 @@ describe('cli pairing output', () => {
     expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('[hermes-service] Started Hermes bridge runtime (pid 40160).'));
 
     await vi.waitFor(() => expect(exitSpy).toHaveBeenCalledWith(0));
+    expect(exitSpy).toHaveBeenCalledTimes(1);
     processOnSpy.mockRestore();
     exitSpy.mockRestore();
   });

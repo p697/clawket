@@ -72,7 +72,7 @@ describe('phone-started update control', () => {
   });
 
   it('accepts a new run once the previous one finished', async () => {
-    seed({ id, state: 'failed', startedAt: 1, finishedAt: 2, reason: 'busy' });
+    seed({ id, state: 'failed', startedAt: 1, finishedAt: 2, reason: 'not_confirmed' });
     const launch = vi.fn();
     expect(await createRemoteUpdateControl({ entry, launch }).start()).toMatchObject({ accepted: true });
     expect(stored().id).not.toBe(id);
@@ -103,8 +103,8 @@ describe('phone-started update status', () => {
     seed({ id, state: 'checking', startedAt: 1 });
     writeRemoteUpdateProgress('00000000-0000-0000-0000-000000000000', { state: 'installing' });
     expect(stored().state).toBe('checking');
-    writeRemoteUpdateProgress(id, { state: 'waiting', waitingFor: 'codex' });
-    expect(stored()).toMatchObject({ state: 'waiting', waitingFor: 'codex' });
+    writeRemoteUpdateProgress(id, { state: 'restarting' });
+    expect(stored()).toMatchObject({ state: 'restarting' });
     writeRemoteUpdateProgress(id, { state: 'updated', results: [{ backend: 'codex', state: 'updated' }] });
     expect(stored()).toMatchObject({ state: 'updated', finishedAt: expect.any(Number) });
     writeRemoteUpdateProgress(id, { state: 'failed', reason: 'error' });

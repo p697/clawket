@@ -25,7 +25,6 @@ export type RemoteUpdateProgress = {
   pid?: number;
   state?: BridgeUpdateStatus['state'];
   version?: string;
-  waitingFor?: string;
   reason?: RemoteUpdateFailure;
   results?: readonly { backend: string; state: string; reason?: string; version?: string }[];
 };

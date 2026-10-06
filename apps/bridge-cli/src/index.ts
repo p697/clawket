@@ -364,9 +364,12 @@ async function main(): Promise<void> {
         emitRuntimeLine(`[hermes-service] ${line}`);
       });
     }
+    // A service stop signals more than once (PID file, service manager, process sweep). Keep the handlers
+    // installed so a repeated signal cannot kill this process before it releases its update owner.
+    let stopping = false;
     const shutdown = async () => {
-      process.off('SIGINT', shutdown);
-      process.off('SIGTERM', shutdown);
+      if (stopping) return;
+      stopping = true;
       await Promise.all(runtimes.map((runtime) => runtime.stop()));
       if (hermesServiceWatchdog) {
         clearInterval(hermesServiceWatchdog);

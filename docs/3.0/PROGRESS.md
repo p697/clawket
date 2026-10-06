@@ -1,5 +1,11 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-06 Bridge 更新改为立即执行、不再等回复（负责人：允许中断进行中的连接）；同时修复 3.1.14 在负责人电脑上更新到 OpenClaw 时回滚的问题。
+  - 现场（只读核查）：在 clawket 仓库目录里执行 `npx -y @p697/clawket@3.1.14 update` 时，npx 选中了版本号相同的工作区包，也就是 9 月 30 日的旧 dist（没有 update 命令），所以只打印帮助。换目录后，Codex 3.1.12 误报忙约 10 秒后被放行，全部运行时停旧、启新，但 OpenClaw 3.1.14 一启动就回滚。根因：停服务会连发 SIGTERM（PID 文件、launchctl、进程清扫）；旧 OpenClaw 收到第一次后就摘掉了信号处理器，第二次直接被杀，没来得及删 owner 记录和 socket（`/tmp` 里留着 12:16 的 socket）。新版验证读到这份旧记录，判定 Unexpected replacement owner；回滚时又因为旧记录联系不上，没能停掉新服务。结果 OpenClaw 和 Hermes Relay 留在 3.1.14，Hermes、Claude Code、Pi 是 3.1.13，Codex 是 3.1.12，全部在线。
+  - 更新器：不再等回复。owner 拒绝私有 stop（真忙或旧版误报）时：Codex、Claude Code、Pi 走生命周期 `bridge.stop`；其他运行时，或 `bridge.stop` 失败时，只向认证 `info` 确认过的 PID 发 SIGTERM。进程已退出的 owner 记录视为不存在，确认退出后删除记录和 socket；OpenClaw 回滚时，即使新服务还没登记也能停掉服务。删去 2 分钟等待、Codex 3.1.11–3.1.13 的 sessions 绕行、`busy` 原因和等待进度行；命令首行改为说明进行中的回复会被中断。OpenClaw 服务退出期间保留信号处理器，重复信号不再打断清理。
+  - 手机一键更新（尚未发布）：去掉 `waiting` 阶段、`waitingFor` 和 `busy` 失败；「立即更新」和命令下方的说明改为进行中的回复会被中断。19 种语言各改 2 个 key、删 2 个 key。
+  - 验证（逐文件串行；另一会话持 heavy 打 QA 包，未跑类型检查）：新 update-interrupt 6 项（换回 main 的旧 update.ts 时 6 项全红）、update 29、update-transaction 9、remote-update 10、update-process 2、update-startup 1、runtime-owner 3 项通过；agent-doc 检查（8 对）和 strict i18n 通过。类型检查、agent-protocol/Mobile 用例、完整门禁、v1 回放与桌面任务交给 PR CI。修复要到下一个 Bridge 版本才能到用户电脑，发布另行授权。
+
 - 2026-10-06 配对首页平台格子恢复右箭头（负责人看过 #187 后要求）。
   - `ChoiceRow compact` 重新画 chevron，六个平台入口与其他选择行一致；#187 的其余文案与相册调整不变。测试改为断言格子带箭头，Mobile AGENTS、设计系统、设计落地和页面规格同步。
   - 逐文件 in-band：OnboardingScreen 48 项通过；UI style、设计系统文档、agent 文档与 whitespace 通过。未做真机视觉验收，未构建或发布。

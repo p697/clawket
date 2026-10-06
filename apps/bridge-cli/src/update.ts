@@ -10,7 +10,7 @@ import { discoverAgentTargets, readAgentConfig, selectAgentTarget, option, type 
 import { codexControl, startCodexBackground } from './codex-lifecycle.js';
 import { claudeControl, startClaudeBackground } from './claude-code-lifecycle.js';
 import { piControl, startPiBackground } from './pi-lifecycle.js';
-import { readRuntimeOwner, queryRuntimeOwner, runtimeOwnerPath } from './runtime-owner.js';
+import { readRuntimeOwner, queryRuntimeOwner, runtimeOwnerPath, type RuntimeOwner } from './runtime-owner.js';
 import { readCliVersion } from './metadata.js';
 import { requestedBackend } from './operations.js';
 import { activateUpdate, type UpdateTarget, type UpdateResult } from './update-transaction.js';
@@ -22,54 +22,25 @@ export function stableBridgeVersion(value: unknown): value is string {
     && value.split('.').every(part => Number.isSafeInteger(Number(part)));
 }
 const runtimeRoot = () => join(homedir(), '.clawket', 'runtime');
-const UPDATE_BACKENDS = ['openclaw', 'hermes', 'hermes-relay', 'codex', 'claude-code', 'pi', 'local-model'];
-/** Published Codex Bridges whose update admission kept every settled turn start and stayed busy after one turn. */
-const CODEX_IDLE_LEAK_VERSIONS = new Set(['3.1.11', '3.1.12', '3.1.13']);
-/** Busy replies (about one per second) before such a Codex owner is checked through its sessions instead. */
-const CODEX_IDLE_LEAK_GRACE_POLLS = 10;
-const UPDATE_PROGRESS_PREFIX = 'clawket-update-progress ';
-export type UpdateProgress = { backend: string; event: 'waiting' };
-
-/** Activation reports fixed progress categories on stderr; stdout stays reserved for the JSON result. */
-function reportUpdateProgress(progress: UpdateProgress): void {
-  process.stderr.write(UPDATE_PROGRESS_PREFIX + JSON.stringify(progress) + '\n');
-}
-export function parseUpdateProgress(line: string): UpdateProgress | null {
-  if (!line.startsWith(UPDATE_PROGRESS_PREFIX) || line.length > 256) return null;
-  try {
-    const value = JSON.parse(line.slice(UPDATE_PROGRESS_PREFIX.length));
-    return value && UPDATE_BACKENDS.includes(value.backend) && value.event === 'waiting' ? { backend: value.backend, event: 'waiting' } : null;
-  } catch { return null; }
-}
 export function describeUpdateResult(row: UpdateResult): string {
   const version = stableBridgeVersion(row.version) ? row.version : undefined;
   const outcome = row.state === 'updated' ? 'running the updated Bridge'
     : row.state === 'manual' ? 'manual update required: use the original deployment method and preserve configuration'
     : row.state === 'stopped' ? 'kept stopped'
     : row.state === 'restored' ? `restarted${version ? ` on ${version}` : ' on its previous installation'}`
-    : row.reason === 'busy' ? 'still running a task, so it was not updated'
     : row.reason === 'update_not_applied' ? 'not changed'
     : 'needs attention: check it with clawket status';
   return `${row.backend}: ${outcome}`;
 }
 
-function run(node: string, args: string[], cwd?: string, allowFailure = false, onProgress?: (progress: UpdateProgress) => void): Promise<string> {
+function run(node: string, args: string[], cwd?: string, allowFailure = false): Promise<string> {
   return new Promise((resolveRun, reject) => {
     const child = spawn(node, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
-    let output = '', tooLarge = false, errors = '';
+    let output = '', tooLarge = false;
     const timer = setTimeout(() => { child.kill(); reject(new Error('Bridge update command timed out.')); }, allowFailure ? 30 * 60_000 : 180_000);
     child.stdout.on('data', data => { output += data.toString(); if (Buffer.byteLength(output) > 128 * 1024) { tooLarge = true; child.kill(); } });
-    // Consume npm/native diagnostics without copying potentially sensitive output into update summaries;
-    // only fixed activation progress categories are recognized.
-    child.stderr.on('data', data => {
-      if (!onProgress) return;
-      errors += data.toString();
-      for (let newline = errors.indexOf('\n'); newline >= 0; newline = errors.indexOf('\n')) {
-        const progress = parseUpdateProgress(errors.slice(0, newline)); errors = errors.slice(newline + 1);
-        if (progress) onProgress(progress);
-      }
-      if (errors.length > 4096) errors = '';
-    });
+    // Drain npm/native diagnostics without copying potentially sensitive output into update summaries.
+    child.stderr.resume();
     child.once('error', () => { clearTimeout(timer); reject(new Error('Could not run the Bridge update command.')); });
     child.once('exit', code => { clearTimeout(timer); (code === 0 || allowFailure) && !tooLarge ? resolveRun(output) : reject(new Error('Bridge update command failed. Inspect the selected runtime logs.')); });
   });
@@ -151,10 +122,28 @@ async function waitForExit(pid: number): Promise<void> {
   }
   throw new Error('The owned Bridge has not exited. No replacement was started.');
 }
-function idleSessions(value: unknown): void {
-  const rows = Array.isArray(value) ? value : (value as { sessions?: unknown } | null)?.sessions;
-  if (!Array.isArray(rows) || rows.length > 10_000 || rows.some(row => !row || typeof row !== 'object' || typeof row.hasActiveRun !== 'boolean')) throw new Error('The older Bridge cannot prove idle state. Finish tasks and stop this Bridge explicitly before updating.');
-  if (rows.some(row => row.hasActiveRun)) throw Object.assign(new Error('A Bridge task is still active.'), { code: 'BRIDGE_BUSY' });
+/** A runtime killed before it released its owner record is no longer an owner. */
+function liveOwner(path: string): RuntimeOwner | null {
+  const record = readRuntimeOwner(path);
+  if (!record) return null;
+  try { process.kill(record.pid, 0); return record; }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === 'ESRCH') return null; throw error; }
+}
+/** Drops the record (and POSIX socket) an exited owner left behind, so its replacement is never judged by it. */
+function forgetOwner(path: string, record: RuntimeOwner): void {
+  if (readRuntimeOwner(path)?.token !== record.token) return;
+  unlinkSync(path);
+  if (process.platform !== 'win32' && existsSync(record.endpoint)) unlinkSync(record.endpoint);
+}
+/**
+ * Updates never wait for replies (owner decision 2026-10-06): an owner that declines to stop because a reply
+ * is running, or an older Bridge that misreports one, is stopped anyway. Its authenticated `info` reply must
+ * name the recorded pid first, so a signal can only reach that owner.
+ */
+async function interrupt(current: RuntimeOwner, lifecycleStop?: (pid: number) => Promise<void>): Promise<void> {
+  await queryRuntimeOwner(current, 'info');
+  try { if (lifecycleStop) { await lifecycleStop(current.pid); return; } } catch { /* fall back to the verified signal */ }
+  process.kill(current.pid, 'SIGTERM');
 }
 
 function hermesRpc(config: { port: number; token: string }, method: string): Promise<any> {
@@ -213,10 +202,10 @@ export async function createUpdateTarget(input: { backend: string; configPath?: 
     async preflight() {
       if (!running) return;
       if (owner) { await queryRuntimeOwner(owner, 'info'); return; }
-      if (input.backend !== 'openclaw' && input.backend !== 'hermes-relay') idleSessions(await input.probe('sessions.list'));
+      if (input.backend !== 'openclaw' && input.backend !== 'hermes-relay') await input.probe();
     },
     async stop() {
-      const current = readRuntimeOwner(ownerPath);
+      const current = liveOwner(ownerPath);
       if (current) {
         if (current.backend !== input.backend || current.configPath !== input.configPath || (current.entry !== expectedEntry && current.entry !== previousEntry)) throw new Error('The runtime owner changed during update.');
         if (owner && current.token !== owner.token) throw new Error('The runtime owner changed during update.');
@@ -224,28 +213,17 @@ export async function createUpdateTarget(input: { backend: string; configPath?: 
           // Disable launchd/systemd/task recovery before stopping its transport process.
           // OpenClaw's native Gateway/tasks are independent of this Bridge.
           await queryRuntimeOwner(current, 'info');
-          await input.legacyStop(current.pid); await waitForExit(current.pid); owner = null; return;
-        }
-        const deadline = Date.now() + 120_000;
-        for (let busy = 1; !(await queryRuntimeOwner(current, 'stop')).stopped; busy++) {
-          if (busy === 1) reportUpdateProgress({ backend: input.backend, event: 'waiting' });
-          // Prove idle sessions the same way as for legacy owners, then use the authenticated lifecycle stop.
-          if (input.backend === 'codex' && CODEX_IDLE_LEAK_VERSIONS.has(current.version) && input.legacyStop && busy >= CODEX_IDLE_LEAK_GRACE_POLLS) {
-            let idle = true;
-            try { idleSessions(await input.probe('sessions.list')); }
-            catch (error) { if ((error as NodeJS.ErrnoException).code !== 'BRIDGE_BUSY') throw error; idle = false; }
-            if (idle) { await input.legacyStop(current.pid); await waitForExit(current.pid); owner = null; return; }
-          }
-          if (Date.now() >= deadline) throw Object.assign(new Error('Finish the active task, then rerun update.'), { code: 'BRIDGE_BUSY' });
-          await delay(1000);
-        }
-        await waitForExit(current.pid); owner = null;
-      } else {
-        try { await input.probe(); } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ECONNREFUSED') return; throw error; }
-        if (!legacy || !input.legacyStop) throw new Error('The runtime owner is unverified. No replacement was started.');
-        if (input.backend !== 'openclaw' && input.backend !== 'hermes-relay') idleSessions(await input.probe('sessions.list'));
-        await input.legacyStop(legacy.pid); await waitForExit(legacy.pid);
+          await input.legacyStop(current.pid);
+        } else if (!(await queryRuntimeOwner(current, 'stop')).stopped) await interrupt(current, input.legacyStop);
+        await waitForExit(current.pid); forgetOwner(ownerPath, current); owner = null; return;
       }
+      if (input.backend === 'openclaw' && input.legacyStop && expectedEntry !== previousEntry) {
+        // The service manager may run a replacement that has not registered yet; stopping the service covers it.
+        await input.legacyStop(0); owner = null; return;
+      }
+      try { await input.probe(); } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ECONNREFUSED') return; throw error; }
+      if (!legacy || !input.legacyStop) throw new Error('The runtime owner is unverified. No replacement was started.');
+      await input.legacyStop(legacy.pid); await waitForExit(legacy.pid);
     },
     async start(entry) { expectedEntry = entry; await input.start(entry, entry === previousEntry ? previousNode : process.execPath); },
     verifyPrevious,
@@ -254,7 +232,7 @@ export async function createUpdateTarget(input: { backend: string; configPath?: 
       if (!previousVersion) { await verifyPrevious(); return undefined; }
       const deadline = Date.now() + 30_000;
       while (Date.now() < deadline) {
-        const next = readRuntimeOwner(ownerPath);
+        const next = liveOwner(ownerPath);
         if (next) {
           if (next.entry !== previousEntry || next.backend !== input.backend || next.configPath !== input.configPath) throw new Error('Unexpected restored owner.');
           await queryRuntimeOwner(next, 'info'); owner = next;
@@ -267,7 +245,7 @@ export async function createUpdateTarget(input: { backend: string; configPath?: 
     async verify(version) {
       const deadline = Date.now() + 30_000;
       while (Date.now() < deadline) {
-        const next = readRuntimeOwner(ownerPath);
+        const next = liveOwner(ownerPath);
         if (next) {
           if (next.entry !== expectedEntry || next.backend !== input.backend || next.configPath !== input.configPath) throw new Error('Unexpected replacement owner.');
           await queryRuntimeOwner(next, 'info'); owner = next;
@@ -380,24 +358,20 @@ export async function handleUpdateCommand(args: string[]): Promise<void> {
       report(id, { state: 'updated', results: [] });
       return;
     }
-    if (!args.includes('--json')) console.log(`Installing Bridge ${version}; saved connections are retained. Active replies must finish before their Bridge can restart.`);
+    if (!args.includes('--json')) console.log(`Installing Bridge ${version}; saved connections are retained. Replies still in progress are interrupted.`);
     failure = 'download';
     const entry = await stageBridgeRelease(version);
     failure = 'error';
     report(id, { state: 'restarting' });
     const forwarded = args.filter((arg, index) => !['--version', '--remote'].includes(arg) && !['--version', '--remote'].includes(args[index - 1]));
-    const output = await run(process.execPath, [entry, 'update', '--activate', ...forwarded], undefined, true, progress => {
-      report(id, { state: 'waiting', waitingFor: progress.backend });
-      if (!args.includes('--json')) console.log(`${progress.backend}: waiting for its current task to finish (up to 2 minutes)…`);
-    });
+    const output = await run(process.execPath, [entry, 'update', '--activate', ...forwarded], undefined, true);
     const result = JSON.parse(output) as { version: string; results: UpdateResult[] };
     if (result.version !== version || !Array.isArray(result.results) || !result.results.length || result.results.some(r => !['updated', 'stopped', 'manual'].includes(r.state))) {
       if (args.includes('--json')) console.log(JSON.stringify({ ok: false, ...result }));
       else for (const row of result.results ?? []) console.log(describeUpdateResult(row));
-      const busy = Array.isArray(result.results) ? result.results.find(row => row.state === 'failed' && row.reason === 'busy') : undefined;
-      failure = busy ? 'busy' : 'not_confirmed';
-      report(id, { state: 'failed', reason: failure, ...(busy ? { waitingFor: busy.backend } : {}), results: Array.isArray(result.results) ? result.results : [] });
-      throw new Error(busy ? `No Bridge was updated: ${busy.backend} is still running a task. Run update again once it finishes.` : 'Bridge update was not fully confirmed. Inspect local runtime status.');
+      failure = 'not_confirmed';
+      report(id, { state: 'failed', reason: failure, results: Array.isArray(result.results) ? result.results : [] });
+      throw new Error('Bridge update was not fully confirmed. Inspect local runtime status.');
     }
     const manifest = join(runtimeRoot(), 'active.json');
     if (existsSync(manifest)) writeFileSync(manifest + '.previous', readFileSync(manifest), { mode: 0o600 });

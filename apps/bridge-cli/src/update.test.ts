@@ -3,7 +3,7 @@ import { writeFileSync, existsSync, unlinkSync, mkdirSync, readFileSync, mkdtemp
 import * as childProcess from 'node:child_process';
 import { homedir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
-import { stableBridgeVersion, compareStableVersions, legacyEntryFromCommands, acquireUpdateLock, stageBridgeRelease, readReleaseMetadata, createUpdateTarget, parseUpdateProgress, describeUpdateResult } from './update.js';
+import { stableBridgeVersion, compareStableVersions, legacyEntryFromCommands, acquireUpdateLock, stageBridgeRelease, readReleaseMetadata, createUpdateTarget, describeUpdateResult } from './update.js';
 
 vi.mock('node:child_process', async importOriginal => {
   const original = await importOriginal<typeof childProcess>();
@@ -94,7 +94,7 @@ it('accepts the npm single-bin manifest form but requires readable package metad
 it('captures a legacy npm-link target for rollback before any lifecycle mutation', async () => {
   const fixture = legacyInstall(), configPath = '/saved/runtime.json';
   const ps = vi.mocked(childProcess.execFileSync).mockReturnValueOnce(commandLine(fixture.bin, `codex run --config ${configPath} --foreground`));
-  const start = vi.fn(async () => {}), legacyStop = vi.fn(async () => {}), probe = vi.fn(async () => [{ hasActiveRun: false }]);
+  const start = vi.fn(async () => {}), legacyStop = vi.fn(async () => {}), probe = vi.fn(async (_method?: string) => ({}));
   try {
     const input = { backend: 'codex', configPath, probe, start, legacyStop };
     if (process.platform === 'win32') await expect(createUpdateTarget(input)).rejects.toThrow('legacy codex Bridge runtime entry could not be verified');
@@ -102,7 +102,8 @@ it('captures a legacy npm-link target for rollback before any lifecycle mutation
       const target = await createUpdateTarget(input);
       expect(target).toMatchObject({ running: true, previousEntry: fixture.entry });
       await target.preflight();
-      expect(probe).toHaveBeenLastCalledWith('sessions.list');
+      // The runtime must still answer; no idle proof is required because updates interrupt replies.
+      expect(probe).toHaveBeenLastCalledWith();
     }
     expect(start).not.toHaveBeenCalled(); expect(legacyStop).not.toHaveBeenCalled();
   } finally { ps.mockReset(); }
@@ -142,13 +143,8 @@ it('validates supported packages in distinct snapshots without activating either
   try { const first = await stageBridgeRelease('3.1.11'), second = await stageBridgeRelease('3.1.11'); expect(first).not.toBe(second); expect(existsSync(first)).toBe(true); expect(existsSync(second)).toBe(true); expect(existsSync(join(homedir(), '.clawket/runtime/active.json'))).toBe(false); }
   finally { vi.unstubAllEnvs(); }
 });
-it('recognizes only fixed activation progress categories', () => {
-  expect(parseUpdateProgress('clawket-update-progress {"backend":"codex","event":"waiting"}')).toEqual({ backend: 'codex', event: 'waiting' });
-  for (const line of ['npm warn deprecated', 'clawket-update-progress {"backend":"/private/path","event":"waiting"}', 'clawket-update-progress {"backend":"codex","event":"done"}',
-    'clawket-update-progress {bad', `clawket-update-progress {"backend":"codex","event":"waiting","pad":"${'x'.repeat(300)}"}`]) expect(parseUpdateProgress(line)).toBeNull();
-});
 it('describes each runtime outcome in words instead of bare states', () => {
-  expect(describeUpdateResult({ backend: 'codex', state: 'failed', reason: 'busy' })).toBe('codex: still running a task, so it was not updated');
+  expect(describeUpdateResult({ backend: 'codex', state: 'failed', reason: 'stop_unverified' })).toBe('codex: needs attention: check it with clawket status');
   expect(describeUpdateResult({ backend: 'openclaw', state: 'failed', reason: 'update_not_applied' })).toBe('openclaw: not changed');
   expect(describeUpdateResult({ backend: 'hermes', state: 'restored', version: '3.1.13' })).toBe('hermes: restarted on 3.1.13');
   expect(describeUpdateResult({ backend: 'pi', state: 'restored', version: 'latest;rm' })).toBe('pi: restarted on its previous installation');

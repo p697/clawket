@@ -48,16 +48,16 @@ it('adopts the run a lost start reply may have launched, but never an older fini
   expect(ignored.result.current.view).toEqual({ phase: 'failed', connectionId: 'computer', reason: 'error' });
 });
 
-it('reports a computer that refuses or a run that ends busy', async () => {
+it('reports a computer that refuses or a run that fails', async () => {
   const disabled = operations([null], async () => ({ accepted: false, reason: 'disabled' }));
   const refused = renderHook(() => useBridgeRemoteUpdate(() => disabled, now));
   await act(async () => { await refused.result.current.start('computer'); });
   expect(refused.result.current.view).toEqual({ phase: 'failed', connectionId: 'computer', reason: 'disabled' });
   expect(disabled.status).not.toHaveBeenCalled();
-  const busy = operations([at('failed', { reason: 'busy', waitingFor: 'codex', finishedAt: 2 })]);
-  const ended = renderHook(() => useBridgeRemoteUpdate(() => busy, now));
+  const failed = operations([at('failed', { reason: 'not_confirmed', finishedAt: 2 })]);
+  const ended = renderHook(() => useBridgeRemoteUpdate(() => failed, now));
   await act(async () => { await ended.result.current.start('computer'); });
-  expect(ended.result.current.view).toEqual({ phase: 'failed', connectionId: 'computer', reason: 'busy', waitingFor: 'codex' });
+  expect(ended.result.current.view).toEqual({ phase: 'failed', connectionId: 'computer', reason: 'not_confirmed' });
 });
 
 it('gives up on a computer that never comes back and keeps a running update when dismissed', async () => {

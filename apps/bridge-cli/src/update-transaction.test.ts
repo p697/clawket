@@ -42,16 +42,16 @@ it('verifies legacy restoration through captured ownership instead of assuming s
   expect(await activateUpdate([legacy], '/new', '3.1.11')).toEqual([{ backend: 'pi', state: 'failed', reason: 'restore_unverified' }]);
   expect(legacy.verifyPrevious).toHaveBeenCalledOnce();
 });
-it('stops independent agents first and names a busy one without touching the shared service', async () => {
+it('stops independent agents first and names one that cannot stop without touching the shared service', async () => {
   const targets = [fixture('openclaw'), fixture('hermes-relay'), fixture('hermes'), fixture('codex')], calls: string[] = [];
   for (const t of targets) { t.stop = vi.fn(async () => { calls.push(`stop:${t.backend}`); }); t.start = vi.fn(async () => { calls.push(`start:${t.backend}`); }); }
   await activateUpdate(targets, '/new', '3.1.14');
   expect(calls).toEqual(['stop:codex', 'stop:openclaw', 'stop:hermes-relay', 'stop:hermes', 'start:codex', 'start:hermes', 'start:hermes-relay', 'start:openclaw']);
   calls.length = 0;
-  vi.mocked(targets[3].stop).mockImplementationOnce(async () => { calls.push('stop:codex'); throw Object.assign(new Error('busy'), { code: 'BRIDGE_BUSY' }); });
+  vi.mocked(targets[3].stop).mockImplementationOnce(async () => { calls.push('stop:codex'); throw new Error('The owned Bridge has not exited.'); });
   expect(await activateUpdate(targets, '/new', '3.1.14')).toEqual([
     { backend: 'openclaw', state: 'failed', reason: 'update_not_applied' }, { backend: 'hermes-relay', state: 'failed', reason: 'update_not_applied' },
-    { backend: 'hermes', state: 'failed', reason: 'update_not_applied' }, { backend: 'codex', state: 'failed', reason: 'busy' },
+    { backend: 'hermes', state: 'failed', reason: 'update_not_applied' }, { backend: 'codex', state: 'failed', reason: 'stop_unverified' },
   ]);
   expect(calls).toEqual(['stop:codex']);
 });

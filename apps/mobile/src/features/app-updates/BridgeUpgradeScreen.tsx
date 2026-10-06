@@ -57,7 +57,7 @@ export function BridgeUpgradeScreen({ onBack, connections, versions, outdatedIds
   const copy = async () => { try { await Clipboard.setStringAsync(command ?? ''); setCopiedCommand(command); setActionFailed(false); } catch { setActionFailed(true); } };
   const share = async () => {
     try {
-      await Share.share({ message: [t('Run on the computer with your Agent'), command ?? '', t('Run it after the current reply finishes. Clawket reconnects on its own, no pairing needed.')].join('\n\n') });
+      await Share.share({ message: [t('Run on the computer with your Agent'), command ?? '', t('Replies still in progress are interrupted. Clawket reconnects on its own, no pairing needed.')].join('\n\n') });
       setActionFailed(false);
     } catch { setActionFailed(true); }
   };
@@ -97,7 +97,7 @@ export function BridgeUpgradeScreen({ onBack, connections, versions, outdatedIds
               <Button testID="bridge-upgrade-share" variant="card" icon={ShareIcon} multiline style={styles.action}
                 label={t('Send to computer')} onPress={() => { void share(); }} />
             </View>
-            <Text style={footnote}>{t('Run it after the current reply finishes. Clawket reconnects on its own, no pairing needed.')}</Text>
+            <Text style={footnote}>{t('Replies still in progress are interrupted. Clawket reconnects on its own, no pairing needed.')}</Text>
             {actionFailed ? <Text accessibilityRole="alert" style={footnote}>{t('Could not copy or share. You can select the commands above.')}</Text> : null}
           </View>
         </Section> : latest ? <Text style={footnote}>{t('The unified updater is available in newer Bridge releases. Use your original deployment method for this release.')}</Text>
@@ -133,24 +133,20 @@ export function BridgeUpgradeScreen({ onBack, connections, versions, outdatedIds
   </View>;
 }
 
-const UPDATE_BACKEND_NAMES: Readonly<Record<string, string>> = { openclaw: 'OpenClaw', hermes: 'Hermes', 'hermes-relay': 'Hermes', codex: 'Codex', 'claude-code': 'Claude Code', pi: 'Pi' };
-
 function RemoteUpdateBlock({ remote, footnote }: { remote: BridgeRemoteUpdateProps; footnote: StyleProp<TextStyle> }) {
   const { t } = useTranslation('chat');
   const { theme: { colors } } = useAppTheme();
-  const name = (backend?: string) => backend === 'local-model' ? t('Local model', { ns: 'config' }) : (backend && UPDATE_BACKEND_NAMES[backend]) || 'Bridge';
   const { view } = remote;
   if (view.phase === 'idle') {
     return <View testID="bridge-remote-update" style={styles.stack}>
       <Button testID="bridge-remote-update-start" label={t('Update now')} onPress={remote.onStart} />
-      <Text style={footnote}>{t('Updates every Bridge on the computer running {{name}}. They restart after the current reply finishes.', { name: remote.connectionLabel })}</Text>
+      <Text style={footnote}>{t('Updates every Bridge on the computer running {{name}}. Replies still in progress are interrupted.', { name: remote.connectionLabel })}</Text>
     </View>;
   }
   if (view.phase === 'running' || view.phase === 'updated') {
     const status = view.status;
     const text = view.phase === 'updated' ? t('Updated to {{version}}', { version: status?.version ?? '' })
       : view.reconnecting || status?.state === 'restarting' ? t('Restarting Bridge…')
-      : status?.state === 'waiting' ? t('Waiting for {{name}} to finish its task…', { name: name(status.waitingFor) })
       : status?.state === 'installing' && status.version ? t('Downloading {{version}}…', { version: status.version })
       : t('Checking the new version…');
     return <SettingsGroup density="comfortable" testID="bridge-remote-update">
@@ -160,8 +156,7 @@ function RemoteUpdateBlock({ remote, footnote }: { remote: BridgeRemoteUpdatePro
       </View>
     </SettingsGroup>;
   }
-  const reason = view.reason === 'busy' ? t('{{name}} is still running a task, so nothing was updated.', { name: name(view.waitingFor) })
-    : view.reason === 'download' ? t("Couldn't download the new version. Check the computer's network.")
+  const reason = view.reason === 'download' ? t("Couldn't download the new version. Check the computer's network.")
     : view.reason === 'unsupported' ? t('This version can only be updated with the command below.')
     : view.reason === 'running' ? t('Another update is already running on this computer.')
     : view.reason === 'disabled' ? t('Phone updates are turned off on this computer.')

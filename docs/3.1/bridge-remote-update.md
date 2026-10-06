@@ -6,8 +6,8 @@
 
 1. 当前连接的 Bridge 在握手时声明 `bridge.remote-update.v1`：Codex、Claude Code、Pi、本地模型的 health 返回 `remoteUpdate: 1`；Hermes 写在能力列表里；OpenClaw 写在 Relay Bridge 补充的 `meta.capabilities` 里，Gateway 自己声明的同名能力会被丢弃。App 用中心能力 `bridgeRemoteUpdate` 判断，默认关闭，只有握手声明后才打开。
 2. 当前连接已确认有旧 Bridge 时，页面显示「立即更新」。点击后，App 通过现有连接发送 `bridge.update.start`：Agent 后端走普通请求，OpenClaw 走 Relay control `bridge-update.request`。请求不带参数，Bridge 也不读取参数。
-3. Bridge 用自己安装的 bundle 启动 `clawket update --remote <id>`，马上回复已受理，所以这个请求不会占住更新所需的空闲闸门。更新器与命令行执行 `update` 完全相同：读取 npm 官方 stable 版本，暂存并校验后，等所有运行时空闲，依次停旧、启新，失败时回滚。
-4. 更新器把阶段写进 `~/.clawket/runtime/remote-update.json`：`checking`、`installing`（带目标版本）、`waiting`（带正在等的后端）、`restarting`，最后是 `updated` 或 `failed`（带固定原因）。手机每 2 秒通过 `bridge.update.status` 读取一次；Bridge 重启期间读取失败，界面按「正在重启」处理。Bridge 重启并握手后，状态文件里的最终结果和新版本一起确认更新完成。
+3. Bridge 用自己安装的 bundle 启动 `clawket update --remote <id>`，马上回复已受理。更新器与命令行执行 `update` 完全相同：读取 npm 官方 stable 版本，暂存并校验后，依次停旧、启新，失败时回滚。更新不等回复结束（负责人 2026-10-06 决定），正在进行的回复会被中断。
+4. 更新器把阶段写进 `~/.clawket/runtime/remote-update.json`：`checking`、`installing`（带目标版本）、`restarting`，最后是 `updated` 或 `failed`（带固定原因）。手机每 2 秒通过 `bridge.update.status` 读取一次；Bridge 重启期间读取失败，界面按「正在重启」处理。Bridge 重启并握手后，状态文件里的最终结果和新版本一起确认更新完成。
 5. 如果所有运行中的 Bridge 已经是目标版本，更新器直接报告 `updated`，不重启任何进程。
 
 ## 安全边界
@@ -31,10 +31,10 @@
 
 ## App 状态
 
-- **可用**：「立即更新」，下方一行说明这次会更新哪台电脑、何时重启；命令收在「改用命令更新」后面。
-- **进行中**：一行进度，依次为检查新版本、下载、等某个后端完成任务、重启 Bridge。
+- **可用**：「立即更新」，下方一行说明这次会更新哪台电脑，进行中的回复会被中断；命令收在「改用命令更新」后面。
+- **进行中**：一行进度，依次为检查新版本、下载、重启 Bridge。
 - **完成**：「已更新到 X」，页面随新版本切到「更新完成」。
-- **失败**：「更新没有完成」，加一句原因（后端仍在运行任务、下载失败、版本不支持、已有更新在进行、电脑已关闭、中途停止、无法确认），附「重试」，命令自动展开。
+- **失败**：「更新没有完成」，加一句原因（下载失败、版本不支持、已有更新在进行、电脑已关闭、中途停止、无法确认），附「重试」，命令自动展开。
 - 更新状态由 App 统一保存，切换页面和 Bridge 重启都不会丢失；离开指南页时清掉已结束的结果。超过 15 分钟仍未完成，按中途停止处理。
 
 ## 发布

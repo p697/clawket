@@ -7,9 +7,9 @@ export const BRIDGE_REMOTE_UPDATE_CAPABILITY = 'bridge.remote-update.v1';
 export const BRIDGE_UPDATE_START_METHOD = 'bridge.update.start';
 export const BRIDGE_UPDATE_STATUS_METHOD = 'bridge.update.status';
 
-export type BridgeUpdateState = 'checking' | 'installing' | 'waiting' | 'restarting' | 'updated' | 'failed';
+export type BridgeUpdateState = 'checking' | 'installing' | 'restarting' | 'updated' | 'failed';
 /** Fixed failure categories; never native errors, paths or command output. */
-export type BridgeUpdateFailure = 'busy' | 'download' | 'unsupported' | 'running' | 'interrupted' | 'not_confirmed' | 'error';
+export type BridgeUpdateFailure = 'download' | 'unsupported' | 'running' | 'interrupted' | 'not_confirmed' | 'error';
 export type BridgeUpdateBackend = 'openclaw' | 'hermes' | 'hermes-relay' | 'codex' | 'claude-code' | 'pi' | 'local-model';
 export type BridgeUpdateOutcome = Readonly<{
   backend: BridgeUpdateBackend;
@@ -24,8 +24,6 @@ export type BridgeUpdateStatus = Readonly<{
   finishedAt?: number;
   /** Target release once the official npm metadata has been read. */
   version?: string;
-  /** Runtime the updater is waiting on while it finishes a task. */
-  waitingFor?: BridgeUpdateBackend;
   reason?: BridgeUpdateFailure;
   results?: readonly BridgeUpdateOutcome[];
 }>;
@@ -40,11 +38,11 @@ export interface BridgeUpdateOperations {
   status(): Promise<BridgeUpdateStatus | null>;
 }
 
-const STATES: readonly BridgeUpdateState[] = ['checking', 'installing', 'waiting', 'restarting', 'updated', 'failed'];
-const FAILURES: readonly BridgeUpdateFailure[] = ['busy', 'download', 'unsupported', 'running', 'interrupted', 'not_confirmed', 'error'];
+const STATES: readonly BridgeUpdateState[] = ['checking', 'installing', 'restarting', 'updated', 'failed'];
+const FAILURES: readonly BridgeUpdateFailure[] = ['download', 'unsupported', 'running', 'interrupted', 'not_confirmed', 'error'];
 const BACKENDS: readonly BridgeUpdateBackend[] = ['openclaw', 'hermes', 'hermes-relay', 'codex', 'claude-code', 'pi', 'local-model'];
 const OUTCOMES: readonly BridgeUpdateOutcome['state'][] = ['updated', 'stopped', 'restored', 'failed', 'manual'];
-const OUTCOME_REASONS = new Set(['busy', 'stop_unverified', 'update_not_applied', 'restore_unverified', 'replacement_stop_unverified',
+const OUTCOME_REASONS = new Set(['stop_unverified', 'update_not_applied', 'restore_unverified', 'replacement_stop_unverified',
   'registration_update_unverified', 'registration_restore_unverified']);
 const ID = /^[a-f0-9-]{36}$/;
 const VERSION = /^(0|[1-9]\d{0,8})\.(0|[1-9]\d{0,8})\.(0|[1-9]\d{0,8})$/;
@@ -73,7 +71,6 @@ export function parseBridgeUpdateStatus(value: unknown): BridgeUpdateStatus | nu
     id: status.id, state: status.state, startedAt: status.startedAt,
     ...(time(status.finishedAt) ? { finishedAt: status.finishedAt } : {}),
     ...(typeof status.version === 'string' && VERSION.test(status.version) ? { version: status.version } : {}),
-    ...(includes(BACKENDS, status.waitingFor) ? { waitingFor: status.waitingFor } : {}),
     ...(includes(FAILURES, status.reason) ? { reason: status.reason } : {}),
     ...(results ? { results } : {}),
   };

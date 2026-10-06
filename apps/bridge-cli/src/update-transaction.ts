@@ -17,7 +17,7 @@ export type UpdateResult = { backend: string; state: 'updated' | 'stopped' | 're
 
 const startOrder = (a: UpdateTarget, b: UpdateTarget) =>
   (a.backend === 'openclaw' ? 2 : a.backend === 'hermes-relay' ? 1 : 0) - (b.backend === 'openclaw' ? 2 : b.backend === 'hermes-relay' ? 1 : 0);
-// Independent agent runtimes stop first, so one that is still busy fails before the shared service and
+// Independent agent runtimes stop first, so one that cannot be stopped fails before the shared service and
 // Hermes are touched; the service/watchdog still stops before its Hermes children.
 const stopRank = (target: UpdateTarget) => target.backend === 'openclaw' ? 1 : target.backend === 'hermes-relay' ? 2 : target.backend === 'hermes' ? 3 : 0;
 
@@ -27,12 +27,12 @@ export async function activateUpdate(targets: UpdateTarget[], entry: string, ver
   for (const target of targets) await target.preflight();
   const stopped: UpdateTarget[] = [], started: UpdateTarget[] = [];
   const registrations: Array<{ target: UpdateTarget; restore: () => void }> = [];
-  let preparing: UpdateTarget | undefined, stopping: { target: UpdateTarget; reason: string } | undefined;
+  let preparing: UpdateTarget | undefined, stopping: UpdateTarget | undefined;
   try {
     // Stop the shared service/watchdog before its Hermes children; start it last.
     for (const target of targets.filter(t => t.running).sort((a, b) => stopRank(a) - stopRank(b))) {
       try { await target.stop(); }
-      catch (error) { stopping = { target, reason: (error as { code?: unknown } | null)?.code === 'BRIDGE_BUSY' ? 'busy' : 'stop_unverified' }; throw error; }
+      catch (error) { stopping = target; throw error; }
       stopped.push(target);
     }
     for (const target of [...stopped].sort(startOrder)) {
@@ -69,7 +69,7 @@ export async function activateUpdate(targets: UpdateTarget[], entry: string, ver
         results.push({ backend: target.backend, state: 'restored', ...(version ? { version } : {}) });
       } catch { results.push({ backend: target.backend, state: 'failed', reason: 'restore_unverified' }); }
     }
-    for (const target of targets) if (!stopped.includes(target)) results.push({ backend: target.backend, state: target === preparing ? 'failed' : target.manual ? 'manual' : target.running ? 'failed' : 'stopped', ...(target === preparing ? { reason: 'registration_update_unverified' } : target === stopping?.target ? { reason: stopping.reason } : target.running ? { reason: 'update_not_applied' } : {}) });
+    for (const target of targets) if (!stopped.includes(target)) results.push({ backend: target.backend, state: target === preparing ? 'failed' : target.manual ? 'manual' : target.running ? 'failed' : 'stopped', ...(target === preparing ? { reason: 'registration_update_unverified' } : target === stopping ? { reason: 'stop_unverified' } : target.running ? { reason: 'update_not_applied' } : {}) });
     return results;
   }
 }
