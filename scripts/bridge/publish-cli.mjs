@@ -51,7 +51,6 @@ export async function preparePublish({
   runCompatibilityGate({ spawn, cwd });
 
   const registryUrl = readRequiredEnv("CLAWKET_PACKAGE_DEFAULT_REGISTRY_URL", env);
-  const fallbackUrl = readRequiredEnv("CLAWKET_PACKAGE_DEFAULT_REGISTRY_FALLBACK_URL", env);
   const originalText = await readText(packagePath, "utf8");
   const pkg = JSON.parse(originalText);
   if (pkg.version !== REQUIRED_CLI_VERSION) {
@@ -62,7 +61,6 @@ export async function preparePublish({
 
   stdout.write(`\nPublishing @p697/clawket version: ${pkg.version}\n`);
   stdout.write(`Publishing default registry: ${registryUrl}\n`);
-  stdout.write(`Publishing fallback registry: ${fallbackUrl}\n`);
   stdout.write("Running publish safety checks (build + verify + dry-run)...\n\n");
 
   runOrThrow(

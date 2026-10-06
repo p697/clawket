@@ -1,3 +1,4 @@
+import { canonicalizeOfficialRelayUrl, sameRelayRegistry } from './official-relay.js';
 import {
   readPairingConfig,
   writePairingConfig,
@@ -8,8 +9,6 @@ import { buildPairingQrPayload } from './qr.js';
 import { buildPairingSessionDraft } from './pairing-session.js';
 import { securePairingCodeKeyHex, writeSecurePairingResponderState } from './secure-pairing.js';
 
-const PACKAGED_DEFAULT_REGISTRY_BASE = process.env.CLAWKET_PACKAGE_DEFAULT_REGISTRY_URL?.trim() ?? '';
-const PACKAGED_DEFAULT_REGISTRY_FALLBACK_BASE = process.env.CLAWKET_PACKAGE_DEFAULT_REGISTRY_FALLBACK_URL?.trim() ?? '';
 
 export interface PairGatewayResult {
   gatewayId: string;
@@ -45,7 +44,7 @@ export async function pairGateway(input: {
   gatewayPassword?: string | null;
   environment?: PairingEnvironment;
 }): Promise<PairingInfo> {
-  const baseUrl = normalizeHttpBase(input.serverUrl);
+  const baseUrl = canonicalizeOfficialRelayUrl(normalizeHttpBase(input.serverUrl), 'openclaw');
   const environment = input.environment ?? 'production';
   const existing = readPairingConfig(environment);
   const compatibility = assessPairingCompatibility(existing, baseUrl);
@@ -261,7 +260,7 @@ export function assessPairingCompatibility(
   nextServerUrl: string,
 ): 'register-new' | 'refresh-existing' | 'server-mismatch' {
   if (!existing) return 'register-new';
-  if (existing.serverUrl === nextServerUrl) return 'refresh-existing';
+  if (sameRelayRegistry(existing.serverUrl, nextServerUrl)) return 'refresh-existing';
   return 'server-mismatch';
 }
 
@@ -270,16 +269,7 @@ async function postJsonWithCloudflareFallback(
   init: RequestInit,
 ): Promise<{ response: Response; attemptedUrl: string; fallbackUrl: string | null }> {
   const response = await fetch(url, init);
-  const fallbackUrl = resolveCloudflareChallengeFallbackUrl(url, response);
-  if (!fallbackUrl) {
-    return { response, attemptedUrl: url, fallbackUrl: null };
-  }
-
-  return {
-    response: await fetch(fallbackUrl, init),
-    attemptedUrl: url,
-    fallbackUrl,
-  };
+  return { response, attemptedUrl: url, fallbackUrl: null };
 }
 
 async function buildPairingRequestError(
@@ -303,16 +293,12 @@ export function isCloudflareChallengeResponse(response: Pick<Response, 'status' 
   return response.status === 403 && response.headers.get('cf-mitigated')?.trim().toLowerCase() === 'challenge';
 }
 
+/** Kept for existing Bridge Core callers. Official APIs use custom domains. */
 export function resolveCloudflareChallengeFallbackUrl(
-  url: string,
-  response: Pick<Response, 'status' | 'headers'>,
+  _url: string,
+  _response: Pick<Response, 'status' | 'headers'>,
 ): string | null {
-  if (!isCloudflareChallengeResponse(response)) return null;
-  if (!PACKAGED_DEFAULT_REGISTRY_BASE || !PACKAGED_DEFAULT_REGISTRY_FALLBACK_BASE) return null;
-  const requestUrl = new URL(url);
-  if (requestUrl.origin !== PACKAGED_DEFAULT_REGISTRY_BASE) return null;
-
-  return `${PACKAGED_DEFAULT_REGISTRY_FALLBACK_BASE}${requestUrl.pathname}${requestUrl.search}`;
+  return null;
 }
 
 function summarizeFailedResponse(text: string): string {

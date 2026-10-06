@@ -1,7 +1,9 @@
 name = "clawket-registry"
 main = "src/index.ts"
 compatibility_date = "2026-03-03"
-workers_dev = true
+workers_dev = false
+# Replace this custom domain with a hostname in your own Cloudflare zone.
+routes = [{ pattern = "registry.example.com", custom_domain = true }]
 
 [vars]
 RELAY_BACKEND = "openclaw"

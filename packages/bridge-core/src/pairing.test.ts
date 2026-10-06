@@ -32,6 +32,15 @@ describe('pairing helpers', () => {
     expect(assessPairingCompatibility(null, 'https://registry.example.com')).toBe('register-new');
   });
 
+  it('refreshes an official legacy pairing without changing its identity', () => {
+    expect(assessPairingCompatibility({ ...baseConfig, serverUrl: 'https://clawket-registry.clawket.workers.dev' },
+      'https://registry.clawket.ai')).toBe('refresh-existing');
+    expect(assessPairingCompatibility({ ...baseConfig, serverUrl: 'https://clawket-registry-preview.clawket.workers.dev' },
+      'https://registry.clawket.ai')).toBe('server-mismatch');
+    expect(resolveCloudflareChallengeFallbackUrl('https://registry.clawket.ai/v1/pair/register',
+      new Response('', { status: 403, headers: { 'cf-mitigated': 'challenge' } }))).toBeNull();
+  });
+
   it('detects Cloudflare challenge responses from the registry edge', () => {
     const response = new Response('blocked', {
       status: 403,

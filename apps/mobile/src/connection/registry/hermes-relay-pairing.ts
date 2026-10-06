@@ -1,3 +1,4 @@
+import { canonicalizeOfficialRelayUrl } from '../../../../../packages/bridge-core/src/official-relay';
 import { resolveOfficialRelayEnvironment } from '../../services/relay-environment';
 import { pairingRequest } from '../../services/pairing-request';
 
@@ -85,7 +86,7 @@ async function claimHermesRelay(
 }
 
 function normalizeHttpBase(url: string): string {
-  const trimmed = url.trim();
+  const trimmed = canonicalizeOfficialRelayUrl(url.trim());
   if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
     return trimmed.replace(/\/+$/, '');
   }

@@ -1,3 +1,4 @@
+import { canonicalizeOfficialRelayUrl } from '../../../../packages/bridge-core/src/official-relay';
 import type { BackendKind } from '@clawket/agent-protocol';
 import { pairingRequest } from './pairing-request';
 import { resolveOfficialRelayEnvironment } from './relay-environment';
@@ -91,7 +92,7 @@ export const RelayPairingService = {
 };
 
 export function normalizeHttpBase(url: string): string {
-  const trimmed = url.trim();
+  const trimmed = canonicalizeOfficialRelayUrl(url.trim());
   if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
     return trimmed.replace(/\/+$/, '');
   }

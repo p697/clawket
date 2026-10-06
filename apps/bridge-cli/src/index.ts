@@ -33,6 +33,7 @@ import { noProgress, startProgress, track, type Progress } from './progress.js';
 import { writePairingQrPng, writeRawQrPng } from './qr-file.js';
 import { decidePairServiceAction } from './service-decision.js';
 import {
+  officialRelayEndpoints,
   clearServiceState,
   deletePairingConfig,
   deleteHermesRelayConfig,
@@ -86,7 +87,7 @@ const HERMES_SERVICE_WATCHDOG_INTERVAL_MS = 30_000;
 const HERMES_PAIRING_BRIDGE_READY_TIMEOUT_MS = 30_000;
 // After the Bridge is up, a gateway that is still starting gets this long to answer.
 const HERMES_API_READY_GRACE_MS = 10_000;
-const PREVIEW_REGISTRY_URL = 'https://clawket-registry-preview.clawket.workers.dev';
+const PREVIEW_REGISTRY_URL = officialRelayEndpoints('openclaw', 'preview').registryUrl;
 // bridge-runtime is already bundled into the published CLI, but relay-shared is
 // not a CLI dependency. Keep this wire value local until those package
 // boundaries converge instead of widening the published dependency surface.
@@ -438,7 +439,7 @@ type PairFailureResult = {
   error: string;
 };
 
-const DEFAULT_HERMES_REGISTRY_URL = 'https://hermes-registry.clawket.ai';
+const DEFAULT_HERMES_REGISTRY_URL = officialRelayEndpoints('hermes').registryUrl;
 
 type LifecycleCommand = 'install' | 'restart' | 'stop' | 'uninstall';
 

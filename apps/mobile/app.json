@@ -11,7 +11,15 @@
       "bundleIdentifier": "com.p697.clawket",
       "associatedDomains": [
         "applinks:registry.clawket.ai",
-        "applinks:clawket-registry-preview.clawket.workers.dev"
+        "applinks:clawket-registry-preview.clawket.workers.dev",
+        "applinks:registry-preview.clawket.ai",
+        "applinks:codex-registry.clawket.ai",
+        "applinks:codex-registry-preview.clawket.ai",
+        "applinks:claude-code-registry.clawket.ai",
+        "applinks:claude-code-registry-preview.clawket.ai",
+        "applinks:pi-registry.clawket.ai",
+        "applinks:pi-registry-preview.clawket.ai",
+        "applinks:local-model-registry.clawket.ai"
       ],
       "infoPlist": {
         "NSCameraUsageDescription": "Allow Clawket to use your camera to scan QR codes and take photos to send to AI.",
@@ -71,6 +79,46 @@
             {
               "scheme": "https",
               "host": "clawket-registry-preview.clawket.workers.dev",
+              "pathPrefix": "/pair/"
+            },
+            {
+              "scheme": "https",
+              "host": "registry-preview.clawket.ai",
+              "pathPrefix": "/pair/"
+            },
+            {
+              "scheme": "https",
+              "host": "codex-registry.clawket.ai",
+              "pathPrefix": "/pair/"
+            },
+            {
+              "scheme": "https",
+              "host": "codex-registry-preview.clawket.ai",
+              "pathPrefix": "/pair/"
+            },
+            {
+              "scheme": "https",
+              "host": "claude-code-registry.clawket.ai",
+              "pathPrefix": "/pair/"
+            },
+            {
+              "scheme": "https",
+              "host": "claude-code-registry-preview.clawket.ai",
+              "pathPrefix": "/pair/"
+            },
+            {
+              "scheme": "https",
+              "host": "pi-registry.clawket.ai",
+              "pathPrefix": "/pair/"
+            },
+            {
+              "scheme": "https",
+              "host": "pi-registry-preview.clawket.ai",
+              "pathPrefix": "/pair/"
+            },
+            {
+              "scheme": "https",
+              "host": "local-model-registry.clawket.ai",
               "pathPrefix": "/pair/"
             }
           ],

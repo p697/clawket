@@ -13,7 +13,7 @@ export async function runHermesPreviewSmoke({
 } = {}) {
   const registryBaseUrl = normalizeBaseUrl(
     env.CLAWKET_HERMES_PREVIEW_REGISTRY_URL
-      ?? 'https://clawket-hermes-registry-preview.clawket.workers.dev',
+      ?? 'https://hermes-registry-preview.clawket.ai',
   );
   const requestJson = (url, init, label) => requireOkJson(
     url,

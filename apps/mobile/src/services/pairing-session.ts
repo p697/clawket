@@ -1,3 +1,4 @@
+import { canonicalizeOfficialRelayUrl } from '../../../../packages/bridge-core/src/official-relay';
 import { sha256 } from 'js-sha256';
 import nacl from 'tweetnacl';
 import { resolveOfficialRelayEnvironment } from './relay-environment';
@@ -359,7 +360,7 @@ function validatePairingLinkDescriptor(input: PairingLinkDescriptor): PairingLin
 }
 
 function normalizeServerUrl(value: string): string {
-  const parsed = new URL(value.trim());
+  const parsed = new URL(canonicalizeOfficialRelayUrl(value.trim()));
   if (parsed.protocol !== 'https:' || !resolveOfficialRelayEnvironment(parsed.origin)) {
     throw new PairingSessionError('UNTRUSTED_PAIRING_SERVER', 'This pairing invitation does not use an official Clawket service.');
   }

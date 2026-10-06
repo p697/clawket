@@ -84,8 +84,6 @@ export async function computeCliBuildProvenance({
   })));
   const definitions = {
     CLAWKET_PACKAGE_DEFAULT_REGISTRY_URL: env.CLAWKET_PACKAGE_DEFAULT_REGISTRY_URL?.trim() ?? "",
-    CLAWKET_PACKAGE_DEFAULT_REGISTRY_FALLBACK_URL:
-      env.CLAWKET_PACKAGE_DEFAULT_REGISTRY_FALLBACK_URL?.trim() ?? "",
   };
 
   return {

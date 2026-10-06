@@ -1,7 +1,9 @@
 name = "clawket-registry-preview"
 main = "src/index.ts"
 compatibility_date = "2026-03-03"
-workers_dev = true
+workers_dev = false
+# Replace this custom domain with a hostname in your own Cloudflare zone.
+routes = [{ pattern = "clawket-registry-preview.example.com", custom_domain = true }]
 account_id = "00000000000000000000000000000000"
 
 [observability]
@@ -11,10 +13,10 @@ enabled = true
 RELAY_BACKEND = "openclaw"
 # Set PAIRING_TICKET_SECRET with `wrangler secret put` on both Preview workers;
 # never place that shared secret in this file.
-RELAY_REGION_MAP = "{\"cn\":\"wss://clawket-relay-preview.example.workers.dev/ws\",\"sg\":\"wss://clawket-relay-preview.example.workers.dev/ws\",\"us\":\"wss://clawket-relay-preview.example.workers.dev/ws\",\"eu\":\"wss://clawket-relay-preview.example.workers.dev/ws\"}"
+RELAY_REGION_MAP = "{\"cn\":\"wss://clawket-relay-preview.example.com/ws\",\"sg\":\"wss://clawket-relay-preview.example.com/ws\",\"us\":\"wss://clawket-relay-preview.example.com/ws\",\"eu\":\"wss://clawket-relay-preview.example.com/ws\"}"
 PAIR_ACCESS_CODE_TTL_SEC = "600"
 PAIR_CLIENT_TOKEN_MAX = "8"
-PAIR_PUBLIC_BASE_URL = "https://clawket-registry-preview.example.workers.dev"
+PAIR_PUBLIC_BASE_URL = "https://clawket-registry-preview.example.com"
 PAIR_SESSION_RESOLVE_MAX_ATTEMPTS = "5"
 APPLE_APP_IDS = "TEAMID.com.example.clawket"
 ANDROID_APP_LINK_PACKAGE = "com.example.clawket"

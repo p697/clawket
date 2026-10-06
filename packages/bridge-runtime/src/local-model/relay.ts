@@ -9,7 +9,7 @@ import { WEBSOCKET_FRAME_LIMIT_BYTES } from '../frame-limit.js';
 
 const PREFIX = '__clawket_relay_control__:';
 export interface LocalModelInvitation { sessionId: string; codeKeyHex: string; qrPayload: string; expiresAt: string; attempts: number }
-export interface LocalModelRelayConfig { relayUrl: string; gatewayId: string; relaySecret: string; invitation?: LocalModelInvitation }
+export interface LocalModelRelayConfig { registryUrl?: string; relayUrl: string; gatewayId: string; relaySecret: string; invitation?: LocalModelInvitation }
 
 export class LocalModelRelay {
   private readonly relayNetwork = relayNetworkOptions();

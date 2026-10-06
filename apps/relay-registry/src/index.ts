@@ -1,3 +1,4 @@
+import { canonicalizeOfficialRelayUrl, resolveOfficialRelayService } from '../../../packages/bridge-core/src/official-relay';
 import {
   errorResponse,
   hmacSha256Hex,
@@ -486,7 +487,7 @@ async function handlePairingSessionCreate(request: Request, env: Env): Promise<R
     return errorResponse('INVALID_PAIRING_PAYLOAD', 'Encrypted pairing payload is invalid', 400);
   }
 
-  const gatewayLookup = await getPairGateway(openClawRoutesKv(env), gatewayId);
+  const gatewayLookup = await getPairGateway(openClawRoutesKv(env), gatewayId, resolveRegistryBackendPolicy(env.RELAY_BACKEND));
   if (!gatewayLookup.ok) return pairingRecordCorruptResponse(OPENCLAW_REGISTRY_POLICY, gatewayLookup.gatewayId);
   const gateway = gatewayLookup.record;
   if (!gateway) return errorResponse('GATEWAY_NOT_FOUND', 'Gateway not found', 404);
@@ -597,7 +598,7 @@ async function handleSecurePairingSessionResolve(request: Request, env: Env): Pr
   if (!record || record.shortCodeLookup !== lookup) {
     return errorResponse('PAIRING_SESSION_NOT_FOUND', 'Pairing code is invalid or expired', 404);
   }
-  const gatewayLookup = await getPairGateway(openClawRoutesKv(env), record.gatewayId);
+  const gatewayLookup = await getPairGateway(openClawRoutesKv(env), record.gatewayId, resolveRegistryBackendPolicy(env.RELAY_BACKEND));
   if (!gatewayLookup.ok) return pairingRecordCorruptResponse(OPENCLAW_REGISTRY_POLICY, gatewayLookup.gatewayId);
   const gateway = gatewayLookup.record;
   if (!gateway || gateway.pairingSessionId !== record.sessionId) {
@@ -664,8 +665,8 @@ async function handleVerify(
   return errorResponse('UNAUTHORIZED', 'Invalid pairing token', 401);
 }
 
-async function getPairGateway(routesKv: KVNamespace, gatewayId: string): Promise<PairGatewayLookupResult> {
-  const lookup = await getPairRecord(routesKv, OPENCLAW_REGISTRY_POLICY, gatewayId);
+async function getPairGateway(routesKv: KVNamespace, gatewayId: string, policy: RegistryBackendPolicy = OPENCLAW_REGISTRY_POLICY): Promise<PairGatewayLookupResult> {
+  const lookup = await getPairRecord(routesKv, policy, gatewayId);
   if (!lookup.ok) return { ok: false, gatewayId: lookup.principalId };
   return { ok: true, record: lookup.record as PairGatewayRecord | null };
 }
@@ -686,7 +687,7 @@ async function getPairRecord(
     }
     const clientTokens = Array.isArray(parsed.clientTokens) ? parsed.clientTokens : [];
     const common = {
-      relayUrl: typeof parsed.relayUrl === 'string' ? parsed.relayUrl : '',
+      relayUrl: typeof parsed.relayUrl === 'string' ? canonicalizeOfficialRelayUrl(parsed.relayUrl, policy.backend) : '',
       region: typeof parsed.region === 'string' ? parsed.region : 'us',
       displayName: typeof parsed.displayName === 'string' ? parsed.displayName : null,
       relaySecretHash: parsed.relaySecretHash,
@@ -1129,7 +1130,15 @@ function resolvePairingPublicBase(request: Request, env: Env): string {
   const configured = env.PAIR_PUBLIC_BASE_URL?.trim();
   if (configured) {
     try {
-      return new URL(configured).origin;
+      const publicOrigin = new URL(configured).origin;
+      const requestOrigin = new URL(request.url).origin;
+      const official = resolveOfficialRelayService(requestOrigin);
+      // Released Apps trust the old invitation origin. New Bridges normalize
+      // their requests first; retained alias callers keep usable one-tap links.
+      if (official?.role === 'registry' && official.backend === (env.RELAY_BACKEND ?? 'openclaw')
+        && new URL(requestOrigin).hostname === official.legacyHostname
+        && canonicalizeOfficialRelayUrl(requestOrigin) === publicOrigin) return requestOrigin;
+      return publicOrigin;
     } catch {
       // Fall back to the current registry origin.
     }

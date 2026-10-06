@@ -155,3 +155,14 @@ it('leaves the existing offline pairing startup path unchanged after explicit re
   expect(mock.background).toHaveBeenCalledTimes(1); expect(mock.fetch).not.toHaveBeenCalled();
   expect(readFileSync(path, 'utf8')).toBe(original);
 });
+
+it.each(['wss://clawket-pi-relay.clawket.workers.dev/ws', 'wss://pi-relay.clawket.ai/ws'])('refreshes an official alias without replacing its live Pi owner (%s)', async relayUrl => {
+  config.relay.registryUrl = 'https://clawket-pi-registry.clawket.workers.dev';
+  config.relay.relayUrl = 'wss://clawket-pi-relay.clawket.workers.dev/ws';
+  config.relay.invitation.qrPayload = JSON.stringify({ v: 2, k: 'cp', b: 'pi', s: config.relay.registryUrl, g: 'existing-id', a: 'old-code' });
+  mock.fetch.mockResolvedValue(Response.json({ gatewayId: 'existing-id', relayUrl, accessCode: 'ABC234' }));
+  save(); await pair('--registry', 'https://pi-registry.clawket.ai');
+  expect(mock.fetch.mock.calls[0][0]).toBe('https://pi-registry.clawket.ai/v1/pair/access-code');
+  expect(JSON.parse(mock.qr.mock.calls[0][0])).toMatchObject({ s: 'https://pi-registry.clawket.ai', g: 'existing-id' });
+  unchanged();
+});

@@ -68,6 +68,29 @@ function openClawInput(label: string, token = `${label}-token`) {
 }
 
 describe('ConnectionStore', () => {
+  it('persists official address migration once, retaining identity, credentials and rollback', async () => {
+    const secureStorage = new MemorySecureStorage();
+    const initial = new ConnectionStore({ secureStorage, legacyStorage: legacyStorage() });
+    await initial.load();
+    const added = await initial.add({ ...openClawInput('Migration'), id: 'preserved-id',
+      url: 'wss://relay-preview.clawket.ai/ws',
+      relay: { serverUrl: 'https://registry-preview.clawket.ai', gatewayId: 'preserved-gw', clientToken: 'preserved-token' } });
+    const old = JSON.parse(secureStorage.values.get(CURRENT_KEY)!);
+    old.state.records[0].url = 'wss://clawket-relay-preview.clawket.workers.dev/ws';
+    old.state.records[0].relay.serverUrl = 'https://clawket-registry-preview.clawket.workers.dev';
+    const oldRaw = JSON.stringify(old);
+    secureStorage.values.set(CURRENT_KEY, oldRaw);
+    const migrated = new ConnectionStore({ secureStorage, legacyStorage: legacyStorage() });
+    await migrated.load();
+    expect(await migrated.getRuntimeRecord(added.id)).toMatchObject({ id: added.id,
+      url: 'wss://relay-preview.clawket.ai/ws', auth: old.state.records[0].auth,
+      relay: { ...old.state.records[0].relay, serverUrl: 'https://registry-preview.clawket.ai' } });
+    expect(migrated.getSnapshot()).toMatchObject({ activeConnectionId: added.id, freeConnectionId: added.id, revision: old.revision + 1 });
+    expect(secureStorage.values.get(ROLLBACK_KEY)).toBe(oldRaw);
+    const writeCount = secureStorage.writes.length;
+    await new ConnectionStore({ secureStorage, legacyStorage: legacyStorage() }).load();
+    expect(secureStorage.writes).toHaveLength(writeCount);
+  });
   it('migrates the released 2.1 schema fixture once and preserves every credential-bearing field', async () => {
     expect(legacyFixture.provenance).toMatchObject({
       kind: 'schema-reconstruction',

@@ -1,3 +1,4 @@
+import { canonicalizeOfficialRelayUrl } from './official-relay.js';
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { homedir, hostname, userInfo } from 'node:os';
@@ -40,10 +41,10 @@ export function readPairingConfig(environment: PairingEnvironment = 'production'
       return null;
     }
     const normalized: PairingConfig = {
-      serverUrl: parsed.serverUrl,
+      serverUrl: canonicalizeOfficialRelayUrl(parsed.serverUrl, 'openclaw', environment),
       gatewayId: parsed.gatewayId,
       relaySecret: parsed.relaySecret,
-      relayUrl: parsed.relayUrl,
+      relayUrl: canonicalizeOfficialRelayUrl(parsed.relayUrl, 'openclaw', environment),
       instanceId: parsed.instanceId?.trim() || createInstanceId(),
       displayName: parsed.displayName ?? null,
       createdAt: parsed.createdAt ?? new Date().toISOString(),

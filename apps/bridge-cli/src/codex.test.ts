@@ -230,3 +230,17 @@ it('allows start after an explicitly refused local connection', async () => {
   await handleCodexCommand(['restart', '--project', project, '--config', path]);
   expect(mock.background).toHaveBeenCalledTimes(1);
 });
+
+it('refreshes an existing official Workers pairing through the custom domain', async () => {
+  saved({ registryUrl: 'https://clawket-codex-registry.clawket.workers.dev',
+    relayUrl: 'wss://clawket-codex-relay.clawket.workers.dev/ws', gatewayId: 'preserved-id', relaySecret: 'preserved-secret' });
+  mock.fetch.mockImplementation(async (url: string) => url.endsWith('/access-code')
+    ? Response.json({ accessCode: 'ABC234' })
+    : Response.json({ sessionId: `ps_${'a'.repeat(64)}`, expiresAt: new Date(Date.now() + 60_000).toISOString(), capabilities: ['pairing.secure-short-code.v2'] }));
+  await handleCodexCommand(['pair', '--foreground', '--config', path]);
+  expect(mock.fetch.mock.calls.map(call => call[0])).toEqual([
+    'https://codex-registry.clawket.ai/v1/pair/access-code', 'https://codex-registry.clawket.ai/v1/pair/session']);
+  expect(JSON.parse(mock.fetch.mock.calls[0][1].body)).toMatchObject({ gatewayId: 'preserved-id', relaySecret: 'preserved-secret' });
+  expect(JSON.parse(readFileSync(path, 'utf8')).relay).toMatchObject({ gatewayId: 'preserved-id', relaySecret: 'preserved-secret',
+    registryUrl: 'https://codex-registry.clawket.ai', relayUrl: 'wss://codex-relay.clawket.ai/ws' });
+});

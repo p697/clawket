@@ -249,3 +249,7 @@ Owner-authorized Codex work is specified in `docs/3.1/codex.md`. New device pair
 ## Claude Code 3.1 extension
 
 Owner-authorized Claude Code work is specified in `docs/3.1/claude-code.md`. Use the official Agent SDK and the installed unmodified CLI; authentication stays in Claude's native flow. Discover Desktop/CLI projects and histories read-only. An idle owner is still an owner; discovery and resume do not constitute live attach. Never take over an unknown or active owner, harvest Desktop credentials, or advertise unverified native control. Preserve existing backends and isolate any Claude Preview resources.
+
+## Official Connection Domain Rule
+
+Official Registry/Relay URLs and saved-alias normalization use the pure `packages/bridge-core/src/official-relay.ts` map. New traffic uses `clawket.ai`; custom/self-hosted URLs remain supported. Keep old Workers routes during the compatibility stage and preserve backend/environment resource isolation. Domain retirement and distribution remain separate owner-authorized operations; see `docs/3.1/connection-domains.md`.

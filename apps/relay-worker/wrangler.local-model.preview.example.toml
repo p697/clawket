@@ -1,7 +1,9 @@
 name = "clawket-local-model-relay-preview"
 main = "src/index.ts"
 compatibility_date = "2026-03-03"
-workers_dev = true
+workers_dev = false
+# Replace this custom domain with a hostname in your own Cloudflare zone.
+routes = [{ pattern = "clawket-local-model-relay-preview.example.com", custom_domain = true }]
 account_id = "00000000000000000000000000000000"
 
 [observability]
@@ -18,7 +20,7 @@ MAX_CLIENT_MESSAGES_PER_10S = "300"
 HEARTBEAT_INTERVAL_MS = "30000"
 AWAITING_CHALLENGE_TTL_MS = "25000"
 CLIENT_PONG_TIMEOUT_MS = "120000"
-REGISTRY_VERIFY_URL = "https://clawket-local-model-registry-preview.example.workers.dev"
+REGISTRY_VERIFY_URL = "https://clawket-local-model-registry-preview.example.com"
 GATEWAY_OWNER_LEASE_MS = "20000"
 
 [[durable_objects.bindings]]

@@ -5,3 +5,5 @@ export * from './pairing-session.js';
 export * from './secure-pairing.js';
 export * from './qr.js';
 export * from './service.js';
+
+export * from './official-relay.js';

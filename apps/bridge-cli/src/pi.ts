@@ -1,3 +1,4 @@
+import { canonicalizeOfficialRelayUrl, migrateOfficialRelayConfig, officialRelayEndpoints, sameRelayRegistry } from '@clawket/bridge-core';
 import { registerRuntimeOwner } from './runtime-owner.js';
 import { createRemoteUpdateControl } from './remote-update.js';
 import { readCliVersion } from './metadata.js';
@@ -27,7 +28,7 @@ async function post<T>(url: string, body: object): Promise<T> {
 function registryIdentity(value: unknown): string {
   if (typeof value !== 'string' || value.length > 2048) throw new Error('Cannot verify the original Pi Registry. Use a separate --config for a new pairing.');
   let url: URL;
-  try { url = new URL(value); } catch { throw new Error('Cannot verify the original Pi Registry. Use a separate --config for a new pairing.'); }
+  try { url = new URL(canonicalizeOfficialRelayUrl(value, 'pi')); } catch { throw new Error('Cannot verify the original Pi Registry. Use a separate --config for a new pairing.'); }
   if (url.username || url.password || url.search || url.hash || (url.protocol !== 'https:' && !(url.protocol === 'http:' && ['127.0.0.1', 'localhost'].includes(url.hostname)))) {
     throw new Error('Cannot verify the original Pi Registry. Use a separate --config for a new pairing.');
   }
@@ -67,7 +68,7 @@ async function refreshRunningPair(args: string[], config: Config, show: (text: s
     const refreshed = await post<{ accessCode: string; gatewayId?: string; relayUrl?: string }>(registry + '/v1/pair/access-code', { gatewayId: previous.gatewayId, relaySecret: previous.relaySecret });
     if (!refreshed || typeof refreshed.accessCode !== 'string' || !refreshed.accessCode.trim() || refreshed.accessCode.length > 256
       || (refreshed.gatewayId !== undefined && refreshed.gatewayId !== previous.gatewayId)
-      || (refreshed.relayUrl !== undefined && refreshed.relayUrl !== previous.relayUrl)) throw new Error('Invalid Pi pairing refresh response');
+      || (refreshed.relayUrl !== undefined && canonicalizeOfficialRelayUrl(refreshed.relayUrl, 'pi') !== previous.relayUrl)) throw new Error('Invalid Pi pairing refresh response');
     qrPayload = JSON.stringify({ v: 2, k: 'cp', b: 'pi', s: registry, g: previous.gatewayId, a: refreshed.accessCode, n: `Pi · ${basename(config.project)}` });
     show('Pi is already running. Scan the new QR code to pair; six-digit code refresh is unavailable while it stays running. Existing phone connections and tasks are unchanged.');
   } else {
@@ -109,6 +110,7 @@ async function runPiCommand(args: string[], progress: Progress): Promise<void> {
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const save = (value: Config) => { writeFileSync(configPath + '.pending', JSON.stringify(value, null, 2), { mode: 0o600 }); renameSync(configPath + '.pending', configPath); };
   let config: Config = existsSync(configPath) ? JSON.parse(readFileSync(configPath, 'utf8')) : { project, agentDirectory: flag(args, '--agent-dir') ?? process.env.PI_CODING_AGENT_DIR, nativeSessionDirectory: flag(args, '--sessions-dir'), command: flag(args, '--pi-command') ?? 'pi', token: randomBytes(32).toString('hex'), port: Number(flag(args, '--port') ?? (18000 + parseInt(projectId.slice(0, 4), 16) % 20000)), host: '127.0.0.1' };
+  if (config.relay) config.relay = migrateOfficialRelayConfig(config.relay, 'pi');
   const show = (text: string) => { if (process.send) process.send({ type: 'pi.display', text }); else { progress.succeed(); console.log(text); } };
   if (command === 'pair' && existsSync(configPath)) {
     let running = false;
@@ -164,10 +166,13 @@ async function runPiCommand(args: string[], progress: Progress): Promise<void> {
         qrPayload = JSON.stringify({ version: 1, backendKind: 'pi', mode: 'local', url: `ws://${address}:${config.port}/v1/pi/ws`, token: config.token });
       } else {
         progress.update('Requesting a pairing code for Pi…');
-        const registryUrl = flag(args, '--registry') ?? 'https://clawket-pi-registry.clawket.workers.dev';
+        const registryUrl = canonicalizeOfficialRelayUrl(flag(args, '--registry') ?? officialRelayEndpoints('pi', 'production').registryUrl, 'pi');
         const url = new URL(registryUrl);
         if (url.protocol !== 'https:' && !['127.0.0.1', 'localhost'].includes(url.hostname)) throw new Error('Pi Registry requires HTTPS');
-        const registered = await post<{ gatewayId: string; relaySecret: string; relayUrl: string; accessCode: string }>(registryUrl.replace(/\/$/, '') + '/v1/pair/register', { displayName: `Pi · ${basename(config.project)}` });
+        const previous = config.relay;
+        const registered = previous && sameRelayRegistry(previous.registryUrl, registryUrl)
+          ? { ...previous, ...await post<{ accessCode: string }>(registryUrl.replace(/\/$/, '') + '/v1/pair/access-code', { gatewayId: previous.gatewayId, relaySecret: previous.relaySecret }) }
+          : await post<{ gatewayId: string; relaySecret: string; relayUrl: string; accessCode: string }>(registryUrl.replace(/\/$/, '') + '/v1/pair/register', { displayName: `Pi · ${basename(config.project)}` });
         if (!registered.gatewayId || !registered.relaySecret || !registered.relayUrl || !registered.accessCode) throw new Error('Invalid Pi registration');
         qrPayload = JSON.stringify({ v: 2, k: 'cp', b: 'pi', s: registryUrl, g: registered.gatewayId, a: registered.accessCode, n: `Pi · ${basename(config.project)}` });
         const draft = buildPairingSessionDraft({ ...registered, qrPayload });

@@ -1,3 +1,4 @@
+import { canonicalizeOfficialRelayUrl, migrateOfficialRelayConfig, officialRelayEndpoints, sameRelayRegistry } from '@clawket/bridge-core';
 import { registerRuntimeOwner } from './runtime-owner.js';
 import { createRemoteUpdateControl } from './remote-update.js';
 import { readCliVersion } from './metadata.js';
@@ -56,6 +57,7 @@ async function runCodexCommand(args: string[], progress: Progress): Promise<void
   const configExists = existsSync(configPath);
   let config: Config = configExists ? JSON.parse(readFileSync(configPath, 'utf8')) : { device, project, command: flag(args, '--codex-command') ?? 'codex', token: randomBytes(32).toString('hex'), port: Number(flag(args, '--port') ?? (38000 + (parseInt(projectId.slice(0, 4), 16) % 10000) * 2 + (args.includes('--preview') ? 1 : 0))), host: '127.0.0.1' };
   if (existsSync(configPath) && ((args.includes('--device') && config.device !== true) || (flag(args, '--project') && config.device === true))) throw new Error('This pairing has a different scope. Choose a separate config for the new scope.');
+  if (config.relay) config.relay = migrateOfficialRelayConfig(config.relay, 'codex');
   const label = config.device ? 'Computer' : basename(config.project);
   if (command === 'pair' && flag(args, '--port')) config.port = Number(flag(args, '--port'));
   if (!Number.isInteger(config.port) || config.port < 1 || config.port > 65535) throw new Error('Invalid Codex Bridge port');
@@ -131,12 +133,12 @@ async function runCodexCommand(args: string[], progress: Progress): Promise<void
         qrPayload = JSON.stringify({ version: 1, backendKind: 'codex', mode: 'local', url: `ws://${address}:${config.port}/v1/codex/ws`, token: config.token, displayName });
       } else {
         progress.update('Requesting a pairing code for Codex…');
-        const registryUrl = flag(args, '--registry') ?? (args.includes('--preview') ? 'https://clawket-codex-registry-preview.clawket.workers.dev' : 'https://clawket-codex-registry.clawket.workers.dev');
+        const registryUrl = canonicalizeOfficialRelayUrl(flag(args, '--registry') ?? (args.includes('--preview') ? officialRelayEndpoints('codex', 'preview').registryUrl : officialRelayEndpoints('codex', 'production').registryUrl), 'codex');
         const url = new URL(registryUrl);
         if (url.protocol !== 'https:' && !['127.0.0.1', 'localhost'].includes(url.hostname)) throw new Error('Codex Registry requires HTTPS');
         const previous = config.relay;
         const previousRegistry = previous?.registryUrl ?? (() => { try { return JSON.parse(previous?.invitation?.qrPayload ?? '{}').s; } catch { return undefined; } })();
-        const registered = previous && previousRegistry === registryUrl
+        const registered = previous && sameRelayRegistry(previousRegistry, registryUrl)
           ? { ...previous, ...await post<{ accessCode: string }>(registryUrl.replace(/\/$/, '') + '/v1/pair/access-code', { gatewayId: previous.gatewayId, relaySecret: previous.relaySecret, displayName }) }
           : await post<{ gatewayId: string; relaySecret: string; relayUrl: string; accessCode: string }>(registryUrl.replace(/\/$/, '') + '/v1/pair/register', { displayName });
         if (!registered.gatewayId || !registered.relaySecret || !registered.relayUrl || !registered.accessCode) throw new Error('Invalid Codex registration');

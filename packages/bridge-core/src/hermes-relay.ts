@@ -1,3 +1,4 @@
+import { canonicalizeOfficialRelayUrl } from './official-relay.js';
 import { readFileSync, writeFileSync, existsSync, rmSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir, hostname } from 'node:os';
@@ -47,10 +48,10 @@ export function readHermesRelayConfig(): HermesRelayConfig | null {
       return null;
     }
     return {
-      serverUrl: parsed.serverUrl,
+      serverUrl: canonicalizeOfficialRelayUrl(parsed.serverUrl, 'hermes'),
       bridgeId: parsed.bridgeId,
       relaySecret: parsed.relaySecret,
-      relayUrl: parsed.relayUrl,
+      relayUrl: canonicalizeOfficialRelayUrl(parsed.relayUrl, 'hermes'),
       instanceId: parsed.instanceId?.trim() || createHermesRelayInstanceId(),
       displayName: parsed.displayName ?? null,
       createdAt: parsed.createdAt ?? new Date().toISOString(),

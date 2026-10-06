@@ -65,7 +65,6 @@ test('publishes the decision-locked 3.1.15 version without mutating the manifest
   await preparePublish({
     env: {
       CLAWKET_PACKAGE_DEFAULT_REGISTRY_URL: 'https://registry.example.com',
-      CLAWKET_PACKAGE_DEFAULT_REGISTRY_FALLBACK_URL: 'https://fallback.example.com',
     },
     readText: async () => JSON.stringify({ name: '@p697/clawket', version: '3.1.15' }),
     spawn: (command, args, options) => {
@@ -88,7 +87,6 @@ test('fails closed when the package version would violate the 3.1 release', asyn
     preparePublish({
       env: {
         CLAWKET_PACKAGE_DEFAULT_REGISTRY_URL: 'https://registry.example.com',
-        CLAWKET_PACKAGE_DEFAULT_REGISTRY_FALLBACK_URL: 'https://fallback.example.com',
       },
       readText: async () => JSON.stringify({ name: '@p697/clawket', version: '3.1.16' }),
       spawn: () => ({ status: 0 }),

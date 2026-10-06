@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { sha256Hex, verifyPairingRelayTicket } from '@clawket/shared';
 import worker from './index';
+import { OFFICIAL_RELAY_SERVICES } from '../../../packages/bridge-core/src/official-relay';
 
 vi.mock('cloudflare:workers', () => ({
   DurableObject: class {
@@ -62,6 +63,43 @@ function createAlwaysAllowRegisterLimiter() {
 }
 
 describe('registry worker', () => {
+  it.each(OFFICIAL_RELAY_SERVICES)('retains $backend / $environment pairing when its saved Relay hostname migrates', async service => {
+    const kv = new MemoryKV();
+    const suffix = 'suffix' in service ? service.suffix : '';
+    const legacyUrl = `wss://${service.worker}-relay${suffix}.clawket.workers.dev/ws`;
+    const canonicalUrl = `wss://${service.relay}.clawket.ai/ws`;
+    const env = { ...createEnv(), RELAY_BACKEND: service.backend,
+      ROUTES_KV: kv as unknown as KVNamespace, HERMES_ROUTES_KV: kv as unknown as KVNamespace,
+      RELAY_REGION_MAP: JSON.stringify({ us: legacyUrl }), PAIR_PUBLIC_BASE_URL: `https://${service.registry}.clawket.ai` };
+    const hermes = service.backend === 'hermes';
+    const principalKey = hermes ? 'bridgeId' : 'gatewayId';
+    const path = hermes ? '/v1/hermes/pair' : '/v1/pair';
+    const post = async (route: string, body: object, origin = 'https://registry.example.com') => fetchHandler(new Request(`${origin}${route}`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+    }), env);
+    const registration = await post(`${path}/register`, { preferredRegion: 'us' });
+    expect(registration.status).toBe(200);
+    const registered = await registration.json() as Record<string, string>;
+    expect(registered.relayUrl).toBe(legacyUrl);
+    env.RELAY_REGION_MAP = JSON.stringify({ us: canonicalUrl });
+    if (!hermes) {
+      const session = await post('/v1/pair/session', { gatewayId: registered.gatewayId, relaySecret: registered.relaySecret,
+        codeHash: await sha256Hex('ABCD-EFGH-JKLM'), shortCodeHash: await sha256Hex('123456'),
+        linkPayload: { nonce: 'A'.repeat(32), ciphertext: 'B'.repeat(32) },
+        codePayload: { nonce: 'A'.repeat(32), ciphertext: 'C'.repeat(32) } }, `https://${service.worker}-registry${suffix}.clawket.workers.dev`);
+      expect(session.status).toBe(200);
+      expect((await session.json() as { pairingUrl: string }).pairingUrl)
+        .toMatch(new RegExp(`^https://${service.worker}-registry${suffix}\\.clawket\\.workers\\.dev/pair/`));
+      const resolved = await post('/v2/pair/session/resolve', { codeHash: await sha256Hex('123456') });
+      expect(resolved.status).toBe(200);
+      expect(await resolved.json()).toMatchObject({ gatewayId: registered.gatewayId, relayUrl: canonicalUrl });
+    }
+    const claim = await post(`${path}/claim`, { [principalKey]: registered[principalKey], accessCode: registered.accessCode });
+    expect(claim.status).toBe(200);
+    expect(await claim.json()).toMatchObject({ [principalKey]: registered[principalKey], relayUrl: canonicalUrl });
+    const refresh = await post(`${path}/access-code`, { [principalKey]: registered[principalKey], relaySecret: registered.relaySecret });
+    expect(refresh.status).toBe(200);
+  });
   it('creates encrypted one-tap and short-code pairing sessions without exposing the legacy payload', async () => {
     const env = createEnv();
     const registerRes = await fetchHandler(new Request('https://registry.example.com/v1/pair/register', {

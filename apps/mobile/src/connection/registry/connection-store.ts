@@ -1,3 +1,4 @@
+import { canonicalizeOfficialRelayUrl } from '../../../../../packages/bridge-core/src/official-relay';
 import type {
   AgentAdapter,
   BackendKind,
@@ -250,10 +251,10 @@ function normalizeConnectionRecord(value: unknown): ConnectionRecord | null {
     label,
     ...(environment ? { environment } : {}),
     createdAt,
-    url,
+    url: value.transportKind === 'relay' ? canonicalizeOfficialRelayUrl(url, String(value.backendKind), environment) : url,
     ...(auth ? { auth } : {}),
     ...(bootstrap ? { bootstrap } : {}),
-    ...(relay ? { relay } : {}),
+    ...(relay ? { relay: { ...relay, serverUrl: canonicalizeOfficialRelayUrl(relay.serverUrl, String(value.backendKind), environment) } } : {}),
     ...(hermes ? { hermes } : {}),
     ...(typeof value.debugMode === 'boolean' ? { debugMode: value.debugMode } : {}),
   };
@@ -367,7 +368,7 @@ function migrateLegacyState(
   value: GatewayConfigsState,
   supplements: ReadonlyMap<string, LegacyConnectionSupplement>,
 ): RegistryState {
-  const records = value.configs.map((config) => migrateLegacyConfig(config, supplements.get(config.id)));
+  const records = value.configs.map((config) => normalizeConnectionRecord(migrateLegacyConfig(config, supplements.get(config.id)))!);
   const ids = new Set(records.map((record) => record.id));
   const activeConnectionId = value.activeId && ids.has(value.activeId)
     ? value.activeId
@@ -449,7 +450,7 @@ function normalizeConnectionIdentityUrl(value: string | undefined): string | nul
   const trimmed = value?.trim().replace(/\/+$/, '');
   if (!trimmed) return null;
   try {
-    const parsed = new URL(trimmed);
+    const parsed = new URL(canonicalizeOfficialRelayUrl(trimmed));
     const pathname = parsed.pathname.replace(/\/+$/, '');
     return `${parsed.protocol.toLowerCase()}//${parsed.host.toLowerCase()}${pathname}${parsed.search}`;
   } catch {
@@ -884,7 +885,16 @@ export class ConnectionStore {
   private async readOrMigrate(): Promise<PersistedRegistrySnapshot> {
     const currentRaw = await this.secureStorage.getItemAsync(CURRENT_STORAGE_KEY, SECURE_OPTIONS);
     const current = parsePersistedSnapshot(currentRaw);
-    if (current) return current;
+    if (current) {
+      const original = JSON.parse(currentRaw!) as PersistedRegistrySnapshot;
+      if (original.state.records.some((record, index) => record.url !== current.state.records[index]?.url
+        || record.relay?.serverUrl !== current.state.records[index]?.relay?.serverUrl)) {
+        const revision = current.revision + 1;
+        await this.persist(original, current.state, revision);
+        return { ...current, revision };
+      }
+      return current;
+    }
 
     const rollbackRaw = await this.secureStorage.getItemAsync(ROLLBACK_STORAGE_KEY, SECURE_OPTIONS);
     const rollback = parsePersistedSnapshot(rollbackRaw);

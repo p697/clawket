@@ -1,16 +1,17 @@
-export const OFFICIAL_CLAUDE_CODE_REGISTRY_URL = 'https://clawket-claude-code-registry.clawket.workers.dev';
-export const OFFICIAL_CLAUDE_CODE_PREVIEW_REGISTRY_URL = 'https://clawket-claude-code-registry-preview.clawket.workers.dev';
-export const OFFICIAL_CODEX_REGISTRY_URL = 'https://clawket-codex-registry.clawket.workers.dev';
-export const OFFICIAL_CODEX_PREVIEW_REGISTRY_URL = 'https://clawket-codex-registry-preview.clawket.workers.dev';
+import { canonicalizeOfficialRelayUrl, officialRelayEndpoints } from '../../../../packages/bridge-core/src/official-relay';
+export const OFFICIAL_CLAUDE_CODE_REGISTRY_URL = officialRelayEndpoints('claude-code', 'production').registryUrl;
+export const OFFICIAL_CLAUDE_CODE_PREVIEW_REGISTRY_URL = officialRelayEndpoints('claude-code', 'preview').registryUrl;
+export const OFFICIAL_CODEX_REGISTRY_URL = officialRelayEndpoints('codex', 'production').registryUrl;
+export const OFFICIAL_CODEX_PREVIEW_REGISTRY_URL = officialRelayEndpoints('codex', 'preview').registryUrl;
 import type { RelayServiceEnvironment } from '../types';
 
-export const OFFICIAL_PRODUCTION_REGISTRY_URL = 'https://registry.clawket.ai';
-export const OFFICIAL_PREVIEW_REGISTRY_URL = 'https://clawket-registry-preview.clawket.workers.dev';
-export const OFFICIAL_HERMES_PRODUCTION_REGISTRY_URL = 'https://hermes-registry.clawket.ai';
-export const OFFICIAL_HERMES_PREVIEW_REGISTRY_URL = 'https://clawket-hermes-registry-preview.clawket.workers.dev';
-export const OFFICIAL_PI_PREVIEW_REGISTRY_URL = 'https://clawket-pi-registry-preview.clawket.workers.dev';
-export const OFFICIAL_PI_REGISTRY_URL = 'https://clawket-pi-registry.clawket.workers.dev';
-export const OFFICIAL_LOCAL_MODEL_PREVIEW_REGISTRY_URL = 'https://clawket-local-model-registry-preview.clawket.workers.dev';
+export const OFFICIAL_PRODUCTION_REGISTRY_URL = officialRelayEndpoints('openclaw', 'production').registryUrl;
+export const OFFICIAL_PREVIEW_REGISTRY_URL = officialRelayEndpoints('openclaw', 'preview').registryUrl;
+export const OFFICIAL_HERMES_PRODUCTION_REGISTRY_URL = officialRelayEndpoints('hermes', 'production').registryUrl;
+export const OFFICIAL_HERMES_PREVIEW_REGISTRY_URL = officialRelayEndpoints('hermes', 'preview').registryUrl;
+export const OFFICIAL_PI_PREVIEW_REGISTRY_URL = officialRelayEndpoints('pi', 'preview').registryUrl;
+export const OFFICIAL_PI_REGISTRY_URL = officialRelayEndpoints('pi', 'production').registryUrl;
+export const OFFICIAL_LOCAL_MODEL_PREVIEW_REGISTRY_URL = officialRelayEndpoints('local-model', 'production').registryUrl;
 
 export type RelayEnvironmentSelectionIssue =
   | 'preview_requires_debug_mode'
@@ -93,7 +94,7 @@ function normalizeOrigin(value?: string): string | null {
   const trimmed = value?.trim();
   if (!trimmed) return null;
   try {
-    return new URL(trimmed).origin.toLowerCase();
+    return new URL(canonicalizeOfficialRelayUrl(trimmed)).origin.toLowerCase();
   } catch {
     return null;
   }

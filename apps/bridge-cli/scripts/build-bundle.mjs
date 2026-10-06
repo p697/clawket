@@ -22,7 +22,6 @@ function readOptionalEnv(name) {
 }
 
 const packagedRegistryUrl = readOptionalEnv("CLAWKET_PACKAGE_DEFAULT_REGISTRY_URL");
-const packagedRegistryFallbackUrl = readOptionalEnv("CLAWKET_PACKAGE_DEFAULT_REGISTRY_FALLBACK_URL");
 
 const args = [
   "apps/bridge-cli/src/index.ts",
@@ -52,7 +51,6 @@ const args = [
   "--external",
   "tweetnacl",
   `--define.process.env.CLAWKET_PACKAGE_DEFAULT_REGISTRY_URL=${JSON.stringify(packagedRegistryUrl)}`,
-  `--define.process.env.CLAWKET_PACKAGE_DEFAULT_REGISTRY_FALLBACK_URL=${JSON.stringify(packagedRegistryFallbackUrl)}`,
 ];
 
 const require = createRequire(import.meta.url);

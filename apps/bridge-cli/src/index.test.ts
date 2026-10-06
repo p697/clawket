@@ -150,8 +150,9 @@ function mockChildProcess() {
 }
 
 vi.mock('@clawket/bridge-core', mockBridgeCore);
-function mockBridgeCore() {
+async function mockBridgeCore() {
   return {
+    ...await import('../../../packages/bridge-core/src/official-relay.js'),
     buildHermesLocalPairingQrPayload: buildHermesLocalPairingQrPayloadMock,
     clearServiceState: vi.fn(),
     deleteHermesRelayConfig: vi.fn(),
@@ -490,7 +491,7 @@ describe('cli pairing output', () => {
     process.argv = ['node', 'clawket', 'pair', '--preview'];
     pairGatewayMock.mockResolvedValue({
       config: {
-        serverUrl: 'https://clawket-registry-preview.clawket.workers.dev',
+        serverUrl: 'https://registry-preview.clawket.ai',
         gatewayId: 'gw_preview_123',
         relaySecret: 'preview-secret',
         relayUrl: 'wss://clawket-relay-preview.clawket.workers.dev/ws',
@@ -510,7 +511,7 @@ describe('cli pairing output', () => {
 
     await vi.waitFor(() => {
       expect(pairGatewayMock).toHaveBeenCalledWith(expect.objectContaining({
-        serverUrl: 'https://clawket-registry-preview.clawket.workers.dev',
+        serverUrl: 'https://registry-preview.clawket.ai',
         environment: 'preview',
       }));
     });

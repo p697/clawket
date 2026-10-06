@@ -1,5 +1,10 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-06 官方连接域名统一（负责人授权分阶段方案与 Cloudflare 操作）。
+  - 统一 OpenClaw/Hermes/Codex/Claude Code/Pi Production 与 Preview、本地模型独立服务的 22 个入口为 clawket.ai；18 个新增域名绑定至原 Worker，TLS/JSON health 22/22 通过。WAF 精确域名集扩展至 v1/v2 API、WS/health/关联文件，保留原有限流动作/阈值与 Speech 例外。
+  - Core 唯一纯域名映射供 CLI/Mobile/Registry 使用；旧官方地址运行时迁移、手机地址事务迁移、Registry 旧记录返回新 Relay，保留连接 ID/凭据/邀请与自建地址。去掉 OpenClaw Workers challenge fallback；Pi/本地模型同 Registry 重配复用身份。源码和旧部署锚点已保存，服务配置/源码固定候选部署及验证继续收尾，详见[迁移记录](../3.1/connection-domains.md)。
+  - 旧 Workers 地址作为兼容入口暂保留；App/Bridge 发布、新原生链接能力与旧入口退役仍须后续交付/验收。未升版本、发布 npm、分发 App 或重启负责人正在运行的 Bridge。
+
 - 2026-10-06 OpenClaw 过程说明实时显示（负责人要求聊天里不再闪，PR205 真机录屏发现的后续）。
   - 现场：测试会话走 OpenClaw 的 Codex 引擎，过程说明（commentary）只以 `agent` 事件 `stream: 'item'`、`kind: 'preamble'` 推送，从不进 `chat` 增量；手机端忽略这类事件，过程说明要等工具结束后的历史刷新才出现，最后一段没有后续工具，回合结束约 1 秒后才插到最终回复上方。
   - 改动：Gateway 路由把 preamble update / end 转成 `chatCommentary`，适配器发 `agent_commentary_chunk{ itemId, text }`（agent-protocol 增量类型，Bridge 不产生）。控制器把每个过程说明当独立实时段落：遇到工具、正式回复文字或回合结束时收成一段；同一项的迟到更新只刷新已收的那段；正式回复的快照与最终消息只剥离回复段（`replyTextSegments`）；恢复读到空回复时保留正在显示的说明；先以回复文字出现、后被认定为说明的同一段原地继续。静默命令探测吞掉说明；会话活动视为「回复中」。
@@ -1988,8 +1993,9 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 
 | 编号 | 事项 | 怎么做 | 验证方法 | 状态 |
 |---|---|---|---|---|
-| HT-CODEX-STREAM-ORDER-1006 | 本轮 Codex 流式排序修复真机验收 | 在含本修复的 main 构建（Bridge 与 Mobile）中启动持续多步骤任务，观察多段 commentary、刷新历史、运行中切出再进入。 | 原始输入在其回复前；段落不在工具/刷新时重复合并或反复换位，时间与已确认段落对应；再验一次完成后历史。 | 负责人已授权先合 main 再验收；手机测试待完成，无构建分发/发布/运行中 Bridge 重启。 |
+| HT-CONNECTION-DOMAINS-1006 | 官方域名客户端交付与旧 Workers 退役 | 负责人决定包含此迁移的 App/Bridge 发布版本；在新原生 App 与 Bridge 上验收旧配对、六位码/QR/邀请、重连和两个服务环境，并补齐实际 Android 分发签名的关联指纹。 | 新客户端不请求 Workers 域名；旧客户端兼容窗口与真实迁移验收满足后，另行授权关闭 Workers 入口。 | Cloudflare 迁移已获授权并实施中；客户端公开交付/真机验收/旧入口关闭待后续决定，不据健康接口通过认定完成。 |
 
+| HT-CODEX-STREAM-ORDER-1006 | 本轮 Codex 流式排序修复真机验收 | 在含本修复的 main 构建（Bridge 与 Mobile）中启动持续多步骤任务，观察多段 commentary、刷新历史、运行中切出再进入。 | 原始输入在其回复前；段落不在工具/刷新时重复合并或反复换位，时间与已确认段落对应；再验一次完成后历史。 | 负责人已授权先合 main 再验收；手机测试待完成，无构建分发/发布/运行中 Bridge 重启。 |
 | HT-OPENCLAW-DIRECT-1006 | Tailscale 与 iOS 物理验收 | 两台设备先加入同一 Tailnet，测试 Tailnet IP 与 HTTPS Serve；iOS 验证首次局域网授权、拒绝/重新授权与证书行为。 | 完成原生 Gateway 握手、会话发现与真实请求，LAN 成功不作为 Tailnet/iOS 证据。 | 负责人已选择先测 Wi-Fi；当前两台设备未加入 Tailnet。自动配置/隔离覆盖已完成，物理验证待环境。 |
 | HT-BRIDGE-315-AUTH-1006 | Bridge 3.1.15 npm 发布认证 | 负责人已完成本次 npm 浏览器二次认证，沿用固定候选。 | 公开 version/latest、完整无认证下载 hash 与候选一致，再独立安装。 | 已完成；15:38:32 JST 公开包验证、15:38:49 空认证公共安装通过。运行中 Bridge 更新与既有手机验收另行进行。 |
 | HT-CLAUDE-HISTORY-1006 | Claude历史列表修复发布与手机验收 | 明确更新到公开Bridge3.1.14后，使用当前App与原配对，在All projects和单项目刷新历史、打开旧会话、返回再刷新。 | 正常历史能完整分页；缺省cwd不再令全列表失败；原scope/owner保护和新聊天保持。 | 候选真实只读目录156条/2页及86项窄回归、最终CI十一项通过；PR191已合并。3.1.14公开version/latest及完整包hash已核验；运行中Bridge未替换，手机验收待明确更新。 |

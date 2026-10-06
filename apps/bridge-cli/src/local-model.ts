@@ -1,7 +1,8 @@
+import { canonicalizeOfficialRelayUrl, migrateOfficialRelayConfig, officialRelayEndpoints, sameRelayRegistry } from '@clawket/bridge-core';
 import { registerRuntimeOwner } from './runtime-owner.js';
 import { createRemoteUpdateControl } from './remote-update.js';
 import { readCliVersion } from './metadata.js';
-import { mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { randomBytes } from 'node:crypto';
@@ -11,7 +12,7 @@ import QRCode from 'qrcode';
 import { ensureLocalModelRouter, type LocalModelLauncher } from './local-model-launcher.js';
 import { noProgress, startProgress, type Progress } from './progress.js';
 
-const PREVIEW = 'https://clawket-local-model-registry-preview.clawket.workers.dev';
+const PREVIEW = officialRelayEndpoints('local-model', 'preview').registryUrl;
 interface RuntimeConfig { port?: number; endpoints: LocalModelEndpoint[]; token: string; relay?: LocalModelRelayConfig; launcher?: LocalModelLauncher }
 
 function flag(args: string[], name: string): string | undefined {
@@ -104,9 +105,12 @@ async function runLocalModelCommand(args: string[], progress: Progress): Promise
     let endpoints: LocalModelEndpoint[];
     if (endpointFile) endpoints = JSON.parse(readFileSync(resolve(endpointFile), 'utf8'));
     else { progress.update('Finding local models…'); endpoints = await discoverLocalModelEndpoints(flag(args, '--base-url') ?? 'http://127.0.0.1:8080', flag(args, '--engine') ?? 'llamacpp'); }
-    config = { endpoints, token: randomBytes(32).toString('hex'), launcher };
+    const previous = existsSync(configPath) ? JSON.parse(readFileSync(configPath, 'utf8')) as RuntimeConfig : undefined;
+    config = { endpoints, token: previous?.token ?? randomBytes(32).toString('hex'), launcher,
+      ...(previous?.relay ? { relay: previous.relay } : {}) };
   }
   progress.update('Starting the local model bridge…');
+  if (config.relay) config.relay = migrateOfficialRelayConfig(config.relay, 'local-model');
   const conversation = new LocalModelConversation(config.endpoints, join(dirname(configPath), 'conversation.json'));
   await conversation.select(conversation.selection);
   // Supervised (IPC) installations update through their own supervisor, never from the phone.
@@ -122,16 +126,22 @@ async function runLocalModelCommand(args: string[], progress: Progress): Promise
     let qrPayload: string | undefined;
     if (command === 'pair') {
       progress.update('Requesting a pairing code…');
-      const registryUrl = flag(args, '--registry') ?? PREVIEW;
+      const registryUrl = canonicalizeOfficialRelayUrl(flag(args, '--registry') ?? PREVIEW, 'local-model');
       const origin = new URL(registryUrl);
       if (origin.protocol !== 'https:' && !['127.0.0.1', 'localhost'].includes(origin.hostname)) throw new Error('Registry requires HTTPS');
-      const registered = await post<{ gatewayId: string; relaySecret: string; relayUrl: string; accessCode: string }>(registryUrl.replace(/\/$/, '') + '/v1/pair/register', { displayName: flag(args, '--name') ?? 'Local model' });
+      const previous = config.relay;
+      const previousRegistry = previous?.registryUrl ?? (() => {
+        try { return JSON.parse(previous?.invitation?.qrPayload ?? '{}').s; } catch { return undefined; }
+      })();
+      const registered = previous && sameRelayRegistry(previousRegistry, registryUrl)
+        ? { ...previous, ...await post<{ accessCode: string }>(registryUrl.replace(/\/$/, '') + '/v1/pair/access-code', { gatewayId: previous.gatewayId, relaySecret: previous.relaySecret }) }
+        : await post<{ gatewayId: string; relaySecret: string; relayUrl: string; accessCode: string }>(registryUrl.replace(/\/$/, '') + '/v1/pair/register', { displayName: flag(args, '--name') ?? 'Local model' });
       if (!registered.gatewayId || !registered.relaySecret || !registered.relayUrl || !registered.accessCode) throw new Error('Invalid registration response');
       qrPayload = JSON.stringify({ v: 2, k: 'cp', b: 'local-model', s: registryUrl, g: registered.gatewayId, a: registered.accessCode, n: flag(args, '--name') ?? 'Local model' });
       const draft = buildPairingSessionDraft({ ...registered, qrPayload });
       const invitation = await post<{ sessionId: string; expiresAt: string; capabilities?: string[] }>(registryUrl.replace(/\/$/, '') + '/v1/pair/session', draft.request);
       if (!invitation.capabilities?.includes('pairing.secure-short-code.v2') || !/^ps_[a-f0-9]{64}$/.test(invitation.sessionId) || !Number.isFinite(Date.parse(invitation.expiresAt))) throw new Error('Registry does not support secure six-digit pairing');
-      config.relay = { relayUrl: registered.relayUrl, gatewayId: registered.gatewayId, relaySecret: registered.relaySecret,
+      config.relay = { registryUrl, relayUrl: registered.relayUrl, gatewayId: registered.gatewayId, relaySecret: registered.relaySecret,
         invitation: { sessionId: invitation.sessionId, expiresAt: invitation.expiresAt, codeKeyHex: securePairingCodeKeyHex(draft.shortPairingCode), qrPayload, attempts: 0 } };
       code = draft.shortPairingCode; config.port = port; save(config);
     }

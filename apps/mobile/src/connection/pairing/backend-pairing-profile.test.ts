@@ -95,7 +95,7 @@ describe('backend pairing profiles', () => {
     });
 
     expect(secureInvitation.connectCode).toHaveBeenCalledWith({
-      serverUrl: 'https://clawket-registry-preview.clawket.workers.dev',
+      serverUrl: 'https://registry-preview.clawket.ai',
       pairingCode: '123456',
       expectedBackendKind: 'openclaw',
       environment: 'preview',
@@ -121,7 +121,7 @@ describe('backend pairing profiles', () => {
 
     // Neither the selected environment nor Debug Mode reaches the invitation: the Registry is fixed.
     expect(secureInvitation.connectCode).toHaveBeenCalledWith({
-      serverUrl: 'https://clawket-local-model-registry-preview.clawket.workers.dev',
+      serverUrl: 'https://local-model-registry.clawket.ai',
       pairingCode: '001234',
       expectedBackendKind: 'local-model',
     });
@@ -216,7 +216,7 @@ describe('backend pairing profiles', () => {
       connectionId: 'hermes-connection',
     });
 
-    const serverUrl = 'https://clawket-hermes-registry-preview.clawket.workers.dev';
+    const serverUrl = 'https://hermes-registry-preview.clawket.ai';
     expect(mockClaimCode).toHaveBeenCalledWith({
       serverUrl,
       pairingCode: 'ABC234',
