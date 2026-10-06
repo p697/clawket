@@ -165,9 +165,9 @@ const CONFIG_PAIRS = [
     label: 'OpenClaw Preview template',
     workerPath: 'apps/relay-worker/wrangler.preview.example.toml',
     registryPath: 'apps/relay-registry/wrangler.preview.example.toml',
-    registryUrl: 'https://clawket-registry-preview.example.workers.dev',
-    relayUrl: 'wss://clawket-relay-preview.example.workers.dev/ws',
-    publicBaseUrl: 'https://clawket-registry-preview.example.workers.dev',
+    registryUrl: 'https://clawket-registry-preview.example.com',
+    relayUrl: 'wss://clawket-relay-preview.example.com/ws',
+    publicBaseUrl: 'https://clawket-registry-preview.example.com',
     serviceBinding: 'RELAY_SYNC_SERVICE',
     serviceName: 'clawket-relay-preview',
   },
@@ -189,8 +189,8 @@ const CONFIG_PAIRS = [
     label: 'Hermes Preview template',
     workerPath: 'apps/relay-worker/wrangler.hermes.preview.example.toml',
     registryPath: 'apps/relay-registry/wrangler.hermes.preview.example.toml',
-    registryUrl: 'https://clawket-hermes-registry-preview.example.workers.dev',
-    relayUrl: 'wss://clawket-hermes-relay-preview.example.workers.dev/ws',
+    registryUrl: 'https://clawket-hermes-registry-preview.example.com',
+    relayUrl: 'wss://clawket-hermes-relay-preview.example.com/ws',
   },
 ];
 const LOCAL_CONFIG_TEMPLATES = [
@@ -346,6 +346,10 @@ test('pairs every tracked Registry endpoint with its Relay endpoint and service 
   for (const expected of CONFIG_PAIRS) {
     const worker = readFileSync(expected.workerPath, 'utf8');
     const registry = readFileSync(expected.registryPath, 'utf8');
+    for (const [source, hostname] of [[worker, new URL(expected.relayUrl).hostname], [registry, new URL(expected.registryUrl).hostname]]) {
+      assert.match(source, /^workers_dev = false$/m, expected.label);
+      assert.ok(source.includes(`pattern = "${hostname}", custom_domain = true`), `${expected.label} custom domain must match its public URL`);
+    }
 
     assert.equal(
       readTomlString(worker, 'REGISTRY_VERIFY_URL'),

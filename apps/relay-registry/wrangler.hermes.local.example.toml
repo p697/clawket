@@ -1,7 +1,9 @@
 name = "clawket-hermes-registry"
 main = "src/index.ts"
 compatibility_date = "2026-03-03"
-workers_dev = true
+workers_dev = false
+# Replace this custom domain with a hostname in your own Cloudflare zone.
+routes = [{ pattern = "hermes-registry.example.com", custom_domain = true }]
 account_id = "replace-with-your-cloudflare-account-id"
 
 [vars]

@@ -150,9 +150,11 @@ function mockChildProcess() {
 }
 
 vi.mock('@clawket/bridge-core', mockBridgeCore);
-async function mockBridgeCore() {
+async function mockBridgeCore(importOriginal: <T>() => Promise<T>) {
+  const { officialRelayEndpoints, canonicalizeOfficialRelayUrl, migrateOfficialRelayConfig, sameRelayRegistry }
+    = await importOriginal<typeof import('@clawket/bridge-core')>();
   return {
-    ...await import('../../../packages/bridge-core/src/official-relay.js'),
+    officialRelayEndpoints, canonicalizeOfficialRelayUrl, migrateOfficialRelayConfig, sameRelayRegistry,
     buildHermesLocalPairingQrPayload: buildHermesLocalPairingQrPayloadMock,
     clearServiceState: vi.fn(),
     deleteHermesRelayConfig: vi.fn(),
