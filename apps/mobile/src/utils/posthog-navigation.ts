@@ -51,6 +51,7 @@ export type TrackedScreen = {
 
 export const TRACKED_SCREEN_DEFINITIONS: Record<string, ScreenDefinition> = {
   Onboarding: { name: 'Onboarding', area: 'onboarding', kind: 'root' },
+  OpenClawDirect: { name: 'OpenClawDirect', area: 'onboarding', kind: 'detail' },
   Roster: { name: 'Roster', area: 'roster', kind: 'root' },
   Thread: { name: 'Thread', area: 'thread', kind: 'detail' },
   SessionPanel: { name: 'SessionPanel', area: 'thread', kind: 'modal' },

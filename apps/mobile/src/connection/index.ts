@@ -1654,3 +1654,6 @@ function disposeAdapter(adapter: AgentAdapter): void {
 }
 
 export { compareAgentSummaries } from './registry/roster-cache';
+
+export { buildOpenClawDirectRecord, connectOpenClawDirect, DirectConnectionInputError, classifyOpenClawDirectFailure } from './pairing/openclaw-direct';
+export type { OpenClawDirectDraft } from './pairing/openclaw-direct';

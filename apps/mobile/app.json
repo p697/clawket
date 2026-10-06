@@ -179,6 +179,7 @@
       "./plugins/with-ios-pod-deployment-target",
       "./plugins/with-home-widgets",
       "./plugins/with-android-system-bars",
+      "./plugins/with-openclaw-direct-networking",
       "./plugins/with-ios-signing",
       [
         "expo-build-properties",

@@ -82,6 +82,7 @@ export type OnboardingScreenProps = Readonly<{
   onOpenWebsite: (backendKind: OnboardingWebsiteBackendKind) => void;
   onErrorAction?: (status: Extract<OnboardingStatus, { kind: 'error' }>['code']) => void;
   onRetry?: () => void;
+  onOpenCustomConnection?: () => void;
 }>;
 
 /** How long a copy action shows its confirmation before the control returns to normal. */
@@ -141,6 +142,7 @@ export function OnboardingScreen({
   onOpenWebsite,
   onErrorAction,
   onRetry,
+  onOpenCustomConnection,
 }: OnboardingScreenProps): React.JSX.Element {
   const { t } = useTranslation('config');
   const { theme } = useAppTheme();
@@ -441,6 +443,7 @@ export function OnboardingScreen({
             action={codeVisible && onPastePairingCode ? <Button testID="onboarding-paste-code" label={t('Paste')} variant="text" disabled={pairingInFlight} onPress={() => { void pastePairingCode().catch(() => setLocalError(true)); }} /> : undefined}>
             {pairingControls}
           </FormStep>
+          {backendKind === 'openclaw' && onOpenCustomConnection ? <Button testID="onboarding-custom-connection" label={t('Local or custom connection')} variant="text" disabled={pairingInFlight} onPress={onOpenCustomConnection} /> : null}
           <Button testID="onboarding-change-platform" label={t('Change platform')} variant="text" onPress={goBack} />
         </>}
       </Reanimated.ScrollView>

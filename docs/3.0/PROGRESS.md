@@ -1,5 +1,9 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-06 OpenClaw 高级直连（负责人要求完整恢复，实现与验收中）。
+  - 默认脚本/配对码 Relay 流程保持；仅 OpenClaw guide 底部新增高级入口，独立页支持 LAN、Tailscale、Custom、Token/Password。复用连接 runtime；鉴权完整替换、同端点去重、当前握手 ready、取消/超时/迟到结果隔离与 Pro 约束；Android 主 Manifest 明文许可及 iOS Local Network/私有地址 ATS 来自原生插件。19 语言同步；行为与验证边界见 [直连规格](21-openclaw-direct-connections.md)。
+  - 已逐文件验证 direct model 25、route 5、screen 3、native plugin 4、OnboardingScreen 55、OnboardingRoute 29；DirectWsTransport 9 项通过，UI/config/i18n/docs/typecheck 检查通过。干净双平台 prebuild 与 133 Pods 同步通过；手机直达当前 Gateway LAN HTTP 200，App 实际握手尚在验证。负责人确认另一会话结束后已接手 android/heavy；本机 Gradle catalog 解析问题排查中，未做发行构建、部署或发布。
+
 - 2026-10-06 修复非桌面 PR 全绿仍无法合并的 CI 矩阵状态。
   - OpenClaw 高级直连 PR201 实测：所有执行项通过，但 job-level if 在矩阵展开前跳过 desktop，GitHub 只记录未展开的 `${{ matrix.os }}` 名称，两个分支保护要求的 OS 检查均缺失。独立修复保留固定两 OS 名称；非桌面变更在轻量 Ubuntu runner 跳过套件步骤，桌面变更/main 仍执行原 Windows/macOS 全套。选择器缺失/畸形仍 fail closed；不改分支保护、测试或覆盖阈值。
   - 单文件选择/矩阵/损坏输入 7 项通过；文档 8 对/5 项与实际 workflow YAML 解析通过，真实双平台 CI 随本 PR 验证；修复合入后，原功能 PR 重基再验证轻量状态与合并。无发行/部署。
@@ -1951,6 +1955,7 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 
 | 编号 | 事项 | 怎么做 | 验证方法 | 状态 |
 |---|---|---|---|---|
+| HT-OPENCLAW-DIRECT-1006 | Tailscale 与 iOS 物理验收 | 两台设备先加入同一 Tailnet，测试 Tailnet IP 与 HTTPS Serve；iOS 验证首次局域网授权、拒绝/重新授权与证书行为。 | 完成原生 Gateway 握手、会话发现与真实请求，LAN 成功不作为 Tailnet/iOS 证据。 | 负责人已选择先测 Wi-Fi；当前两台设备未加入 Tailnet。自动配置/隔离覆盖已完成，物理验证待环境。 |
 | HT-BRIDGE-315-AUTH-1006 | Bridge 3.1.15 npm 发布认证 | 负责人已完成本次 npm 浏览器二次认证，沿用固定候选。 | 公开 version/latest、完整无认证下载 hash 与候选一致，再独立安装。 | 已完成；15:38:32 JST 公开包验证、15:38:49 空认证公共安装通过。运行中 Bridge 更新与既有手机验收另行进行。 |
 | HT-CLAUDE-HISTORY-1006 | Claude历史列表修复发布与手机验收 | 明确更新到公开Bridge3.1.14后，使用当前App与原配对，在All projects和单项目刷新历史、打开旧会话、返回再刷新。 | 正常历史能完整分页；缺省cwd不再令全列表失败；原scope/owner保护和新聊天保持。 | 候选真实只读目录156条/2页及86项窄回归、最终CI十一项通过；PR191已合并。3.1.14公开version/latest及完整包hash已核验；运行中Bridge未替换，手机验收待明确更新。 |
 | HT-CODEX-PARAGRAPHS-1006 | Codex 长回合多段回复的手机验收 | 用包含本轮修复的开发客户端或后续授权更新，在独立会话观察多段 commentary/工具回复；过程中重连、切换会话再返回，并继续到结束。 | 各段只显示一次，段落/工具顺序、原气泡 identity/时间保持；历史分批回来不会新增累计大气泡，结束不会重复全文。 | 244项窄回归、类型与本地文档/UI检查通过；物理手机长回合待负责人验收。本轮不发起分发或Bridge/服务端发布。 |

@@ -468,6 +468,7 @@ export function OnboardingRoute({
         retry();
       }}
       onRetry={retry}
+      onOpenCustomConnection={() => navigation.navigate('OpenClawDirect')}
     />
   );
 }

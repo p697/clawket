@@ -181,7 +181,8 @@ import {
   type AccountSettingsSectionActionRequest,
 } from './src/screens/AccountSettings';
 import { SearchScreen, MessageDetailScreen } from './src/screens/Search';
-import { OnboardingRoute } from './src/screens/Onboarding/OnboardingRoute';
+import { OpenClawDirectRoute } from './src/screens/Onboarding/OpenClawDirectRoute';
+import { OnboardingRoute, type OnboardingConnectedResult } from './src/screens/Onboarding/OnboardingRoute';
 import { publicAppLinks } from './src/config/public';
 import { CLAWKET_GITHUB_REPO_URL } from './src/config/app-links';
 import type { ProFeature } from './src/utils/pro';
@@ -473,6 +474,26 @@ function AppContent({
   const [activeRouteName, setActiveRouteName] = useState<keyof RootStackParamList | null>(null);
   const [rosterRenderedAt, setRosterRenderedAt] = useState<number | null>(null);
   const [pendingAutoOpen, setPendingAutoOpen] = useState<StartupThreadTarget | null>(null);
+  const completeOnboardingConnection = ({ connectionId, backendKind }: OnboardingConnectedResult) => {
+    const rosterGroup = getConnectionRuntime().getSnapshot().roster.find((group) => (
+      group.connection.id === connectionId
+    ));
+    const target = resolveConnectedThreadTarget(
+      backendKind,
+      rosterGroup?.agents.map((summary) => summary.agent),
+    );
+    setCurrentAgentId(target.agentId);
+    setPendingAutoOpen({
+      connectionId,
+      agentId: target.agentId,
+      sessionKey: target.sessionKey,
+      from: 'onboarding',
+    });
+    rootNavigationRef.reset({
+      index: 0,
+      routes: [{ name: 'Roster' }],
+    });
+  };
   // `undefined` until the one-time cache has been read; `null` once nothing is due.
   const [launchAnnouncement, setLaunchAnnouncement] = useState<AppUpdateAnnouncement | null | undefined>(undefined);
   const [announcementPresentation, setAnnouncementPresentation] = useState<AnnouncementPresentation | null>(null);
@@ -1744,28 +1765,13 @@ function AppContent({
                           : 'first_run',
                       })}
                       onOpenPaywall={(reason, onContinue) => presentPaywall(reason, onContinue)}
-                      onConnected={({ connectionId, backendKind }) => {
-                        const rosterGroup = getConnectionRuntime().getSnapshot().roster.find((group) => (
-                          group.connection.id === connectionId
-                        ));
-                        const target = resolveConnectedThreadTarget(
-                          backendKind,
-                          rosterGroup?.agents.map((summary) => summary.agent),
-                        );
-                        setCurrentAgentId(target.agentId);
-                        setPendingAutoOpen({
-                          connectionId,
-                          agentId: target.agentId,
-                          sessionKey: target.sessionKey,
-                          from: 'onboarding',
-                        });
-                        props.navigation.reset({
-                          index: 0,
-                          routes: [{ name: 'Roster' }],
-                        });
-                      }}
+                      onConnected={completeOnboardingConnection}
                     />
                   )}
+                </RootStack.Screen>
+                <RootStack.Screen name="OpenClawDirect">
+                  {(props) => <OpenClawDirectRoute {...props} onConnected={completeOnboardingConnection}
+                    onOpenPaywall={(reason, onContinue) => presentPaywall(reason, onContinue)} />}
                 </RootStack.Screen>
                 <RootStack.Screen name="Roster">
                   {({ navigation }) => wideRoster ? (

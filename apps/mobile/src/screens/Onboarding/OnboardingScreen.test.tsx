@@ -211,6 +211,16 @@ function createProps(overrides: Partial<OnboardingScreenProps> = {}): Onboarding
 }
 
 describe('OnboardingScreen', () => {
+  it('opens the advanced OpenClaw page from its bottom entry', () => {
+    const onOpenCustomConnection = jest.fn();
+    const view = render(<OnboardingScreen {...createProps({ onOpenCustomConnection })} />);
+    fireEvent.press(view.getByTestId('onboarding-custom-connection'));
+    expect(onOpenCustomConnection).toHaveBeenCalledTimes(1);
+  });
+  it.each(['hermes', 'pi', 'codex', 'claude-code', 'local-model', undefined] as const)('does not offer direct setup for %s', (initialBackend) => {
+    const view = render(<OnboardingScreen {...createProps({ initialBackend, onOpenCustomConnection: jest.fn() })} />);
+    expect(view.queryByTestId('onboarding-custom-connection')).toBeNull();
+  });
   it.each([
     ['backend_mismatch', 'This QR code belongs to another backend. Scan the QR code for this backend.'],
     ['invalid_backend', 'This QR code does not contain valid connection info.'],

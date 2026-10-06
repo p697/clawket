@@ -119,6 +119,12 @@ function connectionSnapshot(input: {
 }
 
 describe('OnboardingRoute', () => {
+  it('navigates to the independent direct setup page', () => {
+    const props = createProps();
+    render(<OnboardingRoute {...props} />);
+    act(() => mockScreenProps?.onOpenCustomConnection?.());
+    expect(props.navigation.navigate).toHaveBeenCalledWith('OpenClawDirect');
+  });
   let consoleErrorSpy: jest.SpyInstance;
 
   beforeEach(() => {

@@ -36,6 +36,7 @@ export type RootStackParamList = {
     initialBackend?: BackendKind;
     pairingUrl?: string;
   } | undefined;
+  OpenClawDirect: undefined;
   Roster: undefined;
   Thread: {
     connectionId: string;
@@ -85,6 +86,7 @@ export type RootStackParamList = {
 
 export const ROOT_ROUTE_NAMES = [
   'Onboarding',
+  'OpenClawDirect',
   'Roster',
   'Thread',
   'AgentSettings',
