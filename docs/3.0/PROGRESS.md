@@ -1,8 +1,10 @@
 # PROGRESS · Clawket 3.0 进度日志
 
-- 2026-10-06 负责人明确授权发布 Bridge，准备 `3.1.13`。
-  - fresh main `2cbe5bdb` 独立任务树，只升级公开CLI及固定发布守卫；内部workspace/App版本保持。包含PR184的start/steer文本数组和双表示快照兼容修复；同步main至d3d89610纳入PR183旧npm启动链接的升级器修复，保留跨后端认证、scope与回退保护。不放宽writer或重放已提交输入。
-  - 发布门禁包括当前Production只读快照兼容、v1、精确源码CI与固定包/空认证安装核验。准备、公开发布和本机运行时更新是独立状态；当前未上传、未部署Worker、未打包App、未更新/重启Bridge。见[发布记录](../3.1/bridge-3.1.13-release.md)。
+- 2026-10-06 负责人授权的 Bridge `3.1.13` 已公开发布。
+  - 包含PR184的Codex start/steer文本数组与双表示快照兼容修复，以及PR183旧npm启动链接的升级器修复；保留writer、跨后端认证/scope/回退，不重放已提交输入。仅公开CLI/发布守卫升版，内部workspace/App版本保持。
+  - 固定source `d4087ffc` 的CI37404766720十一项全部通过；六发布门禁、八指令对/五checker、v1五文件41项、当前Production快照四用例24阶段、两lockfile审计零阻挡（沿用两例外）通过。后续main同步仅Mobile/文档，141个bundle输入一致、包验证继续通过；六Production Worker源码/config/锚点保持，无部署。
+  - 包验证3文件/4边界/91模块/141输入、固定tgz dry-run和空认证候选安装通过。npm首发布认证过期E404、重新验证后接受同一固定包；处理中首404保留。2026-10-06 11:57:08 JST公开version/latest=3.1.13，277,707B完整下载与候选逐字节、SHA-256/SHA-1/SHA-512一致，SHA-256 `8679640f…`。
+  - 公共npm第二份空认证独立安装通过identity、exact bundle与CLI help；本发布任务未更新/重启用户Bridge，未打包/分发App。受影响两台电脑的手机续聊、运行中追加与Desktop重开/Retry仍待显式更新后验收；初次失败/传输根因不冒称解决。发布记录交付CI及main合并继续，见[发布记录](../3.1/bridge-3.1.13-release.md)。
 
 - 2026-10-06 设置「Bridge 与更新」入口与页面改版（负责人按建议批准，自行验收）。
   - 入口改名「Bridge 更新」/ `Bridge updates`，图标换成电脑加向上箭头；只在已认证证据表明有旧 Bridge 时显示红点和「有新版本」，英文标题与尾值不再各折两行。
@@ -1916,7 +1918,7 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 | HT-NPM-315-0930 | Bridge 3.1.5 npm 发布两步验证 | 在 npm 官方浏览器流程完成验证，不在聊天中发送密码或验证码。 | npm 发布成功，公开 latest=3.1.5，公开包与固定候选逐字节一致。 | 已完成：npm 两步验证成功；公开 latest=3.1.5，下载包逐字节及 SHA-1/SHA-512 校验通过。 |
 | HT-NPM-314-0929 | Bridge 3.1.4 npm 发布安全密钥验证 | 在已打开的 npm 官方页面完成安全密钥/Touch ID，无需提供密钥。 | npm发布成功，公开latest及下载包SHA与固定候选一致。 | 已完成：五Relay已发布并核验；npm latest=3.1.4，公开下载包三项哈希与固定候选一致。 |
 | HT-COMPOSER-PASTE-0928 | 输入框系统菜单与语音共存验收 | 在后续开发包分别测试 iOS/Android：空白框轻点进入编辑，再长按粘贴；已有草稿双击选词、全选、拖选择手柄、替换粘贴；展开/收起后重复。 | 文本/图片粘贴沿用原入口；不误开麦克风、不因向下拖选择手柄收键盘；空白未聚焦长按语音和麦克风点击/按住松手/上滑取消正常。 | 代码与回归用例已更新；原生菜单和语音触摸待设备验证。 |
-| HT-CODEX-DESKTOP-ROUNDTRIP-1004 | 远程连续消息后 Codex Desktop 重开及 Retry 实机验收 | 使用已 materialized 的独立 QA 同 ID，分别验证真实 Desktop owner 与 Bridge owner/Desktop follower；保存报错现场，Retry 仅一次，不能靠 IPC/手机回复替代 GUI。 | 两次串行手机发送各有唯一原生终态，回到桌面同会话正常加载且历史/设置保持；若失败先保现场再独立评估恢复，不全局重启其他活跃任务。 | 当前 computer-use 工具明确拒绝 com.openai.codex，未绕过限制；源码/窄回归与手机独立工作继续，桌面 GUI 检查待负责人。 |
+| HT-CODEX-DESKTOP-ROUNDTRIP-1004 | 远程连续消息后 Codex Desktop 重开及 Retry 实机验收 | 原有QA checkpoint保留；当前生产问题需先明确更新两台受影响电脑到公开Bridge3.1.13（保持原backend/config/project），然后在Clawket连续续聊已有Desktop会话、运行中追加，回到Desktop重开/Retry。保存现场，Retry仅一次。 | 两次串行手机发送各有唯一原生终态，回到桌面同会话正常加载且历史/设置保持；若失败先保现场再独立评估恢复，不全局重启其他活跃任务。 | 当前 computer-use 工具明确拒绝 com.openai.codex，未绕过限制；源码/窄回归与手机独立工作继续，桌面 GUI 检查待负责人。 10-06文本输入缺数组的Desktop崩溃已修，3.1.13公开包/空认证安装已核验；本发布任务未更新或重启运行中Bridge，两机生产GUI验收仍待负责人。 |
 | HT-CODEX-DESKTOP-0929 | 原始 Desktop 恢复报错验收 | 在候选 Bridge 下，用 Codex Desktop 打开原先出现 null.settings 的会话，检查显示并继续一条无副作用消息。 | 不再出现恢复对话失败，原 ID/历史保留，消息成功；不能用 IPC 探针代替实际 GUI 验收。 | 完整设置契约、两个安装版本的真实 IPC 与同 ID 冷恢复已通过；本轮 Desktop GUI 自动化访问不可用，未绕过限制，仍待负责人窗口验收。 |
 | HT-CONNECTION-0928 | 原故障 iPhone 路径与新等待动画验收 | 确认实际 TestFlight 版本/build 与测试时区；在后续授权的 App 更新后重测 OpenClaw/Codex/Claude QR、Profile/模型及前后台，并验证飞行模式/切网时的诊断分类。 | 对齐准确失败时间/阶段；诊断只含固定元数据，不能把超时直接认作网络故障；本机 Codex 已保留配对恢复，不要求重新生成凭据。小猫不延迟成功导航。 | 本地修复和日志交叉核对完成；UI 自动化窗口不可用，未做真机端到端验收。详见 connection-incident-2026-09-28.md；未发起发布。 |
 | HT-PLAY-REVIEW-0928 | Google Play 全权限审核访问与真机验收 | 独立云环境、重复 QR、真实 DeepSeek、永久兑换及 Pro 恢复已验证；英文访问表单已保存。 | 已完成：三星 Play 正式版 30001 实测扫码/聊天、清空本次测试数据后同码重配、Pro 终身恢复及付费日志；30101 用同源协议实测和计费源码一致性补证，未原生运行。 | 现有 3.1.0/30101 与 77 项更改已重新送审，后台显示正在审核；快速检查已结束、新内部测试证书已验证。托管发布开启，未公开发布。详见 ../3.1/google-play-review-environment-2026-09-28.md。 |
