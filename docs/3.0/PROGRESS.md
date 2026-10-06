@@ -1,5 +1,11 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-06 Codex 频繁连接失败日志对照完成：Cloudflare 集成已读到原始故障窗口的全部565条留存应用事件。
+  - 负责人要求可能的网络问题先放下；本轮停止扩大传输调查，原因仍标为unconfirmed，后续有明确产品故障证据再继续。仅收尾证据、记录和工作区。
+  - 大量手机短连接在1.5秒内正常关闭，53/54在关闭前已有Relay响应；与本机3.1.11认证成功而Native account health持续内部拒绝相符，但云日志不含RPC结果、两room不能全部归到该手机。负责人授权更新已通过官方3.1.12认证owner重启落实，包hash一致、配对/索引hash不变；不重启Desktop、不重放写入。
+  - 更新后仍24次Relay关闭/20次心跳超时，多在整点/半点；01:29:57UTC现场再次抓到Codex超时及约0.6秒Relay恢复，OpenClaw/Hermes本机也同窗超时。云端两Codex owner与Pi近同时1006；echo_sent不证明Bridge收到，主机与HTTP时钟约11秒偏差不是传输延迟。未确定网络/代理或云排队根因，不宣称修复。
+  - 01:37:21UTC本机只读认证/Native health/1082行11页目录、0非法行通过；这是loopback证据，不代替手机推理验收。Relay当前部署仍9月29版本，未改源码、时钟、代理、生产配置或进行新发布。已保全脱敏证据，见[事故记录](../3.1/codex-connection-incident-20261006.md)。
+
 - 2026-10-06 Unblock PR dependency audits with patched source-map and test worker packages.
   - Newly catalogued existing source-map-js and tinypool advisories blocked all PRs despite passing typechecks. Root and standalone Mobile now pin source-map-js 1.2.2; root Vitest pins tinypool 2.1.2, whose Node >=20 requirement fits the Node 22 baseline. The installed API retains existing thread/fork/isolation operations. Both lockfile diffs contain only these transitive package records; no Vitest/Expo/native upgrade, policy suppression, added exception or release.
   - Real audits pass both lockfiles with zero blocking advisories and only the two existing approved exceptions. Fresh npm ci passed; serial real Vitest 3.2.7 thread mock 20 and fork capability 5 cases pass with maxWorkers=2, audit checker 7 and agent docs 8 pairs/5 cases pass. Full required checks and desktop/v1 compatibility run in PR CI. This prerequisite is separate from the Memory/quota UI PR.
