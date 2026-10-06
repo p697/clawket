@@ -224,6 +224,8 @@ Before handling any frame, verify that its WebSocket is still the current owner,
 
 ## Worker Toolchain Audit
 
+Keep the root Vitest worker pool pinned to patched `tinypool` 2.1.2, compatible with the repository’s Node 22 baseline, and root/standalone Mobile source maps pinned to `source-map-js` 1.2.2. Audit both lockfiles; preserve existing approved exceptions without broad suppression.
+
 Keep Wrangler on a security-patched v4 release (current minimum 4.144.0) with its matching Miniflare/workerd dependencies. Do not force a transitive native override to hide an audit finding; validate the resolved lockfile with both dependency audits and v1 replay after toolchain changes.
 
 ## First Registry migration recovery

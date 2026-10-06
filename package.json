@@ -33,6 +33,8 @@
     "picomatch@>=2 <3": "2.3.2",
     "picomatch@>=4 <5": "4.0.7",
     "shell-quote": "1.10.0",
+    "source-map-js": "1.2.2",
+    "tinypool": "2.1.2",
     "react": "19.2.3",
     "react-native": "0.86.3",
     "react-test-renderer": "19.2.3"

@@ -1,5 +1,9 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-06 Unblock PR dependency audits with patched source-map and test worker packages.
+  - Newly catalogued existing source-map-js and tinypool advisories blocked all PRs despite passing typechecks. Root and standalone Mobile now pin source-map-js 1.2.2; root Vitest pins tinypool 2.1.2, whose Node >=20 requirement fits the Node 22 baseline. The installed API retains existing thread/fork/isolation operations. Both lockfile diffs contain only these transitive package records; no Vitest/Expo/native upgrade, policy suppression, added exception or release.
+  - Real audits pass both lockfiles with zero blocking advisories and only the two existing approved exceptions. Fresh npm ci passed; serial real Vitest 3.2.7 thread mock 20 and fork capability 5 cases pass with maxWorkers=2, audit checker 7 and agent docs 8 pairs/5 cases pass. Full required checks and desktop/v1 compatibility run in PR CI. This prerequisite is separate from the Memory/quota UI PR.
+
 - 2026-10-06 负责人授权的 Bridge `3.1.12` 已公开发布，包含旧 Desktop Codex 会话续聊窄修。
   - fresh main `7bd62f45` 的 source head `dd08ceb4` 精确CI37313256838十一项全部通过；六发布门禁、八指令对/五checker、v1五文件41项、当前生产快照四用例24阶段、审计零阻挡（沿用两既有例外）串行通过。六个Production Worker锚点/源码与上次发布一致，不部署Worker；App和内部workspace版本保持。
   - 包含PR175的local host owner查询修复、只读socket中断一次恢复及固定分类诊断；不重放写入、不放宽writer fence。包验证3文件/4边界/91模块/141输入、固定tgz dry-run和空认证独立候选安装通过。
