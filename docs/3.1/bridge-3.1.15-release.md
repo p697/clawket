@@ -26,9 +26,21 @@ Package verification covers three files, four runtime boundaries, 92 modules and
 
 Fresh read-only verification confirms all six Production Worker source/config hashes, deployment anchors and observability settings match the prior release. No Worker was deployed.
 
-## Publication status
+## Verified publication
 
-The owner completed npm's browser authentication and npm accepted the fixed candidate with exit zero. Public propagation initially returns 404; public version/latest, complete public download and independent public installation are still pending. Upload acceptance is distinct from a verified public release. Running Bridges have not been updated or restarted.
+The owner completed npm's browser security-key verification. npm accepted the same fixed artifact for processing with exit zero. Initial public 404 responses were retained; the public version/latest metadata appeared before the tarball download became available.
+
+At `2026-10-06T06:38:32.212Z` (2026-10-06 15:38:32 JST), unauthenticated public version and `latest` both report 3.1.15. A complete public tarball download matches the fixed candidate byte-for-byte, SHA-256, npm SHA-1 and SHA-512 integrity. Upload acceptance and public availability were checked separately.
+
+A second fresh installation directly from public npm with empty user/global authentication configurations passes package identity, exact installed-bundle bytes, update protocol and CLI help (`2026-10-06T06:38:49.429Z`). Running Bridges have not been updated or restarted by this publication. Original pairing, configuration, project/environment scope and native history remain intact; phone/Desktop acceptance and compatible Mobile delivery remain separate.
+
+For an explicit managed runtime update, run outside the Clawket repository so npx cannot select a workspace package with an old local dist:
+
+```bash
+npx -y @p697/clawket@3.1.15 update --version 3.1.15
+```
+
+The update interrupts Bridge replies still in progress. This publication did not execute the update command.
 
 ## Later main integration
 
