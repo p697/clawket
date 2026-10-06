@@ -1,5 +1,5 @@
 import React, { Fragment, useEffect, useState } from 'react';
-import { Platform, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, ScrollView, Share, StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { Check, CircleCheck, Copy, MonitorUp, Share as ShareIcon } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
@@ -12,18 +12,23 @@ import { Button } from '../../components/ui/Button';
 import { ChevronRight } from '../../components/ui/DirectionalIcon';
 import { SettingsGroup, SettingsRow, SettingsDivider } from '../../components/ui/SettingsGroup';
 import { upgradeCommand, usesBridge, newerVersion, type BridgeRelease } from './bridge-release';
+import type { RemoteUpdateView } from './useBridgeRemoteUpdate';
+
+/** Phone-started update of the current connection's computer (owner decision 2026-10-06). */
+export type BridgeRemoteUpdateProps = { available: boolean; connectionLabel: string; view: RemoteUpdateView; onStart: () => void };
 
 /**
  * State-driven guide (owner decision 2026-10-06). With an outdated Bridge the page leads with
  * those connections, then the command, then the rest; otherwise it is a status page without
  * the command. Rows open the Connection page, whose reconnect refreshes saved evidence.
  */
-export function BridgeUpgradeScreen({ onBack, connections, versions, outdatedIds, release, checking, failed: checkFailed, onCheck, onOpenConnection }: {
+export function BridgeUpgradeScreen({ onBack, connections, versions, outdatedIds, release, checking, failed: checkFailed, onCheck, onOpenConnection, remoteUpdate }: {
   onBack: () => void; connections: readonly ConnectionDescriptor[]; versions: Readonly<Record<string, string>>;
   /** Authenticated evidence of an older Bridge: the same set that marks the Settings row. */
   outdatedIds: readonly string[];
   release: BridgeRelease | null; checking: boolean; failed: boolean; onCheck: () => void;
   onOpenConnection: (connectionId: string) => void;
+  remoteUpdate?: BridgeRemoteUpdateProps;
 }) {
   const { t } = useTranslation('chat');
   const { theme: { colors } } = useAppTheme();
@@ -32,6 +37,10 @@ export function BridgeUpgradeScreen({ onBack, connections, versions, outdatedIds
   const [copiedCommand, setCopiedCommand] = useState<string | null>(null);
   const copied = command !== null && copiedCommand === command;
   const [actionFailed, setActionFailed] = useState(false);
+  const [showCommand, setShowCommand] = useState(false);
+  const remote = remoteUpdate && (remoteUpdate.available || remoteUpdate.view.phase !== 'idle') ? remoteUpdate : undefined;
+  // The phone action leads; the command stays one tap away and returns by itself after a failure.
+  const commandVisible = !remote || showCommand || remote.view.phase === 'failed';
   // Remember what was outdated while the page is open, so a reconnect on the latest version reads as done.
   const [seenOutdated, setSeenOutdated] = useState<ReadonlySet<string>>(() => new Set(outdatedIds));
   useEffect(() => {
@@ -75,7 +84,9 @@ export function BridgeUpgradeScreen({ onBack, connections, versions, outdatedIds
         <Section title={latest ? t('Update to {{version}}', { version: latest }) : t('Needs update')} testID="bridge-outdated">
           <SettingsGroup density="comfortable" testID="bridge-outdated-list">{rows(outdated)}</SettingsGroup>
         </Section>
-        {command ? <Section title={t('Run on the computer with your Agent')} testID="bridge-upgrade-steps">
+        {remote ? <RemoteUpdateBlock remote={remote} footnote={footnote} /> : null}
+        {command && !commandVisible ? <Button testID="bridge-upgrade-manual" variant="ghost" label={t('Update with a command instead')} onPress={() => setShowCommand(true)} />
+          : command ? <Section title={t('Run on the computer with your Agent')} testID="bridge-upgrade-steps">
           <View style={styles.stack}>
             <SettingsGroup density="comfortable">
               <Text testID="bridge-upgrade-command" selectable style={[styles.command, { color: colors.ink }]}>{command}</Text>
@@ -122,6 +133,51 @@ export function BridgeUpgradeScreen({ onBack, connections, versions, outdatedIds
   </View>;
 }
 
+const UPDATE_BACKEND_NAMES: Readonly<Record<string, string>> = { openclaw: 'OpenClaw', hermes: 'Hermes', 'hermes-relay': 'Hermes', codex: 'Codex', 'claude-code': 'Claude Code', pi: 'Pi' };
+
+function RemoteUpdateBlock({ remote, footnote }: { remote: BridgeRemoteUpdateProps; footnote: StyleProp<TextStyle> }) {
+  const { t } = useTranslation('chat');
+  const { theme: { colors } } = useAppTheme();
+  const name = (backend?: string) => backend === 'local-model' ? t('Local model', { ns: 'config' }) : (backend && UPDATE_BACKEND_NAMES[backend]) || 'Bridge';
+  const { view } = remote;
+  if (view.phase === 'idle') {
+    return <View testID="bridge-remote-update" style={styles.stack}>
+      <Button testID="bridge-remote-update-start" label={t('Update now')} onPress={remote.onStart} />
+      <Text style={footnote}>{t('Updates every Bridge on the computer running {{name}}. They restart after the current reply finishes.', { name: remote.connectionLabel })}</Text>
+    </View>;
+  }
+  if (view.phase === 'running' || view.phase === 'updated') {
+    const status = view.status;
+    const text = view.phase === 'updated' ? t('Updated to {{version}}', { version: status?.version ?? '' })
+      : view.reconnecting || status?.state === 'restarting' ? t('Restarting Bridge…')
+      : status?.state === 'waiting' ? t('Waiting for {{name}} to finish its task…', { name: name(status.waitingFor) })
+      : status?.state === 'installing' && status.version ? t('Downloading {{version}}…', { version: status.version })
+      : t('Checking the new version…');
+    return <SettingsGroup density="comfortable" testID="bridge-remote-update">
+      <View style={styles.progress}>
+        {view.phase === 'updated' ? <Check size={IconSize.md} color={colors.good} strokeWidth={2} /> : <ActivityIndicator color={colors.inkSecondary} />}
+        <Text testID="bridge-remote-update-status" accessibilityLiveRegion="polite" style={[styles.progressText, { color: colors.ink }]}>{text}</Text>
+      </View>
+    </SettingsGroup>;
+  }
+  const reason = view.reason === 'busy' ? t('{{name}} is still running a task, so nothing was updated.', { name: name(view.waitingFor) })
+    : view.reason === 'download' ? t("Couldn't download the new version. Check the computer's network.")
+    : view.reason === 'unsupported' ? t('This version can only be updated with the command below.')
+    : view.reason === 'running' ? t('Another update is already running on this computer.')
+    : view.reason === 'disabled' ? t('Phone updates are turned off on this computer.')
+    : view.reason === 'interrupted' || view.reason === 'lost' ? t('The update stopped partway. Check the Bridge on the computer.')
+    : t("The result couldn't be confirmed. Use the command below.");
+  return <View testID="bridge-remote-update" style={styles.stack}>
+    <SettingsGroup density="comfortable">
+      <View accessibilityRole="alert" style={styles.failure}>
+        <Text style={[styles.failureTitle, { color: colors.ink }]}>{t('The update did not finish')}</Text>
+        <Text testID="bridge-remote-update-reason" style={[styles.failureReason, { color: colors.inkSecondary }]}>{reason}</Text>
+      </View>
+    </SettingsGroup>
+    {view.reason !== 'disabled' ? <Button testID="bridge-remote-update-retry" variant="ghost" label={t('Retry')} onPress={remote.onStart} /> : null}
+  </View>;
+}
+
 function Section({ title, children, testID }: { title: string; children: React.ReactNode; testID?: string }) {
   const { theme: { colors } } = useAppTheme();
   return <View testID={testID} style={styles.section}>
@@ -143,6 +199,11 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', gap: Space.md },
   action: { flex: 1 },
   updated: { flexDirection: 'row', alignItems: 'center', gap: Space.sm },
+  progress: { flexDirection: 'row', alignItems: 'center', gap: Space.md, padding: Space.lg },
+  progressText: { flex: 1, fontSize: FontSize.body, lineHeight: LineHeight.body },
+  failure: { padding: Space.lg, gap: Space.xs },
+  failureTitle: { fontSize: FontSize.body, lineHeight: LineHeight.body, fontWeight: FontWeight.semibold },
+  failureReason: { fontSize: FontSize.secondary, lineHeight: LineHeight.secondary },
   pending: { gap: Space.sm },
   hero: { alignItems: 'center', paddingVertical: Space.xl, gap: Space.sm },
   symbol: { padding: Space.lg, borderRadius: Radius.xl, marginBottom: Space.xs },

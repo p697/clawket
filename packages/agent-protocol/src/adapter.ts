@@ -1,4 +1,5 @@
 import type { ArtifactOperations, SessionFilesOperations } from './session-files';
+import type { BridgeUpdateOperations } from './bridge-update';
 import type { Capabilities } from './capabilities';
 import type {
   AgentDescriptor,
@@ -145,6 +146,8 @@ export interface AgentAdapter {
   management?: ManagementOperations;
   sessionFiles?: SessionFilesOperations;
   artifacts?: ArtifactOperations;
+  /** Present only while the connected Bridge negotiated `bridgeRemoteUpdate`. */
+  bridgeUpdate?: BridgeUpdateOperations;
   on(event: 'update', listener: (update: SessionUpdate) => void): () => void;
   on(event: 'state', listener: (state: ConnectionState, reason?: string) => void): () => void;
   on(event: 'sessions', listener: (sessions: SessionDescriptor[]) => void): () => void;

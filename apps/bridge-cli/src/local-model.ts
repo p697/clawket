@@ -1,4 +1,5 @@
 import { registerRuntimeOwner } from './runtime-owner.js';
+import { createRemoteUpdateControl } from './remote-update.js';
 import { readCliVersion } from './metadata.js';
 import { mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -108,7 +109,9 @@ async function runLocalModelCommand(args: string[], progress: Progress): Promise
   progress.update('Starting the local model bridge…');
   const conversation = new LocalModelConversation(config.endpoints, join(dirname(configPath), 'conversation.json'));
   await conversation.select(conversation.selection);
-  const server = new LocalModelServer(conversation, config.token, readCliVersion());
+  // Supervised (IPC) installations update through their own supervisor, never from the phone.
+  const remoteUpdate = process.send ? undefined : createRemoteUpdateControl();
+  const server = new LocalModelServer(conversation, config.token, readCliVersion(), remoteUpdate);
   const port = Number(flag(args, '--port') ?? config.port ?? 17880);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid Bridge port');
   await server.start(port);
@@ -133,7 +136,7 @@ async function runLocalModelCommand(args: string[], progress: Progress): Promise
       code = draft.shortPairingCode; config.port = port; save(config);
     }
     if (!config.relay) throw new Error('Pair the local model Bridge before running it');
-    relay = new LocalModelRelay(new LocalModelService(conversation, readCliVersion()), config.relay, invitation => { config.relay!.invitation = invitation; save(config); }, message => console.error(message));
+    relay = new LocalModelRelay(new LocalModelService(conversation, readCliVersion(), remoteUpdate), config.relay, invitation => { config.relay!.invitation = invitation; save(config); }, message => console.error(message));
     progress.update('Connecting to Clawket Relay…');
     relay.start();
     await relay.waitUntilReady();

@@ -235,6 +235,31 @@ it('uses the latest local connection name even when an Agent reply was already i
   expect(adapter.state).toBe('ready');
 });
 
+it('offers a phone-started Bridge update only after the Bridge negotiates it', async () => {
+  const connected = adapter.connect(); sockets[0].open();
+  let request = JSON.parse(sockets[0].sent.at(-1)!);
+  sockets[0].onmessage?.({ data: JSON.stringify({ type: 'res', id: request.id, ok: true, payload: { backend: 'codex', remoteUpdate: 1 } }) });
+  await connected;
+  expect(adapter.capabilities.bridgeRemoteUpdate).toBe(true);
+  const started = adapter.bridgeUpdate!.start();
+  request = JSON.parse(sockets[0].sent.at(-1)!);
+  expect(request).toMatchObject({ method: 'bridge.update.start' });
+  const status = { id: '5b0c7a0e-3c1f-4e8e-9b2a-6f1d2c3b4a59', state: 'checking', startedAt: 1 };
+  sockets[0].onmessage?.({ data: JSON.stringify({ type: 'res', id: request.id, ok: true, payload: { accepted: true, status } }) });
+  await expect(started).resolves.toEqual({ accepted: true, status });
+  adapter.disconnect();
+  expect(adapter.bridgeUpdate).toBeUndefined();
+});
+
+it('keeps phone-started update off for Bridges that do not advertise it', async () => {
+  const connected = adapter.connect(); sockets[0].open();
+  const request = JSON.parse(sockets[0].sent.at(-1)!);
+  sockets[0].onmessage?.({ data: JSON.stringify({ type: 'res', id: request.id, ok: true, payload: { backend: 'codex', bridgeVersion: '3.1.13' } }) });
+  await connected;
+  expect(adapter.capabilities.bridgeRemoteUpdate).toBe(false);
+  expect(adapter.bridgeUpdate).toBeUndefined();
+});
+
 it('negotiates permission/archive controls and keeps native IDs in reversible archives', async () => {
   const connected = adapter.connect(); sockets[0].open();
   let request = JSON.parse(sockets[0].sent.at(-1)!);

@@ -1,4 +1,5 @@
 import { registerRuntimeOwner } from './runtime-owner.js';
+import { createRemoteUpdateControl } from './remote-update.js';
 import { readCliVersion } from './metadata.js';
 import { handleAgentDiagnostics } from './operations.js';
 import { piControl, startPiBackground } from './pi-lifecycle.js';
@@ -149,7 +150,7 @@ async function runPiCommand(args: string[], progress: Progress): Promise<void> {
     await startPiBackground([...args, '--config', configPath], join(directory, 'pi.log'), progress); return;
   }
   await inspectPiInstallation(config.command);
-  const service = new PiService({ bridgeVersion: readCliVersion(), project: config.project, directory: join(directory, 'sessions'), command: config.command, agentDirectory: config.agentDirectory, nativeSessionDirectory: config.nativeSessionDirectory });
+  const service = new PiService({ bridgeVersion: readCliVersion(), remoteUpdate: createRemoteUpdateControl(), project: config.project, directory: join(directory, 'sessions'), command: config.command, agentDirectory: config.agentDirectory, nativeSessionDirectory: config.nativeSessionDirectory });
   let server: PiServer | undefined, relay: PiRelay | undefined;
   let releaseOwner: (() => Promise<void>) | undefined;
   try {

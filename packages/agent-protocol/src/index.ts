@@ -1,4 +1,5 @@
 export * from './adapter';
+export * from './bridge-update';
 export * from './capabilities';
 export * from './descriptors';
 export * from './errors';

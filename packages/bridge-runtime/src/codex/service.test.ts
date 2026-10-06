@@ -2929,6 +2929,17 @@ it('stays busy until an acknowledged turn completes', async () => {
   expect(service.prepareForUpdate()).toBe(true);
 });
 
+it('answers phone-started update only through the injected control', async () => {
+  expect(await request('health')).not.toHaveProperty('remoteUpdate');
+  await expect(request('bridge.update.start')).rejects.toThrow('unavailable');
+  const status = { id: '5b0c7a0e-3c1f-4e8e-9b2a-6f1d2c3b4a59', state: 'checking' as const, startedAt: 1 }, start = vi.fn(async () => ({ accepted: true, status }));
+  (service as any).options.remoteUpdate = { available: () => true, start, status: () => status };
+  expect(await request('health')).toMatchObject({ remoteUpdate: 1 });
+  expect(await request('bridge.update.start', { version: '0.0.1', command: 'rm -rf /' })).toEqual({ accepted: true, status });
+  expect(await request('bridge.update.status')).toEqual({ status });
+  expect(start).toHaveBeenCalledExactlyOnceWith();
+});
+
 
 describe('Desktop owner acquisition following status', () => {
   it('forwards Desktop IPC metadata through the service diagnostic channel', () => {

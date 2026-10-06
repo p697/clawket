@@ -1,5 +1,6 @@
 import { resetSessionHistory } from './src/connection/session-reset';
 import { useBridgeRelease } from './src/features/app-updates/useBridgeRelease';
+import { useBridgeRemoteUpdate } from './src/features/app-updates/useBridgeRemoteUpdate';
 import { useBridgeVersions } from './src/features/app-updates/useBridgeVersions';
 import { newerVersion, usesBridge } from './src/features/app-updates/bridge-release';
 import * as Clipboard from 'expo-clipboard';
@@ -430,6 +431,9 @@ function AppContent({
   const bridgeVersions = useBridgeVersions(connections.initialized, connections.connections, connections.connectionDetails);
   // The latest Bridge release is checked live whenever Settings or the Bridge guide opens.
   const checkBridgeRelease = useCallback(() => { void bridgeRelease.refresh(); }, [bridgeRelease.refresh]);
+  // Phone-started update lives here so its progress survives navigation and the Bridge restart.
+  const bridgeRemoteUpdate = useBridgeRemoteUpdate(useCallback((connectionId: string) => getConnectionRuntime().getAdapter(connectionId)?.bridgeUpdate, []));
+  const remoteUpdateConnectionId = connections.activeConnectionId;
   const bridgeUpgradeIds = Array.from(new Set([...legacyBridgeUpgradeIds, ...connections.connections.filter(c => usesBridge(c) && bridgeRelease.release && bridgeVersions[c.id] && newerVersion(bridgeRelease.release.version, bridgeVersions[c.id])).map(c => c.id)]));
   const rootNavigationRef = useMemo(() => createNavigationContainerRef<RootStackParamList>(), []);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
@@ -1953,8 +1957,14 @@ function AppContent({
                 <RootStack.Screen name="DesignSystem">
                   {({ navigation }) => <DesignSystemScreen onBack={navigation.goBack} />}
                 </RootStack.Screen>
-                <RootStack.Screen name="BridgeUpgrade" listeners={{ focus: checkBridgeRelease }}>
-                  {({ navigation }) => <BridgeUpgradeScreen onBack={navigation.goBack} connections={connections.connections} versions={bridgeVersions} outdatedIds={bridgeUpgradeIds} {...bridgeRelease} onCheck={checkBridgeRelease} onOpenConnection={(connectionId) => navigation.navigate('Connection', { connectionId })} />}
+                <RootStack.Screen name="BridgeUpgrade" listeners={{ focus: checkBridgeRelease, blur: bridgeRemoteUpdate.dismissFinished }}>
+                  {({ navigation }) => <BridgeUpgradeScreen onBack={navigation.goBack} connections={connections.connections} versions={bridgeVersions} outdatedIds={bridgeUpgradeIds} {...bridgeRelease} onCheck={checkBridgeRelease} onOpenConnection={(connectionId) => navigation.navigate('Connection', { connectionId })}
+                    remoteUpdate={{
+                      available: Boolean(remoteUpdateConnectionId && connections.activeState === 'ready' && bridgeUpgradeIds.includes(remoteUpdateConnectionId) && connections.activeAdapter?.bridgeUpdate),
+                      connectionLabel: connections.connections.find(connection => connection.id === remoteUpdateConnectionId)?.label ?? '',
+                      view: bridgeRemoteUpdate.view,
+                      onStart: () => { if (remoteUpdateConnectionId) void bridgeRemoteUpdate.start(remoteUpdateConnectionId); },
+                    }} />}
                 </RootStack.Screen>
                 <RootStack.Screen name="Connection">
                   {({ navigation, route }) => {

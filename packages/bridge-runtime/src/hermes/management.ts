@@ -1,5 +1,6 @@
 import { readHermesModelHealth } from './model-health.js';
-import type { ModelHealthReport } from '@clawket/agent-protocol';
+import { BRIDGE_REMOTE_UPDATE_CAPABILITY, type ModelHealthReport } from '@clawket/agent-protocol';
+import type { RemoteUpdateControl } from '../remote-update.js';
 import { HERMES_BRIDGE_CAPABILITIES } from './internal.js';
 import { HERMES_SKILLS_COMPAT_PYTHON } from './skills-compat.js';
 import { HERMES_SKILL_PROVENANCE_PYTHON } from './skill-provenance.js';
@@ -89,6 +90,7 @@ type HermesSkillContentDetail = {
 
 export abstract class HermesManagementMethods {
   declare hermesRunCapabilities: ReadonlySet<string>;
+  declare remoteUpdate: RemoteUpdateControl | undefined;
   declare hermesHomePath: string;
   declare hermesSourcePath: string;
   declare runHermesPython: <T>(script: string, stdinPayload?: unknown) => Promise<T>;
@@ -109,7 +111,8 @@ export abstract class HermesManagementMethods {
   }
 
   getBridgeCapabilities(): string[] {
-    const capabilities: string[] = ['bridge.session-files.v1', 'bridge.artifacts.v1', ...HERMES_BRIDGE_CAPABILITIES, ...(this.hermesRunCapabilities ?? [])];
+    const capabilities: string[] = ['bridge.session-files.v1', 'bridge.artifacts.v1', ...HERMES_BRIDGE_CAPABILITIES, ...(this.hermesRunCapabilities ?? []),
+      ...(this.remoteUpdate?.available() ? [BRIDGE_REMOTE_UPDATE_CAPABILITY] : [])];
     try {
       const installer = join(this.hermesSourcePath, 'tools', 'skills_hub_install.py');
       if (statSync(installer).size <= 512_000 && /^def _check_install_target\(/m.test(readFileSync(installer, 'utf8'))

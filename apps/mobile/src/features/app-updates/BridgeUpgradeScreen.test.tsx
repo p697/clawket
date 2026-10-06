@@ -7,7 +7,7 @@ import { BridgeUpgradeScreen } from './BridgeUpgradeScreen';
 jest.mock('react-native', () => {
   const ReactRuntime = require('react');
   const host = (name: string) => ({ children, ...props }: any) => ReactRuntime.createElement(name, props, children);
-  return { Platform: { OS: 'ios', select: (value: any) => value.ios ?? value.default }, View: host('View'), Text: host('Text'), Pressable: host('Pressable'), ScrollView: host('ScrollView'), Share: { share: jest.fn().mockResolvedValue(undefined) }, StyleSheet: { create: (styles: any) => styles } };
+  return { Platform: { OS: 'ios', select: (value: any) => value.ios ?? value.default }, View: host('View'), Text: host('Text'), Pressable: host('Pressable'), ScrollView: host('ScrollView'), ActivityIndicator: host('ActivityIndicator'), Share: { share: jest.fn().mockResolvedValue(undefined) }, StyleSheet: { create: (styles: any) => styles } };
 });
 jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn().mockResolvedValue(undefined) }));
 jest.mock('lucide-react-native', () => {
@@ -140,4 +140,59 @@ it('does not offer an unreleased updater', () => {
   const view = render(<BridgeUpgradeScreen {...props} release={{ ...release, unifiedUpdate: false }} />);
   expect(view.queryByTestId('bridge-upgrade-copy')).toBeNull();
   expect(view.getByText('The unified updater is available in newer Bridge releases. Use your original deployment method for this release.')).toBeTruthy();
+});
+
+describe('phone-started update', () => {
+  const remote = (view: any, available = true) => ({ available, connectionLabel: 'Codex · Mac mini', view, onStart: jest.fn() });
+  const running = (status: any, reconnecting = false) => ({ phase: 'running', connectionId: 'lucy', status, reconnecting });
+  const statusText = (view: ReturnType<typeof render>) => view.getByTestId('bridge-remote-update-status').props.children;
+
+  it('leads with one action for the current computer and keeps the command one tap away', () => {
+    const controls = remote({ phase: 'idle' });
+    const view = render(<BridgeUpgradeScreen {...props} remoteUpdate={controls} />);
+    expect(view.getByText('Update now')).toBeTruthy();
+    expect(view.getByText('Updates every Bridge on the computer running Codex · Mac mini. They restart after the current reply finishes.')).toBeTruthy();
+    expect(view.queryByTestId('bridge-upgrade-command')).toBeNull();
+    fireEvent.press(view.getByTestId('bridge-remote-update-start'));
+    expect(controls.onStart).toHaveBeenCalledTimes(1);
+    fireEvent.press(view.getByTestId('bridge-upgrade-manual'));
+    expect(view.getByTestId('bridge-upgrade-command')).toBeTruthy();
+    const ids = viewIds(view);
+    expect(ids.indexOf('bridge-remote-update')).toBeLessThan(ids.indexOf('bridge-upgrade-steps'));
+  });
+
+  it('shows the command alone when the current computer cannot update from the phone', () => {
+    const view = render(<BridgeUpgradeScreen {...props} remoteUpdate={remote({ phase: 'idle' }, false)} />);
+    expect(view.queryByTestId('bridge-remote-update')).toBeNull();
+    expect(view.getByTestId('bridge-upgrade-command')).toBeTruthy();
+  });
+
+  it('describes each stage of a running update in one line', () => {
+    const view = render(<BridgeUpgradeScreen {...props} remoteUpdate={remote(running(null))} />);
+    expect(statusText(view)).toBe('Checking the new version…');
+    view.rerender(<BridgeUpgradeScreen {...props} remoteUpdate={remote(running({ id: 'x', state: 'installing', startedAt: 1, version: '3.1.14' }))} />);
+    expect(statusText(view)).toBe('Downloading 3.1.14…');
+    view.rerender(<BridgeUpgradeScreen {...props} remoteUpdate={remote(running({ id: 'x', state: 'waiting', startedAt: 1, waitingFor: 'claude-code' }))} />);
+    expect(statusText(view)).toBe('Waiting for Claude Code to finish its task…');
+    view.rerender(<BridgeUpgradeScreen {...props} remoteUpdate={remote(running({ id: 'x', state: 'installing', startedAt: 1 }, true))} />);
+    expect(statusText(view)).toBe('Restarting Bridge…');
+    view.rerender(<BridgeUpgradeScreen {...props} remoteUpdate={remote({ phase: 'updated', connectionId: 'lucy', status: { id: 'x', state: 'updated', startedAt: 1, version: '3.1.14' } })} />);
+    expect(statusText(view)).toBe('Updated to 3.1.14');
+    expect(view.queryByText('Update now')).toBeNull();
+  });
+
+  it('explains a failure, offers a retry and brings the command back', () => {
+    const controls = remote({ phase: 'failed', connectionId: 'lucy', reason: 'busy', waitingFor: 'codex' });
+    const view = render(<BridgeUpgradeScreen {...props} remoteUpdate={controls} />);
+    expect(view.getByText('The update did not finish')).toBeTruthy();
+    expect(view.getByTestId('bridge-remote-update-reason').props.children).toBe('Codex is still running a task, so nothing was updated.');
+    expect(view.getByTestId('bridge-upgrade-command')).toBeTruthy();
+    fireEvent.press(view.getByTestId('bridge-remote-update-retry'));
+    expect(controls.onStart).toHaveBeenCalledTimes(1);
+    view.rerender(<BridgeUpgradeScreen {...props} remoteUpdate={remote({ phase: 'failed', connectionId: 'lucy', reason: 'disabled' })} />);
+    expect(view.getByTestId('bridge-remote-update-reason').props.children).toBe('Phone updates are turned off on this computer.');
+    expect(view.queryByTestId('bridge-remote-update-retry')).toBeNull();
+    view.rerender(<BridgeUpgradeScreen {...props} remoteUpdate={remote({ phase: 'failed', connectionId: 'lucy', reason: 'lost' })} />);
+    expect(view.getByTestId('bridge-remote-update-reason').props.children).toBe('The update stopped partway. Check the Bridge on the computer.');
+  });
 });

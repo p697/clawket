@@ -48,6 +48,8 @@ import {
   type GatewayAdapterEvent,
 } from './gateway-session-update';
 import type { ConnectionAdapterRuntimeMetadata } from '../runtime-details';
+import { BRIDGE_REMOTE_UPDATE_CAPABILITY, type BridgeUpdateOperations } from '@clawket/agent-protocol';
+import { bridgeUpdateOperations } from './bridge-update';
 
 export const HERMES_MULTI_SESSION_CAPABILITY = 'hermes.multi-session.v2';
 
@@ -83,7 +85,7 @@ export class HermesAdapter extends GatewayAdapterBase {
       fallbackSessionKey: 'main',
       options,
     });
-    this.currentCapabilities = resolveCapabilities('hermes', { sessionFiles: false, steer: false, execApproval: false, documentAttachments: false, modelHealth: false, cronModel: false });
+    this.currentCapabilities = resolveCapabilities('hermes', { sessionFiles: false, steer: false, execApproval: false, documentAttachments: false, modelHealth: false, cronModel: false, bridgeRemoteUpdate: false });
     this.management = this.createManagementOperations();
   }
 
@@ -99,7 +101,7 @@ export class HermesAdapter extends GatewayAdapterBase {
     this.bridgeCapabilities = Object.freeze([]);
     this.commandRuns.clear();
     super.disconnect();
-    this.currentCapabilities = resolveCapabilities('hermes', { sessionFiles: false, steer: false, execApproval: false, documentAttachments: false, modelHealth: false, cronModel: false });
+    this.currentCapabilities = resolveCapabilities('hermes', { sessionFiles: false, steer: false, execApproval: false, documentAttachments: false, modelHealth: false, cronModel: false, bridgeRemoteUpdate: false });
   }
 
   public override getConnectionRuntimeMetadata(): ConnectionAdapterRuntimeMetadata {
@@ -203,6 +205,11 @@ export class HermesAdapter extends GatewayAdapterBase {
     void this.refreshSessionsAfterMutation();
   }
 
+  private readonly remoteUpdateOperations = bridgeUpdateOperations(method => this.invoke(() => this.gateway.request(method, {})));
+  public get bridgeUpdate(): BridgeUpdateOperations | undefined {
+    return this.state === 'ready' && this.capabilities.bridgeRemoteUpdate ? this.remoteUpdateOperations : undefined;
+  }
+
   protected override requiresHealthEvidence(): boolean {
     return true;
   }
@@ -221,6 +228,7 @@ export class HermesAdapter extends GatewayAdapterBase {
       execApproval: capabilities.includes('hermes.run-approval.v1'),
       modelHealth: capabilities.includes('hermes.model-health.v1'),
       cronModel: capabilities.includes('hermes.cron-model.v1'),
+      bridgeRemoteUpdate: capabilities.includes(BRIDGE_REMOTE_UPDATE_CAPABILITY),
       ...(!supportsMultiSession ? {
           sessions: false,
           sessionCreate: false,

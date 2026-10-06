@@ -83,6 +83,8 @@ export interface Capabilities {
   logs: boolean;
   execApproval: boolean;
   pairRequests: boolean;
+  /** Phone-started official update of every managed Bridge on the computer; requires positive runtime negotiation. */
+  bridgeRemoteUpdate?: boolean;
 }
 
 export type Capability = keyof Capabilities;
@@ -143,6 +145,7 @@ export const CAPABILITY_KEYS = [
   'logs',
   'execApproval',
   'pairRequests',
+  'bridgeRemoteUpdate',
 ] as const satisfies readonly Capability[];
 
 const OPENCLAW_CAPABILITIES: Capabilities = {
@@ -191,6 +194,7 @@ const OPENCLAW_CAPABILITIES: Capabilities = {
   logs: true,
   execApproval: true,
   pairRequests: true,
+  bridgeRemoteUpdate: true,
 };
 
 const HERMES_CAPABILITIES: Capabilities = {
@@ -239,6 +243,7 @@ const HERMES_CAPABILITIES: Capabilities = {
   logs: false,
   execApproval: true,
   pairRequests: false,
+  bridgeRemoteUpdate: true,
 };
 
 /** Chat with abort and history and nothing else: the row the Agent backends build on. */
@@ -283,16 +288,17 @@ const MINIMAL_CHAT_CAPABILITIES: Capabilities = {
   logs: false,
   execApproval: false,
   pairRequests: false,
+  bridgeRemoteUpdate: false,
 };
 
 export const CAPABILITY_MATRIX: Record<BackendKind, Capabilities> = {
-  'claude-code': { ...MINIMAL_CHAT_CAPABILITIES, promptStatus: true, steer: false, sessionBranch: true, projects: true, chat: true, abort: true, history: true, attachments: true,
+  'claude-code': { ...MINIMAL_CHAT_CAPABILITIES, bridgeRemoteUpdate: true, promptStatus: true, steer: false, sessionBranch: true, projects: true, chat: true, abort: true, history: true, attachments: true,
     sessions: true, sessionCreate: true, sessionRename: true, sessionReset: true, sessionDelete: true,
     models: true, modelPerSession: true, agentQuestions: true, execApproval: true },
-  codex: { ...MINIMAL_CHAT_CAPABILITIES, profileManagement: true, promptStatus: true, projects: true, chat: true, abort: true, steer: true, history: true, attachments: true,
+  codex: { ...MINIMAL_CHAT_CAPABILITIES, bridgeRemoteUpdate: true, profileManagement: true, promptStatus: true, projects: true, chat: true, abort: true, steer: true, history: true, attachments: true,
     sessions: true, sessionCreate: true, sessionRename: true, sessionReset: true, sessionDelete: true, sessionArchive: true, sessionPermissions: true,
     models: true, modelPerSession: true, fastMode: true, thinkingLevels: true, skills: true, agentQuestions: true, sessionBranch: true, execApproval: true },
-  pi: { ...MINIMAL_CHAT_CAPABILITIES, promptStatus: true, chat: true, abort: true, steer: true, history: true, attachments: true,
+  pi: { ...MINIMAL_CHAT_CAPABILITIES, bridgeRemoteUpdate: true, promptStatus: true, chat: true, abort: true, steer: true, history: true, attachments: true,
     sessions: true, sessionCreate: true, sessionRename: true, sessionReset: true, sessionDelete: true,
     models: true, modelPerSession: true, thinkingLevels: true, skills: true, agentQuestions: true, sessionBranch: true },
   openclaw: OPENCLAW_CAPABILITIES,
@@ -300,7 +306,7 @@ export const CAPABILITY_MATRIX: Record<BackendKind, Capabilities> = {
   'local-model': {
     ...MINIMAL_CHAT_CAPABILITIES,
     chat: true, abort: true, history: true, attachments: true,
-    models: true,
+    models: true, bridgeRemoteUpdate: true,
   },
 };
 

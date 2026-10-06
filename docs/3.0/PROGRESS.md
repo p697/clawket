@@ -1,5 +1,11 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-06 手机一键更新 Bridge（负责人决定落地）。
+  - 当前连接所在电脑的 Bridge 旧了，并且在握手时声明 `bridge.remote-update.v1`，「Bridge 更新」页就显示「立即更新」，命令收在「改用命令更新」后面，失败后自动展开。手机只能发不带参数的 `bridge.update.start`（OpenClaw 走 Relay control）和只读的 `bridge.update.status`；私有 owner `stop` 仍只在本机，手机不能指定版本、路径或命令。
+  - Bridge 收到请求后立即回复，然后用自己安装的 bundle 启动 `clawket update --remote <id>`：macOS 用 detached，Linux 在 systemd 用户服务里用 `systemd-run --user --scope`，Windows 先起一个中转进程再立即退出，保证停服务时更新器不会被一起结束。阶段写入 `~/.clawket/runtime/remote-update.json`，只记固定类别；同一台电脑一次只跑一个更新；`~/.clawket/disable-remote-update` 可关闭；运行中的 Bridge 已是目标版本时不重启。开发目录和 IPC 托管的本地模型不声明这项能力。
+  - App 端：中心能力 `bridgeRemoteUpdate` 默认关闭，六种适配器只在握手声明后打开；App 级 hook 跨导航和 Bridge 重启跟进进度，重启期间轮询失败按「正在重启」处理，回复丢失时只认领进行中的更新，15 分钟仍未完成按中途停止处理。新增 16 个 key × 19 语言。
+  - 验证（逐文件串行，heavy 下构建和类型检查）：agent-protocol 能力 6 项 + 状态 3 项；bridge-runtime 新增 helper 2 项，Codex、Claude Code、Pi、本地模型、Hermes 各新增 1 项，OpenClaw runtime 68 项（新增 2 项）；bridge-cli remote-update 9 项；mobile adapter helper 2 项、Codex adapter 43 项（新增 2 项）、recorded gateway adapters 41 项（新增 2 项）、hook 4 项、Bridge 页 12 项（新增 4 项）。protocol、runtime、CLI 和 Mobile 类型检查通过，strict i18n 通过。完整门禁、v1 回放和桌面任务交给 PR CI。需要发布 Bridge 和 App 新版本才生效，未获授权不发布。
+
 - 2026-10-06 Codex 步骤时间与消息时钟（负责人批准调查结论的两步方案，要求完整落地）。
   - 根因：Bridge 历史只给工具行整轮开始时间，丢弃原生 `ThreadItemEntry` 开始/结束与 `durationMs`；原生 item 按完成顺序记录，长命令落在其运行期间写下的回复之后；桌面端跟随路径的实时文字与工具不带任何时钟；手机后台会话不记工具边界，切回时把全部段落合成一个尾段并退回整轮开始时间（10:16 排在 10:26 之下的来源，控制器复现确认）。
   - Bridge：历史工具行带原生开始、已结束调用的结束与耗时（命令/MCP/动态工具用原生耗时），整轮渲染项都有开始时钟时按开始时间稳定排序；自有 App Server 实时工具事件带生命周期时钟；桌面端快照读取 Desktop 原生 turn 时钟（回复开始/完成、命令开始+耗时、整轮开始），首个快照之后新出现的项用 Bridge 首次看到的时间，追平快照里 Desktop 未记时间的项不编造。协议仅新增可选字段，旧端忽略。

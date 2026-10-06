@@ -1,4 +1,5 @@
 import { registerRuntimeOwner } from './runtime-owner.js';
+import { createRemoteUpdateControl } from './remote-update.js';
 import { readCliVersion } from './metadata.js';
 import { handleAgentDiagnostics } from './operations.js';
 import { codexControl, startCodexBackground } from './codex-lifecycle.js';
@@ -99,7 +100,7 @@ async function runCodexCommand(args: string[], progress: Progress): Promise<void
   }
   const show = (text: string) => { if (process.send) process.send({ type: 'codex.display', text }); else { progress.succeed(); console.log(text); } };
   await inspectCodexInstallation(config.command);
-  const service = new CodexService({ bridgeVersion: readCliVersion(), project: config.project, directory: join(directory, 'sessions'), command: config.command, device: config.device });
+  const service = new CodexService({ bridgeVersion: readCliVersion(), remoteUpdate: createRemoteUpdateControl(), project: config.project, directory: join(directory, 'sessions'), command: config.command, device: config.device });
   service.on('diagnostic', diagnostic => console.log(JSON.stringify({
     scope: 'codex_bridge', event: 'native_rpc_diagnostic', ts: new Date().toISOString(),
     reason: diagnostic.reason, pendingCount: diagnostic.pendingCount, frameBytes: diagnostic.frameBytes,

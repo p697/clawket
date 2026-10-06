@@ -24,7 +24,7 @@ describe('canonical capability contract', () => {
     expect(resolveCapabilities('codex', { profileManagement: false }).profileManagement).toBe(false);
     expect(resolveCapabilities('hermes', { profileManagement: true }).profileManagement).toBeFalsy();
     expect(resolveCapabilities('pi')).toMatchObject({ chat: true, agentQuestions: true, sessionBranch: true, modelPerSession: true, execApproval: false, channels: false, cron: false });
-    expect(enabled('local-model')).toEqual(['chat', 'abort', 'history', 'attachments', 'models']);
+    expect(enabled('local-model')).toEqual(['chat', 'abort', 'history', 'attachments', 'models', 'bridgeRemoteUpdate']);
     expect(enabled('hermes')).toEqual([
       'chat',
       'abort',
@@ -53,6 +53,7 @@ describe('canonical capability contract', () => {
       'usage',
       'cost',
       'execApproval',
+      'bridgeRemoteUpdate',
     ]);
   });
 
@@ -60,6 +61,13 @@ describe('canonical capability contract', () => {
     expect(resolveCapabilities('claude-code')).toMatchObject({ chat: true, projects: true, sessionBranch: true, agentQuestions: true, execApproval: true, steer: false });
     expect(resolveCapabilities('claude-code', { skills: true, thinkingLevels: true }).skills).toBe(false);
     expect(resolveCapabilities('claude-code', { skills: true, thinkingLevels: true }).thinkingLevels).toBe(false);
+  });
+
+  it('lets every Bridge backend negotiate phone-started updates but never assumes them', () => {
+    for (const backend of ['openclaw', 'hermes', 'codex', 'claude-code', 'pi', 'local-model'] as const) {
+      expect(resolveCapabilities(backend).bridgeRemoteUpdate).toBe(true);
+      expect(resolveCapabilities(backend, { bridgeRemoteUpdate: false }).bridgeRemoteUpdate).toBe(false);
+    }
   });
 
   it('allows runtime evidence to downgrade, never upgrade, backend capability policy', () => {

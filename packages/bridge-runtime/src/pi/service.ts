@@ -15,9 +15,10 @@ import { nativePiDirectory, piPath } from './paths.js';
 import { PiRpc } from './rpc.js';
 import { piBranch, piMessages, piText, piUsage } from './history.js';
 import { persistedPiCursor, piPromptEntryId } from './prompt-identity.js';
+import { handleRemoteUpdateRequest, isRemoteUpdateMethod, remoteUpdateHealth, type RemoteUpdateControl } from '../remote-update.js';
 
 export interface PiRequest { type: 'req'; id: string; method: string; params?: Record<string, unknown> }
-export interface PiOptions { bridgeVersion?: string; project: string; directory: string; command?: string; agentDirectory?: string; nativeSessionDirectory?: string; args?: string[]; env?: NodeJS.ProcessEnv }
+export interface PiOptions { bridgeVersion?: string; remoteUpdate?: RemoteUpdateControl; project: string; directory: string; command?: string; agentDirectory?: string; nativeSessionDirectory?: string; args?: string[]; env?: NodeJS.ProcessEnv }
 type RecordEntry = { id: string; file: string; title: string; created: number; activity?: number; model?: string; provider?: string; preview?: string; keys: Record<string, { hash: string; runId: string; nativeEntryId?: string; nativeFile?: string }> };
 type PromptIdentity = { sessionId: string; leafId: string | null; file: string; key: string; acknowledged: boolean; starts: number; users: number; valid: boolean; capturing?: boolean };
 type Running = { rpc: PiRpc; identityCapture?: Promise<void>; run?: { id: string; text: string; started: number; inputText?: string; identity?: PromptIdentity; agentStarted?: boolean; stop?: 'cancelled' | 'error'; final?: any; visibleReply?: string }; questions: Map<string, AgentQuestion> };
@@ -179,7 +180,7 @@ export class PiService extends EventEmitter {
     const catalog = await live.rpc.request('get_available_models');
     const record = this.records.find(item => this.processes.get(item.id) === live);
     if (record) { record.model = state.model?.id; record.provider = state.model?.provider; }
-    return { backend: 'pi', ...(this.options.bridgeVersion ? { bridgeVersion: this.options.bridgeVersion } : {}), sessionCatalogSync: 1, artifacts: true, promptStatus: true, protocol: 1, modelReady: (catalog.models ?? []).some((m: any) => m.provider === state.model?.provider && m.id === state.model?.id), model: state.model?.id ?? '', vision: state.model?.input?.includes('image') === true, project: basename(this.project) };
+    return { backend: 'pi', ...(this.options.bridgeVersion ? { bridgeVersion: this.options.bridgeVersion } : {}), ...remoteUpdateHealth(this.options.remoteUpdate), sessionCatalogSync: 1, artifacts: true, promptStatus: true, protocol: 1, modelReady: (catalog.models ?? []).some((m: any) => m.provider === state.model?.provider && m.id === state.model?.id), model: state.model?.id ?? '', vision: state.model?.input?.includes('image') === true, project: basename(this.project) };
   }
   async request(frame: PiRequest): Promise<unknown> {
     return this.updateAdmission.request(() => this.requestNow(frame));
@@ -193,6 +194,7 @@ export class PiService extends EventEmitter {
   private async dispatch(frame: PiRequest): Promise<unknown> {
     if (frame?.type !== 'req' || typeof frame.id !== 'string' || !frame.id || frame.id.length > 200) throw new Error('Invalid request');
     const p = frame.params ?? {};
+    if (isRemoteUpdateMethod(frame.method)) return handleRemoteUpdateRequest(this.options.remoteUpdate, frame.method);
     switch (frame.method) {
       case 'health': case 'connect': return this.health();
       case 'chat.promptStatus': {

@@ -23,9 +23,10 @@ import { nativeResumeSpeed } from './resume-settings.js';
 import { desktopTurns, desktopState } from './desktop-state.js';
 import { canonicalProject, projectDescriptor, savedCodexProjects } from './projects.js';
 import { DesktopIpc, DesktopIpcError, type DesktopSnapshot } from './desktop-ipc.js';
+import { handleRemoteUpdateRequest, isRemoteUpdateMethod, remoteUpdateHealth, type RemoteUpdateControl } from '../remote-update.js';
 
 export interface CodexRequest { type: 'req'; id: string; method: string; params?: Record<string, unknown> }
-export interface CodexOptions { bridgeVersion?: string; project: string; directory: string; command?: string; env?: NodeJS.ProcessEnv; device?: boolean; desktop?: DesktopIpc }
+export interface CodexOptions { bridgeVersion?: string; remoteUpdate?: RemoteUpdateControl; project: string; directory: string; command?: string; env?: NodeJS.ProcessEnv; device?: boolean; desktop?: DesktopIpc }
 type Entry = { permissionsUnconfirmed?: true; archived?: boolean; cwd?: string; native?: boolean; id: string; threadId?: string; title: string; created: number; activity?: number; model?: string; provider?: string; effort?: string; serviceTier?: string | null; speedPreference?: { serviceTier: string | null; provider: string }; preview?: string; keys: Record<string, { hash: string; runId: string }> };
 type Run = { desktop?: boolean; id: string; turnId?: string; inputMessageId?: string; inputMessageKey?: string; text: string; started: number; itemId?: string; final?: string; items: Map<string, any>;
   /** Lifecycle clocks of this run's items (bounded); native items stay unchanged. */
@@ -1073,7 +1074,7 @@ export class CodexService extends EventEmitter {
     await this.recover();
     const catalog = this.catalog.length ? this.catalog : await this.refreshModels();
     const account = await this.rpc.request('account/read', { refreshToken: false });
-    return { backend: 'codex', ...(this.options.bridgeVersion ? { bridgeVersion: this.options.bridgeVersion } : {}), sessionActivity: 1, profileVersion: 1, sessionCatalogSync: 1, sessionCatalogPageIndex: 1, artifacts: true, modelReady: account.requiresOpenaiAuth !== true || !!account.account, model: catalog.find(m => m.isDefault)?.model ?? '', vision: true, project: basename(this.project), projects: !!this.options.device, fastMode: true, sessionPermissions: true, sessionArchive: true, promptStatus: true, desktopConnected: this.desktop?.ready === true };
+    return { backend: 'codex', ...(this.options.bridgeVersion ? { bridgeVersion: this.options.bridgeVersion } : {}), ...remoteUpdateHealth(this.options.remoteUpdate), sessionActivity: 1, profileVersion: 1, sessionCatalogSync: 1, sessionCatalogPageIndex: 1, artifacts: true, modelReady: account.requiresOpenaiAuth !== true || !!account.account, model: catalog.find(m => m.isDefault)?.model ?? '', vision: true, project: basename(this.project), projects: !!this.options.device, fastMode: true, sessionPermissions: true, sessionArchive: true, promptStatus: true, desktopConnected: this.desktop?.ready === true };
   }
   async request(frame: CodexRequest): Promise<unknown> {
     return this.updateAdmission.request(() => this.requestNow(frame));
@@ -1086,6 +1087,7 @@ export class CodexService extends EventEmitter {
   private async dispatch(frame: CodexRequest): Promise<unknown> {
     if (frame.type !== 'req' || typeof frame.id !== 'string' || frame.id.length > 200 || !frame.id || typeof frame.method !== 'string' || (frame.params !== undefined && (!frame.params || typeof frame.params !== 'object' || Array.isArray(frame.params)))) throw new Error('Invalid Codex request');
     const p = frame.params ?? {};
+    if (isRemoteUpdateMethod(frame.method)) return handleRemoteUpdateRequest(this.options.remoteUpdate, frame.method);
     switch (frame.method) {
       case 'health': return this.health();
       case 'profile.projects': await this.recover(); return this.profile.projects();

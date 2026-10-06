@@ -96,6 +96,28 @@ describe('HermesLocalBridge WebSocket frame limit', () => {
 });
 
 describe('HermesLocalBridge capability advertisement', () => {
+  it('advertises and answers phone-started update only through the injected control', async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), 'clawket-hermes-remote-update-'));
+    const status = { id: '5b0c7a0e-3c1f-4e8e-9b2a-6f1d2c3b4a59', state: 'checking' as const, startedAt: 1 };
+    const start = vi.fn(async () => ({ accepted: true as const, status }));
+    const bridge = (remoteUpdate?: ConstructorParameters<typeof HermesLocalBridge>[0]['remoteUpdate']) => new HermesLocalBridge({
+      host: '127.0.0.1', port: 1, apiBaseUrl: 'http://127.0.0.1:1', bridgeToken: 'remote-update-test', startHermesIfNeeded: false,
+      hermesSourcePath: join(stateDir, 'missing-hermes-source'), hermesHomePath: join(stateDir, 'home'),
+      sessionStorePath: join(stateDir, 'sessions.json'), usageLedgerPath: join(stateDir, 'usage.json'), remoteUpdate,
+    });
+    try {
+      const without = bridge();
+      expect(without.getBridgeCapabilities()).not.toContain('bridge.remote-update.v1');
+      await expect(without.dispatchRequest('bridge.update.start', {})).rejects.toThrow('unavailable');
+      const enabled = bridge({ available: () => true, start, status: () => status });
+      expect(enabled.getBridgeCapabilities()).toContain('bridge.remote-update.v1');
+      expect(await enabled.dispatchRequest('bridge.update.start', { version: '0.0.1' })).toEqual({ accepted: true, status });
+      expect(await enabled.dispatchRequest('bridge.update.status', {})).toEqual({ status });
+      expect(start).toHaveBeenCalledExactlyOnceWith();
+      expect(bridge({ available: () => false, start, status: () => status }).getBridgeCapabilities()).not.toContain('bridge.remote-update.v1');
+    } finally { await rm(stateDir, { recursive: true, force: true }); }
+  });
+
   it('returns the same Bridge version and capabilities across every health path', async () => {
     const port = await reserveAvailablePort();
     const stateDir = await mkdtemp(join(tmpdir(), 'clawket-hermes-capabilities-'));

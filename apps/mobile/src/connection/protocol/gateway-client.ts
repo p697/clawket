@@ -1937,6 +1937,15 @@ export class GatewayProtocolClient {
     return control.payload as unknown as PermissionsReport;
   }
 
+  /** Phone-started Bridge update; start carries no parameters and status is read-only. */
+  public async requestBridgeUpdate(): Promise<unknown> {
+    return (await this.requestRelayControl('bridge-update.request', 'bridge-update.result', 'bridge-update.error')).payload;
+  }
+
+  public async requestBridgeUpdateStatus(): Promise<unknown> {
+    return (await this.requestRelayControl('bridge-update-status.request', 'bridge-update-status.result', 'bridge-update-status.error')).payload;
+  }
+
   public async requestDoctorFix(): Promise<RepairResult> {
     const control = await this.requestRelayControl(
       'doctor-fix.request',

@@ -1,4 +1,5 @@
 import { registerRuntimeOwner } from './runtime-owner.js';
+import { createRemoteUpdateControl } from './remote-update.js';
 import { readCliVersion } from './metadata.js';
 import { handleAgentDiagnostics } from './operations.js';
 import { claudeControl, startClaudeBackground } from './claude-code-lifecycle.js';
@@ -94,7 +95,7 @@ async function runClaudeCommand(args: string[], progress: Progress): Promise<voi
   }
   const show = (text: string) => { if (process.send) process.send({ type: 'claude-code.display', text }); else { progress.succeed(); console.log(text); } };
   const installed = await inspectClaudeInstallation(config.command);
-  const service = new ClaudeService({ bridgeVersion: readCliVersion(), project: config.project, directory: join(directory, 'sessions'), executable: installed.executable, device: config.device });
+  const service = new ClaudeService({ bridgeVersion: readCliVersion(), remoteUpdate: createRemoteUpdateControl(), project: config.project, directory: join(directory, 'sessions'), executable: installed.executable, device: config.device });
   let server: ClaudeServer | undefined, relay: ClaudeRelay | undefined;
   let releaseOwner: (() => Promise<void>) | undefined;
   try {

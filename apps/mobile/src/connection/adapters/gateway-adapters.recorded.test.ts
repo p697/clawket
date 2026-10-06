@@ -582,6 +582,28 @@ describe('OpenClawAdapter recorded v1 boundary', () => {
     });
   });
 
+  it('offers phone-started Bridge update only from the Relay Bridge handshake', async () => {
+    const status = { id: '5b0c7a0e-3c1f-4e8e-9b2a-6f1d2c3b4a59', state: 'checking', startedAt: 1 };
+    const fake = new RecordedGateway() as RecordedGateway & { requestBridgeUpdate: jest.Mock; requestBridgeUpdateStatus: jest.Mock };
+    fake.requestBridgeUpdate = jest.fn(async () => ({ accepted: true, status }));
+    fake.requestBridgeUpdateStatus = jest.fn(async () => ({ status }));
+    fake.connectResponseCapabilities = [OPENCLAW_BRIDGE_CAPABILITY, 'bridge.remote-update.v1'];
+    fake.onConnect = () => fake.emit('connection', { state: 'ready' });
+    const adapter = new OpenClawAdapter(connection('openclaw', 'remote-update'), { gateway: gateway(fake) });
+    expect(adapter.bridgeUpdate).toBeUndefined();
+    await adapter.connect();
+    expect(adapter.capabilities.bridgeRemoteUpdate).toBe(true);
+    await expect(adapter.bridgeUpdate!.start()).resolves.toEqual({ accepted: true, status });
+    await expect(adapter.bridgeUpdate!.status()).resolves.toEqual(status);
+    expect(fake.requestBridgeUpdate).toHaveBeenCalledWith();
+    expect(fake.requests).toEqual([]);
+    fake.connectResponseCapabilities = [OPENCLAW_BRIDGE_CAPABILITY];
+    fake.emit('connection', { state: 'reconnecting' });
+    fake.emit('connection', { state: 'ready' });
+    expect(adapter.capabilities.bridgeRemoteUpdate).toBe(false);
+    expect(adapter.bridgeUpdate).toBeUndefined();
+  });
+
   it('never aliases an OpenClaw Gateway version to a missing Bridge version', () => {
     const fake = new RecordedGateway();
     fake.gatewayVersion = 'openclaw-gateway-2026.9.5';
@@ -726,6 +748,23 @@ describe('HermesAdapter recorded M3 boundary', () => {
       runId: 'recorded-run-id',
       stopReason: 'cancelled',
     });
+  });
+
+  it('negotiates phone-started Bridge update from the Hermes health capabilities', async () => {
+    const status = { id: '5b0c7a0e-3c1f-4e8e-9b2a-6f1d2c3b4a59', state: 'checking', startedAt: 1 };
+    const fake = new RecordedGateway();
+    fake.onConnect = () => fake.emit('connection', { state: 'ready' });
+    fake.requestHandler = method => method === 'bridge.update.start' ? { accepted: true, status } : { ok: true };
+    const adapter = new HermesAdapter(connection('hermes', 'remote-update'), { gateway: gateway(fake) });
+    const connecting = adapter.connect();
+    fake.emit('health', { status: 'ok', hermesApiReachable: true, capabilities: ['bridge.capabilities.v2', 'hermes.multi-session.v2', 'bridge.remote-update.v1'] });
+    await connecting;
+    expect(adapter.capabilities.bridgeRemoteUpdate).toBe(true);
+    await expect(adapter.bridgeUpdate!.start()).resolves.toEqual({ accepted: true, status });
+    expect(fake.requests).toEqual([{ method: 'bridge.update.start', params: {} }]);
+    fake.emit('health', { status: 'ok', hermesApiReachable: true, capabilities: ['bridge.capabilities.v2', 'hermes.multi-session.v2'] });
+    expect(adapter.capabilities.bridgeRemoteUpdate).toBe(false);
+    expect(adapter.bridgeUpdate).toBeUndefined();
   });
 
   it('downgrades an old Bridge to one read-only main session', async () => {

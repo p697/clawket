@@ -736,6 +736,49 @@ describe('bridge runtime protocol helpers', () => {
     });
   });
 
+  it('adds phone-started update only from this Bridge, never from Gateway metadata', () => {
+    const response = JSON.stringify({ type: 'res', id: 'req_update', ok: true, meta: { capabilities: ['bridge.remote-update.v1', 'gateway.future.v3'] } });
+    expect(JSON.parse(patchConnectResponseBridgeCapabilities(response, '3.1.14').text).meta.capabilities).toEqual(['gateway.future.v3', BRIDGE_CAPABILITIES_V2]);
+    expect(JSON.parse(patchConnectResponseBridgeCapabilities(response, '3.1.14', ['bridge.remote-update.v1']).text).meta.capabilities)
+      .toEqual(['gateway.future.v3', BRIDGE_CAPABILITIES_V2, 'bridge.remote-update.v1']);
+  });
+
+  it('answers phone-started update start and status through Relay controls only', async () => {
+    const status = { id: '5b0c7a0e-3c1f-4e8e-9b2a-6f1d2c3b4a59', state: 'checking', startedAt: 1 };
+    const start = vi.fn(async () => ({ accepted: true, status }));
+    const controlled = (available: boolean) => {
+      const sockets: FakeSocket[] = [];
+      const runtime = new BridgeRuntime({
+        config: BASE_CONFIG, gatewayUrl: 'ws://127.0.0.1:18789',
+        remoteUpdate: { available: () => available, start: start as never, status: () => status as never },
+        createWebSocket: (url) => { const socket = new FakeSocket(url); sockets.push(socket); return socket; },
+      });
+      runtime.start(); sockets[0].open();
+      return { runtime, relay: sockets[0] };
+    };
+    const replies = (relay: FakeSocket) => relay.sent.map(String).filter(frame => frame.startsWith('__clawket_relay_control__:'))
+      .map(frame => JSON.parse(frame.slice('__clawket_relay_control__:'.length))).filter(control => String(control.event).startsWith('bridge-update'));
+    const { runtime, relay } = controlled(true);
+    try {
+      relay.message(`__clawket_relay_control__:${JSON.stringify({ event: 'bridge-update.request', requestId: 'update-1', sourceClientId: 'phone', payload: { version: '0.0.1', command: 'rm -rf /' } })}`);
+      relay.message(`__clawket_relay_control__:${JSON.stringify({ event: 'bridge-update-status.request', requestId: 'status-1', sourceClientId: 'phone' })}`);
+      relay.message(`__clawket_relay_control__:${JSON.stringify({ event: 'bridge-update.request', sourceClientId: 'phone' })}`);
+      await vi.waitFor(() => expect(replies(relay)).toHaveLength(2));
+      expect(start).toHaveBeenCalledExactlyOnceWith();
+      expect(replies(relay)).toEqual(expect.arrayContaining([
+        expect.objectContaining({ event: 'bridge-update.result', requestId: 'update-1', targetClientId: 'phone', payload: { accepted: true, status } }),
+        expect.objectContaining({ event: 'bridge-update-status.result', requestId: 'status-1', targetClientId: 'phone', payload: { status } }),
+      ]));
+    } finally { await runtime.stop(); }
+    const disabled = controlled(false);
+    try {
+      disabled.relay.message(`__clawket_relay_control__:${JSON.stringify({ event: 'bridge-update.request', requestId: 'update-2', sourceClientId: 'phone' })}`);
+      await vi.waitFor(() => expect(replies(disabled.relay)).toEqual([expect.objectContaining({ event: 'bridge-update.error', requestId: 'update-2',
+        payload: { code: 'bridge_update_unavailable', message: 'Remote Bridge update is unavailable on this computer' } })]));
+      expect(start).toHaveBeenCalledOnce();
+    } finally { await disabled.runtime.stop(); }
+  });
+
   it('forwards a canonical v1 connect request byte-identically through BridgeRuntime', async () => {
     vi.stubEnv('OPENCLAW_STATE_DIR', await createOpenClawStateDir());
     const sockets: FakeSocket[] = [];

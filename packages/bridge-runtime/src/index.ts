@@ -11,6 +11,7 @@ export * from './hermes/relay.js';
 export * from './openclaw.js';
 export * from './protocol.js';
 export * from './openclaw/runtime.js';
+export { isBridgeUpdateFinished, parseBridgeUpdateStatus, type BridgeUpdateOutcome, type BridgeUpdateStart, type BridgeUpdateStatus, type RemoteUpdateControl } from './remote-update.js';
 export { LocalModelConversation } from './local-model/conversation.js';
 export { LocalModelServer, LocalModelService } from './local-model/server.js';
 export { LocalModelRelay, type LocalModelRelayConfig, type LocalModelInvitation } from './local-model/relay.js';

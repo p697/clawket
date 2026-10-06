@@ -16,6 +16,8 @@ import { bridgeUnavailableDelay } from './bridge-availability';
 import { SessionCatalogConsumer } from './session-catalog';
 import { requiresConnectionAction } from '../recovery-window';
 import type { WebSocketFactory } from '../transports/types';
+import { bridgeUpdateOperations } from './bridge-update';
+import type { BridgeUpdateOperations } from '@clawket/agent-protocol';
 
 type Listeners = {
   update: (update: SessionUpdate) => void;
@@ -31,8 +33,10 @@ export class PiAdapter implements AgentAdapter {
     read: (sessionKey, id, offset) => this.rpc('clawket.artifacts.read', { sessionKey, id, offset }),
   };
   get artifacts(): ArtifactOperations | undefined { return this.currentState === 'ready' && this.artifactsEnabled ? this.artifactOperations : undefined; }
+  private readonly remoteUpdateOperations = bridgeUpdateOperations(method => this.rpc(method));
+  get bridgeUpdate(): BridgeUpdateOperations | undefined { return this.currentState === 'ready' && this.capabilities.bridgeRemoteUpdate ? this.remoteUpdateOperations : undefined; }
   readonly connection: ConnectionDescriptor;
-  readonly capabilities = resolveCapabilities('pi', { promptStatus: false, attachments: false });
+  readonly capabilities = resolveCapabilities('pi', { bridgeRemoteUpdate: false, promptStatus: false, attachments: false });
   readonly questions = {
     list: (key: string) => this.rpc<AgentQuestion[]>('questions.list', { sessionKey: key }),
     respond: async (key: string, id: string, answer: { value?: string; confirmed?: boolean; cancelled?: boolean }) => { await this.rpc('questions.respond', { sessionKey: key, questionId: id, ...answer }); },
@@ -95,10 +99,10 @@ export class PiAdapter implements AgentAdapter {
     try {
       // Relay authenticates its socket; only direct connections need connect/token.
       // A Relay connect request starts OpenClaw's challenge lifecycle.
-      const health = await this.rpc<{ bridgeVersion?: string; artifacts?: boolean; promptStatus?: boolean; sessionCatalogSync?: unknown; backend: string; vision: boolean; model: string }>(this.record.transportKind === 'relay' ? 'health' : 'connect', { token: this.record.auth?.token });
+      const health = await this.rpc<{ bridgeVersion?: string; remoteUpdate?: unknown; artifacts?: boolean; promptStatus?: boolean; sessionCatalogSync?: unknown; backend: string; vision: boolean; model: string }>(this.record.transportKind === 'relay' ? 'health' : 'connect', { token: this.record.auth?.token });
       if (epoch !== this.epoch) return;
       if (health.backend !== 'pi') throw new AdapterError('unsupported', 'Endpoint is not a Pi Bridge');
-      this.bridgeVersion = typeof health.bridgeVersion === 'string' ? health.bridgeVersion : undefined;
+      this.bridgeVersion = typeof health.bridgeVersion === 'string' ? health.bridgeVersion : undefined; this.capabilities.bridgeRemoteUpdate = health.remoteUpdate === 1;
       this.sessionCatalog.configure(health.sessionCatalogSync);
       this.artifactsEnabled = health.artifacts === true;
       this.capabilities.promptStatus = health.promptStatus === true;
@@ -153,9 +157,9 @@ export class PiAdapter implements AgentAdapter {
   async probe(timeoutMs = 5_000): Promise<boolean> {
     const epoch = this.epoch;
     try {
-      const health = await this.rpc<{ bridgeVersion?: string; artifacts?: boolean; promptStatus?: boolean; sessionCatalogSync?: unknown; backend: string; vision: boolean; model: string }>('health', {}, timeoutMs);
+      const health = await this.rpc<{ bridgeVersion?: string; remoteUpdate?: unknown; artifacts?: boolean; promptStatus?: boolean; sessionCatalogSync?: unknown; backend: string; vision: boolean; model: string }>('health', {}, timeoutMs);
       if (epoch !== this.epoch || health.backend !== 'pi') return false;
-      this.bridgeVersion = typeof health.bridgeVersion === 'string' ? health.bridgeVersion : undefined;
+      this.bridgeVersion = typeof health.bridgeVersion === 'string' ? health.bridgeVersion : undefined; this.capabilities.bridgeRemoteUpdate = health.remoteUpdate === 1;
       this.sessionCatalog.configure(health.sessionCatalogSync);
       this.artifactsEnabled = health.artifacts === true;
       this.capabilities.promptStatus = health.promptStatus === true;

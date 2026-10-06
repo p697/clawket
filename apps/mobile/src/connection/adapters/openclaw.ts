@@ -60,6 +60,8 @@ import {
 } from './gateway-adapter';
 import { OPENCLAW_GATEWAY_PROTOCOL_PROFILE } from './gateway-profiles';
 import { extractCronDeliveries, resolveCronRunSessionKey } from './cron-run-content';
+import { BRIDGE_REMOTE_UPDATE_CAPABILITY, BRIDGE_UPDATE_START_METHOD, type BridgeUpdateOperations } from '@clawket/agent-protocol';
+import { bridgeUpdateOperations } from './bridge-update';
 
 // Message sends sit near the end of a run; one page covers every recorded run so far.
 const CRON_RUN_HISTORY_LIMIT = 200;
@@ -90,6 +92,12 @@ export class OpenClawAdapter extends GatewayAdapterBase {
     if (this.state !== 'ready') return undefined;
     if (this.gateway.supportsMethod?.('clawket.artifacts.open') && this.gateway.supportsMethod?.('clawket.artifacts.read')) return this.bridgeArtifacts;
     return this.connection.transportKind !== 'relay' && this.gateway.supportsMethod?.('artifacts.get') && this.gateway.supportsMethod?.('artifacts.download') ? this.artifactReader?.operations : undefined;
+  }
+
+  private readonly remoteUpdateOperations = bridgeUpdateOperations(method => this.invoke(() => method === BRIDGE_UPDATE_START_METHOD
+    ? this.gateway.requestBridgeUpdate() : this.gateway.requestBridgeUpdateStatus()));
+  public get bridgeUpdate(): BridgeUpdateOperations | undefined {
+    return this.state === 'ready' && this.capabilities.bridgeRemoteUpdate ? this.remoteUpdateOperations : undefined;
   }
 
   public get sessionFiles(): SessionFilesOperations | undefined {
@@ -124,7 +132,7 @@ export class OpenClawAdapter extends GatewayAdapterBase {
       || !options.loadBridgeCapabilityMode;
     this.loadBridgeCapabilityMode = options.loadBridgeCapabilityMode;
     this.onBridgeCapabilityMode = options.onBridgeCapabilityMode;
-    this.currentCapabilities = resolveCapabilities('openclaw', { sessionFiles: false });
+    this.currentCapabilities = resolveCapabilities('openclaw', { sessionFiles: false, bridgeRemoteUpdate: false });
     this.management = this.createManagementOperations();
   }
 
@@ -310,7 +318,10 @@ export class OpenClawAdapter extends GatewayAdapterBase {
   protected override handleGatewayConnectionTransition(state: LegacyConnectionState): void {
     if (state !== 'ready') { this.historyEpoch++; this.artifactReader?.clear(); }
     this.updateCapabilities(resolveCapabilities('openclaw', { sessionFiles: state === 'ready'
-      && this.gateway.supportsMethod?.('clawket.files.list') === true && this.gateway.supportsMethod?.('clawket.files.read') === true }));
+      && this.gateway.supportsMethod?.('clawket.files.list') === true && this.gateway.supportsMethod?.('clawket.files.read') === true,
+      // Only the Relay Bridge's own negotiated handshake metadata can enable a phone-started update.
+      bridgeRemoteUpdate: state === 'ready' && this.connection.transportKind === 'relay'
+        && (this.gateway.getConnectResponseCapabilities?.() ?? []).includes(BRIDGE_REMOTE_UPDATE_CAPABILITY) }));
     if (state === 'connecting') this.v2HandshakeStarted = false;
     if (state === 'challenging') this.v2HandshakeStarted = true;
   }

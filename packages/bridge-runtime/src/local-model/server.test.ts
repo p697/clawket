@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import WebSocket from 'ws';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { LocalModelConversation } from './conversation.js';
 import { LocalModelServer, LocalModelService } from './server.js';
 
@@ -52,5 +52,19 @@ it('shares update admission across local and Relay service dispatchers', async (
     (conversation as any).mutation = true; expect(conversation.prepareForUpdate()).toBe(false); (conversation as any).mutation = false;
     expect(conversation.prepareForUpdate()).toBe(true);
     await expect(relay.request({ type: 'req', id: 'new', method: 'chat.send' })).rejects.toThrow('restarting');
+  } finally { await conversation.stop(); rmSync(directory, { recursive: true, force: true }); }
+});
+
+it('answers phone-started update only through the injected control', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'clawket-local-remote-update-'));
+  const conversation = new LocalModelConversation([{ id: 'test', name: 'Test', baseUrl: 'http://localhost:1', contextWindow: 8192 }], join(directory, 'history.json'), async () => Response.json({ data: [{ id: 'test' }] }));
+  const status = { id: '5b0c7a0e-3c1f-4e8e-9b2a-6f1d2c3b4a59', state: 'checking' as const, startedAt: 1 }, start = vi.fn(async () => ({ accepted: true, status }));
+  const without = new LocalModelService(conversation, '3.1.14'), withControl = new LocalModelService(conversation, '3.1.14', { available: () => true, start, status: () => status });
+  try {
+    expect(await without.request({ type: 'req', id: 'h', method: 'health' })).not.toHaveProperty('remoteUpdate');
+    await expect(without.request({ type: 'req', id: 's', method: 'bridge.update.start' })).rejects.toThrow('unavailable');
+    expect(await withControl.request({ type: 'req', id: 'h', method: 'health' })).toMatchObject({ remoteUpdate: 1 });
+    expect(await withControl.request({ type: 'req', id: 's', method: 'bridge.update.start' })).toEqual({ accepted: true, status });
+    expect(await withControl.request({ type: 'req', id: 't', method: 'bridge.update.status' })).toEqual({ status });
   } finally { await conversation.stop(); rmSync(directory, { recursive: true, force: true }); }
 });

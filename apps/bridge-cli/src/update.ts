@@ -14,6 +14,7 @@ import { readRuntimeOwner, queryRuntimeOwner, runtimeOwnerPath } from './runtime
 import { readCliVersion } from './metadata.js';
 import { requestedBackend } from './operations.js';
 import { activateUpdate, type UpdateTarget, type UpdateResult } from './update-transaction.js';
+import { isRemoteUpdateId, relaunchRemoteUpdater, writeRemoteUpdateProgress, type RemoteUpdateFailure } from './remote-update.js';
 
 export const BRIDGE_NPM_METADATA_URL = 'https://registry.npmjs.org/@p697%2fclawket/latest';
 export function stableBridgeVersion(value: unknown): value is string {
@@ -328,8 +329,15 @@ export async function collectUpdateTargets(args: string[]): Promise<UpdateTarget
 }
 
 export async function handleUpdateCommand(args: string[]): Promise<void> {
-  const allowed = new Set(['--backend', '--config', '--project', '--device', '--preview', '--version', '--json', '--activate']);
-  for (let i = 0; i < args.length; i++) { const flag = args[i]; if (!allowed.has(flag)) throw new Error('Unknown update option. Use clawket update --help.'); if (['--backend', '--config', '--project', '--version'].includes(flag)) { if (!args[++i] || args[i].startsWith('--')) throw new Error(`${flag} requires a value`); } }
+  const allowed = new Set(['--backend', '--config', '--project', '--device', '--preview', '--version', '--json', '--activate', '--remote', '--relaunch']);
+  for (let i = 0; i < args.length; i++) { const flag = args[i]; if (!allowed.has(flag)) throw new Error('Unknown update option. Use clawket update --help.'); if (['--backend', '--config', '--project', '--version', '--remote'].includes(flag)) { if (!args[++i] || args[i].startsWith('--')) throw new Error(`${flag} requires a value`); } }
+  // `--remote <id>` is the phone-started run a runtime launched; only it reports to the shared status file.
+  const remote = option(args, '--remote');
+  if (remote !== undefined && (!isRemoteUpdateId(remote) || args.includes('--activate'))) throw new Error('Invalid remote update.');
+  if (args.includes('--relaunch')) {
+    if (!remote) throw new Error('--relaunch requires --remote.');
+    relaunchRemoteUpdater(remote); return;
+  }
   if (args.includes('--activate')) {
     const entry = realpathSync(process.argv[1]);
     const inside = relative(realpathSync(join(runtimeRoot(), 'releases')), entry);
@@ -342,26 +350,44 @@ export async function handleUpdateCommand(args: string[]): Promise<void> {
     if (results.some(r => r.state === 'failed' || r.state === 'restored')) process.exitCode = 1;
     return;
   }
+  const report: typeof writeRemoteUpdateProgress = (id, patch) => { if (remote) writeRemoteUpdateProgress(id, patch); };
+  const id = remote ?? '';
   mkdirSync(runtimeRoot(), { recursive: true, mode: 0o700 });
   const lock = join(runtimeRoot(), 'update.lock');
-  acquireUpdateLock(lock);
+  try { acquireUpdateLock(lock); } catch (error) { report(id, { state: 'failed', reason: 'running' }); throw error; }
+  // Only a lock holder records its pid, so a live pid always means a live update.
+  report(id, { pid: process.pid });
+  let failure: RemoteUpdateFailure = 'error';
   try {
     // Validate scope/owners before downloading, then revalidate in the replacement CLI.
     const selected = await collectUpdateTargets(args);
     let version = option(args, '--version');
     if (!version) {
+      failure = 'download';
       const response = await fetch(BRIDGE_NPM_METADATA_URL, { signal: AbortSignal.timeout(15_000), redirect: 'error' });
       if (!response.ok) throw new Error('Could not check the latest Bridge release.');
       const metadata = await readReleaseMetadata(response);
-      if (metadata.name !== '@p697/clawket' || metadata.clawket?.updateProtocol !== 1) throw new Error('The published Bridge does not support unified update yet. No runtime was changed.');
+      if (metadata.name !== '@p697/clawket' || metadata.clawket?.updateProtocol !== 1) { failure = 'unsupported'; throw new Error('The published Bridge does not support unified update yet. No runtime was changed.'); }
       version = metadata.version;
+      failure = 'error';
     }
     if (!stableBridgeVersion(version)) throw new Error('Invalid stable Bridge release version.');
     for (const selectedTarget of selected) if (selectedTarget.previousVersion && compareStableVersions(version, selectedTarget.previousVersion) < 0) throw new Error('Downgrades require explicit rollback outside the updater.');
+    report(id, { state: 'installing', version });
+    // A phone may act on a stale saved version: never restart runtimes that already run this release.
+    if (remote && selected.some(target => target.running) && selected.every(target => !target.running || target.previousVersion === version)) {
+      console.log(`Bridge ${version} is already running; nothing was restarted.`);
+      report(id, { state: 'updated', results: [] });
+      return;
+    }
     if (!args.includes('--json')) console.log(`Installing Bridge ${version}; saved connections are retained. Active replies must finish before their Bridge can restart.`);
+    failure = 'download';
     const entry = await stageBridgeRelease(version);
-    const forwarded = args.filter((arg, index) => arg !== '--version' && args[index - 1] !== '--version');
+    failure = 'error';
+    report(id, { state: 'restarting' });
+    const forwarded = args.filter((arg, index) => !['--version', '--remote'].includes(arg) && !['--version', '--remote'].includes(args[index - 1]));
     const output = await run(process.execPath, [entry, 'update', '--activate', ...forwarded], undefined, true, progress => {
+      report(id, { state: 'waiting', waitingFor: progress.backend });
       if (!args.includes('--json')) console.log(`${progress.backend}: waiting for its current task to finish (up to 2 minutes)…`);
     });
     const result = JSON.parse(output) as { version: string; results: UpdateResult[] };
@@ -369,15 +395,22 @@ export async function handleUpdateCommand(args: string[]): Promise<void> {
       if (args.includes('--json')) console.log(JSON.stringify({ ok: false, ...result }));
       else for (const row of result.results ?? []) console.log(describeUpdateResult(row));
       const busy = Array.isArray(result.results) ? result.results.find(row => row.state === 'failed' && row.reason === 'busy') : undefined;
+      failure = busy ? 'busy' : 'not_confirmed';
+      report(id, { state: 'failed', reason: failure, ...(busy ? { waitingFor: busy.backend } : {}), results: Array.isArray(result.results) ? result.results : [] });
       throw new Error(busy ? `No Bridge was updated: ${busy.backend} is still running a task. Run update again once it finishes.` : 'Bridge update was not fully confirmed. Inspect local runtime status.');
     }
     const manifest = join(runtimeRoot(), 'active.json');
     if (existsSync(manifest)) writeFileSync(manifest + '.previous', readFileSync(manifest), { mode: 0o600 });
     writeFileSync(manifest + '.pending', JSON.stringify({ version, entry, node: process.execPath }), { mode: 0o600 }); renameSync(manifest + '.pending', manifest);
     const complete = !result.results.some(row => row.state === 'manual');
+    report(id, { state: 'updated', results: result.results });
     if (args.includes('--json')) console.log(JSON.stringify({ ok: complete, ...result }));
     else { console.log(`Bridge ${version}: managed runtime update confirmed. Pairing and history retained.`); for (const row of result.results) console.log(describeUpdateResult(row)); }
     if (!complete) process.exitCode = 1;
+  } catch (error) {
+    // Already-finished runs keep their specific outcome; this only covers unexpected exits.
+    report(id, { state: 'failed', reason: failure });
+    throw error;
   } finally { unlinkSync(lock); }
 }
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { delegateManagedRuntime, isRuntimeCommand } from './managed-release.js';
 import { registerRuntimeOwner } from './runtime-owner.js';
+import { createRemoteUpdateControl } from './remote-update.js';
 import { handleUpdateCommand } from './update.js';
 import { handleClaudeCommand } from './claude-code.js';
 import { handleCodexCommand } from './codex.js';
@@ -322,6 +323,7 @@ async function main(): Promise<void> {
     const runtimes = runtimeConfigs.map(({ environment, config }) => {
       const runtime = new BridgeRuntime({
         clientChannels: true,
+        remoteUpdate: createRemoteUpdateControl(),
         config,
         gatewayUrl,
         bridgeVersion,
@@ -1542,6 +1544,7 @@ async function startHermesBridgeRuntime(options: HermesBridgeRuntimeOptions): Pr
   }
 
   const bridge = new HermesLocalBridge({
+    remoteUpdate: createRemoteUpdateControl(),
     host,
     port,
     apiBaseUrl,

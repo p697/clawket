@@ -20,9 +20,10 @@ import { ClaudeOwners, type ClaudeOwnerSnapshot } from './owners.js';
 import { ClaudeSession, claudePromptContent } from './session.js';
 import { ClaudeStore, type ClaudeRecord } from './store.js';
 import { claudeModels } from './models.js';
+import { handleRemoteUpdateRequest, isRemoteUpdateMethod, remoteUpdateHealth, type RemoteUpdateControl } from '../remote-update.js';
 
 export interface ClaudeRequest { type: 'req'; id: string; method: string; params?: Record<string, unknown> }
-export interface ClaudeOptions { bridgeVersion?: string; project: string; directory: string; executable: string; device?: boolean; ownershipDirectory?: string }
+export interface ClaudeOptions { bridgeVersion?: string; remoteUpdate?: RemoteUpdateControl; project: string; directory: string; executable: string; device?: boolean; ownershipDirectory?: string }
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 function string(value: unknown, label: string, max = 300): string {
   if (typeof value !== 'string' || !value.trim() || value.length > max) throw new ClaudeFault(`Invalid ${label}`);
@@ -108,7 +109,7 @@ export class ClaudeService extends EventEmitter {
   async health(): Promise<object> {
     if (this.stopped) throw new ClaudeFault('Claude Bridge is stopped');
     // Viewing projects/history remains useful when model authentication needs attention.
-    return { backend: 'claude-code', ...(this.options.bridgeVersion ? { bridgeVersion: this.options.bridgeVersion } : {}), sessionActivity: 1, sessionCatalogSync: 1, artifacts: true, promptStatus: true, projects: true, vision: true,
+    return { backend: 'claude-code', ...(this.options.bridgeVersion ? { bridgeVersion: this.options.bridgeVersion } : {}), ...remoteUpdateHealth(this.options.remoteUpdate), sessionActivity: 1, sessionCatalogSync: 1, artifacts: true, promptStatus: true, projects: true, vision: true,
       capabilities: { steer: false, thinkingLevels: false, skills: false, sessionBranch: true } };
   }
 
@@ -128,6 +129,7 @@ export class ClaudeService extends EventEmitter {
       throw new ClaudeFault('Invalid Claude request');
     }
     const p = frame.params ?? {};
+    if (isRemoteUpdateMethod(frame.method)) return handleRemoteUpdateRequest(this.options.remoteUpdate, frame.method);
     switch (frame.method) {
       case 'health': return this.health();
       case 'sessions.activity': {

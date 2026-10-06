@@ -412,3 +412,16 @@ it('reports package version and protects active work before fencing update admis
   expect(subject.prepareForUpdate()).toBe(true);
   await expect(subject.request({ type: 'req', id: 'after', method: 'sessions.list' })).rejects.toThrow('restarting');
 });
+
+it('answers phone-started update only through the injected control', async () => {
+  const { service: subject } = fixture();
+  const call = (method: string, params?: Record<string, unknown>) => subject.request({ type: 'req', id: method, method, ...(params ? { params } : {}) } as any);
+  expect(await call('health')).not.toHaveProperty('remoteUpdate');
+  await expect(call('bridge.update.status')).rejects.toThrow('unavailable');
+  const status = { id: '5b0c7a0e-3c1f-4e8e-9b2a-6f1d2c3b4a59', state: 'checking' as const, startedAt: 1 }, start = vi.fn(async () => ({ accepted: true, status }));
+  (subject as any).options.remoteUpdate = { available: () => true, start, status: () => status };
+  expect(await call('health')).toMatchObject({ remoteUpdate: 1 });
+  expect(await call('bridge.update.start', { version: '0.0.1' })).toEqual({ accepted: true, status });
+  expect(await call('bridge.update.status')).toEqual({ status });
+  expect(start).toHaveBeenCalledExactlyOnceWith();
+});

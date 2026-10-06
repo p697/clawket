@@ -9,6 +9,8 @@ import {
 import { generateId } from '../../services/gateway-auth';
 import { RelayWsTransport } from '../transports/relay-ws';
 import type { WebSocketFactory } from '../transports/types';
+import { bridgeUpdateOperations } from './bridge-update';
+import type { BridgeUpdateOperations } from '@clawket/agent-protocol';
 
 type Listeners = {
   update: (update: SessionUpdate) => void;
@@ -19,7 +21,9 @@ type Listeners = {
 /** Backend-neutral chat UI with a Bridge-owned durable conversation. */
 export class LocalModelAdapter implements AgentAdapter {
   readonly connection: ConnectionDescriptor;
-  readonly capabilities = resolveCapabilities('local-model', { attachments: false });
+  readonly capabilities = resolveCapabilities('local-model', { bridgeRemoteUpdate: false, attachments: false });
+  private readonly remoteUpdateOperations = bridgeUpdateOperations(method => this.rpc(method));
+  get bridgeUpdate(): BridgeUpdateOperations | undefined { return this.currentState === 'ready' && this.capabilities.bridgeRemoteUpdate ? this.remoteUpdateOperations : undefined; }
   readonly management: ManagementOperations;
   private activityEnabled = false;
   private readonly readActivity = async (keys: readonly string[]) => {
@@ -91,10 +95,10 @@ export class LocalModelAdapter implements AgentAdapter {
     try {
       // Relay authenticates its socket; only direct connections need connect/token.
       // A Relay connect request starts OpenClaw's challenge lifecycle.
-      const health = await this.rpc<{ bridgeVersion?: string; sessionActivity?: unknown; backend: string; vision: boolean; model: string }>(this.record.transportKind === 'relay' ? 'health' : 'connect', { token: this.record.auth?.token });
+      const health = await this.rpc<{ bridgeVersion?: string; remoteUpdate?: unknown; sessionActivity?: unknown; backend: string; vision: boolean; model: string }>(this.record.transportKind === 'relay' ? 'health' : 'connect', { token: this.record.auth?.token });
       if (epoch !== this.epoch) return;
       if (health.backend !== 'local-model') throw new AdapterError('unsupported', 'Endpoint is not a local model Bridge');
-      this.bridgeVersion = typeof health.bridgeVersion === 'string' ? health.bridgeVersion : undefined;
+      this.bridgeVersion = typeof health.bridgeVersion === 'string' ? health.bridgeVersion : undefined; this.capabilities.bridgeRemoteUpdate = health.remoteUpdate === 1;
       this.activityEnabled = health.sessionActivity === 1;
       this.capabilities.attachments = health.vision === true;
       this.model = health.model;
@@ -137,9 +141,9 @@ export class LocalModelAdapter implements AgentAdapter {
   async probe(timeoutMs = 5_000): Promise<boolean> {
     const epoch = this.epoch;
     try {
-      const health = await this.rpc<{ bridgeVersion?: string; sessionActivity?: unknown; backend: string; vision: boolean; model: string }>('health', {}, timeoutMs);
+      const health = await this.rpc<{ bridgeVersion?: string; remoteUpdate?: unknown; sessionActivity?: unknown; backend: string; vision: boolean; model: string }>('health', {}, timeoutMs);
       if (epoch !== this.epoch || health.backend !== 'local-model') return false;
-      this.bridgeVersion = typeof health.bridgeVersion === 'string' ? health.bridgeVersion : undefined;
+      this.bridgeVersion = typeof health.bridgeVersion === 'string' ? health.bridgeVersion : undefined; this.capabilities.bridgeRemoteUpdate = health.remoteUpdate === 1;
       this.activityEnabled = health.sessionActivity === 1;
       this.capabilities.attachments = health.vision === true; this.model = health.model;
       return true;

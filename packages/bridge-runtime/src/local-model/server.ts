@@ -5,12 +5,13 @@ import WebSocket, { WebSocketServer } from 'ws';
 import type { PromptInput } from '@clawket/agent-protocol';
 import { WEBSOCKET_FRAME_LIMIT_BYTES } from '../frame-limit.js';
 import { LocalModelConversation } from './conversation.js';
+import { handleRemoteUpdateRequest, isRemoteUpdateMethod, remoteUpdateHealth, type RemoteUpdateControl } from '../remote-update.js';
 
 export interface LocalModelRequest { type: 'req'; id: string; method: string; params?: Record<string, unknown> }
 
 /** The same bounded RPC dispatcher serves direct and authenticated Relay clients. */
 export class LocalModelService {
-  constructor(readonly conversation: LocalModelConversation, private readonly bridgeVersion?: string) {}
+  constructor(readonly conversation: LocalModelConversation, private readonly bridgeVersion?: string, private readonly remoteUpdate?: RemoteUpdateControl) {}
 
   request(frame: LocalModelRequest): Promise<unknown> {
     return this.conversation.requestForUpdate(() => this.requestNow(frame));
@@ -18,9 +19,10 @@ export class LocalModelService {
   private async requestNow(frame: LocalModelRequest): Promise<unknown> {
     if (!frame || frame.type !== 'req' || typeof frame.id !== 'string' || !frame.id || frame.id.length > 200) throw new Error('Invalid request');
     const params = frame.params ?? {};
+    if (isRemoteUpdateMethod(frame.method)) return handleRemoteUpdateRequest(this.remoteUpdate, frame.method);
     switch (frame.method) {
       case 'connect':
-      case 'health': return { backend: 'local-model', ...(this.bridgeVersion ? { bridgeVersion: this.bridgeVersion } : {}), sessionActivity: 1, protocol: 1, ...await this.conversation.health() };
+      case 'health': return { backend: 'local-model', ...(this.bridgeVersion ? { bridgeVersion: this.bridgeVersion } : {}), ...remoteUpdateHealth(this.remoteUpdate), sessionActivity: 1, protocol: 1, ...await this.conversation.health() };
       case 'sessions.activity': return sessionActivityKeys(params.keys).map(key => ({ key, state: key !== 'main' ? 'unknown' : this.conversation.running ? 'running' : 'idle' }));
       case 'chat.history':
         if (params.cursor !== undefined && typeof params.cursor !== 'string') throw new Error('Invalid history cursor');
@@ -67,9 +69,9 @@ export class LocalModelServer {
     }
   };
 
-  constructor(readonly conversation: LocalModelConversation, private readonly token: string, bridgeVersion?: string) {
+  constructor(readonly conversation: LocalModelConversation, private readonly token: string, bridgeVersion?: string, remoteUpdate?: RemoteUpdateControl) {
     if (Buffer.byteLength(token) < 32) throw new Error('Bridge token must contain at least 32 bytes');
-    this.service = new LocalModelService(conversation, bridgeVersion);
+    this.service = new LocalModelService(conversation, bridgeVersion, remoteUpdate);
   }
 
   async start(port = 17880, host = '127.0.0.1'): Promise<number> {

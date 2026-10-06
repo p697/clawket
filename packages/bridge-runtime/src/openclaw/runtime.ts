@@ -47,6 +47,8 @@ import {
   type WebSocketFrameData,
 } from '../frame-limit.js';
 import { RelaySessionState } from '../relay-session.js';
+import { BRIDGE_REMOTE_UPDATE_CAPABILITY, BRIDGE_UPDATE_START_METHOD, BRIDGE_UPDATE_STATUS_METHOD } from '@clawket/agent-protocol';
+import { handleRemoteUpdateRequest, type RemoteUpdateControl } from '../remote-update.js';
 
 type PendingGatewayMessage =
   | { kind: 'text'; text: string }
@@ -94,6 +96,8 @@ export type BridgeRuntimeOptions = {
   config: PairingConfig;
   gatewayUrl: string;
   bridgeVersion?: string;
+  /** CLI-injected phone-started update control, answered through Relay controls. */
+  remoteUpdate?: RemoteUpdateControl;
   /** Additive owner negotiation; legacy runtime consumers retain the v1 wire. */
   clientChannels?: boolean;
   reconnectBaseDelayMs?: number;
@@ -469,6 +473,11 @@ export class BridgeRuntime {
       return;
     }
 
+    if (control.event === 'bridge-update.request' || control.event === 'bridge-update-status.request') {
+      await this.handleBridgeUpdateRequest(control);
+      return;
+    }
+
     if (control.event === 'permissions.request') {
       await this.handlePermissionsRequest(control);
       return;
@@ -712,6 +721,35 @@ export class BridgeRuntime {
     }
   }
 
+  /** Phone-started update; only start (no parameters) and status reach the CLI-injected control. */
+  private async handleBridgeUpdateRequest(control: {
+    event: string;
+    requestId?: string;
+    sourceClientId?: string;
+    targetClientId?: string;
+  }): Promise<void> {
+    const requestId = control.requestId?.trim() ?? '';
+    const replyTargetClientId = control.sourceClientId?.trim() || control.targetClientId?.trim() || '';
+    const base = control.event === 'bridge-update.request' ? 'bridge-update' : 'bridge-update-status';
+    if (!requestId) {
+      this.log(`relay ${base} request dropped reason=missing_request_id`);
+      return;
+    }
+    try {
+      const payload = await handleRemoteUpdateRequest(this.options.remoteUpdate,
+        base === 'bridge-update' ? BRIDGE_UPDATE_START_METHOD : BRIDGE_UPDATE_STATUS_METHOD) as Record<string, unknown>;
+      if (base === 'bridge-update') this.log(`relay bridge-update requested accepted=${payload.accepted === true}`);
+      this.sendRelayControl({ event: `${base}.result`, requestId, targetClientId: replyTargetClientId || undefined, payload });
+    } catch {
+      this.sendRelayControl({
+        event: `${base}.error`,
+        requestId,
+        targetClientId: replyTargetClientId || undefined,
+        payload: { code: 'bridge_update_unavailable', message: 'Remote Bridge update is unavailable on this computer' },
+      });
+    }
+  }
+
   private async handlePermissionsRequest(control: {
     requestId?: string;
     sourceClientId?: string;
@@ -904,7 +942,8 @@ export class BridgeRuntime {
       }
       const pending = this.inFlightConnectHandshakes.get(response.id);
       if (response.ok && pending?.bridgeCapabilitiesRequested) {
-        relayText = patchConnectResponseBridgeCapabilities(text, this.bridgeVersion).text;
+        relayText = patchConnectResponseBridgeCapabilities(text, this.bridgeVersion,
+          this.options.remoteUpdate?.available() ? [BRIDGE_REMOTE_UPDATE_CAPABILITY] : []).text;
         // Only isolated full-client channels to a local Gateway can read host files.
         // Legacy shared channels and remote Gateways keep transparent forwarding.
         const hello = JSON.parse(relayText);
@@ -1715,6 +1754,7 @@ export function stripConnectRequestBridgeMeta(
 export function patchConnectResponseBridgeCapabilities(
   text: string,
   bridgeVersion?: string,
+  bridgeCapabilities: readonly string[] = [],
 ): { text: string; patched: boolean } {
   try {
     const parsed = JSON.parse(text) as {
@@ -1728,10 +1768,11 @@ export function patchConnectResponseBridgeCapabilities(
     }
     const meta = isRuntimeRecord(parsed.meta) ? parsed.meta : {};
     const { bridgeVersion: _gatewayBridgeVersion, ...preservedMeta } = meta;
-    const capabilities = normalizeConnectCapabilities(meta.capabilities);
+    // Bridge-local capabilities come only from this Bridge, never from the Gateway's metadata.
+    const capabilities = normalizeConnectCapabilities(meta.capabilities).filter(capability => capability !== BRIDGE_REMOTE_UPDATE_CAPABILITY);
     const normalizedBridgeVersion = normalizeBridgeVersion(bridgeVersion);
-    if (!capabilities.includes(BRIDGE_CAPABILITIES_V2)) {
-      capabilities.push(BRIDGE_CAPABILITIES_V2);
+    for (const capability of [BRIDGE_CAPABILITIES_V2, ...bridgeCapabilities]) {
+      if (!capabilities.includes(capability)) capabilities.push(capability);
     }
     return {
       text: JSON.stringify({

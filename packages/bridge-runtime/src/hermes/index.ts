@@ -19,6 +19,7 @@ import { HermesCommandMethods, type HermesModelState } from './commands.js';
 import { HermesCronMethods, supportsHermesCronModels } from './cron.js';
 import { HermesHttpServerMethods, inspectHermesApi, probeHermesApi, type HermesLocalBridgeClient } from './http-server.js';
 import { HermesManagementMethods } from './management.js';
+import { handleRemoteUpdateRequest, isRemoteUpdateMethod, type RemoteUpdateControl } from '../remote-update.js';
 import {
   HermesNativeSessionReader,
   decodeHermesHistoryCursor,
@@ -91,6 +92,8 @@ export type HermesLocalBridgeOptions = {
   bridgeToken?: string | null;
   displayName?: string | null;
   bridgeVersion?: string;
+  /** CLI-injected phone-started update control; see `../remote-update.ts`. */
+  remoteUpdate?: RemoteUpdateControl;
   sessionStorePath?: string;
   usageLedgerPath?: string;
   gatewayOwnerPath?: string;
@@ -113,6 +116,7 @@ export class HermesLocalBridge {
   readonly bridgeToken: string;
   readonly displayName: string;
   readonly bridgeVersion: string | undefined;
+  readonly remoteUpdate: RemoteUpdateControl | undefined;
   readonly hermesSourcePath: string;
   readonly hermesHomePath: string;
   private readonly sessionFiles = new SessionFileStore();
@@ -159,6 +163,7 @@ export class HermesLocalBridge {
     this.bridgeToken = options.bridgeToken?.trim() || randomUUID();
     this.displayName = options.displayName?.trim() || DEFAULT_AGENT_NAME;
     this.bridgeVersion = normalizeBridgeVersion(options.bridgeVersion);
+    this.remoteUpdate = options.remoteUpdate;
     this.hermesSourcePath = options.hermesSourcePath?.trim() || resolveHermesSourcePath();
     this.hermesHomePath = options.hermesHomePath?.trim() || DEFAULT_HERMES_HOME_PATH;
     // The CLI persists the bridge token. Derive a separate, scope-bound API key
@@ -761,6 +766,8 @@ export class HermesLocalBridge {
   }
 
   private async dispatchAdmittedRequest(method: string, params: unknown): Promise<unknown> {
+    // The updater runs out of process and waits for idle work, so starting it never queues behind mutations.
+    if (isRemoteUpdateMethod(method)) return handleRemoteUpdateRequest(this.remoteUpdate, method);
     // Keep whole config/session mutations serialized after making Python nonblocking.
     // Read-only requests and health must never wait behind these operations.
     if (/^(model\.set|skills\.(install|update|delete|content\.update)|hermes\.(reasoning|fast)\.set|hermes\.cron\.jobs\.(create|update|pause|resume|run|remove)|chat\.send)$/.test(method)) {
