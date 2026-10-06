@@ -59,18 +59,37 @@ export async function stageBridgeRelease(version: string): Promise<string> {
 /** Legacy migration captures a known Clawket entry, never an arbitrary process occupying a port. */
 export function legacyEntryFromCommands(lines: string, backend: string, configPath?: string): { pid: number; entry: string } | null {
   const matches = lines.split('\n').flatMap(line => {
-    const match = line.match(/^\s*(\d+)\s+\S+\s+(\S*(?:@p697\/clawket|apps\/bridge-cli)\/dist\/index\.js)\s+(.*)$/);
-    if (!match || !Number.isSafeInteger(Number(match[1]))) return [];
+    const match = line.match(/^\s*(\d+)\s+\S+\s+(\S+)\s+(.*)$/);
+    if (!match || !Number.isSafeInteger(Number(match[1])) || Number(match[1]) <= 0) return [];
     const args = match[3];
     const commandMatches = backend === 'openclaw' ? /^run(?:\s|$)/.test(args)
       : backend === 'hermes-relay' ? /^hermes\s+relay\s+run(?:\s|$)/.test(args)
       : backend === 'hermes' ? /^hermes\s+(run|dev)(?:\s|$)/.test(args)
-      : args.startsWith(`${backend} `);
+      : args.startsWith(`${backend} `) && /^(?:codex|claude-code|pi)\s+(?:run|pair)(?:\s|$)/.test(args);
     if (!commandMatches || (configPath && !args.split(/\s+--/).some(segment => segment === `config ${configPath}` || segment === `config "${configPath}"`))) return [];
-    return [{ pid: Number(match[1]), entry: match[2] }];
+    const entry = legacyRuntimeEntry(match[2]);
+    return entry ? [{ pid: Number(match[1]), entry }] : [];
   });
-  if (matches.length > 1) throw new Error('Multiple legacy Bridge owners match this scope. Stop the duplicate runtimes before updating.');
+  if (matches.length > 1) throw new Error(`Multiple legacy ${backend} Bridge owners match this scope. Stop the duplicate runtimes before updating.`);
   return matches[0] ?? null;
+}
+
+function legacyRuntimeEntry(invoked: string): string | null {
+  const knownBundle = /\/(?:@p697\/clawket|apps\/bridge-cli)\/dist\/index\.js$/;
+  if (knownBundle.test(invoked)) return invoked;
+  if (!/\/(?:\.bin|bin)\/clawket$/.test(invoked)) return null;
+  try {
+    if (!lstatSync(invoked).isSymbolicLink()) return null;
+    const entry = realpathSync(invoked);
+    if (!knownBundle.test(entry.replace(/\\/g, '/')) || !lstatSync(entry).isFile()) return null;
+    const packageDirectory = dirname(dirname(entry)), metadataPath = join(packageDirectory, 'package.json');
+    const info = lstatSync(metadataPath);
+    if (!info.isFile() || info.size > 16_384) return null;
+    const metadata = JSON.parse(readFileSync(metadataPath, 'utf8'));
+    const bin = typeof metadata?.bin === 'string' ? metadata.bin : metadata?.bin?.clawket;
+    if (metadata?.name !== '@p697/clawket' || typeof bin !== 'string' || resolve(packageDirectory, bin) !== entry) return null;
+    return entry;
+  } catch { return null; }
 }
 
 function legacyEntry(backend: string, configPath?: string): { pid: number; entry: string } | null {
@@ -136,7 +155,7 @@ export async function createUpdateTarget(input: { backend: string; configPath?: 
     catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ECONNREFUSED') throw error; }
     if (running) legacy = legacyEntry(input.backend, input.backend === 'hermes' || input.backend === 'hermes-relay' ? undefined : input.configPath);
   }
-  if (running && !owner && (!legacy || !existsSync(legacy.entry))) throw new Error('The legacy runtime entry could not be verified. Stop that Bridge explicitly, then rerun update.');
+  if (running && !owner && (!legacy || !existsSync(legacy.entry))) throw new Error(`The legacy ${input.backend} Bridge runtime entry could not be verified (${input.configPath ? 'selected configuration' : 'shared service'}). Stop that Bridge explicitly, then rerun update.`);
   const previousEntry = owner?.entry ?? legacy?.entry ?? null;
   let expectedEntry = previousEntry;
   const previousNode = owner?.node ?? process.execPath;

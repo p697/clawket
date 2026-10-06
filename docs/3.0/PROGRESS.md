@@ -1,5 +1,10 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-06 — Bridge legacy npm executable-link update fix (issue #182).
+  - 本机 Codex Bridge 3.1.10 通过 npm `.bin/clawket` 启动，链接和真实 bundle 均存在；3.1.12 升级器仅匹配 `dist/index.js`，在入口发现阶段误拒绝。已用认证停止、更新、显式启动完成该实例迁移，运行版本 3.1.12 / 本机 doctor healthy，配置与会话文件 SHA-256 不变；手机端收发未实测。
+  - 候选源码对 npm `.bin` / 全局 `bin` 链接解析真实 bundle，并校验有界 package/bin 清单；保留精确 backend/config、重复 owner、认证和 idle/rollback 保护。错误只添加后端与固定 scope 类别，不输出路径或凭据。回归覆盖 OpenClaw/Hermes/Codex/Claude Code/Pi、链接与直路径重复、坏链接/目录/假包、scope/命令拒绝和 lifecycle 捕获。
+  - 本地模拟器运行中，遵守资源规则，自动测试交给 PR CI；本地静态检查与 CI 结果在 PR 登记。此次代码修复不改版本，不准备分发包或发布服务。
+
 - 2026-10-06 Codex 长回合重复/合并文本：手机控制器已确定复现并修复两个边界丢失问题。
   - 重连清空已显示段落/工具，只记住尾段；历史未返回时累计 snapshot 被重新当作整段显示。新增真实 controller 两种文本/工具先到的12段回归，旧实现均红；当前同 adapter/run 的段落、工具顺序、render key/首见时钟保存在内存，累计 wire 文本不再被尾段覆盖，返回会话也可减去已显示前缀。只保存展示状态，不持久化、不重发或恢复 Native writer。
   - 原生多段 commentary 没有工具/guide 间隔时，恢复未把独立同回合 assistant item 当作段落；纯投影旧实现回归红。现在显式原始输入/turn 锚点与精确有序前缀可确认段落并逐次延长；保留当前尾段 cell，重复原生正文仍独立，缺锚点/不完整页不能猜测或删除 live-only 内容。退休 adapter 不能恢复这批展示行。

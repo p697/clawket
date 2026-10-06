@@ -130,3 +130,5 @@ Codex `permission_configuration_diagnostic` logs only the runtime's fixed failur
 ## Unified Bridge update
 
 `update` is the explicit all-saved-managed-runtime exception to default lifecycle scope. Keep its bounded authenticated private owner control, idle admission fence, immutable package staging and verified version transition. Retain exact config/identity/history; never pair/reset, infer ownership from ports, or start a second owner after an uncertain stop. Preserve stopped scopes and report independent supervisors as manual. Future starts use a validated managed snapshot; old global CLIs require the latest npx invocation. Details and release limitations: `../../docs/bridge-updates.md`.
+
+Legacy npm `.bin/clawket` and global `bin/clawket` executable links must resolve to a known Clawket bundle with a matching bounded package/bin manifest before capture. Preserve exact backend/config matching and duplicate-owner rejection; capture the resolved bundle for rollback. Failure summaries identify the backend and a fixed scope category, never the config path or credentials.
