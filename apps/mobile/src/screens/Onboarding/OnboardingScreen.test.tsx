@@ -862,8 +862,8 @@ describe('OnboardingScreen', () => {
       expect(choiceStyle.paddingVertical).toBe(Space.sm);
       expect(choiceStyle.minHeight).toBe(ControlSize.settingsRow);
       expect(flattenStyle(row.props.children[0].props.style).width).toBe(Space.xxl);
-      // Mark and name read as one tile; six chevrons in a grid were noise (owner decision 2026-10-06).
-      expect(row.props.children[2]).toBeNull();
+      // Each cell leads to its platform's guide, so it keeps the chevron (owner decision 2026-10-06).
+      expect(row.props.children[2]).toBeTruthy();
     }
     // "No agent yet?" belongs to the choices; the open-source note follows it instead of anchoring to the bottom.
     const chooser = view.getByTestId('onboarding-chooser');

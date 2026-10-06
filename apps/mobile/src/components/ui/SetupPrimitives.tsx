@@ -29,7 +29,7 @@ export function PageIntro({ title, description }: { title: string; description?:
 
 /**
  * `locked` swaps the chevron for the Pro lock; the row stays pressable so the caller can open its paywall.
- * `compact` grid cells carry no chevron (owner decision 2026-10-06): the official mark and name read as one tile.
+ * `compact` grid cells keep the chevron too (owner decision 2026-10-06): each cell opens that platform's guide.
  */
 export function ChoiceRow({ icon: Icon, leading, title, description, locked = false, compact = false, onPress, testID }: { icon?: LucideIcon; leading?: React.ReactNode; title: string; description?: string; locked?: boolean; compact?: boolean; onPress: () => void; testID?: string }) {
   const { theme: { colors } } = useAppTheme();
@@ -42,7 +42,7 @@ export function ChoiceRow({ icon: Icon, leading, title, description, locked = fa
     </View>
     {locked
       ? <Lock testID={testID ? `${testID}-lock-icon` : undefined} size={IconSize.sm} color={colors.inkTertiary} strokeWidth={2} />
-      : compact ? null : <ChevronRight size={IconSize.sm} color={colors.inkTertiary} strokeWidth={1.75} />}
+      : <ChevronRight size={IconSize.sm} color={colors.inkTertiary} strokeWidth={1.75} />}
   </Pressable>;
 }
 

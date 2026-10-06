@@ -1,5 +1,9 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-06 配对首页平台格子恢复右箭头（负责人看过 #187 后要求）。
+  - `ChoiceRow compact` 重新画 chevron，六个平台入口与其他选择行一致；#187 的其余文案与相册调整不变。测试改为断言格子带箭头，Mobile AGENTS、设计系统、设计落地和页面规格同步。
+  - 逐文件 in-band：OnboardingScreen 48 项通过；UI style、设计系统文档、agent 文档与 whitespace 通过。未做真机视觉验收，未构建或发布。
+
 - 2026-10-06 负责人授权基于最新main的Bridge3.1.14已公开发布，独立公共安装验证通过。
   - 起点干净main350c0aa8，发布前刷新至5ba5be00纳入PR194 Codex原生步骤时钟；包含PR191 Claude历史缺省cwd修复、PR192 Codex完成回合后更新误报忙修复；仅公开CLI/守卫升patch，内部workspace/App版本保持。
   - source f320cbf5的CI37412432814十一项通过；六guard、八指令对/五checker、v1五文件41项、最新生产快照四用例24阶段、审计零阻挡（沿用两例外）、包provenance141输入、固定包dry-run与空认证候选安装通过。初始候选在PR194合入后废弃未上传；npm首认证过期E404，负责人请求重新发起并完成认证后接受固定280,493B包；处理中首404保留。2026-10-06 13:47:04 JST公开version/latest=3.1.14，完整空认证下载与候选逐字节/SHA-256/SHA-1/SHA-512一致；SHA-2567908cd45…，公共npm第二份空认证独立安装通过identity、exact bundle、updateProtocol和CLI help；交付记录至3acac903保持141个bundle输入不变，其CI37415434522十一项通过。随后main合入PR196/02a8d6a4，已重基保留两条进度记录；手机触发更新不在已发布的不可变3.1.14包中，需要后续单独授权发布，未另升版或替换包。最终整合CI及合并收尾。结果记入[发布记录](../3.1/bridge-3.1.14-release.md)。本任务不替换运行中Bridge、打包App或部署Worker，手机验收继续保留。
