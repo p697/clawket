@@ -856,6 +856,11 @@ export class CodexService extends EventEmitter {
       if ((tool.status !== 'running' || previousTool) && (!previousTool || previousTool.status !== tool.status || previousTool.output !== tool.output)) this.update({ type: 'tool_call_update', sessionKey: r.id, runId: run.id, ...identity, toolCallId: item.id, status: tool.status, rawOutput: tool.output, ...timing });
     }
     publishText();
+    // Map insertion order reflects first sighting, not native position: an
+    // expanded snapshot can reveal the original input after we saw its tail.
+    // Keep that authoritative order for subsequent paged-history overlays.
+    run.items = new Map(mergeCodexLiveItems(items.filter(item => typeof item.id === 'string'), run.items)
+      .map(item => [item.id, item]));
     run.textClock = tailClock; run.observed = true;
   }
   private desktopSnapshot(threadId: string, snapshot: DesktopSnapshot): void {

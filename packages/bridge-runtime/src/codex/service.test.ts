@@ -1369,7 +1369,7 @@ describe('device project discovery and desktop routing', () => {
     await service.stop(); service = new CodexService({ project, directory: join(root, 'device'), device: true, env: { CODEX_HOME: root }, desktop: desktop as any });
     return desktop;
   }
-  it('keeps the original input and early replies before a paged native tail during an active Desktop run', async () => {
+  it.each([false, true])('keeps the original input and early replies before a paged native tail (initial partial snapshot: %s)', async partial => {
     const desktop = await device();
     const original = mock.request.getMockImplementation()!;
     const items = [
@@ -1387,6 +1387,7 @@ describe('device project discovery and desktop routing', () => {
     });
     await request('sessions.list');
     await request('chat.history', { sessionKey: `native:${threadId}` });
+    if (partial) desktop.emit('snapshot', threadId, { fresh: true, state: { turns: [{ id: 'long-turn', status: 'inProgress', items: items.slice(2) }], requests: [] } });
     desktop.emit('snapshot', threadId, { fresh: true, state: { turns: [{ id: 'long-turn', status: 'inProgress', itemsView: 'full', items }], requests: [] } });
     const expected = items.map(item => item.type === 'commandExecution' ? `toolcall_${item.id}` : item.id);
     for (tailSize of [32, 18, 1, 32]) {

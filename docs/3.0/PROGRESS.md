@@ -1,9 +1,9 @@
 # PROGRESS · Clawket 3.0 进度日志
 
 - 2026-10-06 Codex 流式消息排序与重复合并第一轮修复（负责人截图 15:39 回复跨过 15:33 用户消息、15:44 合并段落重复；负责人先测试）。
-  - Bridge 原生历史只返回最近32项，却把活动缓存中缺失的早期项追加到页尾，原始输入及早期回复随页大小移位；改为按共同原生 ID 的后继锚点补入，保留原生页顺序与最新内容。Desktop 补到早期工具不再发出短累计前缀再恢复全文。
+  - Bridge 原生历史只返回最近32项，却把活动缓存中缺失的早期项追加到页尾，原始输入及早期回复随页大小移位；改为按共同原生 ID 的后继锚点补入，保留原生页顺序与最新内容。Desktop 补到早期工具不再发出短累计前缀再恢复全文；初始快照不完整时，后续完整快照同步纠正缓存的首次到达顺序。
   - Mobile 一旦存在工具就跳过段落恢复，且已提交多段合并气泡无法被完整原生段落细化；现在已确认同回合的历史到达即可恢复，不等下一段文字，完整精确前缀才允许拆段，保留首个 cell 和当前工具结果；不完整、乱序或 live-only 边界继续保留。
-  - 四个真实 service/controller 新场景在旧实现上先红，修后单文件串行通过 Codex service350/history110、Mobile controller contract117/adapter-events51、liveRunThread31、historyMergePolicy97，共756项；agent-doc8对/5项与whitespace通过。另一会话持heavy，类型与完整后端/v1门禁交PR CI。无原生发消息/重放/owner变更，保持 OpenClaw/Hermes 语义。
+  - 五个真实 service/controller 新场景先红（含首个快照不完整、随后补齐的追加边界），修后单文件串行通过 Codex service351/history110、Mobile controller contract117/adapter-events51、liveRunThread31、historyMergePolicy97，共757项；agent-doc8对/5项与whitespace通过。另一会话持heavy，类型与完整后端/v1门禁交PR CI。无原生发消息/重放/owner变更，保持 OpenClaw/Hermes 语义。
   - 按负责人“我来测试”交付草稿PR，待手机长回合验收；本轮不合并、不打分发包、不发布或重启Bridge。生效需后续包含修复的 Bridge 与 Mobile 构建，详见[Codex规格](../3.1/codex.md)。
 
 - 2026-10-06 工作过程动效、去掉新步骤提示、失败不再标红（负责人要求，「你来把控」）。
