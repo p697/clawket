@@ -1,8 +1,9 @@
 # PROGRESS · Clawket 3.0 进度日志
 
-- 2026-10-06 OpenClaw 高级直连（负责人要求完整恢复，实现与验收中）。
+- 2026-10-06 OpenClaw 高级直连（负责人要求完整恢复，实现与 Android Wi-Fi 验收完成，iOS 原生编译通过）。
   - 默认脚本/配对码 Relay 流程保持；仅 OpenClaw guide 底部新增高级入口，独立页支持 LAN、Tailscale、Custom、Token/Password。复用连接 runtime；鉴权完整替换、同端点去重、当前握手 ready、取消/超时/迟到结果隔离与 Pro 约束；Android 主 Manifest 明文许可及 iOS Local Network/私有地址 ATS 来自原生插件。19 语言同步；行为与验证边界见 [直连规格](21-openclaw-direct-connections.md)。
-  - 已逐文件验证 direct model 26、route 9、screen 3、native plugin 4、OnboardingScreen 55、OnboardingRoute 29、DirectWsTransport 9、root navigation 2、coordinator 207 项（344 项）通过，UI/config/i18n/docs/typecheck 检查通过。干净双平台 prebuild 与 133 Pods 同步通过，Android Debug 和本地 debug 签名的独立 QA 包编译通过；实际 USB 手机确认 OpenClaw 专属入口、空地址校验、键盘下按钮可达、LAN 错误 Token 的鉴权提示及表单/遮罩保留。正确 Token 生成了设备批准请求，但初版页面显示笼统错误；已用当前 adapter 的显式 pairing 事件补齐布尔状态，提前认领保存目标并保留批准等待上限的正确提示，新增先红后绿与迟到保存回调回归，修正版 QA 握手/收发与 iOS 编译继续验证。负责人确认另一会话结束后已接手设备；仅本机隔离 Gradle 缓存/镜像与两进程 C++ 限制，无发行、部署或发布。
+  - 已逐文件验证 direct model 26、route 9、screen 3、native plugin 4、OnboardingScreen 55、OnboardingRoute 29、DirectWsTransport 9、root navigation 2、coordinator 207 项（344 项）通过，UI/config/i18n/docs/typecheck 检查通过。干净双平台 prebuild 与 133 Pods 同步通过，Android Debug 与独立 QA 本地 debug 签名编译通过；实际安装的是非 debuggable QA 包，验证主 Manifest 的明文策略，不依赖 debug 放行。Xcode 27 unsigned arm64 generic Simulator Debug 编译通过（两 build job、未启动 Simulator），产物中的 Local Network 说明、局域网许可、9 个私有/Tailnet/IPv6 ATS 例外及公开 arbitrary-load 禁用已核。
+  - USB 仅部署/UI 操作；手机真实 Wi-Fi 直达现有电脑 Gateway，无 adb reverse/网络隧道。OpenClaw 专属入口、空地址校验、键盘下按钮可达、LAN 错误 Token 提示及表单/遮罩保留通过。初版批准请求显示笼统错误，已补当前 adapter 显式 pairing 布尔状态及握手前保存目标认领，先红后绿回归覆盖批准超时和迟到回调；修正版实际显示电脑批准提示，只批准本次新 QA Android 请求，随后握手 ready、Agent/会话发现、新 QA 会话真实单次收发通过。仅重启 QA App 后恢复同会话/历史、自动与手动重连 ready；多次重试/重启始终一条 OpenClaw/Local 连接。QA 留装，临时凭据/采集文件已删、android 租约释放。Tailnet/iOS 物理权限与 TLS 尚待环境，登记 HUMAN TODO；本轮无发行、部署或发布。
 
 - 2026-10-06 修复非桌面 PR 全绿仍无法合并的 CI 矩阵状态。
   - OpenClaw 高级直连 PR201 实测：所有执行项通过，但 job-level if 在矩阵展开前跳过 desktop，GitHub 只记录未展开的 `${{ matrix.os }}` 名称，两个分支保护要求的 OS 检查均缺失。独立修复保留固定两 OS 名称；非桌面变更在轻量 Ubuntu runner 跳过套件步骤，桌面变更/main 仍执行原 Windows/macOS 全套。选择器缺失/畸形仍 fail closed；不改分支保护、测试或覆盖阈值。
