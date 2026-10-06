@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -36,6 +36,51 @@ beforeEach(() => {
 });
 afterEach(async () => { for (const service of services.splice(0)) await service.stop(); for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 describe('Claude service durable send and ownership boundary', () => {
+  it('reads an occupied native conversation model in its own project without resuming or persisting it', async () => {
+    const { project, service } = fixture(true); const nativeId = randomUUID();
+    const other = join(project, 'other'); mkdirSync(other);
+    mocks.list.mockResolvedValue([{ sessionId: nativeId, cwd: other, summary: 'Native', lastModified: 10 }]);
+    mocks.history.mockResolvedValue([{ uuid: 'reply', type: 'assistant', message: { model: 'claude-haiku-test', content: [{ type: 'text', text: 'Reply' }] } }]);
+    mocks.roster.mockResolvedValue({ known: true, owners: [{ sessionId: nativeId, status: 'idle' }] });
+    const [row] = await request(service, 'sessions.list') as Array<{ key: string }>;
+    expect(await request(service, 'models.list', { sessionKey: row.key })).toMatchObject({ currentModel: 'claude-haiku-test' });
+    expect(mocks.starts.mock.calls.every(([options]) => options.key === 'model-catalog' && !options.resume)).toBe(true);
+    expect(mocks.starts.mock.calls.at(-1)![0].cwd).toBe(other);
+    expect(mocks.history.mock.calls.at(-1)![1]).toEqual({ dir: other });
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect((service as any).store.records).toEqual([]);
+  });
+
+  it('persists observed model metadata without turning it into a launch override on restart', async () => {
+    const { service, open } = fixture();
+    const row = await request(service, 'sessions.create') as { key: string };
+    await request(service, 'models.list', { sessionKey: row.key });
+    const session = mocks.starts.mock.calls.at(-1)![1];
+    session.currentModel = 'claude-effective'; session.emit('model', 'claude-effective');
+    expect(await request(service, 'models.list', { sessionKey: row.key })).toMatchObject({ currentModel: 'claude-effective' });
+    expect((await request(service, 'sessions.list') as any[])[0].model).toBe('claude-effective');
+    expect((service as any).store.records[0]).toMatchObject({ observedModel: 'claude-effective' });
+    expect((service as any).store.records[0].model).toBeUndefined();
+    await service.stop(); const restarted = open();
+    expect((await request(restarted, 'sessions.list') as any[])[0].model).toBe('claude-effective');
+    await request(restarted, 'models.list', { sessionKey: row.key });
+    expect(mocks.starts.mock.calls.at(-1)![0].model).toBeUndefined();
+  });
+
+  it('keeps legacy explicit model pins while preferring the current native read over stale metadata', async () => {
+    const { service } = fixture();
+    const row = await request(service, 'sessions.create') as { key: string };
+    (service as any).store.records[0].model = 'legacy-pin';
+    expect(await request(service, 'models.list', { sessionKey: row.key })).toMatchObject({ currentModel: 'sonnet' });
+    expect(mocks.starts.mock.calls.at(-1)![0].model).toBe('legacy-pin');
+  });
+
+  it('rejects an unknown scoped model read before starting a catalog probe', async () => {
+    const { service } = fixture();
+    await expect(request(service, 'models.list', { sessionKey: 'unknown-session' })).rejects.toThrow('Unknown');
+    expect(mocks.starts).not.toHaveBeenCalled();
+  });
+
   it('a rename acknowledgement prevents a new sync from reusing a pre-rename multi-row scan', async () => {
     const { service } = fixture();
     const first = await request(service, 'sessions.create', { title: 'Before rename' }) as any;
@@ -351,8 +396,9 @@ describe('Claude service durable send and ownership boundary', () => {
     expect(mocks.starts.mock.calls.at(-1)![0]).toMatchObject({ key: 'model-catalog' });
     expect(mocks.starts.mock.calls.at(-1)![0].resume).toBeUndefined();
     await request(service, 'chat.send', { sessionKey: row.key, text: 'first', idempotencyKey: 'first' });
+    const started = mocks.starts.mock.calls.length;
     await request(service, 'models.list', { sessionKey: row.key });
-    expect(mocks.starts.mock.calls.at(-1)![0].resume).toBeUndefined();
+    expect(mocks.starts).toHaveBeenCalledTimes(started);
     expect(mocks.send).toHaveBeenCalledTimes(1);
   });
 

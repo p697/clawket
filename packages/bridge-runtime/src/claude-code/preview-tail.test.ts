@@ -18,11 +18,11 @@ it('reads a bounded tail of a large native transcript and ignores later tool out
   const line = (row: unknown) => `${JSON.stringify(row)}\n`;
   await writeFile(join(nativeDir, `${sessionId}.jsonl`), 'x'.repeat(9 * 1024 * 1024) + '\n'
     + line({ type: 'user', uuid: 'u', timestamp: '2026-09-27T10:00:00.000Z', message: { content: 'First prompt' } })
-    + line({ type: 'assistant', uuid: 'a', timestamp: '2026-09-27T10:01:00.000Z', message: { content: [{ type: 'text', text: '**Latest reply**' }] } })
+    + line({ type: 'assistant', uuid: 'a', timestamp: '2026-09-27T10:01:00.000Z', message: { model: 'claude-native', content: [{ type: 'text', text: '**Latest reply**' }] } })
     + line({ type: 'user', uuid: 'tool', timestamp: '2026-09-27T10:02:00.000Z', message: { content: [{ type: 'tool_result', tool_use_id: 'call', content: 'secret result' }] } }));
   expect(await claudeTranscriptSize(sessionId, cwd, root)).toBeGreaterThan(8 * 1024 * 1024);
   expect(await claudePreviewTail(sessionId, cwd, root))
-    .toEqual({ preview: 'Latest reply', lastActivityAt: Date.parse('2026-09-27T10:01:00.000Z') });
+    .toEqual({ preview: 'Latest reply', lastActivityAt: Date.parse('2026-09-27T10:01:00.000Z'), model: 'claude-native' });
   expect(await claudePreviewTail('../outside', cwd, root)).toBeUndefined();
   const previous = process.env.CLAUDE_CONFIG_DIR;
   try {
@@ -32,6 +32,7 @@ it('reads a bounded tail of a large native transcript and ignores later tool out
       fileSize: (await claudeTranscriptSize(sessionId, cwd, root))!,
     }]) as any, getSessionMessages }, async () => []);
     expect((await catalog.discover()).sessions[0].preview).toBe('Latest reply');
+    expect(await catalog.readModel(sessionId, cwd)).toBe('claude-native');
   } finally {
     if (previous === undefined) delete process.env.CLAUDE_CONFIG_DIR;
     else process.env.CLAUDE_CONFIG_DIR = previous;

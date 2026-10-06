@@ -168,4 +168,16 @@ describe('Claude project and native session discovery', () => {
     await catalog.discover();
     expect(sdk.getSessionMessages).toHaveBeenCalledTimes(1);
   });
+
+  it('projects native model metadata and rereads the selected conversation without a cached default', async () => {
+    const { project, sdk } = await fixture(); const info = row(project, 1);
+    sdk.listSessions.mockResolvedValue([info]);
+    sdk.getSessionMessages.mockResolvedValue([{ uuid: 'reply', type: 'assistant', message: { model: 'claude-old', content: [] } }]);
+    const catalog = new ClaudeCatalog({ project, device: false }, sdk, async () => []);
+    expect((await catalog.discover()).sessions[0].model).toBe('claude-old');
+    sdk.getSessionMessages.mockResolvedValue([{ uuid: 'new', type: 'assistant', message: { model: 'claude-new', content: [] } }]);
+    expect(await catalog.readModel(info.sessionId, project)).toBe('claude-new');
+    sdk.getSessionMessages.mockResolvedValue([{ uuid: 'synthetic', type: 'assistant', message: { model: '<synthetic>', content: [] } }]);
+    expect(await catalog.readModel(info.sessionId, project)).toBeUndefined();
+  });
 });

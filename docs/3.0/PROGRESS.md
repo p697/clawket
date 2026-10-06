@@ -1,5 +1,12 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-06 Claude Code 新建/已有会话开始时模型未读到（负责人要求修复）。
+  - 原生 control 初始化只有目录，`system/init` 首次发送前不出现；owned SDK 现用有十秒上限的 summary 元数据读取实际模型，旧读回不覆盖较新的 init/选模。观测值单独持久化为 `observedModel`，不把默认值变成重启 launch pin，旧 `model` pin 保持兼容。
+  - 原生会话只读最新主会话模型证据与成功 `/model` 的真实参数，排除子代理、工具和 synthetic；大文件保留 4 MiB tail 上限。目录 probe 使用会话所在项目，不接管或 resume 原 writer。未留下历史的新切换仍未知，不冒称实时读取另一个 owner 的设置。Mobile 仅模型读取等待增至有界 60 秒，普通 RPC 与写操作 deadline 保持。
+  - 逐文件串行：session 12、service 38、history 7、models 3、catalog 17、preview-tail 1、store 5；Mobile Claude adapter 14、共享 model picker 60，全通过。本机 Claude 2.1.283 的独立项目原生测试通过：首次输入前 Haiku，session-only 切换后 Sonnet，11 项模型目录、零发送/零推理，项目配置未改。真实原生测试为显式命令，不进入 CI-safe gate。
+  - 本地编译 Core、Runtime/Mobile 类型检查与 agent 文档检查串行验证；完整跨后端门禁交 PR CI。未做手机实机验收，未打包、发布、部署、升版本或更新运行中 Bridge；已安装环境需后续授权的 Bridge/App 更新才能收到对应修复。
+  - PR204 首次提交 `89fe2739` 的 CI37431847470 十一项全绿；合并前 main 先后新增 PR203 CI 矩阵修复与 PR201 OpenClaw 手机直连，已保留各条进度记录并重基，Claude 实现保持不变，最新基线门禁继续验证。
+
 - 2026-10-06 OpenClaw 高级直连（负责人要求完整恢复，实现与 Android Wi-Fi 验收完成，iOS 原生编译通过）。
   - 默认脚本/配对码 Relay 流程保持；仅 OpenClaw guide 底部新增高级入口，独立页支持 LAN、Tailscale、Custom、Token/Password。复用连接 runtime；鉴权完整替换、同端点去重、当前握手 ready、取消/超时/迟到结果隔离与 Pro 约束；Android 主 Manifest 明文许可及 iOS Local Network/私有地址 ATS 来自原生插件。19 语言同步；行为与验证边界见 [直连规格](21-openclaw-direct-connections.md)。
   - 已逐文件验证 direct model 26、route 9、screen 3、native plugin 4、OnboardingScreen 55、OnboardingRoute 29、DirectWsTransport 9、root navigation 2、coordinator 207 项（344 项）通过，UI/config/i18n/docs/typecheck 检查通过。干净双平台 prebuild 与 133 Pods 同步通过，Android Debug 与独立 QA 本地 debug 签名编译通过；实际安装的是非 debuggable QA 包，验证主 Manifest 的明文策略，不依赖 debug 放行。Xcode 27 unsigned arm64 generic Simulator Debug 编译通过（两 build job、未启动 Simulator），产物中的 Local Network 说明、局域网许可、9 个私有/Tailnet/IPv6 ATS 例外及公开 arbitrary-load 禁用已核。

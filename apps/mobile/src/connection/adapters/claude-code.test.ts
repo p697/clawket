@@ -136,6 +136,21 @@ it('preserves native model priority for catalog, selection and settings replies'
   }
 });
 
+it('waits for a cold native model read beyond 20 seconds, with a bounded 60-second deadline', async () => {
+  const connected = adapter.connect(); sockets[0].open(); sockets[0].reply(); await connected;
+  let settled = false;
+  const read = adapter.management.models!.getSelection!('cold').then(value => { settled = true; return value; });
+  const request = JSON.parse(sockets[0].sent.at(-1)!);
+  await jest.advanceTimersByTimeAsync(30_001);
+  expect(settled).toBe(false);
+  sockets[0].onmessage?.({ data: JSON.stringify({ type: 'res', id: request.id, ok: true, payload: { currentModel: 'haiku', models: [] } }) });
+  expect((await read).currentModel).toBe('haiku');
+  sockets[0].onmessage?.({ data: JSON.stringify({ type: 'tick', ts: Date.now(), ack: 'relay.client-pong.v1' }) });
+  const stalled = adapter.management.models!.getSelection!('cold').catch(error => error);
+  await jest.advanceTimersByTimeAsync(60_000);
+  expect((await stalled).code).toBe('timeout');
+});
+
 it('does not advertise unsupported steer, thinking controls, or skill management', () => {
   expect(adapter.capabilities).toMatchObject({ steer: false, thinkingLevels: false, skills: false, sessionBranch: true });
   expect(adapter.management.models?.setThinkingLevel).toBeUndefined();

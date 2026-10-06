@@ -1,5 +1,6 @@
 import { ClaudeFault } from './errors.js';
 import { ClaudeOwnerLock } from './owner-lock.js';
+import { claudeModelId } from './models.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { closeSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
@@ -13,6 +14,8 @@ export type ClaudeRecord = {
   createdAt: number;
   lastActivityAt?: number;
   model?: string;
+  /** Observed native model is display metadata, never a launch override. Legacy model pins remain intact. */
+  observedModel?: string;
   materialized?: boolean;
   fingerprints: Record<string, { hash: string; runId: string; clientKey: string }>;
 };
@@ -31,6 +34,7 @@ function validate(records: unknown): asserts records is ClaudeRecord[] {
       || !Number.isFinite(row.createdAt) || row.createdAt < 0
       || row.lastActivityAt !== undefined && (!Number.isFinite(row.lastActivityAt) || row.lastActivityAt < 0)
       || row.model !== undefined && (typeof row.model !== 'string' || row.model.length > 300)
+      || row.observedModel !== undefined && claudeModelId(row.observedModel) !== row.observedModel
       || row.materialized !== undefined && typeof row.materialized !== 'boolean'
       || row.nativeId !== undefined && (!UUID.test(row.nativeId) || nativeIds.has(row.nativeId))
       || row.materialized && !row.nativeId

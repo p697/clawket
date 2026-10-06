@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 import type { SessionMessage } from '@anthropic-ai/claude-agent-sdk';
 import { lastVisiblePreview } from '../session-preview.js';
-import { claudeHistory } from './history.js';
+import { claudeHistory, claudeHistoryModel } from './history.js';
 
 const MAX_TAIL_BYTES = 4 * 1024 * 1024;
 const UUID = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i;
@@ -23,7 +23,7 @@ export async function claudeTranscriptSize(sessionId: string, cwd: string, confi
 
 /** Large native JSONL files need a bounded roster excerpt, not a full SDK history projection. */
 export async function claudePreviewTail(sessionId: string, cwd: string, configDir = process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude')):
-  Promise<{ preview: string; lastActivityAt: number | null } | undefined> {
+  Promise<{ preview?: string; lastActivityAt: number | null; model?: string } | undefined> {
   const path = transcriptPath(sessionId, cwd, configDir);
   if (!path) return undefined;
   const handle = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
@@ -41,15 +41,17 @@ export async function claudePreviewTail(sessionId: string, cwd: string, configDi
     }
     const lines = bytes.subarray(0, read).toString('utf8').split('\n');
     if (offset > 0) lines.shift(); // The first line may begin in the middle of a JSON record.
-    for (let index = lines.length - 1; index >= 0; index--) {
+    const rows: SessionMessage[] = [];
+    for (let index = 0; index < lines.length; index++) {
       let entry: unknown;
       try { entry = JSON.parse(lines[index]); } catch { continue; }
       if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
       const row = entry as Record<string, unknown>;
       if ((row.type !== 'user' && row.type !== 'assistant') || row.isSidechain === true || row.parent_agent_id || row.parent_tool_use_id) continue;
-      const visible = lastVisiblePreview(claudeHistory([row as SessionMessage]));
-      if (visible) return visible;
+      rows.push(row as SessionMessage);
     }
-    return undefined;
+    const visible = lastVisiblePreview(claudeHistory(rows));
+    const model = claudeHistoryModel(rows);
+    return visible || model ? { lastActivityAt: null, ...visible, ...(model ? { model } : {}) } : undefined;
   } finally { await handle.close(); }
 }

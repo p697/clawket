@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { claudeModels } from './models.js';
+import { claudeModels, claudeModelValue } from './models.js';
 
 it('preserves default/explicit aliases separately while exposing their actual native model', () => {
   const models = claudeModels([
@@ -13,4 +13,16 @@ it('preserves default/explicit aliases separately while exposing their actual na
 });
 it('does not guess model versions when an older native CLI omits them', () => {
   expect(claudeModels([{ value: 'sonnet', displayName: 'Sonnet', description: '' }])[0]).not.toHaveProperty('resolvedModel');
+});
+
+it('preserves an explicitly selected alias when default resolves to the same native model', () => {
+  const models = [
+    { value: 'default', resolvedModel: 'claude-opus-test', displayName: 'Default', description: '' },
+    { value: 'opus', resolvedModel: 'claude-opus-test', displayName: 'Opus', description: '' },
+  ];
+  expect(claudeModelValue(models, 'claude-opus-test', 'opus')).toBe('opus');
+  expect(claudeModelValue(models, 'opus')).toBe('opus');
+  expect(claudeModelValue(models, undefined)).toBe('');
+  expect(claudeModelValue([{ value: 'sonnet', displayName: 'Sonnet', description: '' }], undefined)).toBe('');
+  expect(claudeModelValue(models, 'claude-unknown', 'opus')).toBe('claude-unknown');
 });

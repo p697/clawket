@@ -3,6 +3,7 @@ import { EventEmitter } from 'node:events';
 import { query, type Options, type Query, type SDKMessage, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { PromptInput, SessionUpdate } from '@clawket/agent-protocol';
 import { ClaudeInteractions } from './interactions.js';
+import { claudeModelId } from './models.js';
 
 type SessionOptions = {
   key: string;
@@ -49,6 +50,7 @@ export class ClaudeSession extends EventEmitter {
   private run?: Run;
   private nativeId?: string;
   private model?: string;
+  private modelRevision = 0;
 
   constructor(private readonly options: SessionOptions, private readonly sdkQuery: typeof query = query) {
     super();
@@ -143,7 +145,7 @@ export class ClaudeSession extends EventEmitter {
   private receive(message: SDKMessage): void {
     if (message.type === 'system' && message.subtype === 'init') {
       this.nativeId = message.session_id;
-      this.model = message.model;
+      this.rememberModel(message.model);
       this.emit('identity', this.nativeId);
       if (this.run) this.run.model = message.model;
     }
@@ -202,7 +204,28 @@ export class ClaudeSession extends EventEmitter {
 
   async models(): ReturnType<Query['supportedModels']> {
     await this.start();
+    const revision = this.modelRevision;
+    let deadline: ReturnType<typeof setTimeout> | undefined;
+    try {
+      // initialize returns the catalog, but system/init may not arrive until the first prompt.
+      // Summary is a read-only native model snapshot; full context counting would call the API.
+      const usage = await Promise.race([
+        this.runner!.getContextUsage({ detail: 'summary' }),
+        new Promise<never>((_, reject) => { deadline = setTimeout(() => reject(new ClaudeFault('Claude model read timed out')), 10_000); }),
+      ]);
+      if (!this.closed && revision === this.modelRevision) this.rememberModel(usage.model);
+    } catch { /* Older runtimes/read failures retain the last confirmed model and usable catalog. */ }
+    finally { if (deadline) clearTimeout(deadline); }
     return this.runner!.supportedModels();
+  }
+
+  private rememberModel(value: unknown): void {
+    const model = claudeModelId(value);
+    if (!model) return;
+    this.modelRevision++;
+    if (model === this.model) return;
+    this.model = model;
+    this.emit('model', model);
   }
   async setModel(model: string): Promise<void> {
     if (this.run) throw new ClaudeFault('Wait for Claude to finish before changing models');
@@ -210,7 +233,7 @@ export class ClaudeSession extends EventEmitter {
     const models = await this.models();
     if (!models.some(row => row.value === model || row.resolvedModel === model)) throw new ClaudeFault('Unsupported Claude model');
     await this.runner!.setModel(model);
-    this.model = model;
+    this.rememberModel(model);
   }
   async close(): Promise<void> {
     this.closed = true;

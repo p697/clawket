@@ -5,7 +5,7 @@ import { basename, isAbsolute, resolve } from 'node:path';
 import { getSessionMessages, listSessions, type SDKSessionInfo } from '@anthropic-ai/claude-agent-sdk';
 import type { ProjectDescriptor, SessionDescriptor, SessionHistory } from '@clawket/agent-protocol';
 import { claudeHistoryPage } from './history-page.js';
-import { claudeHistory } from './history.js';
+import { claudeHistory, claudeHistoryModel } from './history.js';
 import { lastVisiblePreview } from '../session-preview.js';
 import { claudePreviewTail, claudeTranscriptSize } from './preview-tail.js';
 import { savedClaudeProjects } from './saved-projects.js';
@@ -28,7 +28,7 @@ async function canonical(path: string): Promise<string> {
 export class ClaudeCatalog {
   private entries = new Map<string, NativeEntry>();
   private projects = new Map<string, ProjectDescriptor>();
-  private previews = new Map<string, { version: number; preview?: string; lastActivityAt: number | null }>();
+  private previews = new Map<string, { version: number; preview?: string; lastActivityAt: number | null; model?: string }>();
   private previewFailures = new Map<string, { version: number; checkedAt: number }>();
   private refresh?: Promise<{ truncated: boolean; complete: boolean; sessions: SessionDescriptor[] }>;
 
@@ -127,18 +127,32 @@ export class ClaudeCatalog {
 
   hasNativeEntry(sessionId: string): boolean { return this.entries.has(`native:${opaqueId(sessionId)}`); }
 
+  cachedModel(sessionId: string): string | undefined { return this.previews.get(sessionId)?.model; }
+
+  private async readMetadata(sessionId: string, cwd: string, fileSize?: number) {
+    const size = this.sdk.getSessionMessages === getSessionMessages
+      ? fileSize ?? await claudeTranscriptSize(sessionId, cwd) : undefined;
+    if (size !== undefined && size > 8 * 1024 * 1024) return claudePreviewTail(sessionId, cwd);
+    const rows = await this.sdk.getSessionMessages(sessionId, { dir: cwd });
+    const visible = lastVisiblePreview(claudeHistory(rows));
+    const model = claudeHistoryModel(rows);
+    return { lastActivityAt: null, ...visible, ...(model ? { model } : {}) };
+  }
+
+  /** The caller supplies an already authorized native identity/cwd, never phone paths. */
+  async readModel(sessionId: string, cwd: string): Promise<string | undefined> {
+    try { return (await this.readMetadata(sessionId, cwd))?.model; }
+    catch { return undefined; }
+  }
+
   async loadPreview(sessionId: string, cwd: string, version: number, fileSize?: number): Promise<void> {
     const cached = this.previews.get(sessionId);
     if (cached?.version === version) return;
     const failure = this.previewFailures.get(sessionId);
     if (failure?.version === version && Date.now() - failure.checkedAt < 30_000) return;
     try {
-      const size = this.sdk.getSessionMessages === getSessionMessages
-        ? fileSize ?? await claudeTranscriptSize(sessionId, cwd) : undefined;
-      const visible = size !== undefined && size > 8 * 1024 * 1024
-        ? await claudePreviewTail(sessionId, cwd)
-        : lastVisiblePreview(claudeHistory(await this.sdk.getSessionMessages(sessionId, { dir: cwd })));
-      this.previews.set(sessionId, { version, preview: visible?.preview, lastActivityAt: visible?.lastActivityAt ?? null });
+      const visible = await this.readMetadata(sessionId, cwd, fileSize);
+      this.previews.set(sessionId, { version, preview: visible?.preview, lastActivityAt: visible?.lastActivityAt ?? null, model: visible?.model });
       this.previewFailures.delete(sessionId);
     } catch { this.previewFailures.set(sessionId, { version, checkedAt: Date.now() }); }
   }
@@ -148,6 +162,7 @@ export class ClaudeCatalog {
     return { connectionId: '', agentId: 'claude-code', key, kind: 'direct',
       title: (info.customTitle || info.summary || 'Claude Code').slice(0, 300),
       updatedAt: info.lastModified, ...(visible?.lastActivityAt != null ? { lastActivityAt: visible.lastActivityAt } : {}), preview: visible?.preview,
+      ...(visible?.model ? { model: visible.model } : {}),
       hasActiveRun: false, project, source: 'native', canContinue: false,
       allowedActions: { rename: false, reset: false, delete: false, pin: true } };
   }

@@ -19,7 +19,7 @@ import { claudeHistoryPage } from './history-page.js';
 import { ClaudeOwners, type ClaudeOwnerSnapshot } from './owners.js';
 import { ClaudeSession, claudePromptContent } from './session.js';
 import { ClaudeStore, type ClaudeRecord } from './store.js';
-import { claudeModels } from './models.js';
+import { claudeModels, claudeModelValue } from './models.js';
 import { handleRemoteUpdateRequest, isRemoteUpdateMethod, remoteUpdateHealth, type RemoteUpdateControl } from '../remote-update.js';
 
 export interface ClaudeRequest { type: 'req'; id: string; method: string; params?: Record<string, unknown> }
@@ -88,7 +88,8 @@ export class ClaudeService extends EventEmitter {
       ? nativePreview : livePreview ?? nativePreview;
     return { connectionId: '', agentId: 'claude-code', key: record.key, kind: 'direct',
       title: record.title || basename(record.cwd), updatedAt: Math.max(record.lastActivityAt ?? record.createdAt, visible?.lastActivityAt ?? 0),
-      lastActivityAt: visible?.lastActivityAt ?? record.lastActivityAt ?? null, preview: visible?.preview, model: record.model,
+      lastActivityAt: visible?.lastActivityAt ?? record.lastActivityAt ?? null, preview: visible?.preview,
+      model: this.sessions.get(record.key)?.currentModel ?? (record.imported && record.nativeId ? this.catalog.cachedModel(record.nativeId) : undefined) ?? record.observedModel ?? record.model,
       project, source: record.imported ? 'native' : 'bridge', ...continuation,
       hasActiveRun: !!this.sessions.get(record.key)?.activeRun || !!(record.imported && snapshot?.known && snapshot.owners.some(owner => owner.sessionId === record.nativeId && owner.status === 'busy')), attention: this.attention.get(record.key),
       allowedActions: { rename: !record.imported, reset: !record.imported, delete: !record.imported, pin: true } };
@@ -240,13 +241,23 @@ export class ClaudeService extends EventEmitter {
       case 'models.list': case 'models.select': return this.serial(async () => {
         if (p.sessionKey === undefined || p.sessionKey === null || (frame.method === 'models.list' && !this.store.records.some(row => row.key === p.sessionKey && !row.imported))) {
           if (frame.method !== 'models.list') throw new ClaudeFault('Choose a conversation before changing its Claude model');
-          const probe = new ClaudeSession({ key: 'model-catalog', cwd: this.project, executable: this.options.executable });
+          const record = this.store.records.find(row => row.key === p.sessionKey);
+          const native = p.sessionKey == null || record ? undefined : this.catalog.native(string(p.sessionKey, 'session'));
+          const cwd = record?.cwd ?? native?.cwd ?? this.project;
+          const nativeId = record?.nativeId ?? native?.sessionId;
+          const live = record && this.sessions.get(record.key);
+          if (live) {
+            const models = await live.models();
+            const current = live.currentModel ?? record.observedModel ?? record.model ?? '';
+            return { currentModel: claudeModelValue(models, current, record.model),
+              currentProvider: 'anthropic', currentBaseUrl: '', models: claudeModels(models) };
+          }
+          const current = nativeId ? await this.catalog.readModel(nativeId, cwd) ?? record?.model ?? '' : '';
+          const probe = new ClaudeSession({ key: 'model-catalog', cwd, executable: this.options.executable });
           this.probes.add(probe);
           try {
             const models = await probe.models();
-            const current = this.store.records.find(row => row.key === p.sessionKey)?.model ?? '';
-            const selected = models.find(model => model.value === current || model.resolvedModel === current);
-            return { currentModel: selected?.value ?? current, currentProvider: 'anthropic', currentBaseUrl: '',
+            return { currentModel: claudeModelValue(models, current, record?.model), currentProvider: 'anthropic', currentBaseUrl: '',
               models: claudeModels(models) };
           } finally { await probe.close(); this.probes.delete(probe); }
         }
@@ -259,9 +270,8 @@ export class ClaudeService extends EventEmitter {
             await session.setModel(model); record.model = model; this.store.save();
           }
           const catalog = await session.models();
-          const current = record.model ?? session.currentModel;
-          const selected = catalog.find(model => model.value === current || model.resolvedModel === current);
-          const selection: ModelSelectionState = { currentModel: selected?.value ?? current ?? '', currentProvider: 'anthropic', currentBaseUrl: '',
+          const current = session.currentModel ?? record.observedModel ?? record.model;
+          const selection: ModelSelectionState = { currentModel: claudeModelValue(catalog, current, record.model), currentProvider: 'anthropic', currentBaseUrl: '',
             models: claudeModels(catalog) };
           return frame.method === 'models.select' ? { ...selection, ok: true, scope: 'session' } : selection;
         } finally { if (record.imported && !session.activeRun) await this.releaseSession(record.key, session); }
@@ -369,9 +379,9 @@ export class ClaudeService extends EventEmitter {
         model: record.model, ...(record.materialized ? { resume: record.nativeId } : { sessionId: record.nativeId }) });
       session.on('update', (update: SessionUpdate) => this.update(update));
       session.on('closed', () => { void this.serial(() => this.releaseSession(record.key, session)).catch(() => {}); });
-      session.on('identity', () => {
-        if (!record.model && session.currentModel) {
-          record.model = session.currentModel;
+      session.on('model', () => {
+        if (session.currentModel) {
+          record.observedModel = session.currentModel;
           try { this.store.save(); }
           catch { this.update({ type: 'error', sessionKey: record.key, code: 'server', message: 'Claude model metadata could not be saved.' }); }
           void this.descriptor(record).then(descriptor => this.update({ type: 'session_info_update', session: descriptor })).catch(() => {});

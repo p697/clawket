@@ -231,7 +231,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
   }
 
 
-  private rpc<T>(method: string, params: Record<string, unknown> = {}, timeoutMs = method === 'models.select' ? 190_000 : 20_000): Promise<T> {
+  private rpc<T>(method: string, params: Record<string, unknown> = {}, timeoutMs = method === 'models.select' ? 190_000 : method === 'models.list' ? 60_000 : 20_000): Promise<T> {
     // Fresh identity across adapter replacement and process restarts; late replies
     // must never resolve a different request on the same saved connection.
     const id = generateId();

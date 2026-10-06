@@ -13,6 +13,15 @@ function fixture() {
   return { dir, scope, open };
 }
 describe('Claude durable metadata ownership', () => {
+  it('retains observed models separately from explicit launch pins and rejects malformed observations', () => {
+    const { dir, open } = fixture(); const store = open();
+    store.records.push({ key: randomUUID(), cwd: dir, title: '', createdAt: 1, observedModel: 'claude-observed', fingerprints: {} });
+    store.save(); store.close(); const restored = open();
+    expect(restored.records[0].observedModel).toBe('claude-observed');
+    expect(restored.records[0].model).toBeUndefined();
+    restored.records[0].observedModel = '';
+    expect(() => restored.save()).toThrow('Invalid Claude index');
+  });
   it('rejects a second live writer and preserves accepted message identities across restart', () => {
     const { dir, open } = fixture(); const store = open();
     store.records.push({ key: randomUUID(), cwd: dir, title: 'QA', createdAt: 1, fingerprints: {

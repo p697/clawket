@@ -204,6 +204,8 @@ Claude SDK rows with absent optional `cwd` are excluded from the eligible native
 
 Model choices retain native aliases and optional resolved IDs. Exclude exact native model-switch and interruption envelopes from human chat history without stripping ordinary text discussing commands.
 
+Claude owned model reads use the bounded read-only `getContextUsage({ detail: 'summary' })` snapshot before the first prompt; control initialization alone does not report the selected model. Fence late snapshots against native init and confirmed selections. Persist observations separately from explicit launch pins, preserving legacy pins. Native-session views read only main-session transcript model evidence (bounded tails for large files) and project-scoped catalogs, never resume/adopt an original writer or infer an unknown model from the first catalog row. Native-completed model switches require their actual command argument, not a parsed display label.
+
 Default Claude executable discovery prefers the newest runnable Desktop Code host runtime in macOS/Windows user data, then PATH/native CLI. The GUI and VM guest are not SDK executables. Explicit commands override automatic discovery; selected-runtime version/startup failures must not silently retry another installation. Use that same executable for SDK sessions and native owner queries. Layouts, minimum version and explicit real-model verification are documented in `../../docs/3.1/claude-code.md`.
 
 ## Codex App Server

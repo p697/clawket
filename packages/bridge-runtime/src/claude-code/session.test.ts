@@ -23,6 +23,7 @@ function fixture() {
     },
     initializationResult: vi.fn().mockResolvedValue({}),
     supportedModels: vi.fn().mockResolvedValue([{ value: 'native-model', displayName: 'Native model', description: '' }]),
+    getContextUsage: vi.fn().mockResolvedValue({ model: 'native-model' }),
     setModel: vi.fn().mockResolvedValue(undefined),
     interrupt: vi.fn().mockResolvedValue(undefined),
     close: vi.fn(() => { closed = true; next?.({ value: undefined, done: true }); next = undefined; }),
@@ -38,6 +39,62 @@ function fixture() {
 }
 
 describe('Claude owned streaming session', () => {
+  it('reads the effective model before any prompt or system init, without dispatching input', async () => {
+    const { session, iterator, events } = fixture();
+    await session.models();
+    expect(session.currentModel).toBe('native-model');
+    expect(iterator.getContextUsage).toHaveBeenCalledWith({ detail: 'summary' });
+    expect(session.activeRun).toBeUndefined();
+    expect(events).toEqual([]);
+    await session.close();
+  });
+
+  it('does not overwrite a newer native init with a pending model snapshot', async () => {
+    const { session, iterator, push } = fixture();
+    let finish!: (value: { model: string }) => void;
+    iterator.getContextUsage.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    await session.start();
+    const models = session.models(); await new Promise(resolve => setImmediate(resolve));
+    push({ type: 'system', subtype: 'init', session_id: 'native', model: 'new-model' });
+    await new Promise(resolve => setImmediate(resolve));
+    finish({ model: 'old-model' }); await models;
+    expect(session.currentModel).toBe('new-model');
+    await session.close();
+  });
+
+  it('keeps native selection ahead of an older pending model read', async () => {
+    const { session, iterator } = fixture();
+    let finish!: (value: { model: string }) => void;
+    iterator.getContextUsage.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    await session.start();
+    const read = session.models(); await new Promise(resolve => setImmediate(resolve));
+    await session.setModel('native-model');
+    finish({ model: 'old-model' }); await read;
+    expect(session.currentModel).toBe('native-model');
+    await session.close();
+  });
+
+  it.each([null, '', '<synthetic>', 42])('never invents a model from an invalid native snapshot (%s)', async model => {
+    const { session, iterator } = fixture();
+    iterator.getContextUsage.mockResolvedValueOnce({ model } as any);
+    expect(await session.models()).toHaveLength(1);
+    expect(session.currentModel).toBeUndefined();
+    await session.close();
+  });
+
+  it('bounds an unsupported or stalled model read without retiring a usable owned process', async () => {
+    vi.useFakeTimers();
+    const { session, iterator } = fixture();
+    try {
+      iterator.getContextUsage.mockImplementationOnce(() => new Promise(() => {}));
+      const read = session.models(); await vi.advanceTimersByTimeAsync(10_000);
+      expect(await read).toHaveLength(1);
+      expect(iterator.close).not.toHaveBeenCalled();
+      iterator.getContextUsage.mockRejectedValueOnce(new Error('native private error'));
+      expect(await session.models()).toHaveLength(1);
+    } finally { await session.close(); vi.useRealTimers(); }
+  });
+
   it('uses installed CLI, native settings and ordinary permissions, preserving streamed whitespace', async () => {
     const { session, factory, events, push, takeInput } = fixture();
     await session.start();

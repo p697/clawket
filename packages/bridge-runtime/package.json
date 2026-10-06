@@ -21,6 +21,7 @@
     "test:hermes-integration": "vitest run src/hermes/*.integration.test.ts --no-file-parallelism",
     "test:codex-desktop-integration": "vitest run src/codex/desktop.integration.test.ts --config vitest.native.config.ts --maxWorkers=2",
     "test:claude-desktop-integration": "vitest run src/claude-code/desktop.integration.test.ts --config vitest.native.config.ts --maxWorkers=2",
+    "test:claude-model-integration": "vitest run src/claude-code/model-read.integration.test.ts --config vitest.native.config.ts --maxWorkers=2",
     "test:codex-activity-integration": "vitest run src/codex/session-activity.integration.test.ts --config vitest.native.config.ts --maxWorkers=2",
     "test:codex-profile-integration": "vitest run src/codex/profile.integration.test.ts --config vitest.native.config.ts --maxWorkers=2"
   },

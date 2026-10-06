@@ -1,5 +1,6 @@
 import type { SessionMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { ChatMessage } from '@clawket/agent-protocol';
+import { claudeModelId } from './models.js';
 
 type Block = Record<string, unknown>;
 
@@ -27,6 +28,39 @@ function outputText(content: unknown): string {
   if (typeof content === 'string') return content.slice(0, 32_000);
   return blocks(content).filter(block => block.type === 'text' && typeof block.text === 'string')
     .map(block => block.text).join('\n').slice(0, 32_000);
+}
+
+/** Last native main-session model evidence; never infer it from tool output or a subagent. */
+export function claudeHistoryModel(messages: readonly SessionMessage[]): string | undefined {
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const entry = messages[index] as SessionMessage & { isSidechain?: unknown; isCompletedLocalCommand?: unknown };
+    if (!entry || typeof entry.uuid !== 'string' || !entry.uuid || entry.parent_tool_use_id || entry.parent_agent_id || entry.isSidechain === true || !record(entry.message)) continue;
+    if (entry.type === 'assistant') {
+      const model = claudeModelId(entry.message.model);
+      if (model) return model;
+    }
+    if (entry.type !== 'user' || entry.isCompletedLocalCommand !== true) continue;
+    const content = entry.message.content;
+    const parts = blocks(content);
+    const text = typeof content === 'string' ? content
+      : parts.length === 1 && parts[0].type === 'text' && typeof parts[0].text === 'string' ? parts[0].text : '';
+    if (text.length > 4_000) continue;
+    const switched = /^\s*<local-command-stdout>Set model to ([\s\S]*)<\/local-command-stdout>\s*$/.exec(text);
+    if (!switched) continue;
+    const command = messages[index - 1];
+    if (command?.type === 'user' && (command as SessionMessage & { isSidechain?: unknown }).isSidechain !== true
+      && !command.parent_tool_use_id && !command.parent_agent_id && record(command.message)) {
+      const content = command.message.content;
+      const parts = blocks(content);
+      const text = typeof content === 'string' ? content
+        : parts.length === 1 && parts[0].type === 'text' && typeof parts[0].text === 'string' ? parts[0].text : '';
+      const args = /^\s*<command-name>\/model<\/command-name>\s*<command-message>model<\/command-message>\s*<command-args>([^<]*)<\/command-args>\s*$/.exec(text);
+      if (args) return claudeModelId(args[1]);
+    }
+    // Display labels are not model IDs. An unrecognized switch invalidates older evidence.
+    return undefined;
+  }
+  return undefined;
 }
 
 /** Read-only projection. Native UUIDs and tool-use IDs survive live/history reconciliation. */

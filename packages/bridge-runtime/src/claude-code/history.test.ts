@@ -1,12 +1,33 @@
 import { describe, expect, it } from 'vitest';
 import type { SessionMessage } from '@anthropic-ai/claude-agent-sdk';
-import { claudeHistory } from './history.js';
+import { claudeHistory, claudeHistoryModel } from './history.js';
 
 const message = (type: SessionMessage['type'], uuid: string, content: unknown): SessionMessage => ({
   type, uuid, session_id: 'fixture', parent_tool_use_id: null, parent_agent_id: null, message: { content },
 });
 
 describe('Claude native history', () => {
+  it('recovers the latest main-session model while excluding subagents, tool output and synthetic replies', () => {
+    const model = (uuid: string, value: unknown) => ({ ...message('assistant', uuid, []), message: { model: value, content: [] } });
+    expect(claudeHistoryModel([
+      model('old', 'claude-old'), model('new', 'claude-new'),
+      { ...model('child', 'claude-child'), parent_tool_use_id: 'tool' },
+      { ...model('sidechain', 'claude-child'), isSidechain: true } as SessionMessage,
+      model('synthetic', '<synthetic>'), model('invalid', 42),
+      message('user', 'tool-output', [{ type: 'tool_result', content: 'claude-other' }]),
+    ])).toBe('claude-new');
+  });
+
+  it('uses only native-completed model switches, and withdraws stale evidence after an unknown switch', () => {
+    const prior = { ...message('assistant', 'reply', []), message: { model: 'claude-prior', content: [] } };
+    const switched = message('user', 'switch', '<local-command-stdout>Set model to `sonnet (claude-next)`</local-command-stdout>');
+    expect(claudeHistoryModel([prior, switched])).toBe('claude-prior');
+    const command = message('user', 'command', '<command-name>/model</command-name>\n<command-message>model</command-message>\n<command-args>sonnet</command-args>');
+    expect(claudeHistoryModel([prior, command, { ...switched, isCompletedLocalCommand: true } as SessionMessage])).toBe('sonnet');
+    const unknown = message('user', 'unknown', '<local-command-stdout>Set model to Unknown display name</local-command-stdout>');
+    expect(claudeHistoryModel([prior, { ...unknown, isCompletedLocalCommand: true } as SessionMessage])).toBeUndefined();
+  });
+
   it('omits native model-switch envelopes while preserving human discussion of commands', () => {
     const text = 'Explain <command-name>/model</command-name> please';
     expect(claudeHistory([
