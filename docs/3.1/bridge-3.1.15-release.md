@@ -28,4 +28,8 @@ Fresh read-only verification confirms all six Production Worker source/config ha
 
 ## Publication status
 
-The fixed candidate has reached npm's browser authentication challenge. Upload acceptance, public version/latest, complete public download and independent public installation are still pending; this is not yet a verified public release. Running Bridges have not been updated or restarted.
+The owner completed npm's browser authentication and npm accepted the fixed candidate with exit zero. Public propagation initially returns 404; public version/latest, complete public download and independent public installation are still pending. Upload acceptance is distinct from a verified public release. Running Bridges have not been updated or restarted.
+
+## Later main integration
+
+After upload, main gained PR202 (`3cfc2708`), repairing the standalone local-model supervisor's start behavior across control credential replacement. This script is outside the npm CLI's packaged files and all 143 package input hashes remain unchanged after synchronization. The immutable artifact source remains `56991532`; integration CI checks the later repository state separately. No replacement upload or additional version bump is performed.
