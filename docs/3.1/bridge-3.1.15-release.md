@@ -1,0 +1,23 @@
+# Bridge 3.1.15 release
+
+The owner authorized a small Bridge publication from latest main on 2026-10-06. The clean source base is `44db3569` (PR197). Only the public CLI patch version and publish guard advance to 3.1.15; internal workspace and App versions remain unchanged.
+
+## Scope
+
+PR196 adds authenticated phone-started Bridge updates through parameterless start and read-only status controls. The updater runs outside the requesting runtime's process tree, serializes updates on that computer, and preserves stopped scopes, configuration, pairing and history. Development layouts and independently supervised local-model runtimes do not advertise it. The phone UI requires a separately delivered compatible App.
+
+PR197 makes explicit update and Codex/Claude Code pairing refresh proceed without waiting for replies. An update interrupts running Bridge replies through authenticated lifecycle control or a verified owner PID; pairing refresh restarts only its own Bridge. It also removes confirmed exited-owner records and keeps OpenClaw shutdown signal handlers through cleanup, repairing the observed 3.1.14 update rollback after repeated service-stop signals. Existing native Desktop/terminal work, backend scope and ownership checks remain authoritative.
+
+This package includes all prior Bridge fixes, including Claude history without optional cwd, Codex Desktop input compatibility and native step clocks. Publication does not update running Bridges or establish phone/Desktop acceptance. No App distribution or Production Worker deployment is included.
+
+## Publication gates
+
+Require six publish-guard cases, documentation rules, both lockfile dependency audits, v1 replay, fresh read-only Production Worker snapshot compatibility, exact-source CI including Windows/macOS, bundle provenance, fixed-tarball dry run and isolated empty-auth candidate installation. Public completion requires version/latest and a complete unauthenticated download matching the fixed candidate and npm integrity, followed by an independent public installation. Private evidence lives at `/Volumes/Lucy-SSD/clawket-release-evidence/bridge-3.1.15-20261006`.
+
+## Recovery and acceptance
+
+Retain public 3.1.14 as the previous package for deliberate recovery; its updater/shutdown defects remain documented in [Bridge updates](../bridge-updates.md). An explicit managed update must retain the original backend/config/project/environment and verify the authenticated running version. Replies still running are interrupted. Keep existing Claude history and two-computer Codex continuation/Desktop reopen acceptance checkpoints; compatible Mobile delivery is separate. This publication does not execute a runtime update.
+
+## Verification status
+
+Version preparation is complete. Local checks and packaging await the existing QA build's heavy lease; CI and publication evidence will be recorded before declaring this release complete.

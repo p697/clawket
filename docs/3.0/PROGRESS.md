@@ -1,5 +1,9 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-06 负责人授权基于最新 main 的 Bridge 3.1.15 小发布，准备中。
+  - 干净基线 `44db3569`，纳入 PR196 手机触发更新、PR197 更新/重新配对立即执行及退出 owner/服务停止清理修复；只升公开 CLI 与守卫 patch，内部 workspace/App 不升。
+  - 独立 worktree 准备版本及[发布记录](../3.1/bridge-3.1.15-release.md)。本地发布校验/固定包和完整 CI 待完成；另一会话的 QA APK 持 heavy 锁，先做独立准备。运行中 Bridge 未更新，App 与 Worker 发布不在本任务范围。
+
 - 2026-10-06 CI 追踪追加：本地模型 supervisor 并发启动竞态（QQ 邮箱调查后继续验证 main）。
   - CI 精简 PR #199 在最新 main 上 11 项全部通过，已合并为 19ec342e；此前 main run 37422232668 又在 macOS concurrent-start 进程测试退出 1。原日志没有内部错误，不能仅由退出码认定原因；新增真 socket 回归固定复现「读旧 credential、连接新 owner 被拒绝」的启动失败，旧实现先红、修复后绿。
   - 控制 credential 在取得独占 socket 后原子发布；只有保存的 credential 确实换代才重新读取连接，仍受原有 15 秒 start 总预算约束，换代重试不另启 owner。未换代的无效回复依然立即失败，status/stop 不跨代静默重试。测试临时目录前缀缩短，避免 macOS canonical Unix socket 路径超限；不改停止/并发恢复断言。
