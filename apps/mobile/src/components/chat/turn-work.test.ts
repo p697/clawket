@@ -69,7 +69,7 @@ describe('collectLiveTurnWork', () => {
     expect(work.running).toBe(1);
     expect(work.current).toBe(pending);
   });
-  it('names the newest running step and counts failures without dropping them', () => {
+  it('names the newest running step and keeps failed steps in the turn', () => {
     const start = 1_700_000_000_000;
     const ask = prompt('fix the tests');
     const read = call('read', { path: 'a.ts' }, { toolStartedAt: start + 1_000 });
@@ -81,7 +81,6 @@ describe('collectLiveTurnWork', () => {
     expect(keys(work.steps)).toEqual([read.id, failed.id, first.id, second.id]);
     expect(work.current?.id).toBe(second.id);
     expect(work.running).toBe(2);
-    expect(work.failed).toBe(1);
     expect(work.firstStepAt).toBe(start + 1_000);
     expect(work.entries.map((entry) => `${entry.kind}:${entry.message.id}`)).toEqual([
       `step:${read.id}`, `step:${failed.id}`, `said:${said.id}`, `step:${first.id}`, `step:${second.id}`,

@@ -99,15 +99,13 @@ export type TurnWork = Readonly<{
   current?: UiMessage;
   /** Steps running at once. */
   running: number;
-  /** Failed steps; a failure the Agent moved past is still counted, never shouted. */
-  failed: number;
   /** When the first step started, for the dock's one-second grace. */
   firstStepAt?: number;
   /** An approval of this turn still waiting for the user. */
   pendingApproval?: UiMessage;
 }>;
 
-export const EMPTY_TURN_WORK: TurnWork = Object.freeze({ entries: [], steps: [], running: 0, failed: 0 });
+export const EMPTY_TURN_WORK: TurnWork = Object.freeze({ entries: [], steps: [], running: 0 });
 
 /**
  * Builds a turn from its messages, newest first. In the running turn a step
@@ -121,7 +119,6 @@ function buildTurnWork(turn: ReadonlyArray<UiMessage>, live = false): TurnWork {
   const steps: UiMessage[] = [];
   let current: UiMessage | undefined;
   let running = 0;
-  let failed = 0;
   let firstStepAt: number | undefined;
   let pendingApproval: UiMessage | undefined;
   // Walking newest-first: whether a step came after the message in hand.
@@ -134,8 +131,6 @@ function buildTurnWork(turn: ReadonlyArray<UiMessage>, live = false): TurnWork {
       if (message.toolStatus === 'running') {
         running += 1;
         current ??= message;
-      } else if (message.toolStatus === 'error') {
-        failed += 1;
       }
       const started = validTime(message.toolStartedAt) ?? validTime(message.timestampMs);
       if (started !== undefined) firstStepAt = firstStepAt === undefined ? started : Math.min(firstStepAt, started);
@@ -154,7 +149,7 @@ function buildTurnWork(turn: ReadonlyArray<UiMessage>, live = false): TurnWork {
   }
   entries.reverse();
   steps.reverse();
-  return { entries, steps, current, running, failed, firstStepAt, pendingApproval };
+  return { entries, steps, current, running, firstStepAt, pendingApproval };
 }
 
 /** The newest turn: everything after the latest prompt the Agent received. */

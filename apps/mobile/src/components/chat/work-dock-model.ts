@@ -78,7 +78,7 @@ function stepIndex(work: TurnWork, step: NonNullable<TurnWork['current']>): numb
 
 /**
  * The dock's second line, shared with the work panel: which step and how far
- * along, the turn's time, and failures as one quiet clause. An approval shows
+ * along, and the turn's time. An approval shows
  * its command, a question what it asks, a lost connection what it means.
  */
 export function formatWorkDockCaption({ phase, work, elapsed, detail, t }: Readonly<{
@@ -99,7 +99,7 @@ export function formatWorkDockCaption({ phase, work, elapsed, detail, t }: Reado
   if (work.running > 1) parts.push(t('{{count}} steps at once', { ns: 'chat', count: work.running }));
   else if (phase.kind === 'step') parts.push(t('Step {{count}}', { ns: 'chat', count: stepIndex(work, phase.step) }));
   else if (work.steps.length > 0) parts.push(work.steps.length === 1 ? t('1 step', { ns: 'chat' }) : t('{{count}} steps', { ns: 'chat', count: work.steps.length }));
+  // Failures are not counted here (owner decision 2026-10-06): the panel marks each failed step.
   if (elapsed !== undefined && elapsed >= 1000) parts.push(t('Elapsed {{time}}', { ns: 'chat', time: formatElapsedClock(elapsed) }));
-  if (work.failed > 0) parts.push(work.failed === 1 ? t('1 step failed', { ns: 'chat' }) : t('{{count}} steps failed', { ns: 'chat', count: work.failed }));
   return parts.join(' · ');
 }

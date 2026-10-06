@@ -467,8 +467,6 @@
   "{{count}} steps at once": "{{count}} steps at once",
   "Step {{count}}": "Step {{count}}",
   "Elapsed {{time}}": "Elapsed {{time}}",
-  "1 step failed": "1 step failed",
-  "{{count}} steps failed": "{{count}} steps failed",
   "Review": "Review",
   "Goes to the request": "Goes to the request",
   "Shows every step so far": "Shows every step so far",

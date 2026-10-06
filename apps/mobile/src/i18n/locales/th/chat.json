@@ -467,8 +467,6 @@
   "{{count}} steps at once": "{{count}} ขั้นตอนพร้อมกัน",
   "Step {{count}}": "ขั้นตอนที่ {{count}}",
   "Elapsed {{time}}": "ผ่านไป {{time}}",
-  "1 step failed": "ล้มเหลว 1 ขั้นตอน",
-  "{{count}} steps failed": "ล้มเหลว {{count}} ขั้นตอน",
   "Review": "ตรวจสอบ",
   "Goes to the request": "ไปที่คำขอ",
   "Shows every step so far": "แสดงทุกขั้นตอนจนถึงตอนนี้",

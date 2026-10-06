@@ -467,8 +467,6 @@
   "{{count}} steps at once": "{{count}}단계 동시 진행",
   "Step {{count}}": "{{count}}단계",
   "Elapsed {{time}}": "{{time}} 경과",
-  "1 step failed": "1단계 실패",
-  "{{count}} steps failed": "{{count}}단계 실패",
   "Review": "확인하기",
   "Goes to the request": "요청으로 이동해요",
   "Shows every step so far": "지금까지의 모든 단계를 보여 줘요",

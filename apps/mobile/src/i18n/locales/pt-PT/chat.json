@@ -467,8 +467,6 @@
   "{{count}} steps at once": "{{count}} passos em simultâneo",
   "Step {{count}}": "Passo {{count}}",
   "Elapsed {{time}}": "{{time}} decorrido",
-  "1 step failed": "1 passo falhou",
-  "{{count}} steps failed": "{{count}} passos falharam",
   "Review": "Rever",
   "Goes to the request": "Vai para o pedido",
   "Shows every step so far": "Mostra todos os passos até agora",

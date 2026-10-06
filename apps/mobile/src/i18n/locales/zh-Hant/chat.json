@@ -467,8 +467,6 @@
   "{{count}} steps at once": "同時進行 {{count}} 步",
   "Step {{count}}": "第 {{count}} 步",
   "Elapsed {{time}}": "已用 {{time}}",
-  "1 step failed": "1 步失敗",
-  "{{count}} steps failed": "{{count}} 步失敗",
   "Review": "去處理",
   "Goes to the request": "前往這個請求",
   "Shows every step so far": "查看目前的每一步",

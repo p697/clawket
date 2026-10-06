@@ -467,8 +467,6 @@
   "{{count}} steps at once": "{{count}} خطوات في آن واحد",
   "Step {{count}}": "الخطوة {{count}}",
   "Elapsed {{time}}": "مضى {{time}}",
-  "1 step failed": "فشلت خطوة واحدة",
-  "{{count}} steps failed": "فشلت {{count}} خطوات",
   "Review": "مراجعة",
   "Goes to the request": "ينتقل إلى الطلب",
   "Shows every step so far": "يعرض كل الخطوات حتى الآن",

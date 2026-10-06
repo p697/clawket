@@ -467,8 +467,6 @@
   "{{count}} steps at once": "Aynı anda {{count}} adım",
   "Step {{count}}": "{{count}}. adım",
   "Elapsed {{time}}": "{{time}} geçti",
-  "1 step failed": "1 adım başarısız",
-  "{{count}} steps failed": "{{count}} adım başarısız",
   "Review": "İncele",
   "Goes to the request": "İsteğe gider",
   "Shows every step so far": "Şimdiye kadarki tüm adımları gösterir",

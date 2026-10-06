@@ -467,8 +467,6 @@
   "{{count}} steps at once": "Шагов одновременно: {{count}}",
   "Step {{count}}": "Шаг {{count}}",
   "Elapsed {{time}}": "Прошло {{time}}",
-  "1 step failed": "1 шаг не удался",
-  "{{count}} steps failed": "Не удалось шагов: {{count}}",
   "Review": "Проверить",
   "Goes to the request": "Переходит к запросу",
   "Shows every step so far": "Показывает все шаги на данный момент",

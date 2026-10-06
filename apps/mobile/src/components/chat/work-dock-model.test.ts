@@ -57,11 +57,11 @@ describe('formatWorkDockCaption', () => {
     return formatWorkDockCaption({ phase: resolveWorkDockPhase({ work, messages, offline: false }), work, elapsed, t });
   };
 
-  it('says which step, how long, and failures as one quiet clause', () => {
+  it('says which step and how long, never how many failed', () => {
     expect(caption([step('c', 'running'), step('b', 'error'), step('a', 'success'), prompt], 160_000))
-      .toBe('Step 3 · Elapsed 2:40 · 1 step failed');
+      .toBe('Step 3 · Elapsed 2:40');
     expect(caption([step('c', 'running'), step('b', 'running'), step('a', 'error'), step('z', 'error'), prompt]))
-      .toBe('2 steps at once · 2 steps failed');
+      .toBe('2 steps at once');
     expect(caption([step('a', 'success'), prompt], 500)).toBe('1 step');
   });
 

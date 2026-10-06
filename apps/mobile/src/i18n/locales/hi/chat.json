@@ -467,8 +467,6 @@
   "{{count}} steps at once": "एक साथ {{count}} चरण",
   "Step {{count}}": "चरण {{count}}",
   "Elapsed {{time}}": "{{time}} बीते",
-  "1 step failed": "1 चरण विफल",
-  "{{count}} steps failed": "{{count}} चरण विफल",
   "Review": "देखें",
   "Goes to the request": "अनुरोध पर ले जाता है",
   "Shows every step so far": "अब तक के सभी चरण दिखाता है",

@@ -467,8 +467,6 @@
   "{{count}} steps at once": "{{count}} ステップを同時に実行中",
   "Step {{count}}": "ステップ {{count}}",
   "Elapsed {{time}}": "経過 {{time}}",
-  "1 step failed": "1 ステップ失敗",
-  "{{count}} steps failed": "{{count}} ステップ失敗",
   "Review": "確認する",
   "Goes to the request": "リクエストに移動します",
   "Shows every step so far": "これまでの全ステップを表示します",

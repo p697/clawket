@@ -467,8 +467,6 @@
   "{{count}} steps at once": "Кроків одночасно: {{count}}",
   "Step {{count}}": "Крок {{count}}",
   "Elapsed {{time}}": "Минуло {{time}}",
-  "1 step failed": "1 крок не вдався",
-  "{{count}} steps failed": "Не вдалося кроків: {{count}}",
   "Review": "Переглянути",
   "Goes to the request": "Переходить до запиту",
   "Shows every step so far": "Показує всі кроки на цей момент",
