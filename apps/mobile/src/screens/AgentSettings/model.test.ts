@@ -272,3 +272,9 @@ describe('Agent settings descriptor model', () => {
   const model = buildAgentSettingsModel({ connection: connection(backend), agent: agent(backend), capabilities: capabilities(backend), connectionState: 'ready', isPro: true, summary: { todayCostUsd: 0.258672624, todayCostMode: 'mixed' } });
   expect(model.stats.find((s) => s.id === 'usage')).toMatchObject({ value: '$0.26', title: 'Cost today', detail: { key: 'Partial', tone: 'neutral' } });
 });
+
+
+it('labels the Codex instruction entry Memory and preserves its files destination', () => {
+  const model = buildAgentSettingsModel({ connection: connection('codex'), agent: agent('codex'), capabilities: capabilities('codex', { profileManagement: true }), connectionState: 'ready', isPro: false, summary: { fileCount: 1 } });
+  expect(model.stats.find(row => row.id === 'files')).toEqual(expect.objectContaining({ title: 'Memory', section: 'files', value: '1' }));
+});

@@ -1,5 +1,5 @@
 import React from 'react';
-import { RefreshControl } from 'react-native';
+import { AppState, RefreshControl } from 'react-native';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import type { AgentProfileOperations } from '@clawket/agent-protocol';
 import { NativeProfileScreen } from './NativeProfileScreen';
@@ -8,12 +8,12 @@ jest.mock('react-native', () => {
   const ReactRuntime = require('react');
   const host = (name: string) => ReactRuntime.forwardRef(({ children, ...props }: any, ref: any) => ReactRuntime.createElement(name, { ...props, ref }, children));
   const ScrollView = ReactRuntime.forwardRef(({ children, refreshControl, ...props }: any, ref: any) => ReactRuntime.createElement('ScrollView', { ...props, ref }, refreshControl, children));
-  return { Platform: { OS: 'ios', select: (v: any) => v.ios ?? v.default }, StyleSheet: { create: (v: any) => v, hairlineWidth: 1 }, View: host('View'), Text: host('Text'), Pressable: host('Pressable'), ScrollView, RefreshControl: host('RefreshControl'), TextInput: host('TextInput'), Switch: host('Switch'), ActivityIndicator: host('ActivityIndicator') };
+  return { AppState: { currentState: 'active', addEventListener: jest.fn(() => ({ remove: jest.fn() })) }, Platform: { OS: 'ios', select: (v: any) => v.ios ?? v.default }, StyleSheet: { create: (v: any) => v, hairlineWidth: 1 }, View: host('View'), Text: host('Text'), Pressable: host('Pressable'), ScrollView, RefreshControl: host('RefreshControl'), TextInput: host('TextInput'), Switch: host('Switch'), ActivityIndicator: host('ActivityIndicator') };
 });
 jest.mock('lucide-react-native', () => new Proxy({}, { get: () => () => null }));
 jest.mock('@react-navigation/native', () => ({ useIsFocused: () => mockFocused }));
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) }));
-jest.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en' } }) }));
+jest.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string, values?: any) => key.replace(/{{(\w+)}}/g, (_match, field) => String(values?.[field] ?? field)), i18n: { language: 'en' } }) }));
 jest.mock('../../theme', () => ({ useAppTheme: () => ({ theme: { colors: { canvasGrouped: 'white', surfaceFloating: 'white', ink: 'black', inkSecondary: 'gray' } } }) }));
 jest.mock('@gorhom/bottom-sheet', () => ({ BottomSheetScrollView: ({ children }: any) => children }));
 jest.mock('../../components/ui/Sheet', () => ({ Sheet: ({ visible, children }: any) => visible ? children : null }));
@@ -27,6 +27,7 @@ const defaults = { model: 'one', thinking: 'high', version: 'v1', editable: true
 let profile: jest.Mocked<AgentProfileOperations>, navigation: any, mockFocused = true;
 beforeEach(() => {
   mockFocused = true;
+  AppState.currentState = 'active';
   profile = { projects: jest.fn(async () => [{ id: 'p', name: 'Project', available: true }, { id: 'q', name: 'Other project', available: true }]), defaults: jest.fn(async () => defaults), setDefaults: jest.fn(), usage: jest.fn(async () => ({ plan: 'pro', quotas: [{ id: 'codex', name: 'Codex', windows: [{ minutes: 300, usedPercent: 25, resetsAt: null }] }], lifetimeTokens: null, daily: [] })), skills: jest.fn(async () => ({ skills: [{ id: 's', name: 'example', scope: 'project', description: 'Description', enabled: false, editable: true }], errorCount: 1 })), setSkillEnabled: jest.fn(), instructions: jest.fn(), document: jest.fn(), saveDocument: jest.fn(), mcp: jest.fn(async () => [{ name: 'server', auth: 'required', toolsAvailable: true, tools: [] }]), plugins: jest.fn(async () => [{ id: 'plugin', name: 'Plugin', description: 'Installed', enabled: false }]) } as any;
   navigation = { navigate: jest.fn(), push: jest.fn(), goBack: jest.fn() };
 });
@@ -44,6 +45,7 @@ it('keeps confirmed model defaults until the native write responds and resets in
 it('shows quota prominently and keeps unavailable values unknown', async () => {
   const screen = render(<NativeQuotaCard profile={profile} online refreshing={false} onPress={jest.fn()} />);
   await waitFor(() => expect(screen.getByText('75%')).toBeTruthy());
+  expect(screen.getByText('profile.resetUnknown')).toBeTruthy();
   profile.usage.mockResolvedValue({ plan: null, quotas: [], lifetimeTokens: null, daily: [] });
   screen.rerender(<NativeQuotaCard profile={profile} online refreshing onPress={jest.fn()} />);
   await waitFor(() => expect(screen.getByText('profile.quotaUnavailable')).toBeTruthy()); expect(screen.getByText('—')).toBeTruthy();
@@ -199,4 +201,51 @@ it('keeps custom provider defaults readable and directs changes to the computer'
   expect(screen.getByText('profile.desktopManage')).toBeTruthy();
   expect(screen.getByTestId('native-default-model').props.accessibilityState.disabled).toBe(true);
   expect(profile.setDefaults).not.toHaveBeenCalled();
+});
+
+
+it('shows the limiting quota reset and updates only while focused and foregrounded', async () => {
+  jest.useFakeTimers();
+  const now = 1800000000000;
+  jest.setSystemTime(now);
+  let appStateChanged!: (state: string) => void;
+  const remove = jest.fn();
+  (AppState.addEventListener as jest.Mock).mockImplementationOnce((_event, listener) => { appStateChanged = listener; return { remove }; });
+  profile.usage.mockResolvedValue({ plan: 'pro', quotas: [{ id: 'codex', name: 'Codex', windows: [{ minutes: 300, usedPercent: 10, resetsAt: now / 1000 + 3600 }, { minutes: 10080, usedPercent: 33, resetsAt: now / 1000 + (6 * 24 + 1) * 3600 }] }], lifetimeTokens: null, daily: [] });
+  let screen!: ReturnType<typeof render>;
+  const card = () => <NativeQuotaCard profile={profile} online refreshing={false} onPress={jest.fn()} />;
+  try {
+    screen = render(card());
+    await act(async () => {});
+    expect(screen.getByText('67%')).toBeTruthy();
+    expect(screen.getByText('Resets in 6d 1h')).toBeTruthy();
+    expect(screen.queryByText('profile.tightestWindow')).toBeNull();
+    act(() => { jest.advanceTimersByTime(3600000); });
+    expect(screen.getByText('Resets in 6d 0h')).toBeTruthy();
+    act(() => { AppState.currentState = 'background'; appStateChanged('background'); });
+    expect(jest.getTimerCount()).toBe(0);
+    jest.setSystemTime(now + 2 * 3600000);
+    act(() => { AppState.currentState = 'active'; appStateChanged('active'); });
+    expect(screen.getByText('Resets in 5d 23h')).toBeTruthy();
+    mockFocused = false; screen.rerender(card());
+    expect(jest.getTimerCount()).toBe(0);
+    mockFocused = true; screen.rerender(card());
+    expect(jest.getTimerCount()).toBe(1);
+    screen.unmount();
+    expect(remove).toHaveBeenCalled();
+    expect(jest.getTimerCount()).toBe(0);
+    expect(profile.usage).toHaveBeenCalledTimes(1);
+  } finally { screen?.unmount(); jest.useRealTimers(); }
+});
+
+it('keeps quota and connection state truthful after a reset deadline or failed refresh', async () => {
+  profile.usage.mockResolvedValue({ plan: 'pro', quotas: [{ id: 'codex', name: 'Codex', windows: [{ minutes: 300, usedPercent: 33, resetsAt: Math.floor(Date.now() / 1000) - 1 }] }], lifetimeTokens: null, daily: [] });
+  const screen = render(<NativeQuotaCard profile={profile} online refreshing={false} onPress={jest.fn()} />);
+  await waitFor(() => expect(screen.getByText('Reset pending')).toBeTruthy());
+  expect(screen.getByText('67%')).toBeTruthy();
+  profile.usage.mockRejectedValue(new Error('failed'));
+  screen.rerender(<NativeQuotaCard profile={profile} online refreshing onPress={jest.fn()} />);
+  await waitFor(() => expect(screen.getByText('profile.loadError')).toBeTruthy());
+  screen.rerender(<NativeQuotaCard profile={profile} online={false} refreshing={false} onPress={jest.fn()} />);
+  expect(screen.getByText('profile.offline')).toBeTruthy();
 });

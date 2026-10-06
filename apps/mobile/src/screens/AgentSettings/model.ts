@@ -288,7 +288,7 @@ export function buildAgentSettingsModel(
         id: definition.id,
         section: definition.id,
         placement: definition.placement,
-        title: input.capabilities.profileManagement && definition.id === 'files' ? 'AGENTS.md' : definition.title(summary),
+        title: definition.title(summary),
         value: definition.value(summary),
         detail: definition.detail?.(summary),
         attention: definition.attention?.(summary) ?? false,

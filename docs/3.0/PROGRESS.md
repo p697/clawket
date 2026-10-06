@@ -1,5 +1,9 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-06 Codex Agent profile: Memory entry and quota reset countdown.
+  - Owner-requested home tile label now uses the shared localized Memory label; its existing native instruction-file route, filenames and editing gates are unchanged. The confusing quota explanation is replaced with a localized countdown from the existing native Unix-second reset timestamp for the same limiting window as the percentage. Equal limits use the latest reset, unknown tied resets remain unknown; elapsed timestamps never imply replenishment. The minute timer stops offscreen/background/offline and is removed on unmount. No Bridge, protocol or other-backend behavior changes.
+  - Serial focused checks passed native-profile-model 5, NativeProfileScreen 16 and Agent settings model 17 cases (38 total), Mobile typecheck, strict i18n (19 locales), UI style, design-system docs and agent docs (8 instruction pairs / 5 checker cases). The initial countdown test used a nested async render act and failed in the test harness; render/flush sequencing was corrected and the complete affected file passed. Full gates run in PR CI. No app version bump, distribution build, OTA, package publication or deployment; installed apps receive this UI through a later authorized update.
+
 - 2026-10-06 Codex 频繁连接失败日志对照完成：Cloudflare 集成已读到原始故障窗口的全部565条留存应用事件。
   - 负责人要求可能的网络问题先放下；本轮停止扩大传输调查，原因仍标为unconfirmed，后续有明确产品故障证据再继续。仅收尾证据、记录和工作区。
   - 大量手机短连接在1.5秒内正常关闭，53/54在关闭前已有Relay响应；与本机3.1.11认证成功而Native account health持续内部拒绝相符，但云日志不含RPC结果、两room不能全部归到该手机。负责人授权更新已通过官方3.1.12认证owner重启落实，包hash一致、配对/索引hash不变；不重启Desktop、不重放写入。
