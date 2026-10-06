@@ -417,6 +417,64 @@ describe('useChatController adapter event migration', () => {
     expect(result.current.listData.find(message => message.id === 'streaming')).toMatchObject({ text: 'A later paragraph.', timestampMs: 19_000 });
   });
 
+  it.each([true, false])('restores a noncurrent Codex run as tool-bounded paragraphs with their own clocks (reported clocks: %s)', reported => {
+    const runAt = Date.UTC(2026, 9, 6, 2, 16, 54);
+    jest.setSystemTime(runAt);
+    const { result, rerender, handlers } = renderController('codex');
+    act(() => handlers.onState?.('ready'));
+    const other = 'agent:main:other';
+    const receive = (update: any, at: number) => {
+      jest.setSystemTime(at);
+      act(() => handlers.onUpdate?.(mapAdapterSessionUpdate(update, { now: () => at })));
+    };
+    const texts = ['First commentary.', 'Second commentary.', 'Third commentary.'];
+    const nativeAt = [runAt + 4_000, runAt + 95_000, runAt + 580_000];
+    receive({ type: 'run_started', sessionKey: other, runId: 'desktop:turn' }, runAt + 500);
+    texts.forEach((_, index) => {
+      receive({ type: 'agent_message_chunk', sessionKey: other, runId: 'desktop:turn', textMode: 'snapshot', text: texts.slice(0, index + 1).join('\n\n'),
+        ...(reported ? { timestampMs: nativeAt[index] } : {}) }, nativeAt[index]! + 1_000);
+      receive({ type: 'tool_call', sessionKey: other, runId: 'desktop:turn', toolCallId: `tool-${index}`, title: 'exec', status: 'running',
+        ...(reported ? { startedAtMs: nativeAt[index]! + 2_000 } : {}) }, nativeAt[index]! + 3_000);
+    });
+    receive({ type: 'tool_call_update', sessionKey: other, runId: 'desktop:turn', toolCallId: 'tool-0', status: 'success',
+      ...(reported ? { finishedAtMs: runAt + 40_000, durationMs: 33_000 } : {}) }, runAt + 41_000);
+    jest.setSystemTime(runAt + 600_000);
+    historyMock.sessionKey = other;
+    rerender({});
+    const rows = result.current.listData.slice().reverse();
+    expect(rows.filter(row => row.role === 'assistant' && row.text.trim()).map(row => [row.text, row.timestampMs])).toEqual(
+      texts.map((text, index) => [text, reported ? nativeAt[index] : nativeAt[index]! + 1_000]));
+    expect(rows.filter(row => row.role === 'tool').map(row => [row.id, row.toolStatus, row.toolStartedAt])).toEqual(
+      texts.map((_, index) => [`toolcall_tool-${index}`, index === 0 ? 'success' : 'running', nativeAt[index]! + (reported ? 2_000 : 3_000)]));
+    expect(rows.find(row => row.id === 'toolcall_tool-0')).toMatchObject(reported
+      ? { toolFinishedAt: runAt + 40_000, toolDurationMs: 33_000 } : { toolFinishedAt: runAt + 41_000, toolDurationMs: 34_000 });
+    // No earlier paragraph is repeated inside a tail dated by the run start.
+    expect(rows.some(row => row.role === 'assistant' && row.text.includes(texts[0]!) && row.text.includes(texts[2]!))).toBe(false);
+    expect(rows.filter(row => row.role === 'assistant' && row.text.trim() && row.timestampMs === runAt + 500)).toEqual([]);
+  });
+
+  it('keeps the native run time of a Codex step over the phone receipt span', () => {
+    jest.setSystemTime(1_000);
+    const { result, handlers } = renderController('codex');
+    const receive = (update: any, at: number) => {
+      jest.setSystemTime(at);
+      act(() => handlers.onUpdate?.(mapAdapterSessionUpdate(update, { now: () => at })));
+    };
+    act(() => handlers.onState?.('ready'));
+    receive({ type: 'run_started', sessionKey: 'agent:main:main', runId: 'run' }, 1_000);
+    receive({ type: 'tool_call', sessionKey: 'agent:main:main', runId: 'run', toolCallId: 'exec', title: 'exec', status: 'running', startedAtMs: 2_000 }, 9_000);
+    receive({ type: 'tool_call_update', sessionKey: 'agent:main:main', runId: 'run', toolCallId: 'exec', status: 'success',
+      startedAtMs: 2_000, finishedAtMs: 8_500, durationMs: 6_400 }, 10_000);
+    expect(result.current.listData.find(row => row.id === 'toolcall_exec')).toMatchObject({
+      toolStatus: 'success', toolStartedAt: 2_000, toolFinishedAt: 8_500, toolDurationMs: 6_400,
+    });
+    receive({ type: 'tool_call', sessionKey: 'agent:main:main', runId: 'run', toolCallId: 'legacy', title: 'exec' }, 11_000);
+    receive({ type: 'tool_call_update', sessionKey: 'agent:main:main', runId: 'run', toolCallId: 'legacy', status: 'success' }, 14_000);
+    expect(result.current.listData.find(row => row.id === 'toolcall_legacy')).toMatchObject({
+      toolStartedAt: 11_000, toolFinishedAt: 14_000, toolDurationMs: 3_000,
+    });
+  });
+
   it.each(['NO', 'NO_'])('does not adopt silent reply prefix %s as the active visible run', (text) => {
     const { result, handlers } = renderController();
 

@@ -58,6 +58,12 @@ function response(cwd = project) {
 }
 const request = (method: string, params: Record<string, unknown> = {}) => service.request({ type: 'req', id: randomUUID(), method, params }) as Promise<any>;
 const notify = (method: string, params: object, emittedAtMs?: unknown) => mock.instances.at(-1).emit('notification', { method, params: { threadId, ...params }, emittedAtMs });
+/** A history row's identity, state and output; step clocks are presentation metadata compared separately. */
+const untimed = ({ timestampMs: _timestampMs, tool, ...row }: any) => {
+  if (!tool) return row;
+  const { startedAtMs: _startedAtMs, finishedAtMs: _finishedAtMs, durationMs: _durationMs, ...state } = tool;
+  return { ...row, tool: state };
+};
 async function start() {
   const result = await request('chat.send', { sessionKey: key, text: 'hello', idempotencyKey: 'send-1' });
   await Promise.resolve(); notify('turn/started', { turn: { id: 'turn-1' } }); return result;
@@ -996,6 +1002,46 @@ describe('Codex owned sessions', () => {
     notify('item/agentMessage/delta', { turnId: 'turn-1', itemId: 'first', delta: 'A paragraph.' }, 14000);
     expect(updates.at(-1)).toMatchObject({ timestampMs: 13000 });
   });
+  it('publishes owned tool lifecycle clocks and the native run time live and in active history', async () => {
+    await start();
+    notify('item/started', { turnId: 'turn-1', startedAtMs: 20_000, item: { id: 'exec', type: 'commandExecution', command: 'npm test', status: 'inProgress' } }, 21_000);
+    expect(updates.at(-1)).toMatchObject({ type: 'tool_call', toolCallId: 'exec', status: 'running', startedAtMs: 20_000 });
+    notify('item/started', { turnId: 'turn-1', startedAtMs: 25_000, item: { id: 'exec', type: 'commandExecution', command: 'npm test', status: 'inProgress' } }, 25_000);
+    notify('item/completed', { turnId: 'turn-1', completedAtMs: 26_500,
+      item: { id: 'exec', type: 'commandExecution', command: 'npm test', status: 'completed', exitCode: 0, durationMs: 6_400 } }, 27_000);
+    expect(updates.at(-1)).toMatchObject({ type: 'tool_call_update', toolCallId: 'exec', status: 'success', startedAtMs: 20_000, finishedAtMs: 26_500, durationMs: 6_400 });
+    const row = (await request('chat.history', { sessionKey: key })).messages.find((message: any) => message.id === 'toolcall_exec');
+    expect(row).toMatchObject({ timestampMs: 20_000, tool: { status: 'success', startedAtMs: 20_000, finishedAtMs: 26_500, durationMs: 6_400 } });
+  });
+  it('times owned tools from notification emission when the producer omits or corrupts lifecycle clocks', async () => {
+    await start();
+    notify('item/started', { turnId: 'turn-1', item: { id: 'exec', type: 'commandExecution', command: 'pwd', status: 'inProgress' } }, 30_000);
+    notify('item/completed', { turnId: 'turn-1', completedAtMs: 'late', item: { id: 'exec', type: 'commandExecution', command: 'pwd', status: 'failed', exitCode: 1 } }, 31_250);
+    expect(updates.filter(update => update.type.startsWith('tool_call'))).toEqual([
+      expect.objectContaining({ type: 'tool_call', startedAtMs: 30_000 }),
+      expect.objectContaining({ type: 'tool_call_update', status: 'error', startedAtMs: 30_000, finishedAtMs: 31_250, durationMs: 1_250 }),
+    ]);
+    expect((service as any).runs.get(key).items.get('exec')).not.toHaveProperty('startedAtMs');
+  });
+  it('projects native step clocks in start order after a long command was recorded at completion', async () => {
+    await start(); notify('turn/completed', { turn: { id: 'turn-1', status: 'completed' } });
+    const original = mock.request.getMockImplementation()!;
+    mock.request.mockImplementation(async (method, params) => {
+      if (method === 'thread/items/list') return { data: [
+        { turnId: 'turn-1', startedAtMs: 13_000, completedAtMs: 13_000, item: { type: 'agentMessage', id: 'final', phase: 'final_answer', text: 'Done.' } },
+        { turnId: 'turn-1', startedAtMs: 3_000, completedAtMs: 12_000, item: { type: 'commandExecution', id: 'long', command: 'npm test', status: 'completed', exitCode: 0, durationMs: 8_990 } },
+        { turnId: 'turn-1', startedAtMs: 9_000, completedAtMs: 9_500, item: { type: 'agentMessage', id: 'after', phase: 'commentary', text: 'Still waiting.' } },
+        { turnId: 'turn-1', startedAtMs: 2_000, completedAtMs: 2_500, item: { type: 'agentMessage', id: 'before', phase: 'commentary', text: 'Starting.' } },
+        { turnId: 'turn-1', startedAtMs: 1_000, completedAtMs: 1_000, item: { type: 'userMessage', id: 'u', content: [{ type: 'text', text: 'hello' }] } },
+      ] };
+      if (method === 'thread/turns/list' && params.itemsView === 'notLoaded') return { data: [{ id: 'turn-1', startedAt: 1, completedAt: 14, status: 'completed' }] };
+      return original(method, params);
+    });
+    const history = await request('chat.history', { sessionKey: key });
+    expect(history.messages.map((message: any) => [message.id, message.timestampMs]))
+      .toEqual([['u', 1_000], ['before', 2_000], ['toolcall_long', 3_000], ['after', 9_000], ['final', 14_000]]);
+    expect(history.messages[2].tool).toMatchObject({ status: 'success', startedAtMs: 3_000, finishedAtMs: 12_000, durationMs: 8_990 });
+  });
   it('does not enable unsafe approvals and persists before turn submission', async () => {
     mock.request.mockImplementationOnce(async () => response());
     await start();
@@ -1046,18 +1092,19 @@ describe('Codex owned sessions', () => {
       expect.objectContaining({ toolCallId: 'search', status }),
     ]);
     const completedRow = row(await request('chat.history', { sessionKey: key }));
-    expect(completedRow).toMatchObject({ tool: { callId: 'search', status } });
+    expect(completedRow).toMatchObject({ tool: { callId: 'search', status, startedAtMs: expect.any(Number), finishedAtMs: expect.any(Number) } });
+    expect(completedRow.tool.finishedAtMs).toBeGreaterThanOrEqual(completedRow.tool.startedAtMs);
     if (type === 'webSearch') expect(completedRow.tool.output).toBe(JSON.stringify(completed.results));
     expect(completed).not.toHaveProperty('status');
     desktop.emit('follow', threadId, true, 'desktop-tool-reader');
-    await vi.waitFor(() => expect(followerRow()).toMatchObject({ id: completedRow.id, tool: completedRow.tool }));
+    await vi.waitFor(() => expect(followerRow()).toMatchObject({ id: completedRow.id, tool: untimed(completedRow).tool }));
     notify('turn/completed', { turn: { id: 'turn-1', status: 'completed' } });
     const original = mock.request.getMockImplementation()!;
     mock.request.mockImplementation((method, params) => method === 'thread/items/list'
       ? Promise.resolve({ data: [{ turnId: 'turn-1', item: completed }] }) : original(method, params));
     const reloaded = await request('chat.history', { sessionKey: key });
     expect(reloaded.hasActiveRun).toBe(false);
-    expect(row(reloaded)).toEqual(completedRow);
+    expect(untimed(row(reloaded))).toEqual(untimed(completedRow));
   });
   it.each(['webSearch', 'imageView'])('does not replace explicit future native %s completion state with success', async type => {
     await start();
@@ -1702,7 +1749,7 @@ describe('device project discovery and desktop routing', () => {
       ? Promise.resolve({ data: [{ turnId: 'turn-1', item: corrected }] }) : original(method, params));
     const cold = await request('chat.history', { sessionKey: key });
     expect(cold.hasActiveRun).toBe(false);
-    expect(cold.messages.at(-1)).toEqual(activeRow);
+    expect(untimed(cold.messages.at(-1))).toEqual(untimed(activeRow));
     expect(updates.filter(u => u.type === 'run_finished')).toHaveLength(1);
     expect(desktop.request).not.toHaveBeenCalled();
   });
@@ -1733,6 +1780,93 @@ describe('device project discovery and desktop routing', () => {
       .toEqual([['success', 'partial'], ['success', 'full result'], ['error', 'full result']]);
     expect((await request('chat.history', { sessionKey: key })).messages.at(-1))
       .toMatchObject({ id: 'toolcall_command', tool: { status: 'error', output: 'full result' } });
+  });
+  it('dates Desktop text and tools from Codex Desktop native clocks, then from changes it observes', async () => {
+    const desktop = await followed();
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(50_000);
+    try {
+      const a = { id: 'a', type: 'agentMessage', text: 'Checking.' }, b = { id: 'b', type: 'agentMessage', text: 'Waiting.' };
+      const c = { id: 'c', type: 'agentMessage', text: 'Reading.' };
+      const exec = { id: 'exec', type: 'commandExecution', command: 'npm test', status: 'inProgress' };
+      const mcp = { id: 'mcp', type: 'mcpToolCall', server: 'files', tool: 'read', arguments: {}, status: 'inProgress' };
+      const snapshot = (items: any[]) => ({ fresh: true, state: { turns: [{ id: 'turn-1', status: 'inProgress', turnStartedAtMs: 10_000,
+        aeonAssistantMessageStartedAtMsById: { a: 11_000, b: 14_000, c: 16_000 }, commandExecutionStartedAtMsById: { exec: 12_000 }, items }], requests: [] } });
+      const presentation = () => updates.filter(update => ['agent_message_chunk', 'tool_call', 'tool_call_update'].includes(update.type));
+      updates.length = 0;
+      desktop.emit('snapshot', threadId, snapshot([a, exec, b, mcp, c]));
+      expect(presentation()).toEqual([
+        expect.objectContaining({ type: 'agent_message_chunk', text: 'Checking.', timestampMs: 11_000 }),
+        expect.objectContaining({ type: 'tool_call', toolCallId: 'exec', startedAtMs: 12_000 }),
+        expect.objectContaining({ type: 'agent_message_chunk', text: 'Checking.\n\nWaiting.', timestampMs: 14_000 }),
+        expect.objectContaining({ type: 'tool_call', toolCallId: 'mcp' }),
+        expect.objectContaining({ type: 'agent_message_chunk', text: 'Checking.\n\nWaiting.\n\nReading.', timestampMs: 16_000 }),
+      ]);
+      // A caught-up step that Desktop does not date keeps an unknown start.
+      expect(presentation()[3]).not.toHaveProperty('startedAtMs');
+      expect((await request('chat.history', { sessionKey: key })).activeRun).toMatchObject({ startedAtMs: 10_000, messageTimestampMs: 16_000 });
+      vi.setSystemTime(60_000);
+      updates.length = 0;
+      const later = { id: 'later', type: 'fileChange', changes: [], status: 'completed' };
+      desktop.emit('snapshot', threadId, snapshot([a, { ...exec, status: 'completed', exitCode: 0, durationMs: 7_000 }, b,
+        { ...mcp, status: 'completed', result: { content: [] }, durationMs: 2_000 }, c, later]));
+      expect(presentation()).toEqual([
+        expect.objectContaining({ type: 'tool_call_update', toolCallId: 'exec', status: 'success', startedAtMs: 12_000, finishedAtMs: 19_000, durationMs: 7_000 }),
+        expect.objectContaining({ type: 'tool_call_update', toolCallId: 'mcp', status: 'success', finishedAtMs: 60_000, durationMs: 2_000 }),
+        expect.objectContaining({ type: 'tool_call', toolCallId: 'later', startedAtMs: 60_000 }),
+        expect.objectContaining({ type: 'tool_call_update', toolCallId: 'later', status: 'success', startedAtMs: 60_000, finishedAtMs: 60_000, durationMs: 0 }),
+      ]);
+      expect(presentation()[1]).not.toHaveProperty('startedAtMs');
+      const history = await request('chat.history', { sessionKey: key });
+      expect(history.activeRun.messageTimestampMs).toBeUndefined();
+      expect(history.messages.find((message: any) => message.id === 'toolcall_exec'))
+        .toMatchObject({ timestampMs: 12_000, tool: { startedAtMs: 12_000, finishedAtMs: 19_000, durationMs: 7_000 } });
+      expect(history.messages.find((message: any) => message.id === 'c')).toMatchObject({ timestampMs: 16_000 });
+      expect([...(service as any).runs.get(key).items.keys()]).toEqual(['a', 'exec', 'b', 'mcp', 'c', 'later']);
+    } finally { vi.useRealTimers(); }
+  });
+  it('does not re-date Desktop items whose clocks left the bounded map', async () => {
+    const desktop = await followed();
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(50_000);
+    try {
+      const reply = { id: 'reply', type: 'agentMessage', text: 'Reading many files.' };
+      const tools = Array.from({ length: 600 }, (_, index) => ({ id: `tool-${index}`, type: 'mcpToolCall', server: 'files', tool: 'read', arguments: {}, status: 'completed', result: { content: [] } }));
+      const publish = (items: any[]) => desktop.emit('snapshot', threadId, { fresh: true, state: { turns: [{ id: 'turn-1', status: 'inProgress', items }], requests: [] } });
+      publish([reply]);
+      vi.setSystemTime(60_000);
+      publish([reply, ...tools]);
+      const clocks = (service as any).runs.get(key).itemClocks;
+      expect(clocks.size).toBeLessThanOrEqual(512);
+      expect(clocks.has('tool-0')).toBe(false);
+      vi.setSystemTime(70_000);
+      updates.length = 0;
+      publish([reply, ...tools]);
+      expect(updates.filter(update => update.type.startsWith('tool_call'))).toEqual([]);
+      expect(clocks.has('tool-0')).toBe(false);
+      expect(clocks.has('reply')).toBe(false);
+      expect(clocks.get('tool-88')).toEqual({ startedAtMs: 60_000, completedAtMs: 60_000 });
+      expect(clocks.get('tool-599')).toEqual({ startedAtMs: 60_000, completedAtMs: 60_000 });
+    } finally { vi.useRealTimers(); }
+  });
+  it('never invents clocks for a caught-up Desktop snapshot without native timing', async () => {
+    const desktop = await followed();
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(50_000);
+    try {
+      updates.length = 0;
+      desktop.emit('snapshot', threadId, { fresh: true, state: { turns: [{ id: 'turn-1', status: 'inProgress', turnStartedAtMs: 'soon',
+        aeonAssistantMessageStartedAtMsById: { a: -1 }, items: [{ id: 'a', type: 'agentMessage', text: 'Earlier.' },
+          { id: 'exec', type: 'commandExecution', command: 'pwd', status: 'completed', exitCode: 0, durationMs: 500 }] }], requests: [] } });
+      const presentation = updates.filter(update => ['agent_message_chunk', 'tool_call', 'tool_call_update'].includes(update.type));
+      expect(presentation).toEqual([
+        expect.objectContaining({ type: 'agent_message_chunk', text: 'Earlier.' }),
+        expect.objectContaining({ type: 'tool_call', toolCallId: 'exec', status: 'success' }),
+        expect.objectContaining({ type: 'tool_call_update', toolCallId: 'exec', status: 'success', durationMs: 500 }),
+      ]);
+      expect(presentation[0]).not.toHaveProperty('timestampMs');
+      expect(presentation[1]).not.toHaveProperty('startedAtMs');
+      expect(presentation[2]).not.toHaveProperty('startedAtMs');
+      expect(presentation[2]).not.toHaveProperty('finishedAtMs');
+      expect((await request('chat.history', { sessionKey: key })).activeRun).toMatchObject({ startedAtMs: 50_000 });
+    } finally { vi.useRealTimers(); }
   });
   it('uses the last visible native message instead of the first prompt and caches the tail', async () => {
     await device();

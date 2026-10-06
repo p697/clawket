@@ -1,5 +1,7 @@
 import { validTurnIdentity } from './turnIdentity';
-import type { StreamSegment } from './liveRunThread';
+import { liveReplyRenderKey, type StreamSegment } from './liveRunThread';
+import { sameLiveToolCall } from './liveToolMessages';
+import { finalReplyTail } from './streamText';
 import type { UiMessage } from '../types/chat';
 
 export type SessionRunState = {
@@ -85,4 +87,37 @@ export function rememberSessionRunIdentity(map: Map<string, SessionRunState>, ke
   state.turnId = turn; state.inputMessageId = input;
   if (clientKey) state.inputMessageKey = clientKey;
   return true;
+}
+
+/**
+ * A noncurrent Codex run keeps the rows its open conversation would show: a new
+ * tool commits the text before it, dated by that text's first clock. Without
+ * this a later restore merges every paragraph into one tail of unknown age.
+ */
+export function rememberSessionRunTool(map: Map<string, SessionRunState>, sessionKey: string, runId: string,
+  owner: object, tool: UiMessage, now = Date.now()): void {
+  const state = map.get(sessionKey);
+  if (!state || state.runId !== runId) return;
+  const presentation = state.presentation?.owner === owner ? state.presentation : { owner, segments: [], tools: [] };
+  if (presentation.tools.some(candidate => sameLiveToolCall(candidate, tool))) return;
+  const tail = finalReplyTail(state.streamText ?? '', presentation.segments);
+  const timestampMs = state.streamTimestampMs ?? now;
+  const segments: StreamSegment[] = tail.trim() ? [...presentation.segments, {
+    id: `stream_segment_${timestampMs}_${presentation.segments.length}`,
+    renderKey: liveReplyRenderKey(state.startedAt, runId, presentation.segments.length),
+    text: tail, timestampMs, afterToolCount: presentation.tools.length,
+  }] : presentation.segments;
+  map.set(sessionKey, { ...state, streamTimestampMs: undefined, presentation: { owner, segments, tools: [...presentation.tools, tool] } });
+}
+
+/** Settles a remembered Codex tool row in place; a call this phone never saw stays absent. */
+export function settleSessionRunTool(map: Map<string, SessionRunState>, sessionKey: string, runId: string,
+  owner: object, update: UiMessage, settle: (previous: UiMessage) => UiMessage): void {
+  const state = map.get(sessionKey);
+  const presentation = state?.runId === runId && state.presentation?.owner === owner ? state.presentation : undefined;
+  const index = presentation ? presentation.tools.findIndex(candidate => sameLiveToolCall(candidate, update)) : -1;
+  if (!state || !presentation || index < 0) return;
+  const tools = [...presentation.tools];
+  tools[index] = { ...settle(tools[index]!), id: tools[index]!.id };
+  map.set(sessionKey, { ...state, presentation: { ...presentation, tools } });
 }

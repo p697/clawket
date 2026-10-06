@@ -91,7 +91,9 @@ import {
   markSessionRunDelta,
   markSessionRunStarted,
   rememberSessionRunIdentity,
+  rememberSessionRunTool,
   SessionRunState,
+  settleSessionRunTool,
 } from "./sessionRunState";
 import { shouldAdoptPendingOptimisticRunId } from "./pendingOptimisticRun";
 import { validTurnIdentity, type RunWorkIdentity } from './turnIdentity';
@@ -868,6 +870,22 @@ export function useChatController({
     ],
   );
 
+  /** Codex restores its tool-bounded rows; other backends restore the cumulative stream. */
+  const restoreRememberedStream = useCallback((remembered: SessionRunState) => {
+    const presentation = adapter?.connection.backendKind === 'codex' && remembered.presentation?.owner === adapter
+      ? remembered.presentation : undefined;
+    if (presentation) {
+      chatStreamSegmentsRef.current = presentation.segments;
+      setChatStreamSegments(presentation.segments);
+      chatToolMessagesRef.current = presentation.tools;
+      setChatToolMessages(presentation.tools);
+    }
+    const streamText = sanitizeVisibleStreamText(presentation
+      ? finalReplyTail(remembered.streamText ?? '', presentation.segments) : remembered.streamText);
+    chatStreamRef.current = streamText;
+    setChatStream(streamText);
+  }, [adapter]);
+
   const syncDerivedSessionActivity = useCallback(
     (reason: string) => {
       const key = history.sessionKey;
@@ -905,9 +923,7 @@ export function useChatController({
         streamStartedAtRef.current = remembered.startedAt;
         chatStreamTimestampRef.current = remembered.streamTimestampMs ?? null;
         setChatStreamTimestampMs(chatStreamTimestampRef.current);
-        const streamText = sanitizeVisibleStreamText(remembered.streamText);
-        chatStreamRef.current = streamText;
-        setChatStream(streamText);
+        restoreRememberedStream(remembered);
         lastRunSignalAtRef.current = Math.max(
           lastRunSignalAtRef.current,
           remembered.startedAt,
@@ -955,6 +971,7 @@ export function useChatController({
       history.loadHistory,
       history.messages,
       history.sessionKey,
+      restoreRememberedStream,
       t,
     ],
   );
@@ -1186,21 +1203,10 @@ export function useChatController({
       setChatStreamTimestampMs(chatStreamTimestampRef.current);
       lastRunSignalAtRef.current = Date.now();
       lastRunRecoveryProbeAtRef.current = 0;
-      const presentation = adapter?.connection.backendKind === 'codex' && remembered.presentation?.owner === adapter
-        ? remembered.presentation : undefined;
-      if (presentation) {
-        chatStreamSegmentsRef.current = presentation.segments;
-        setChatStreamSegments(presentation.segments);
-        chatToolMessagesRef.current = presentation.tools;
-        setChatToolMessages(presentation.tools);
-      }
-      const streamText = sanitizeVisibleStreamText(presentation
-        ? finalReplyTail(remembered.streamText ?? '', presentation.segments) : remembered.streamText);
-      chatStreamRef.current = streamText;
-      setChatStream(streamText);
+      restoreRememberedStream(remembered);
       setIsSending(true);
     },
-    [adapter, clearTransientRunPresentation],
+    [clearTransientRunPresentation, restoreRememberedStream],
   );
 
   useEffect(() => {
@@ -2146,7 +2152,8 @@ export function useChatController({
           onChildSessionActivityChange();
         }
         if (!matchesCurrentSession(update.sessionKey)) {
-          if (adapter?.connection.backendKind === 'codex') sessionRunStateRef.current.get(update.sessionKey)!.streamTimestampMs = undefined;
+          if (adapter?.connection.backendKind === 'codex') rememberSessionRunTool(sessionRunStateRef.current, update.sessionKey, update.runId, adapter,
+            { ...update.message, toolSummary: formatToolOneLinerLocalized(toolName, update.message.toolArgs, t) });
           return;
         }
         if (!acceptRun(update.sessionKey, update.runId)) return;
@@ -2166,32 +2173,36 @@ export function useChatController({
         markRunSignal();
         markSessionRunStarted(sessionRunStateRef.current, update.sessionKey, update.runId);
         if (rememberSessionRunIdentity(sessionRunStateRef.current, update.sessionKey, update.runId, update.turnId, update.inputMessageId, update.inputMessageKey)) setNativeRunIdentityEpoch(epoch => epoch + 1);
-        if (!matchesCurrentSession(update.sessionKey)) return;
+        // The producer's native run time wins; otherwise measure between this phone's clocks.
+        const settleTool = (previousMessage: UiMessage | undefined): UiMessage => {
+          const toolName = previousMessage?.toolName ?? "tool";
+          const finishedAt = update.message.toolFinishedAt;
+          const startedAt = update.message.toolStartedAt ?? previousMessage?.toolStartedAt;
+          const localizedSummary = formatToolOneLinerLocalized(toolName, previousMessage?.toolArgs, t);
+          return {
+            ...previousMessage,
+            ...update.message,
+            toolName,
+            toolSummary: update.message.toolStatus === "error"
+              ? t("Failed {{name}}", { name: localizedSummary })
+              : update.message.toolStatus === "success"
+                ? t("Completed {{name}}", { name: localizedSummary })
+                : localizedSummary,
+            toolDurationMs: update.message.toolDurationMs
+              ?? (finishedAt && startedAt ? Math.max(0, finishedAt - startedAt) : undefined),
+          };
+        };
+        if (!matchesCurrentSession(update.sessionKey)) {
+          if (adapter?.connection.backendKind === 'codex') settleSessionRunTool(sessionRunStateRef.current, update.sessionKey, update.runId, adapter, update.message, settleTool);
+          return;
+        }
         if (!acceptRun(update.sessionKey, update.runId)) return;
         const previousMessage = chatToolMessagesRef.current.find(
           (message) => sameLiveToolCall(message, update.message),
         );
         const toolName = previousMessage?.toolName ?? "tool";
-        const finishedAt = update.message.toolFinishedAt;
-        const durationMs = finishedAt && previousMessage?.toolStartedAt
-          ? Math.max(0, finishedAt - previousMessage.toolStartedAt)
-          : undefined;
-        const localizedSummary = formatToolOneLinerLocalized(
-          toolName,
-          previousMessage?.toolArgs,
-          t,
-        );
-        const message: UiMessage = {
-          ...previousMessage,
-          ...update.message,
-          toolName,
-          toolSummary: update.message.toolStatus === "error"
-            ? t("Failed {{name}}", { name: localizedSummary })
-            : update.message.toolStatus === "success"
-              ? t("Completed {{name}}", { name: localizedSummary })
-              : localizedSummary,
-          toolDurationMs: durationMs,
-        };
+        const message = settleTool(previousMessage);
+        const durationMs = message.toolDurationMs;
         chatToolMessagesRef.current = withToolMessage(chatToolMessagesRef.current, message);
         setChatToolMessages(chatToolMessagesRef.current);
         if (update.message.toolStatus === "running" || update.message.toolStatus === "unknown") {

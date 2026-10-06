@@ -48,6 +48,8 @@ export type SessionUpdate =
       rawInput?: unknown;
       /** Omission retains the legacy live-start event; unknown does not prove execution. */
       status?: 'running' | 'success' | 'error' | 'unknown';
+      /** Producer's native or observed call start (Unix ms); omission keeps receipt timing. */
+      startedAtMs?: number;
     }
   | {
       type: 'tool_call_update';
@@ -59,6 +61,10 @@ export type SessionUpdate =
       inputMessageId?: string;
       inputMessageKey?: string;
       rawOutput?: unknown;
+      /** Producer's call clocks (Unix ms) and native duration (ms); only settled calls carry completion. */
+      startedAtMs?: number;
+      finishedAtMs?: number;
+      durationMs?: number;
     }
   | {
       type: 'run_finished';

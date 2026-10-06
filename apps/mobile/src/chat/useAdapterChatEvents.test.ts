@@ -166,6 +166,38 @@ describe('mapAdapterSessionUpdate', () => {
     expect(update.type).toBe('run_finished');
     if (update.type === 'run_finished') expect(update.finalMessage?.timestampMs).toBe(1000);
   });
+  it('prefers reported step clocks and native run time over receipt time', () => {
+    const options = { now: () => 90_000 };
+    const start = mapAdapterSessionUpdate({ type: 'tool_call', sessionKey: session.key, runId: 'run', toolCallId: 'exec', title: 'exec',
+      status: 'running', startedAtMs: 12_000 }, options);
+    expect(start).toMatchObject({ message: { toolStartedAt: 12_000 } });
+    const caughtUp = mapAdapterSessionUpdate({ type: 'tool_call', sessionKey: session.key, runId: 'run', toolCallId: 'done', title: 'exec',
+      status: 'success', startedAtMs: 13_000 }, options);
+    expect(caughtUp).toMatchObject({ message: { toolStartedAt: 13_000 } });
+    const settled = mapAdapterSessionUpdate({ type: 'tool_call_update', sessionKey: session.key, runId: 'run', toolCallId: 'exec', status: 'error',
+      startedAtMs: 12_000, finishedAtMs: 19_000, durationMs: 6_900 }, options);
+    expect(settled).toMatchObject({ message: { toolStartedAt: 12_000, toolFinishedAt: 19_000, toolDurationMs: 6_900 } });
+    const running = mapAdapterSessionUpdate({ type: 'tool_call_update', sessionKey: session.key, runId: 'run', toolCallId: 'exec', status: 'running',
+      startedAtMs: 12_000, finishedAtMs: 19_000, durationMs: 6_900 }, options);
+    if (running.type !== 'tool_call_update') throw new Error('Missing tool update');
+    expect(running.message).toMatchObject({ toolStartedAt: 12_000 });
+    expect(running.message.toolFinishedAt).toBeUndefined();
+    expect(running.message).not.toHaveProperty('toolDurationMs');
+  });
+
+  it.each([undefined, null, 0, -1, 1.5, NaN, Infinity, 1e20, '12000'])('keeps receipt timing for an omitted or malformed step clock %j', value => {
+    const options = { now: () => 90_000 };
+    const start = mapAdapterSessionUpdate({ type: 'tool_call', sessionKey: session.key, runId: 'run', toolCallId: 'exec', title: 'exec', startedAtMs: value } as any, options);
+    if (start.type !== 'tool_call') throw new Error('Missing tool call');
+    expect(start.message.toolStartedAt).toBe(90_000);
+    const settled = mapAdapterSessionUpdate({ type: 'tool_call_update', sessionKey: session.key, runId: 'run', toolCallId: 'exec', status: 'success',
+      startedAtMs: value, finishedAtMs: value, durationMs: value === 0 ? -1 : value } as any, options);
+    if (settled.type !== 'tool_call_update') throw new Error('Missing tool update');
+    expect(settled.message.toolFinishedAt).toBe(90_000);
+    expect(settled.message).not.toHaveProperty('toolStartedAt');
+    expect(settled.message).not.toHaveProperty('toolDurationMs');
+  });
+
   it('uses an authoritative final clock without retiming a cancellation notice', () => {
     const update = mapAdapterSessionUpdate({
       type: 'run_finished', sessionKey: session.key, runId: 'clock-final', stopReason: 'cancelled',

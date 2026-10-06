@@ -16,7 +16,8 @@ import { nativeSettings, nativePermissionSettings, nativeTurnPermissions, matche
 import { fastServiceTier, isFastServiceTier, hasServiceTier } from './speed.js';
 import { CodexProfile } from './profile.js';
 import { CodexRpc } from './rpc.js';
-import { codexMessages, codexGeneratedImage, codexTool, codexTurnFailure, codexReplyTimestamp, codexFinalReplyId, codexItemTimestamp } from './history.js';
+import { codexMessages, codexGeneratedImage, codexTool, codexTurnFailure, codexReplyTimestamp, codexFinalReplyId, codexItemClock, codexItemTimestamp,
+  codexToolTiming, codexDesktopItemClock, type CodexItemClock } from './history.js';
 import { loadDesktopHistory } from './desktop-history.js';
 import { nativeResumeSpeed } from './resume-settings.js';
 import { desktopTurns, desktopState } from './desktop-state.js';
@@ -26,7 +27,13 @@ import { DesktopIpc, DesktopIpcError, type DesktopSnapshot } from './desktop-ipc
 export interface CodexRequest { type: 'req'; id: string; method: string; params?: Record<string, unknown> }
 export interface CodexOptions { bridgeVersion?: string; project: string; directory: string; command?: string; env?: NodeJS.ProcessEnv; device?: boolean; desktop?: DesktopIpc }
 type Entry = { permissionsUnconfirmed?: true; archived?: boolean; cwd?: string; native?: boolean; id: string; threadId?: string; title: string; created: number; activity?: number; model?: string; provider?: string; effort?: string; serviceTier?: string | null; speedPreference?: { serviceTier: string | null; provider: string }; preview?: string; keys: Record<string, { hash: string; runId: string }> };
-type Run = { desktop?: boolean; id: string; turnId?: string; inputMessageId?: string; inputMessageKey?: string; text: string; started: number; itemId?: string; final?: string; items: Map<string, any>; itemTimestamps?: Map<string, number> };
+type Run = { desktop?: boolean; id: string; turnId?: string; inputMessageId?: string; inputMessageKey?: string; text: string; started: number; itemId?: string; final?: string; items: Map<string, any>;
+  /** Lifecycle clocks of this run's items (bounded); native items stay unchanged. */
+  itemClocks?: Map<string, CodexItemClock>;
+  /** Desktop: projected at least once, so later items were observed as they appeared. */
+  observed?: boolean;
+  /** Desktop: start clock of the first paragraph after the latest tool. */
+  textClock?: number };
 type Consent = { desktop?: boolean; wireId: string | number; entry: Entry; turnId: string; approval: Extract<ApprovalRequest, { kind: 'exec' }>; permissions?: object };
 type QuestionGroup = { desktop?: boolean; wireId: string | number; entry: Entry; turnId: string; pending: Map<string, { question: AgentQuestion; nativeId: string }>; answers: Record<string, { answers: string[] }> };
 type MetadataBaseline = Map<Entry, { threadId: string; revision: number; pending: boolean }>;
@@ -788,33 +795,64 @@ export class CodexService extends EventEmitter {
     await confirmPermissions();
     this.scheduleDesktop(r);
   }
-  private projectDesktopItems(r: Entry, run: Run, items: any[]): void {
+  /**
+   * Desktop item clocks: Codex Desktop's native lifecycle maps first, then this
+   * Bridge's sighting of a new item or a settling call after the run's first
+   * snapshot. Items of that caught-up snapshot, and clocks evicted from the
+   * bounded map, are never re-dated by a later sighting.
+   */
+  private desktopItemClock(run: Run, turn: any, item: any, seen: { first: boolean; settled: boolean; wasSettled: boolean }): CodexItemClock {
+    const clocks = run.itemClocks ??= new Map();
+    const known = clocks.get(item.id), native = codexDesktopItemClock(turn, item);
+    const startedAtMs = native?.startedAtMs ?? known?.startedAtMs ?? (seen.first && run.observed ? Date.now() : undefined);
+    const completedAtMs = native?.completedAtMs ?? known?.completedAtMs
+      ?? (seen.settled && run.observed && (seen.first || !seen.wasSettled) ? Math.max(Date.now(), startedAtMs ?? 0) : undefined);
+    const clock = codexItemClock(startedAtMs, completedAtMs) ?? codexItemClock(startedAtMs) ?? {};
+    // Only dated items take a slot, so re-reading a long turn never churns the map.
+    if (clock.startedAtMs !== undefined || clock.completedAtMs !== undefined) {
+      if (!known && clocks.size >= 512) clocks.delete(clocks.keys().next().value!);
+      clocks.set(item.id, clock);
+    }
+    return clock;
+  }
+  private projectDesktopItems(r: Entry, run: Run, items: any[], turn?: any): void {
     const identity = { turnId: run.turnId, inputMessageId: run.inputMessageId, inputMessageKey: run.inputMessageKey };
     const messages: string[] = [];
+    // Phone text after a tool is one tail dated by its first paragraph.
+    let tailClock: number | undefined, tailOpen = false;
     const publishText = () => {
       const text = messages.join('\n\n').slice(-128000);
-      if (text !== run.text) { run.text = text; this.update({ type: 'agent_message_chunk', sessionKey: r.id, runId: run.id, ...identity, text, textMode: 'snapshot' }); }
+      if (text !== run.text) { run.text = text; this.update({ type: 'agent_message_chunk', sessionKey: r.id, runId: run.id, ...identity, text, textMode: 'snapshot',
+        ...(tailClock !== undefined ? { timestampMs: tailClock } : {}) }); }
     };
     for (const item of items) {
       if (typeof item.id !== 'string') continue;
       const old = run.items.get(item.id); run.items.set(item.id, item); this.items.set(item.id, item);
       if (['agentMessage', 'assistantMessage'].includes(item.type)) {
+        const clock = this.desktopItemClock(run, turn, item, { first: !old, settled: false, wasSettled: false });
         messages.push(String(item.text ?? item.message ?? ''));
+        if (!tailOpen) { tailOpen = true; tailClock = clock.startedAtMs; }
         continue;
       }
       const tool = codexTool(item); if (!tool) continue;
       const previousTool = old && codexTool(old);
+      const settled = (status?: string) => status === 'success' || status === 'error';
+      const timing = codexToolTiming(item, tool.status, this.desktopItemClock(run, turn, item,
+        { first: !old, settled: settled(tool.status), wasSettled: settled(previousTool?.status) }));
       if (!old) {
         // Mobile commits the current text at a new tool boundary. Replaying
         // a caught-up snapshot must publish only the preceding words first.
         publishText();
-        this.update({ type: 'tool_call', sessionKey: r.id, runId: run.id, ...identity, toolCallId: item.id, title: tool.name, rawInput: tool.input, status: tool.status });
+        this.update({ type: 'tool_call', sessionKey: r.id, runId: run.id, ...identity, toolCallId: item.id, title: tool.name, rawInput: tool.input, status: tool.status,
+          ...(timing.startedAtMs !== undefined ? { startedAtMs: timing.startedAtMs } : {}) });
       }
+      tailOpen = false; tailClock = undefined;
       // Match history's projected state and output. Initial unknown updates
       // also correct older clients that ignore tool_call's additive status.
-      if ((tool.status !== 'running' || previousTool) && (!previousTool || previousTool.status !== tool.status || previousTool.output !== tool.output)) this.update({ type: 'tool_call_update', sessionKey: r.id, runId: run.id, ...identity, toolCallId: item.id, status: tool.status, rawOutput: tool.output });
+      if ((tool.status !== 'running' || previousTool) && (!previousTool || previousTool.status !== tool.status || previousTool.output !== tool.output)) this.update({ type: 'tool_call_update', sessionKey: r.id, runId: run.id, ...identity, toolCallId: item.id, status: tool.status, rawOutput: tool.output, ...timing });
     }
     publishText();
+    run.textClock = tailClock; run.observed = true;
   }
   private desktopSnapshot(threadId: string, snapshot: DesktopSnapshot): void {
     const r = this.records.find(e => e.threadId === threadId);
@@ -832,7 +870,7 @@ export class CodexService extends EventEmitter {
     const turn = active[0];
     const terminalFor = (turnId: string) => turns.find((t: any) => (t.turnId ?? t.id) === turnId && ['completed', 'interrupted', 'failed'].includes(t.status));
     const finishDesktopTurn = (run: Run, terminal: any) => {
-      if (Array.isArray(terminal.items) && terminal.items.length) this.projectDesktopItems(r, run, terminal.items);
+      if (Array.isArray(terminal.items) && terminal.items.length) this.projectDesktopItems(r, run, terminal.items, terminal);
       run.final = run.text;
       this.finish(r, terminal.status === 'interrupted' ? 'cancelled' : terminal.status === 'failed' ? 'error' : 'end_turn', terminal);
     };
@@ -850,7 +888,7 @@ export class CodexService extends EventEmitter {
         finishDesktopTurn(run, terminal);
         run = undefined;
       }
-      if (!run) { run = { id: `desktop:${turnId}`, desktop: true, turnId, text: '', started: Date.now(), items: new Map() }; this.runs.set(r.id, run); this.update({ type: 'run_started', sessionKey: r.id, runId: run.id }); }
+      if (!run) { run = { id: `desktop:${turnId}`, desktop: true, turnId, text: '', started: codexItemTimestamp(turn.turnStartedAtMs) ?? Date.now(), items: new Map() }; this.runs.set(r.id, run); this.update({ type: 'run_started', sessionKey: r.id, runId: run.id }); }
       if (run.turnId !== turnId) { run.inputMessageId = undefined; run.inputMessageKey = undefined; }
       run.turnId = turnId;
       const items = Array.isArray(turn.items) ? turn.items : [];
@@ -861,7 +899,7 @@ export class CodexService extends EventEmitter {
         if (typeof originalInput.clientId === 'string' && Object.hasOwn(r.keys, originalInput.clientId) && r.keys[originalInput.clientId].runId === run.id) run.inputMessageKey = originalInput.clientId;
         this.update({ type: 'run_started', sessionKey: r.id, runId: run.id, turnId, inputMessageId: run.inputMessageId, inputMessageKey: run.inputMessageKey });
       }
-      this.projectDesktopItems(r, run, items);
+      this.projectDesktopItems(r, run, items, turn);
     } else if (run?.turnId) {
       const terminal = terminalFor(run.turnId);
       if (terminal) finishDesktopTurn(run, terminal);
@@ -1381,11 +1419,11 @@ export class CodexService extends EventEmitter {
       const grouped = new Map<string, any>();
       for (const row of [...result.data].reverse()) {
         if (typeof row.turnId !== 'string' || !row.item || typeof row.item.id !== 'string') throw new Error('Invalid native history item');
-        if (!grouped.has(row.turnId)) grouped.set(row.turnId, { ...(metadataByTurn.get(row.turnId) as object ?? {}), id: row.turnId, items: [], itemTimestamps: new Map() });
+        if (!grouped.has(row.turnId)) grouped.set(row.turnId, { ...(metadataByTurn.get(row.turnId) as object ?? {}), id: row.turnId, items: [], itemClocks: new Map() });
         const turn = grouped.get(row.turnId);
         turn.items.push(row.item);
-        const timestamp = codexItemTimestamp(row.startedAtMs, row.completedAtMs);
-        if (timestamp !== undefined) turn.itemTimestamps.set(row.item.id, timestamp);
+        const clock = codexItemClock(row.startedAtMs, row.completedAtMs);
+        if (clock) turn.itemClocks.set(row.item.id, clock);
       }
       turns = [...grouped.values()];
     }
@@ -1395,8 +1433,9 @@ export class CodexService extends EventEmitter {
       const combined = new Map((liveTurn.items ?? []).map((item: any) => [item.id, item]));
       for (const [id, item] of active.items) combined.set(id, item);
       liveTurn.items = [...combined.values()];
-      liveTurn.itemTimestamps ??= new Map();
-      for (const [id, timestamp] of active.itemTimestamps ?? []) if (!liveTurn.itemTimestamps.has(id)) liveTurn.itemTimestamps.set(id, timestamp);
+      liveTurn.itemClocks ??= new Map();
+      // Persisted native clocks win; live clocks cover items not yet recorded.
+      for (const [id, clock] of active.itemClocks ?? []) if (!liveTurn.itemClocks.has(id)) liveTurn.itemClocks.set(id, clock);
     }
     // An older item page may begin midway through the first turn. Its last
     // phase-less paragraph is not evidence of that turn's final reply.
@@ -1410,7 +1449,7 @@ export class CodexService extends EventEmitter {
     const identity = legacyCursor ? {} : { kind: 'items' };
     const next = start ? { ...identity, native: page.native, end: start } : result.nextCursor ? { ...identity, native: result.nextCursor } : undefined;
     const run = owned ? this.runs.get(owned.id) : undefined;
-    return { key: String(key), messages: messages.slice(start, end), nextCursor: next ? Buffer.from(JSON.stringify(next)).toString('base64url') : undefined, sessionId: threadId, thinkingLevel: owned?.effort, hasActiveRun: !!run, activeRun: run ? { runId: run.id, text: run.text, startedAtMs: run.started, messageTimestampMs: run.itemId ? run.itemTimestamps?.get(run.itemId) : undefined, sessionAbortable: !!run.turnId, turnId: run.turnId, inputMessageId: run.inputMessageId, inputMessageKey: run.inputMessageKey } : undefined };
+    return { key: String(key), messages: messages.slice(start, end), nextCursor: next ? Buffer.from(JSON.stringify(next)).toString('base64url') : undefined, sessionId: threadId, thinkingLevel: owned?.effort, hasActiveRun: !!run, activeRun: run ? { runId: run.id, text: run.text, startedAtMs: run.started, messageTimestampMs: run.desktop ? run.textClock : run.itemId ? run.itemClocks?.get(run.itemId)?.startedAtMs : undefined, sessionAbortable: !!run.turnId, turnId: run.turnId, inputMessageId: run.inputMessageId, inputMessageKey: run.inputMessageKey } : undefined };
   }
   private prompt(r: Entry, input: PromptInput, desktopOverrides?: Record<string, unknown>): Promise<{ runId: string }> {
     return this.serial(r, async () => {
@@ -1538,26 +1577,31 @@ export class CodexService extends EventEmitter {
     }
     if (p.turnId && run.turnId && p.turnId !== run.turnId) return;
     const base = { sessionKey: r.id, runId: run.id, turnId: run.turnId, inputMessageId: run.inputMessageId, inputMessageKey: run.inputMessageKey };
-    const itemTimestamp = (id: string, startedAtMs?: unknown): number => {
-      const clocks = run.itemTimestamps ??= new Map();
-      if (!clocks.has(id)) {
+    // Older producers omit lifecycle clocks; emission/receipt is observation only.
+    const observedAt = (nativeAtMs?: unknown) => codexItemTimestamp(nativeAtMs) ?? codexItemTimestamp(emittedAtMs) ?? Date.now();
+    // The first sighting fixes an item's start; later notifications cannot advance it.
+    const itemClock = (id: string, startedAtMs?: unknown, completion?: { atMs: unknown }): CodexItemClock => {
+      const clocks = run.itemClocks ??= new Map();
+      let clock = clocks.get(id);
+      if (!clock) {
         if (clocks.size >= 512) clocks.delete(clocks.keys().next().value!);
-        // Older producers omit lifecycle start; emission/receipt is observation only.
-        clocks.set(id, codexItemTimestamp(startedAtMs) ?? codexItemTimestamp(emittedAtMs) ?? Date.now());
+        clock = { startedAtMs: observedAt(startedAtMs) };
+        clocks.set(id, clock);
       }
-      return clocks.get(id)!;
+      if (completion && clock.completedAtMs === undefined) clock.completedAtMs = Math.max(observedAt(completion.atMs), clock.startedAtMs ?? 0);
+      return clock;
     };
     if (method === 'item/agentMessage/delta' && typeof p.delta === 'string') {
       if (typeof p.itemId !== 'string') return;
       if (run.itemId !== p.itemId) { run.itemId = p.itemId; if (run.text) run.text += '\n\n'; }
       const item = run.items.get(p.itemId) ?? { id: p.itemId, type: 'agentMessage', text: '' };
       item.text = (item.text + p.delta).slice(-128000); run.items.set(p.itemId, item);
-      run.text = (run.text + p.delta).slice(-128000); this.update({ type: 'agent_message_chunk', ...base, text: run.text, textMode: 'snapshot', timestampMs: itemTimestamp(p.itemId) });
+      run.text = (run.text + p.delta).slice(-128000); this.update({ type: 'agent_message_chunk', ...base, text: run.text, textMode: 'snapshot', timestampMs: itemClock(p.itemId).startedAtMs });
     }
     if (method === 'item/reasoning/summaryTextDelta' && typeof p.delta === 'string') this.update({ type: 'agent_thought_chunk', ...base, text: p.delta });
     if (method === 'item/started' || method === 'item/completed') {
       const item = p.item; if (!item || typeof item.id !== 'string') return;
-      if (item.type === 'agentMessage') itemTimestamp(item.id, method === 'item/started' ? p.startedAtMs : undefined);
+      const clock = method === 'item/started' ? itemClock(item.id, p.startedAtMs) : itemClock(item.id, undefined, { atMs: p.completedAtMs });
       // Only the original owned input's receipt proves the main run anchor.
       if (!run.inputMessageId && item.type === 'userMessage' && typeof item.clientId === 'string'
         && Object.hasOwn(r.keys, item.clientId) && r.keys[item.clientId].runId === run.id
@@ -1576,8 +1620,10 @@ export class CodexService extends EventEmitter {
         ? { ...item, status: method === 'item/started' ? 'inProgress' : 'completed' } : item);
       if (item.type === 'agentMessage' && method === 'item/completed') run.final = String(item.text ?? '').slice(-128000);
       const tool = codexTool(run.items.get(item.id));
-      if (tool && method === 'item/started') this.update({ type: 'tool_call', ...base, toolCallId: item.id, title: tool.name, kind: tool.name, rawInput: tool.input, status: tool.status });
-      if (tool && method === 'item/completed') this.update({ type: 'tool_call_update', ...base, toolCallId: item.id, status: tool.status, rawOutput: tool.output });
+      if (tool && method === 'item/started') this.update({ type: 'tool_call', ...base, toolCallId: item.id, title: tool.name, kind: tool.name, rawInput: tool.input, status: tool.status,
+        ...(clock.startedAtMs !== undefined ? { startedAtMs: clock.startedAtMs } : {}) });
+      if (tool && method === 'item/completed') this.update({ type: 'tool_call_update', ...base, toolCallId: item.id, status: tool.status, rawOutput: tool.output,
+        ...codexToolTiming(run.items.get(item.id), tool.status, clock) });
     }
     if (method === 'turn/completed' && p.turn?.id === run.turnId && ['completed', 'interrupted', 'failed'].includes(p.turn.status)) {
       this.finish(r, p.turn.status === 'interrupted' ? 'cancelled' : p.turn.status === 'failed' ? 'error' : 'end_turn', p.turn);

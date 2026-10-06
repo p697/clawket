@@ -30,6 +30,8 @@ This package is the platform-neutral contract between Clawket UI and backend ada
 
 Optional `agent_message_chunk.timestampMs` and `SessionHistory.activeRun.messageTimestampMs` describe the current visible paragraph independently of run start. A producer must keep the same paragraph's clock fixed; absent fields preserve older peers. These clocks are presentation metadata, never activity, ownership or dispatch proof.
 
+Optional `tool_call.startedAtMs` and `tool_call_update.startedAtMs`/`finishedAtMs`/`durationMs` carry the producer's native or observed step clocks (Unix ms) and native run time (ms); only a settled call carries completion or duration. Consumers prefer them over receipt time; absent or malformed values keep receipt timing. Like paragraph clocks they are presentation metadata, never execution proof.
+
 `ConfigOperations.backups.remove` is additive and optional: it removes a local restore point without restoring or modifying the Gateway. Older adapters without it remain valid. Cron mock updates normalize `agentTurn.model: null` to an absent stored override.
 
 `SkillStatusEntry.invocation` is an optional adapter-authored draft prefix for an available installed skill. `SkillsOperations.install` is an optional source-pinned native installation with a verified installed-status result. `Capabilities.steer` and `AgentAdapter.steer` describe exact active-run guidance; Hermes may enable it only after explicit API/Bridge capability negotiation. Other backends and legacy peers keep it absent/disabled.

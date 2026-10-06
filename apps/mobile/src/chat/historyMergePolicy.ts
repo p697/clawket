@@ -94,10 +94,10 @@ function hasStepTiming(message: UiMessage): boolean {
 }
 
 /**
- * Only OpenClaw's history says how long each step took; Codex, Claude Code
- * and Pi history does not, so a reload would erase the times this phone
- * measured while it watched the steps run. A history row without timing of
- * its own keeps a finished live row's, matched by exact tool call ID or the
+ * OpenClaw and current Codex history say how long each step took; Claude Code,
+ * Pi and older Codex runtimes do not, so a reload would erase the times this
+ * phone measured while it watched the steps run. A history row without timing
+ * of its own keeps a finished live row's, matched by exact tool call ID or the
  * snapshot's alias for it, and all three fields come from that one clock.
  */
 export function preserveToolTiming(previous: UiMessage[], next: UiMessage[], aliases?: Readonly<Record<string, string>>): UiMessage[] {

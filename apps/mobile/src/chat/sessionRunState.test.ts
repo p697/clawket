@@ -3,7 +3,10 @@ import {
   markSessionRunDelta,
   markSessionRunStarted,
   rememberSessionRunIdentity,
+  rememberSessionRunTool,
+  settleSessionRunTool,
 } from './sessionRunState';
+import type { UiMessage } from '../types/chat';
 
 describe('sessionRunState', () => {
   it('retains in-memory paragraph rows only for the same run and clears them on retirement', () => {
@@ -95,5 +98,58 @@ describe('sessionRunState', () => {
     expect(mismatchCleared).toBe(false);
     expect(exactCleared).toBe(true);
     expect(map.has('agent:main')).toBe(false);
+  });
+
+  describe('noncurrent Codex tool boundaries', () => {
+    const owner = {};
+    const tool = (id: string, extra: Partial<UiMessage> = {}): UiMessage => ({ id: `toolcall_${id}`, role: 'tool', text: '', toolName: 'exec', toolStatus: 'running', ...extra });
+
+    it('commits each paragraph before its tool with that paragraph\'s first clock', () => {
+      const map = new Map();
+      markSessionRunStarted(map, 'chat', 'run', 1_000);
+      markSessionRunDelta(map, 'chat', 'run', 'First.', 1_000, true, 4_000);
+      rememberSessionRunTool(map, 'chat', 'run', owner, tool('one'), 10_000);
+      markSessionRunDelta(map, 'chat', 'run', 'First.\n\nSecond.', 1_000, true, 95_000);
+      rememberSessionRunTool(map, 'chat', 'run', owner, tool('two'), 100_000);
+      rememberSessionRunTool(map, 'chat', 'run', owner, tool('three'), 110_000);
+      const state = map.get('chat');
+      expect(state.streamTimestampMs).toBeUndefined();
+      expect(state.presentation.segments).toEqual([
+        { id: 'stream_segment_4000_0', renderKey: 'reply:1000:0', text: 'First.', timestampMs: 4_000, afterToolCount: 0 },
+        { id: 'stream_segment_95000_1', renderKey: 'reply:1000:1', text: 'Second.', timestampMs: 95_000, afterToolCount: 1 },
+      ]);
+      expect(state.presentation.tools.map((row: UiMessage) => row.id)).toEqual(['toolcall_one', 'toolcall_two', 'toolcall_three']);
+    });
+
+    it('dates text without a reported clock by its commit time and ignores replays, other runs and other owners', () => {
+      const map = new Map();
+      markSessionRunDelta(map, 'chat', 'run', 'Text.', 1_000, true);
+      map.get('chat').streamTimestampMs = undefined;
+      rememberSessionRunTool(map, 'chat', 'run', owner, tool('one'), 7_000);
+      const committed = map.get('chat').presentation;
+      expect(committed.segments).toEqual([expect.objectContaining({ text: 'Text.', timestampMs: 7_000 })]);
+      rememberSessionRunTool(map, 'chat', 'run', owner, { ...tool('one'), id: 'toolresult_one' }, 8_000);
+      rememberSessionRunTool(map, 'chat', 'other-run', owner, tool('two'), 9_000);
+      rememberSessionRunTool(map, 'missing', 'run', owner, tool('two'), 9_000);
+      expect(map.get('chat').presentation).toBe(committed);
+      expect(map.has('missing')).toBe(false);
+      rememberSessionRunTool(map, 'chat', 'run', {}, tool('two'), 9_000);
+      expect(map.get('chat').presentation.tools.map((row: UiMessage) => row.id)).toEqual(['toolcall_two']);
+    });
+
+    it('settles only a remembered call from the same run and owner', () => {
+      const map = new Map();
+      markSessionRunStarted(map, 'chat', 'run', 1_000);
+      rememberSessionRunTool(map, 'chat', 'run', owner, tool('one', { toolStartedAt: 2_000 }), 2_000);
+      const settle = (previous: UiMessage) => ({ ...previous, toolStatus: 'success' as const, toolFinishedAt: 5_000, toolDurationMs: 3_000 });
+      settleSessionRunTool(map, 'chat', 'run', owner, { id: 'toolcall_missing', role: 'tool', text: '' }, settle);
+      settleSessionRunTool(map, 'chat', 'other-run', owner, tool('one'), settle);
+      settleSessionRunTool(map, 'chat', 'run', {}, tool('one'), settle);
+      expect(map.get('chat').presentation.tools[0]).toMatchObject({ toolStatus: 'running', toolStartedAt: 2_000 });
+      settleSessionRunTool(map, 'chat', 'run', owner, { id: 'toolresult_one', role: 'tool', text: '' }, previous => ({ ...settle(previous), id: 'toolresult_one' }));
+      expect(map.get('chat').presentation.tools).toEqual([
+        expect.objectContaining({ id: 'toolcall_one', toolStatus: 'success', toolStartedAt: 2_000, toolFinishedAt: 5_000, toolDurationMs: 3_000 }),
+      ]);
+    });
   });
 });

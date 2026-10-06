@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { codexMessages, codexTool, codexTurnFailure } from './history.js';
+import { codexDesktopItemClock, codexItemClock, codexMessages, codexTool, codexToolTiming, codexTurnFailure } from './history.js';
 
 describe('Codex tool execution evidence', () => {
   it.each([
@@ -86,7 +86,7 @@ describe('Codex final reply clocks', () => {
   it('keeps paragraph clocks while the confirmed final retains its completion clock', () => {
     const progressClock = (startedAt + 60) * 1000, finalStartClock = (completedAt - 10) * 1000;
     const messages = codexMessages([{ id: 'turn', status: 'completed', startedAt, completedAt,
-      itemTimestamps: new Map([['progress', progressClock], ['final', finalStartClock]]), items: [
+      itemClocks: new Map([['progress', { startedAtMs: progressClock }], ['final', { startedAtMs: finalStartClock }]]), items: [
         user, { id: 'progress', type: 'agentMessage', phase: 'commentary', text: 'Still working' },
         { id: 'final', type: 'agentMessage', phase: 'final_answer', text: 'Done' },
       ] }]);
@@ -97,7 +97,7 @@ describe('Codex final reply clocks', () => {
   it('retains the known paragraph clock for a partial legacy turn without borrowing completion', () => {
     const paragraphClock = (startedAt + 60) * 1000;
     const turn = { id: 'partial', status: 'completed', startedAt, completedAt,
-      itemTimestamps: new Map([['paragraph', paragraphClock]]),
+      itemClocks: new Map([['paragraph', { startedAtMs: paragraphClock }]]),
       items: [{ id: 'paragraph', type: 'agentMessage', text: 'Earlier progress' }] };
     expect(codexMessages([turn], { unconfirmedLegacyTurnId: 'partial' })[0].timestampMs).toBe(paragraphClock);
     expect(codexMessages([turn])[0].timestampMs).toBe(completedAt * 1000);
@@ -150,7 +150,7 @@ describe('Codex user item clocks', () => {
 
   it('keeps two same-turn guides at their native times without changing their identities or order', () => {
     const turn = Object.freeze({ id: 'original-turn', startedAt: 100,
-      itemTimestamps: new Map([['main', 100100], ['guide-1', 160100], ['guide-2', 220100]]),
+      itemClocks: new Map([['main', { startedAtMs: 100100 }], ['guide-1', { startedAtMs: 160100 }], ['guide-2', { startedAtMs: 220100 }]]),
       items: [user('main', 'receipt-1'), { id: 'progress', type: 'agentMessage', text: 'Waiting' },
         user('guide-1'), { id: 'tool', type: 'commandExecution', command: 'sleep', status: 'inProgress' }, user('guide-2')] });
     const messages = codexMessages([turn]);
@@ -166,13 +166,116 @@ describe('Codex user item clocks', () => {
 
   it.each([undefined, null, 0, -1, NaN, Infinity, 100.5, '160100', 8.64e15 + 1])(
     'keeps the legacy turn clock when the user item clock is invalid: %s', clock => {
-      const messages = codexMessages([{ startedAt: 100, itemTimestamps: new Map([['guide', clock]]), items: [user('guide')] }]);
+      const messages = codexMessages([{ startedAt: 100, itemClocks: new Map([['guide', { startedAtMs: clock }]]), items: [user('guide')] }]);
       expect(messages[0].timestampMs).toBe(100000);
     });
 
   it('keeps legacy history without item timing metadata unchanged', () => {
     expect(codexMessages([{ startedAt: 100, items: [user('legacy')] }])[0].timestampMs).toBe(100000);
     expect(codexMessages([{ items: [user('undated')] }])[0].timestampMs).toBeUndefined();
+  });
+});
+
+describe('Codex tool step clocks', () => {
+  const user = { id: 'user', type: 'userMessage', content: [{ type: 'text', text: 'Run the checks' }] };
+  const command = (id: string, extra: object = {}) => ({ id, type: 'commandExecution', command: 'npm test', status: 'completed', exitCode: 0, durationMs: 376609, ...extra });
+
+  it('dates each step by its native start and keeps the native run time after reload', () => {
+    const [message] = codexMessages([{ id: 'turn', status: 'completed', startedAt: 100, completedAt: 900,
+      itemClocks: new Map([['long', { startedAtMs: 466430, completedAtMs: 843040 }]]), items: [command('long')] }]);
+    expect(message).toMatchObject({ id: 'toolcall_long', timestampMs: 466430,
+      tool: { status: 'success', startedAtMs: 466430, finishedAtMs: 843040, durationMs: 376609 } });
+  });
+
+  it('derives a missing native run time from the settled lifecycle and never times an unsettled step', () => {
+    const clocks = new Map([['search', { startedAtMs: 1000, completedAtMs: 4500 }], ['running', { startedAtMs: 2000 }], ['unknown', { startedAtMs: 3000, completedAtMs: 3500 }]]);
+    const messages = codexMessages([{ id: 'turn', startedAt: 1, itemClocks: clocks, items: [
+      { id: 'search', type: 'webSearch', query: 'docs', action: { type: 'other' } },
+      { id: 'running', type: 'commandExecution', command: 'sleep 9', status: 'inProgress', durationMs: null },
+      { id: 'unknown', type: 'mcpToolCall', tool: 'read' },
+    ] }]);
+    expect(messages.map(message => message.tool)).toEqual([
+      expect.objectContaining({ status: 'success', startedAtMs: 1000, finishedAtMs: 4500, durationMs: 3500 }),
+      expect.objectContaining({ status: 'running', startedAtMs: 2000 }),
+      expect.objectContaining({ status: 'unknown', startedAtMs: 3000 }),
+    ]);
+    expect(messages[1].tool).not.toHaveProperty('finishedAtMs');
+    expect(messages[1].tool).not.toHaveProperty('durationMs');
+    expect(messages[2].tool).not.toHaveProperty('finishedAtMs');
+  });
+
+  it.each([-1, 1.5, '20', NaN, Infinity, 8.64e15 + 1])('ignores a malformed native run time %j', durationMs => {
+    expect(codexToolTiming({ durationMs }, 'success', { startedAtMs: 1000, completedAtMs: 1600 })).toEqual({ startedAtMs: 1000, finishedAtMs: 1600, durationMs: 600 });
+    expect(codexToolTiming({ durationMs }, 'error', { startedAtMs: 1000 })).toEqual({ startedAtMs: 1000 });
+  });
+
+  it('keeps legacy tool rows on the turn clock without inventing timing', () => {
+    const [message] = codexMessages([{ id: 'turn', status: 'completed', startedAt: 100, items: [command('legacy', { durationMs: null })] }]);
+    expect(message.timestampMs).toBe(100000);
+    expect(message.tool).not.toHaveProperty('startedAtMs');
+    expect(message.tool).not.toHaveProperty('finishedAtMs');
+    expect(message.tool).not.toHaveProperty('durationMs');
+  });
+
+  it('restores start order when native history recorded a long command after later replies', () => {
+    const items = [user, { id: 'before', type: 'agentMessage', phase: 'commentary', text: 'Starting the long check.' },
+      { id: 'after', type: 'agentMessage', phase: 'commentary', text: 'Still waiting for it.' },
+      command('long'), { id: 'final', type: 'agentMessage', phase: 'final_answer', text: 'Done.' }];
+    const itemClocks = new Map([['user', { startedAtMs: 1000, completedAtMs: 1000 }], ['before', { startedAtMs: 2000, completedAtMs: 2500 }],
+      ['after', { startedAtMs: 9000, completedAtMs: 9500 }], ['long', { startedAtMs: 3000, completedAtMs: 12000 }], ['final', { startedAtMs: 13000, completedAtMs: 13000 }]]);
+    const messages = codexMessages([{ id: 'turn', status: 'completed', startedAt: 1, completedAt: 14, itemClocks, items }]);
+    expect(messages.map(message => [message.id, message.timestampMs])).toEqual([
+      ['user', 1000], ['before', 2000], ['toolcall_long', 3000], ['after', 9000], ['final', 14000],
+    ]);
+    expect(items.map(item => item.id)).toEqual(['user', 'before', 'after', 'long', 'final']);
+  });
+
+  it.each([
+    ['a rendered item without a clock', new Map([['before', { startedAtMs: 2000 }], ['long', { startedAtMs: 1000 }]])],
+    ['a reversed native pair', new Map([['before', { startedAtMs: 2000 }], ['after', { startedAtMs: 9000 }], ['long', { startedAtMs: 3000, completedAtMs: 2000 }]])],
+  ])('keeps native order with %s', (_case, itemClocks) => {
+    const messages = codexMessages([{ id: 'turn', startedAt: 1, itemClocks, items: [
+      { id: 'before', type: 'agentMessage', text: 'Before.' }, { id: 'after', type: 'agentMessage', text: 'After.' }, command('long'),
+    ] }]);
+    expect(messages.map(message => message.id)).toEqual(['before', 'after', 'toolcall_long']);
+  });
+
+  it('orders by start without letting unrendered native items block it', () => {
+    const messages = codexMessages([{ id: 'turn', startedAt: 1, itemClocks: new Map([['a', { startedAtMs: 5000 }], ['tool', { startedAtMs: 4000 }]]), items: [
+      { id: 'a', type: 'agentMessage', text: 'Paragraph.' }, { id: 'reasoning', type: 'reasoning', summary: [] },
+      { id: 'pause', type: 'sleep' }, command('tool'),
+    ] }]);
+    expect(messages.map(message => message.id)).toEqual(['toolcall_tool', 'a']);
+  });
+});
+
+describe('Codex Desktop native item clocks', () => {
+  const turn = {
+    aeonAssistantMessageStartedAtMsById: { reply: 1000, broken: 'soon' },
+    agentMessageCompletedAtMsById: { reply: 1800, reversed: 500 },
+    commandExecutionStartedAtMsById: { exec: 2000 },
+  };
+  it('reads Desktop reply and command lifecycle maps', () => {
+    expect(codexDesktopItemClock(turn, { id: 'reply', type: 'agentMessage' })).toEqual({ startedAtMs: 1000, completedAtMs: 1800 });
+    expect(codexDesktopItemClock(turn, { id: 'exec', type: 'commandExecution', durationMs: 450 })).toEqual({ startedAtMs: 2000, completedAtMs: 2450 });
+    expect(codexDesktopItemClock(turn, { id: 'exec', type: 'commandExecution', durationMs: null })).toEqual({ startedAtMs: 2000 });
+  });
+  it.each([
+    [turn, { id: 'broken', type: 'agentMessage' }],
+    [{ ...turn, aeonAssistantMessageStartedAtMsById: { reversed: 900 } }, { id: 'reversed', type: 'agentMessage' }],
+    [turn, { id: 'missing', type: 'commandExecution', durationMs: 5 }],
+    [turn, { id: 'exec', type: 'mcpToolCall' }],
+    [turn, { id: '__proto__', type: 'commandExecution' }],
+    [{ commandExecutionStartedAtMsById: [2000] }, { id: '0', type: 'commandExecution' }],
+    [null, { id: 'exec', type: 'commandExecution' }],
+  ])('treats malformed or absent Desktop clocks as unknown: %j %j', (desktopTurn, item) => {
+    expect(codexDesktopItemClock(desktopTurn, item)).toBeUndefined();
+  });
+  it('validates native clock pairs once for every producer', () => {
+    expect(codexItemClock(1000, 2000)).toEqual({ startedAtMs: 1000, completedAtMs: 2000 });
+    expect(codexItemClock(undefined, 2000)).toEqual({ completedAtMs: 2000 });
+    expect(codexItemClock(2000, 1000)).toBeUndefined();
+    expect(codexItemClock(null, null)).toBeUndefined();
   });
 });
 

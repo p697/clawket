@@ -86,25 +86,89 @@ export function codexFinalReplyId(items: any[], allowLegacy = true): string | un
   return id;
 }
 
+/** Validated native lifecycle clocks (Unix ms) of one item, kept beside the unchanged native item. */
+export type CodexItemClock = { startedAtMs?: number; completedAtMs?: number };
+
+const validClock = (value: unknown): value is number => typeof value === 'number'
+  && Number.isSafeInteger(value) && value > 0 && value <= 8.64e15;
+
 /** Native millisecond item clocks are optional; malformed or reversed pairs are not evidence. */
+export function codexItemClock(started: unknown, completed?: unknown): CodexItemClock | undefined {
+  if ((started != null && !validClock(started)) || (completed != null && !validClock(completed))) return undefined;
+  if (validClock(started) && validClock(completed) && completed < started) return undefined;
+  if (!validClock(started) && !validClock(completed)) return undefined;
+  return { ...(validClock(started) ? { startedAtMs: started } : {}), ...(validClock(completed) ? { completedAtMs: completed } : {}) };
+}
+
 export function codexItemTimestamp(started: unknown, completed?: unknown): number | undefined {
-  const valid = (value: unknown): value is number => typeof value === 'number'
-    && Number.isSafeInteger(value) && value > 0 && value <= 8.64e15;
-  if ((started != null && !valid(started)) || (completed != null && !valid(completed))) return undefined;
-  if (valid(started) && valid(completed) && completed < started) return undefined;
-  return valid(started) ? started : valid(completed) ? completed : undefined;
+  const clock = codexItemClock(started, completed);
+  return clock?.startedAtMs ?? clock?.completedAtMs;
+}
+
+/** Commands, MCP and dynamic tools report their native run time; other values are not evidence. */
+function codexNativeDuration(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= 8.64e15 ? value : undefined;
+}
+
+/**
+ * Timing of one tool call from its lifecycle clock. Only a settled call has a
+ * completion or a duration; the native per-call duration wins over the clock span.
+ */
+export function codexToolTiming(item: any, status: NonNullable<ChatMessage['tool']>['status'], clock?: CodexItemClock):
+  Pick<NonNullable<ChatMessage['tool']>, 'startedAtMs' | 'finishedAtMs' | 'durationMs'> {
+  const settled = status === 'success' || status === 'error';
+  const startedAtMs = clock?.startedAtMs;
+  const finishedAtMs = settled ? clock?.completedAtMs : undefined;
+  const durationMs = !settled ? undefined : codexNativeDuration(item?.durationMs)
+    ?? (startedAtMs !== undefined && finishedAtMs !== undefined && finishedAtMs >= startedAtMs ? finishedAtMs - startedAtMs : undefined);
+  return { ...(startedAtMs !== undefined ? { startedAtMs } : {}), ...(finishedAtMs !== undefined ? { finishedAtMs } : {}),
+    ...(durationMs !== undefined ? { durationMs } : {}) };
+}
+
+/** Codex Desktop keeps native lifecycle clocks beside its turn state; malformed maps are not evidence. */
+export function codexDesktopItemClock(turn: any, item: any): CodexItemClock | undefined {
+  const entry = (name: string) => {
+    const map = turn?.[name];
+    return map && typeof map === 'object' && !Array.isArray(map) && typeof item?.id === 'string' && Object.hasOwn(map, item.id) ? map[item.id] : undefined;
+  };
+  if (item?.type === 'agentMessage') return codexItemClock(entry('aeonAssistantMessageStartedAtMsById'), entry('agentMessageCompletedAtMsById'));
+  if (item?.type !== 'commandExecution') return undefined;
+  const started = entry('commandExecutionStartedAtMsById'), duration = codexNativeDuration(item.durationMs);
+  return codexItemClock(started, validClock(started) && duration !== undefined ? started + duration : undefined);
+}
+
+/** Item types that produce a history row; others never affect presentation order. */
+function rendersHistoryRow(item: any): boolean {
+  return item.type === 'userMessage' || item.type === 'agentMessage' || item.type === 'plan' || codexTool(item) !== undefined;
+}
+
+/**
+ * Native item lists record an item when it completes, so a long command lands
+ * after replies written while it ran. Live presentation follows start order;
+ * restore it only when every rendered item has a native start clock.
+ */
+function codexStartOrder(items: any[], clocks: Map<string, CodexItemClock> | undefined): any[] {
+  if (!clocks) return items;
+  const rendered = items.filter(item => typeof item?.id === 'string' && rendersHistoryRow(item));
+  const start = (item: any) => codexItemClock(clocks.get(item.id)?.startedAtMs, clocks.get(item.id)?.completedAtMs)?.startedAtMs;
+  if (rendered.length < 2 || rendered.some(item => start(item) === undefined)) return items;
+  return rendered.map((item, index) => ({ item, index, at: start(item)! }))
+    .sort((a, b) => a.at - b.at || a.index - b.index).map(entry => entry.item);
 }
 
 export function codexMessages(turns: any[], options: { unconfirmedLegacyTurnId?: string } = {}): ChatMessage[] {
   const messages: ChatMessage[] = [];
   for (const turn of turns) {
     const items = turn.items ?? [];
+    const clocks: Map<string, CodexItemClock> | undefined = turn.itemClocks instanceof Map ? turn.itemClocks : undefined;
     const completedAtMs = codexReplyTimestamp(turn);
     const finalReplyId = codexFinalReplyId(items,
       options.unconfirmedLegacyTurnId === undefined || turn.id !== options.unconfirmedLegacyTurnId);
-    for (const item of items) {
+    for (const item of codexStartOrder(items, clocks)) {
       if (typeof item.id !== 'string') continue;
       const timestampMs = typeof turn.startedAt === 'number' ? turn.startedAt * 1000 : undefined;
+      const clock = codexItemClock(clocks?.get(item.id)?.startedAtMs, clocks?.get(item.id)?.completedAtMs);
+      const itemTimestampMs = clock?.startedAtMs ?? clock?.completedAtMs;
       const base = { id: item.id, timestampMs, ...(typeof turn.id === 'string' && turn.id.length > 0 && turn.id.length <= 256 ? { turnId: turn.id } : {}) };
       if (item.type === 'userMessage') {
         const text = (item.content ?? []).filter((p: any) => p.type === 'text').map((p: any) => p.text).join('\n');
@@ -114,15 +178,15 @@ export function codexMessages(turns: any[], options: { unconfirmedLegacyTurnId?:
           const match = /^data:(image\/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+/]*={0,2})$/.exec(part.url);
           if (match) attachments.push({ type: 'image', mimeType: match[1], content: match[2] });
         }
-        messages.push({ ...base, timestampMs: codexItemTimestamp(turn.itemTimestamps instanceof Map ? turn.itemTimestamps.get(item.id) : undefined) ?? timestampMs,
+        messages.push({ ...base, timestampMs: itemTimestampMs ?? timestampMs,
           role: 'user', text, ...(typeof item.clientId === 'string' && item.clientId && item.clientId.length <= 200 ? { idempotencyKey: item.clientId } : {}), ...(attachments.length ? { attachments } : {}) });
       } else if (item.type === 'agentMessage' || item.type === 'plan') {
-        messages.push({ ...base, timestampMs: (item.id === finalReplyId ? completedAtMs : undefined)
-          ?? (turn.itemTimestamps instanceof Map ? turn.itemTimestamps.get(item.id) : undefined) ?? timestampMs,
+        messages.push({ ...base, timestampMs: (item.id === finalReplyId ? completedAtMs : undefined) ?? itemTimestampMs ?? timestampMs,
           role: 'assistant', text: String(item.text ?? '') });
       } else {
         const tool = codexTool(item);
-        if (tool) messages.push({ ...base, id: `toolcall_${item.id}`, role: 'tool', text: '', tool });
+        if (tool) messages.push({ ...base, id: `toolcall_${item.id}`, timestampMs: itemTimestampMs ?? timestampMs, role: 'tool', text: '',
+          tool: { ...tool, ...codexToolTiming(item, tool.status, clock) } });
         const image = codexGeneratedImage(item);
         if (image) messages.push({ ...image, timestampMs: completedAtMs ?? timestampMs, ...(base.turnId ? { turnId: base.turnId } : {}) });
       }

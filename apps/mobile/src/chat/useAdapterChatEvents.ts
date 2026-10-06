@@ -204,6 +204,15 @@ function stringifyUnknown(value: unknown): string | undefined {
   }
 }
 
+/** A producer's step clock (Unix ms); anything else keeps this phone's receipt timing. */
+function reportedClock(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 && value <= 8.64e15 ? value : undefined;
+}
+
+function reportedDuration(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= 8.64e15 ? value : undefined;
+}
+
 /** Convert the rendering-neutral protocol message into the current RN message model. */
 export function mapAdapterChatMessage(
   message: ChatMessage,
@@ -380,7 +389,8 @@ export function mapAdapterSessionUpdate(
         activeRunId: update.runId,
         isSending: true,
       };
-    case 'tool_call':
+    case 'tool_call': {
+      const startedAt = reportedClock(update.startedAtMs);
       return {
         ...update,
         message: {
@@ -393,14 +403,19 @@ export function mapAdapterSessionUpdate(
           ...(update.status !== undefined ? { toolStatusReported: true as const } : {}),
           toolSummary: update.title,
           toolArgs: stringifyUnknown(update.rawInput),
-          ...(update.status === undefined || update.status === 'running' ? { toolStartedAt: now() } : {}),
+          ...(startedAt !== undefined ? { toolStartedAt: startedAt }
+            : update.status === undefined || update.status === 'running' ? { toolStartedAt: now() } : {}),
         },
         merge: false,
         activeRunId: update.runId,
         isSending: true,
       };
+    }
     case 'tool_call_update': {
       const timestampMs = now();
+      const settled = update.status === 'success' || update.status === 'error';
+      const startedAt = reportedClock(update.startedAtMs);
+      const durationMs = settled ? reportedDuration(update.durationMs) : undefined;
       return {
         ...update,
         message: {
@@ -411,7 +426,9 @@ export function mapAdapterSessionUpdate(
           toolStatus: update.status,
           toolStatusReported: true,
           toolDetail: stringifyUnknown(update.rawOutput),
-          toolFinishedAt: update.status === 'success' || update.status === 'error' ? timestampMs : undefined,
+          ...(startedAt !== undefined ? { toolStartedAt: startedAt } : {}),
+          toolFinishedAt: settled ? reportedClock(update.finishedAtMs) ?? timestampMs : undefined,
+          ...(durationMs !== undefined ? { toolDurationMs: durationMs } : {}),
         },
         merge: true,
         activeRunId: update.runId,
