@@ -19,6 +19,19 @@ describe('phone-started Bridge update status', () => {
     expect(parseBridgeUpdateStart({ accepted: true, status: { id, state: 'checking', startedAt: 5 } })).toEqual({ accepted: true, status: { id, state: 'checking', startedAt: 5 } });
   });
 
+  it('drops malformed result rows and fields while keeping the valid ones', () => {
+    expect(parseBridgeUpdateStatus({ id, state: 'failed', startedAt: 1, results: [null, 'codex', { backend: 'pi', state: 'restored', reason: 'Error: EACCES /Users/private', version: 3 },
+      { backend: 'hermes', state: 'failed', reason: 7, version: 'latest' }] }))
+      .toEqual({ id, state: 'failed', startedAt: 1, results: [{ backend: 'pi', state: 'restored' }, { backend: 'hermes', state: 'failed' }] });
+  });
+
+  it('keeps the progress of a run that is already in progress', () => {
+    const status = { id, state: 'installing', startedAt: 3, version: '3.1.14' };
+    for (const value of [null, 'accepted', 1]) expect(parseBridgeUpdateStart(value)).toBeNull();
+    expect(parseBridgeUpdateStart({ accepted: false, reason: 'running', status })).toEqual({ accepted: false, reason: 'running', status });
+    expect(parseBridgeUpdateStart({ accepted: false, reason: 'running', status: { id: 'bad' } })).toEqual({ accepted: false, reason: 'running' });
+  });
+
   it('treats only updated and failed as finished', () => {
     expect(['checking', 'installing', 'waiting', 'restarting'].some(state => isBridgeUpdateFinished({ id, state: state as any, startedAt: 1 }))).toBe(false);
     expect(isBridgeUpdateFinished({ id, state: 'failed', startedAt: 1, reason: 'busy' })).toBe(true);
