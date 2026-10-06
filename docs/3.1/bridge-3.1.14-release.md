@@ -30,4 +30,22 @@ Package verification covers three files, four runtime boundaries, 91 modules and
 
 Fresh read-only before/after verification confirms all six Production Worker source/config hashes, deployment anchors and observability settings remain unchanged. No Worker was deployed.
 
-npm publication is waiting for the owner's separate security-key authentication. Public version/latest, full download and public installation remain pending. No public completion is claimed at this stage.
+## Verified publication
+
+The first npm publication authentication challenge expired with E404 without an accepted upload. The owner requested renewal and completed the renewed publication security-key verification. npm accepted the same fixed artifact for processing with exit zero; the first public 404 was retained. Manifest requests carrying only Cache-Control continued returning 404, while fresh cache-bypassing queries became available.
+
+At `2026-10-06T04:47:04.485Z` (2026-10-06 13:47:04 JST), unauthenticated public version and `latest` both report 3.1.14. A complete cache-bypassed tarball download matches the fixed candidate byte-for-byte, SHA-256, npm SHA-1 and SHA-512 integrity. Public package verification is distinct from upload acceptance.
+
+A second fresh installation directly from public npm with empty user/global authentication configurations passes package identity, exact installed-bundle bytes, update protocol and CLI help (`2026-10-06T04:47:33.806Z`). Delivery-record changes through `3acac903` retained all 141 package input hashes and passed all eleven jobs in CI37415434522. They did not rebuild or replace the uploaded artifact. Running user Bridges have not been updated or restarted by this publication; their original configuration, pairing and history are retained. The Claude history and existing two-computer Codex acceptance checkpoints require an explicit managed runtime update. PR194's full step-time presentation also requires the corresponding Mobile code in an installed App.
+
+For an explicit managed update after active Codex tasks finish, use the fixed verified version:
+
+```bash
+npx -y @p697/clawket@3.1.14 update --version 3.1.14
+```
+
+This publication did not execute the update command. Stopped scopes and original backend/config/project/environment remain authoritative.
+
+## Later main integration
+
+After this fixed package was uploaded, main gained PR196 as `02a8d6a4`, adding phone-triggered Bridge updates. The release record is rebased onto that commit for clean main integration, preserving both progress entries. This later Bridge code is not present in the immutable public 3.1.14 artifact. It requires a later explicitly authorized Bridge publication and the corresponding Mobile delivery. No replacement upload, new version bump or additional publication was performed. Source CI for the published package remains the recorded `f320cbf5` run; final integration CI checks the newer repository state separately.
