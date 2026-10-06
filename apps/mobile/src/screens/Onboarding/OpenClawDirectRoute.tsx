@@ -4,7 +4,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as Clipboard from 'expo-clipboard';
 import { getConnectionRuntime, useConnections, connectOpenClawDirect, buildOpenClawDirectRecord,
-  DirectConnectionInputError, classifyOpenClawDirectFailure, type OpenClawDirectDraft } from '../../connection';
+  DirectConnectionInputError, classifyOpenClawDirectFailure, findOpenClawDirectConnection, type OpenClawDirectDraft } from '../../connection';
 import { useProPaywall } from '../../contexts/ProPaywallContext';
 import type { RootStackParamList } from '../../navigation/root-stack';
 import type { OnboardingConnectedResult } from './OnboardingRoute';
@@ -46,7 +46,7 @@ export function OpenClawDirectRoute({ navigation, onConnected, onOpenPaywall }: 
       setError(failure instanceof DirectConnectionInputError ? failure.field : 'url');
       return;
     }
-    const current = generation.current;
+    const current = ++generation.current;
     const connect = async () => {
       if (!focused.current || current !== generation.current || inFlight.current !== null) return;
       inFlight.current = current;
@@ -81,11 +81,29 @@ export function OpenClawDirectRoute({ navigation, onConnected, onOpenPaywall }: 
       }
     };
     if (runtime.connections.length > 0 && !isPro && !retryId.current) {
-      onOpenPaywall('gatewayConnections', () => { void connect(); });
+      // Reopening a failed free connection is a retry, not an additional Pro connection.
+      inFlight.current = current; setBusy(true);
+      void (async () => {
+        let existing;
+        try {
+          existing = await findOpenClawDirectConnection({ runtime: getConnectionRuntime(), url: draft.url,
+            isCurrent: () => focused.current && current === generation.current });
+        } catch {
+          if (focused.current && current === generation.current) setError('server');
+          return;
+        } finally {
+          if (inFlight.current === current) inFlight.current = null;
+          if (focused.current && current === generation.current) setBusy(false);
+        }
+        if (!focused.current || current !== generation.current) return;
+        if (existing?.isFreeSlot) { retryId.current = existing.id; await connect(); }
+        else onOpenPaywall('gatewayConnections', () => { void connect(); });
+      })();
     } else { void connect(); }
   }, [isPro, onConnected, onOpenPaywall, retire, runtime.connections.length]);
 
   return <OpenClawDirectScreen busy={busy} error={error} onSubmit={submit}
     onBack={() => { retire(); navigation.goBack(); }}
+    onDraftChanged={() => { if (inFlight.current === null) retire(); }}
     onCopyCommand={(command) => { void Clipboard.setStringAsync(command).catch(() => setError('server')); }} />;
 }

@@ -19,11 +19,12 @@ export type OpenClawDirectScreenProps = Readonly<{
   busy: boolean;
   error?: 'url' | 'credential' | 'unauthorized' | 'pairing_required' | 'network' | 'server';
   onBack: () => void;
+  onDraftChanged?: () => void;
   onSubmit: (draft: OpenClawDirectDraft) => void;
   onCopyCommand: (command: string) => void;
 }>;
 
-export function OpenClawDirectScreen({ busy, error, onBack, onSubmit, onCopyCommand }: OpenClawDirectScreenProps) {
+export function OpenClawDirectScreen({ busy, error, onBack, onDraftChanged, onSubmit, onCopyCommand }: OpenClawDirectScreenProps) {
   const { t } = useTranslation('config');
   const { theme: { colors } } = useAppTheme();
   const insets = useSafeAreaInsets();
@@ -52,14 +53,14 @@ export function OpenClawDirectScreen({ busy, error, onBack, onSubmit, onCopyComm
         <FormStep number="01" title={t('Connection type')}>
           <SegmentedTabs testID="direct-mode" size="sm" active={mode} tabs={[
             { key: 'local', label: t('Local network') }, { key: 'tailscale', label: t('Tailscale') }, { key: 'custom', label: t('Custom') },
-          ]} onSwitch={(value) => { if (!busy) setMode(value); }} />
+          ]} onSwitch={(value) => { if (!busy) { onDraftChanged?.(); setMode(value); } }} />
           <Text style={[styles.hint, { color: colors.inkSecondary }]}>{mode === 'local'
             ? t('Connect your phone and computer to the same Wi-Fi network.') : mode === 'tailscale'
               ? t('Connect both devices to the same Tailscale network.')
               : t('Use a reachable ws:// or wss:// OpenClaw Gateway endpoint.')}</Text>
         </FormStep>
         <FormStep number="02" title={t('Gateway address')}>
-          <FormTextInput testID="direct-url" accessibilityLabel={t('Gateway address')} value={url} onChangeText={setUrl}
+          <FormTextInput testID="direct-url" accessibilityLabel={t('Gateway address')} value={url} onChangeText={(value) => { onDraftChanged?.(); setUrl(value); }}
             editable={!busy} autoCapitalize="none" autoCorrect={false} keyboardType="url" textContentType="URL"
             placeholder={mode === 'local' ? 'ws://192.168.1.10:18789' : mode === 'tailscale' ? 'ws://100.64.0.10:18789' : 'wss://gateway.example.com'}
             invalid={error === 'url'} onFocus={reveal.measureAnchor} />
@@ -67,9 +68,9 @@ export function OpenClawDirectScreen({ busy, error, onBack, onSubmit, onCopyComm
         <FormStep number="03" title={t('Authentication')}>
           <SegmentedTabs testID="direct-auth" size="sm" active={authMethod} tabs={[
             { key: 'token', label: t('Token') }, { key: 'password', label: t('Password') },
-          ]} onSwitch={(value) => { if (!busy) { setAuthMethod(value); setCredential(''); } }} />
+          ]} onSwitch={(value) => { if (!busy) { onDraftChanged?.(); setAuthMethod(value); setCredential(''); } }} />
           <FormTextInput testID="direct-credential" accessibilityLabel={authMethod === 'token' ? t('Gateway token') : t('Gateway password')}
-            value={credential} onChangeText={setCredential} editable={!busy} secureTextEntry autoCapitalize="none" autoCorrect={false}
+            value={credential} onChangeText={(value) => { onDraftChanged?.(); setCredential(value); }} editable={!busy} secureTextEntry autoCapitalize="none" autoCorrect={false}
             placeholder={authMethod === 'token' ? t('Gateway token') : t('Gateway password')} invalid={error === 'credential'}
             onFocus={reveal.measureAnchor} onSubmitEditing={() => { if (!busy) onSubmit({ mode, url, authMethod, credential }); }} />
           <View ref={reveal.anchorRef} collapsable={false} onLayout={reveal.measureAnchor}>

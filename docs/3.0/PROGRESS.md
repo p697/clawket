@@ -2,7 +2,7 @@
 
 - 2026-10-06 OpenClaw 高级直连（负责人要求完整恢复，实现与验收中）。
   - 默认脚本/配对码 Relay 流程保持；仅 OpenClaw guide 底部新增高级入口，独立页支持 LAN、Tailscale、Custom、Token/Password。复用连接 runtime；鉴权完整替换、同端点去重、当前握手 ready、取消/超时/迟到结果隔离与 Pro 约束；Android 主 Manifest 明文许可及 iOS Local Network/私有地址 ATS 来自原生插件。19 语言同步；行为与验证边界见 [直连规格](21-openclaw-direct-connections.md)。
-  - 已逐文件验证 direct model 25、route 5、screen 3、native plugin 4、OnboardingScreen 55、OnboardingRoute 29；DirectWsTransport 9 项通过，UI/config/i18n/docs/typecheck 检查通过。干净双平台 prebuild 与 133 Pods 同步通过；手机直达当前 Gateway LAN HTTP 200，App 实际握手尚在验证。负责人确认另一会话结束后已接手 android/heavy；本机 Gradle catalog 解析问题排查中，未做发行构建、部署或发布。
+  - 已逐文件验证 direct model 25、route 7、screen 3、native plugin 4、OnboardingScreen 55、OnboardingRoute 29；DirectWsTransport 9、root navigation 2 项通过，UI/config/i18n/docs/typecheck 检查通过。干净双平台 prebuild 与 133 Pods 同步通过；手机直达当前 Gateway LAN HTTP 200，App 实际握手尚在验证。负责人确认另一会话结束后已接手 android/heavy；本机 Gradle 缓存隔离后已正常编译，按负责人协调要求让出 heavy 后现已恢复验证，未做发行构建、部署或发布。
 
 - 2026-10-06 修复非桌面 PR 全绿仍无法合并的 CI 矩阵状态。
   - OpenClaw 高级直连 PR201 实测：所有执行项通过，但 job-level if 在矩阵展开前跳过 desktop，GitHub 只记录未展开的 `${{ matrix.os }}` 名称，两个分支保护要求的 OS 检查均缺失。独立修复保留固定两 OS 名称；非桌面变更在轻量 Ubuntu runner 跳过套件步骤，桌面变更/main 仍执行原 Windows/macOS 全套。选择器缺失/畸形仍 fail closed；不改分支保护、测试或覆盖阈值。

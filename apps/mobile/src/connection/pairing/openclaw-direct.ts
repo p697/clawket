@@ -47,6 +47,22 @@ type DirectRuntime = Pick<ConnectionCoordinator,
 const attemptOwners = new WeakMap<DirectRuntime, Map<string, symbol>>();
 const endpointKey = (url: string) => normalizeOpenClawDirectUrl(url).replace(/\/$/, '');
 
+/** Credential-free result for entitlement checks; only the connection layer reads saved URLs. */
+export async function findOpenClawDirectConnection(input: Readonly<{
+  runtime: DirectRuntime; url: string; isCurrent: () => boolean; retryConnectionId?: string;
+}>): Promise<ConnectionDescriptor | undefined> {
+  const key = endpointKey(input.url);
+  for (const candidate of input.runtime.getSnapshot().connections) {
+    if (candidate.backendKind !== 'openclaw' || candidate.transportKind === 'relay') continue;
+    const saved = await input.runtime.getRuntimeConnectionRecord(candidate.id);
+    if (!input.isCurrent()) return undefined;
+    let matches = false;
+    try { matches = endpointKey(saved.url) === key; } catch { /* Historical malformed URLs cannot match. */ }
+    if (candidate.id === input.retryConnectionId || matches) return candidate;
+  }
+  return undefined;
+}
+
 /** Retry replaces authentication rather than merging an obsolete token with a new password. */
 export async function connectOpenClawDirect(input: Readonly<{
   runtime: DirectRuntime;
@@ -57,15 +73,7 @@ export async function connectOpenClawDirect(input: Readonly<{
 }>): Promise<ConnectionDescriptor | null> {
   const { runtime, isCurrent } = input;
   const record = buildOpenClawDirectRecord(input.draft);
-  let existing: ConnectionDescriptor | undefined;
-  for (const candidate of runtime.getSnapshot().connections) {
-    if (candidate.backendKind !== 'openclaw' || candidate.transportKind === 'relay') continue;
-    const saved = await runtime.getRuntimeConnectionRecord(candidate.id);
-    if (!isCurrent()) return null;
-    let matches = false;
-    try { matches = endpointKey(saved.url) === endpointKey(record.url); } catch { /* Historical malformed URLs cannot match. */ }
-    if (candidate.id === input.retryConnectionId || matches) { existing = candidate; break; }
-  }
+  const existing = await findOpenClawDirectConnection({ runtime, url: record.url, isCurrent, retryConnectionId: input.retryConnectionId });
   if (!isCurrent()) return null;
   const owners = attemptOwners.get(runtime) ?? new Map<string, symbol>();
   attemptOwners.set(runtime, owners);

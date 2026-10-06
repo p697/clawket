@@ -7,6 +7,7 @@ let mockProps: OpenClawDirectScreenProps;
 let mockSnapshot: { connections: unknown[]; activeConnectionId: string | null; activeState: string; error: { message: string } | null };
 let mockIsPro = false;
 const mockConnect = jest.fn();
+const mockFind = jest.fn(async (..._args: unknown[]) => undefined as { id: string; isFreeSlot: boolean } | undefined);
 const mockPause = jest.fn(async () => {});
 jest.mock('react-native', () => ({ Keyboard: { dismiss: jest.fn() } }));
 jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn(async () => {}) }));
@@ -15,6 +16,7 @@ jest.mock('../../connection', () => ({
   ...jest.requireActual('../../connection/pairing/openclaw-direct'),
   getConnectionRuntime: () => ({ getSnapshot: () => mockSnapshot, pauseConnection: mockPause }),
   useConnections: () => mockSnapshot,
+  findOpenClawDirectConnection: (...args: unknown[]) => mockFind(...args),
   connectOpenClawDirect: (...args: unknown[]) => mockConnect(...args),
 }));
 jest.mock('../../contexts/ProPaywallContext', () => ({ useProPaywall: () => ({ isPro: mockIsPro }) }));
@@ -24,7 +26,7 @@ const saved = { id: 'direct', backendKind: 'openclaw' };
 const props = () => ({ navigation: { goBack: jest.fn() }, route: { name: 'OpenClawDirect' }, onConnected: jest.fn(), onOpenPaywall: jest.fn() });
 
 beforeEach(() => {
-  jest.clearAllMocks(); mockIsPro = false;
+  jest.clearAllMocks(); mockIsPro = false; mockFind.mockResolvedValue(undefined);
   mockSnapshot = { connections: [], activeConnectionId: null, activeState: 'idle', error: null };
   mockConnect.mockImplementation(async (input) => {
     input.onSaved(saved); mockSnapshot.activeConnectionId = saved.id; mockSnapshot.activeState = 'ready'; return saved;
@@ -61,11 +63,11 @@ describe('direct setup lifecycle', () => {
     expect(p.onOpenPaywall).not.toHaveBeenCalled();
     expect(mockConnect.mock.calls[1][0].retryConnectionId).toBe('direct');
   });
-  it('gates an additional connection and retires a paywall continuation on departure', () => {
+  it('gates an additional connection and retires a paywall continuation on departure', async () => {
     mockSnapshot.connections = [saved];
     const p = props(); const view = render(<OpenClawDirectRoute {...(p as unknown as React.ComponentProps<typeof OpenClawDirectRoute>)} />);
     act(() => mockProps.onSubmit(draft));
-    expect(p.onOpenPaywall).toHaveBeenCalledWith('gatewayConnections', expect.any(Function));
+    await waitFor(() => expect(p.onOpenPaywall).toHaveBeenCalledWith('gatewayConnections', expect.any(Function)));
     expect(mockConnect).not.toHaveBeenCalled();
     const continuation = p.onOpenPaywall.mock.calls[0][1]; view.unmount();
     act(() => continuation()); expect(mockConnect).not.toHaveBeenCalled();
@@ -79,4 +81,21 @@ describe('direct setup lifecycle', () => {
     expect(mockProps.error).toBe('network'); expect(mockPause).toHaveBeenCalledWith('direct');
     expect(p.onConnected).not.toHaveBeenCalled(); view.unmount(); jest.useRealTimers();
   });
+  it('allows reopening the existing free endpoint without a Pro paywall', async () => {
+    mockSnapshot.connections = [saved]; mockFind.mockResolvedValue({ id: 'direct', isFreeSlot: true });
+    const p = props(); render(<OpenClawDirectRoute {...(p as unknown as React.ComponentProps<typeof OpenClawDirectRoute>)} />);
+    act(() => mockProps.onSubmit(draft));
+    await waitFor(() => expect(p.onConnected).toHaveBeenCalled());
+    expect(p.onOpenPaywall).not.toHaveBeenCalled(); expect(mockConnect.mock.calls[0][0].retryConnectionId).toBe('direct');
+  });
+  it('retires a pending paywall draft when the form changes', async () => {
+    mockSnapshot.connections = [saved];
+    const p = props(); render(<OpenClawDirectRoute {...(p as unknown as React.ComponentProps<typeof OpenClawDirectRoute>)} />);
+    act(() => mockProps.onSubmit(draft));
+    await waitFor(() => expect(p.onOpenPaywall).toHaveBeenCalled());
+    const continuation = p.onOpenPaywall.mock.calls[0][1];
+    act(() => mockProps.onDraftChanged?.()); act(() => continuation());
+    expect(mockConnect).not.toHaveBeenCalled();
+  });
+
 });
