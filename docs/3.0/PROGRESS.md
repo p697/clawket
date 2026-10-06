@@ -1,10 +1,15 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-06 负责人授权基于最新main发布Bridge3.1.14，发布准备进行中。
+  - 起点干净main350c0aa8，发布前刷新至5ba5be00纳入PR194 Codex原生步骤时钟；包含PR191 Claude历史缺省cwd修复、PR192 Codex完成回合后更新误报忙修复；仅公开CLI/守卫升patch，内部workspace/App版本保持。
+  - 串行发布检查、当前Production只读快照矩阵、CI、固定包及公开安装验证待完成；结果记入[发布记录](../3.1/bridge-3.1.14-release.md)。本任务不替换运行中Bridge、打包App或部署Worker，手机验收继续保留。
+
 - 2026-10-06 手机一键更新 Bridge（负责人决定落地）。
   - 当前连接所在电脑的 Bridge 旧了，并且在握手时声明 `bridge.remote-update.v1`，「Bridge 更新」页就显示「立即更新」，命令收在「改用命令更新」后面，失败后自动展开。手机只能发不带参数的 `bridge.update.start`（OpenClaw 走 Relay control）和只读的 `bridge.update.status`；私有 owner `stop` 仍只在本机，手机不能指定版本、路径或命令。
   - Bridge 收到请求后立即回复，然后用自己安装的 bundle 启动 `clawket update --remote <id>`：macOS 用 detached，Linux 在 systemd 用户服务里用 `systemd-run --user --scope`，Windows 先起一个中转进程再立即退出，保证停服务时更新器不会被一起结束。阶段写入 `~/.clawket/runtime/remote-update.json`，只记固定类别；同一台电脑一次只跑一个更新；`~/.clawket/disable-remote-update` 可关闭；运行中的 Bridge 已是目标版本时不重启。开发目录和 IPC 托管的本地模型不声明这项能力。
   - App 端：中心能力 `bridgeRemoteUpdate` 默认关闭，六种适配器只在握手声明后打开；App 级 hook 跨导航和 Bridge 重启跟进进度，重启期间轮询失败按「正在重启」处理，回复丢失时只认领进行中的更新，15 分钟仍未完成按中途停止处理。新增 16 个 key × 19 语言。
   - 验证（逐文件串行，heavy 下构建和类型检查）：agent-protocol 能力 6 项 + 状态 3 项；bridge-runtime 新增 helper 2 项，Codex、Claude Code、Pi、本地模型、Hermes 各新增 1 项，OpenClaw runtime 68 项（新增 2 项）；bridge-cli remote-update 9 项；mobile adapter helper 2 项、Codex adapter 43 项（新增 2 项）、recorded gateway adapters 41 项（新增 2 项）、hook 4 项、Bridge 页 12 项（新增 4 项）。protocol、runtime、CLI 和 Mobile 类型检查通过，strict i18n 通过。完整门禁、v1 回放和桌面任务交给 PR CI。需要发布 Bridge 和 App 新版本才生效，未获授权不发布。
+
 
 - 2026-10-06 Codex 步骤时间与消息时钟（负责人批准调查结论的两步方案，要求完整落地）。
   - 根因：Bridge 历史只给工具行整轮开始时间，丢弃原生 `ThreadItemEntry` 开始/结束与 `durationMs`；原生 item 按完成顺序记录，长命令落在其运行期间写下的回复之后；桌面端跟随路径的实时文字与工具不带任何时钟；手机后台会话不记工具边界，切回时把全部段落合成一个尾段并退回整轮开始时间（10:16 排在 10:26 之下的来源，控制器复现确认）。
@@ -12,6 +17,7 @@
   - 手机：工具事件优先用上报时钟与原生耗时；后台 Codex 运行按工具边界提交段落并结算工具，切回会话恢复各段自己的时间，不再出现带整轮开始时间的合并尾段（新回归在旧实现下红）。
   - 单文件串行通过 Bridge history 108、service 347（重基到 #192 之后）、desktop-history 4、desktop-state 12、delivered-artifacts 8，Mobile sessionRunState 11、useAdapterChatEvents 40、controller adapter-events 51 / contract 115 / queue 112、liveRunThread 24、historyMergePolicy 97；heavy 租约下协议、Bridge runtime、Mobile 类型检查通过；完整门禁交 CI。
   - 生效需要 Bridge 新版本（发布需负责人授权）和手机新包；本任务未打包、发布、部署或重启运行中的 Bridge。
+
 
 - 2026-10-06 「Bridge 更新」的最新版本改为实时查询（负责人：必须实时，每次打开设置都查）。
   - 原来 App 启动时只在缓存超过 24 小时才查 npm，页面本身不查，所以负责人手机显示 3.1.12 时 npm 实际已是 3.1.13。现在启动时、每次进入设置页或 Bridge 更新页、以及手动「检查更新」都实时查 npm `latest`；同时发起的检查共用一个请求，保存的结果只在等待和失败时显示，晚到的缓存不会覆盖已拿到的实时结果。
@@ -29,7 +35,7 @@
   - 缺省cwd的记录不进入可安全归属项目的native目录，不借用默认/缓存路径；完整扫描撤回其native lookup，已导入/自有记录仍保留独立验证的scope。翻页以新SDK身份计进展，整页无归属/异项目也继续；保留畸形字段、重复身份、2,000扫描上限及冻结快照保护，不改原生历史/owner/其他后端。
   - 新回归旧实现先红：目录4项、实际service同步2项。修后逐文件串行目录16、service33、共享pager28、OpenClaw旧Bridge兼容9项（86项）通过，Core/Runtime编译、8指令对/5文档检查、whitespace通过；本地不跑全套，完整门禁交PR CI。首次修后一个断言遇macOS /var realpath别名，已按原生canonical路径校正再通过。
   - 候选编译模块直接只读本机真实历史，完整156条/2页/最大65,379B，重复base=unchanged，512ms；没有启动writer、监听/Relay owner或修改配对。此证据不等于手机已验收；未发布、升版本、部署或更新/重启正在运行的Bridge。安装环境需要包含本修复的后续Bridge更新；App无需改动。
-  - 首次PR191 / 7eda0c55的CI37409166918十一项全绿；合并前main新增纯Mobile PR190，已保留两条进度记录并重基，Bridge输入不变，最终门禁重新等待。
+  - 首次PR191 / 7eda0c55的CI37409166918十一项全绿；合并前main新增纯Mobile PR190，已保留两条进度记录并重基，Bridge输入不变，最终8ace0d53的CI37409620570十一项通过，PR191已合并为472fcf6d。
 
 - 2026-10-06 会话面板顶部 Agent 胶囊可点开资料页（负责人要求）。
   - 连接只有一个 Agent 时，胶囊从纯标签改为按钮（无障碍名「Agent 设置」）：先关闭面板，再打开该 Agent 的 `AgentSettings`，与线程头部胶囊同一入口；会话需要权限时保持不可点，无权访问的 Agent 先走付费墙。多 Agent 时胶囊仍打开切换菜单，行为不变。
@@ -1914,7 +1920,7 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 
 | 编号 | 事项 | 怎么做 | 验证方法 | 状态 |
 |---|---|---|---|---|
-| HT-CLAUDE-HISTORY-1006 | Claude历史列表修复发布与手机验收 | 后续明确授权发布并更新Bridge后，使用当前App与原配对，在All projects和单项目刷新历史、打开旧会话、返回再刷新。 | 正常历史能完整分页；缺省cwd不再令全列表失败；原scope/owner保护和新聊天保持。 | 候选真实只读目录156条/2页及86项窄回归通过，完整CI/合并由代理完成；目前未发布或替换运行中Bridge，手机验收待更新。 |
+| HT-CLAUDE-HISTORY-1006 | Claude历史列表修复发布与手机验收 | 3.1.14发布后明确更新Bridge，使用当前App与原配对，在All projects和单项目刷新历史、打开旧会话、返回再刷新。 | 正常历史能完整分页；缺省cwd不再令全列表失败；原scope/owner保护和新聊天保持。 | 候选真实只读目录156条/2页及86项窄回归、最终CI十一项通过；PR191已合并。3.1.14发布已获授权、验证进行中；运行中Bridge未替换，手机验收待更新。 |
 | HT-CODEX-PARAGRAPHS-1006 | Codex 长回合多段回复的手机验收 | 用包含本轮修复的开发客户端或后续授权更新，在独立会话观察多段 commentary/工具回复；过程中重连、切换会话再返回，并继续到结束。 | 各段只显示一次，段落/工具顺序、原气泡 identity/时间保持；历史分批回来不会新增累计大气泡，结束不会重复全文。 | 244项窄回归、类型与本地文档/UI检查通过；物理手机长回合待负责人验收。本轮不发起分发或Bridge/服务端发布。 |
 | HT-SEND-SHEET-AUDIT-1006 | Send 弹窗 PR 的依赖审计阻挡决策 | 已由独立PR #181修复source-map-js/tinypool并合入main，负责人确认继续。 | UI PR rebase fresh main 后完整 required CI 通过才合并。 | 人工决策已完成；PR #179已重基，代理继续CI与合并，无发布动作。 |
 | HT-CODEX-DESKTOP-SEND-1005 | 修复交付后已有 Desktop 会话的手机验收 | 3.1.12已公开；负责人用原scope/config更新 Bridge，保持当前客户端，在受影响旧会话续聊两轮并打开原桌面会话。 | 原 ID/历史保留，两轮均成功；IPC 恢复后没有重复发送，桌面重开正常。旧失败消息先核对实际历史，未知执行不重发。 | 已完成只读真实owner对照与407项窄回归，公开Bridge3.1.12包含修复；运行中3.1.11尚未替换，phone/GUI验收待更新后进行。 |
