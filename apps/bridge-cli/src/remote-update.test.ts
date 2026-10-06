@@ -129,6 +129,8 @@ describe('phone-started updater launch', () => {
     launchRemoteUpdater(id, entry, '/node');
     expect(spawn).toHaveBeenLastCalledWith('/node', [entry, 'update', '--remote', id, '--relaunch'], expect.objectContaining({ detached: true, windowsHide: true }));
     Object.defineProperty(process, 'platform', { value: 'linux' });
+    // CI runners themselves run under systemd; outside a unit the variable is absent.
+    vi.stubEnv('INVOCATION_ID', '');
     launchRemoteUpdater(id, entry, '/node');
     expect(spawn).toHaveBeenLastCalledWith('/node', [entry, 'update', '--remote', id], expect.anything());
     vi.stubEnv('INVOCATION_ID', 'systemd-unit');
