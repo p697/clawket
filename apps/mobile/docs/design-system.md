@@ -36,6 +36,8 @@ The home has a separate Companion membership card (56-point ink tile, static inv
 
 ## Active-run input
 
+The two-action Send sheet fits its contents instead of reserving 32% of the screen. Use the grouped sheet canvas with 16-point body edges and a white comfortable SettingsGroup: 64-point minimum rows, aligned 32-point icon slots, wrapping labels and an inset divider. Shared sheet chrome owns the header gap and bottom safe area.
+
 The active-run Current/Next sheet remains reachable while a Current acknowledgement is pending. Its Current row is disabled and carries the existing localized `Sending…` trailing value; Next remains an explicit choice and the composer retains Stop. Acknowledgement settles only the submitted draft revision, never a later draft with identical text. Keep the serial send guard and scope-fenced dismissal handoff; do not infer acceptance or replay on timeout.
 
 ## Usage page — owner-approved September 16
