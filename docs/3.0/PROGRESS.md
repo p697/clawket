@@ -1,5 +1,11 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-06 Bridge 统一更新在用过 Codex 后必然回滚（负责人本机 `npx -y @p697/clawket@latest update` 卡约 2 分钟后报 hermes/codex/claude-code/pi failed）：根因已修，待授权发布。
+  - 根因：#125 让 Codex `prepareForUpdate` 把 `starts.size > 0` 当作忙，而 `starts` 是 #43 起只增不删的回复查找表；手机发过一条消息后 3.1.11–3.1.13 的 Codex 永远报忙，更新器等满 120 秒后回滚已停的 OpenClaw/Hermes Relay/Hermes。Codex 现只把未落定的 start 与进行中的 run 算忙。
+  - 更新器：独立 Agent 运行时先停，忙时不再连带重启共享服务和 Hermes；等待时逐个提示；失败原因 `busy`/`stop_unverified` 写进结果，摘要用文字说明每个运行时的去向，回滚报告实际运行的版本（`@latest` 共用 npx 缓存目录，原地被换成新版本时不再误报 failed）。仅对已知有缺陷的 Codex 3.1.11–3.1.13，在约 10 秒忙等后用认证的 `sessions.list` 证明无进行中 run，再用 `bridge.stop` 停止，与旧版迁移同一非原子规则。
+  - 本机现状（只读核查）：全部运行；OpenClaw/Hermes/Hermes Relay 已从被替换的 npx 缓存以 3.1.13 重启，Codex 仍 3.1.12，Claude Code/Pi 内存 3.1.12、磁盘 3.1.13（单文件 bundle、依赖版本相同，风险低）。未停止、重启或更新任何进程。
+  - 验证：Codex service 341 项（新增 2 项，旧判断下必红）、update-transaction 9、update 30、update-codex-idle 3（真实 owner socket 假冒 3.1.12 忙等）、update-process 2、update-startup 1 项逐文件串行通过；bridge-runtime 与 bridge-cli 类型检查通过（持 heavy）。完整门禁、v1 回放与桌面任务交给 PR CI。修复到达用户需发布 Bridge 新版本，未获授权前不发布、不改版本号。
+
 - 2026-10-06 Claude Code 历史列表刷新失败：缺省 cwd 的 SDK 记录不再阻断整个目录。
   - 本机实际运行 health 报 Bridge3.1.12；磁盘已是3.1.13，不能以磁盘包版本替代进程版本。loopback普通列表157条成功，但手机所用sessions.sync拒绝；同SDK0.3.283的157条原生记录中1条缺省可选cwd，旧校验令complete=false。既有日志无列表失败细节，根因由只读请求和SDK元数据复现，不归因Relay/网络。
   - 缺省cwd的记录不进入可安全归属项目的native目录，不借用默认/缓存路径；完整扫描撤回其native lookup，已导入/自有记录仍保留独立验证的scope。翻页以新SDK身份计进展，整页无归属/异项目也继续；保留畸形字段、重复身份、2,000扫描上限及冻结快照保护，不改原生历史/owner/其他后端。

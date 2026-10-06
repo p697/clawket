@@ -21,15 +21,54 @@ export function stableBridgeVersion(value: unknown): value is string {
     && value.split('.').every(part => Number.isSafeInteger(Number(part)));
 }
 const runtimeRoot = () => join(homedir(), '.clawket', 'runtime');
+const UPDATE_BACKENDS = ['openclaw', 'hermes', 'hermes-relay', 'codex', 'claude-code', 'pi', 'local-model'];
+/** Published Codex Bridges whose update admission kept every settled turn start and stayed busy after one turn. */
+const CODEX_IDLE_LEAK_VERSIONS = new Set(['3.1.11', '3.1.12', '3.1.13']);
+/** Busy replies (about one per second) before such a Codex owner is checked through its sessions instead. */
+const CODEX_IDLE_LEAK_GRACE_POLLS = 10;
+const UPDATE_PROGRESS_PREFIX = 'clawket-update-progress ';
+export type UpdateProgress = { backend: string; event: 'waiting' };
 
-function run(node: string, args: string[], cwd?: string, allowFailure = false): Promise<string> {
+/** Activation reports fixed progress categories on stderr; stdout stays reserved for the JSON result. */
+function reportUpdateProgress(progress: UpdateProgress): void {
+  process.stderr.write(UPDATE_PROGRESS_PREFIX + JSON.stringify(progress) + '\n');
+}
+export function parseUpdateProgress(line: string): UpdateProgress | null {
+  if (!line.startsWith(UPDATE_PROGRESS_PREFIX) || line.length > 256) return null;
+  try {
+    const value = JSON.parse(line.slice(UPDATE_PROGRESS_PREFIX.length));
+    return value && UPDATE_BACKENDS.includes(value.backend) && value.event === 'waiting' ? { backend: value.backend, event: 'waiting' } : null;
+  } catch { return null; }
+}
+export function describeUpdateResult(row: UpdateResult): string {
+  const version = stableBridgeVersion(row.version) ? row.version : undefined;
+  const outcome = row.state === 'updated' ? 'running the updated Bridge'
+    : row.state === 'manual' ? 'manual update required: use the original deployment method and preserve configuration'
+    : row.state === 'stopped' ? 'kept stopped'
+    : row.state === 'restored' ? `restarted${version ? ` on ${version}` : ' on its previous installation'}`
+    : row.reason === 'busy' ? 'still running a task, so it was not updated'
+    : row.reason === 'update_not_applied' ? 'not changed'
+    : 'needs attention: check it with clawket status';
+  return `${row.backend}: ${outcome}`;
+}
+
+function run(node: string, args: string[], cwd?: string, allowFailure = false, onProgress?: (progress: UpdateProgress) => void): Promise<string> {
   return new Promise((resolveRun, reject) => {
     const child = spawn(node, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
-    let output = '', tooLarge = false;
+    let output = '', tooLarge = false, errors = '';
     const timer = setTimeout(() => { child.kill(); reject(new Error('Bridge update command timed out.')); }, allowFailure ? 30 * 60_000 : 180_000);
     child.stdout.on('data', data => { output += data.toString(); if (Buffer.byteLength(output) > 128 * 1024) { tooLarge = true; child.kill(); } });
-    // Consume npm/native diagnostics without copying potentially sensitive output into update summaries.
-    child.stderr.on('data', () => {});
+    // Consume npm/native diagnostics without copying potentially sensitive output into update summaries;
+    // only fixed activation progress categories are recognized.
+    child.stderr.on('data', data => {
+      if (!onProgress) return;
+      errors += data.toString();
+      for (let newline = errors.indexOf('\n'); newline >= 0; newline = errors.indexOf('\n')) {
+        const progress = parseUpdateProgress(errors.slice(0, newline)); errors = errors.slice(newline + 1);
+        if (progress) onProgress(progress);
+      }
+      if (errors.length > 4096) errors = '';
+    });
     child.once('error', () => { clearTimeout(timer); reject(new Error('Could not run the Bridge update command.')); });
     child.once('exit', code => { clearTimeout(timer); (code === 0 || allowFailure) && !tooLarge ? resolveRun(output) : reject(new Error('Bridge update command failed. Inspect the selected runtime logs.')); });
   });
@@ -158,9 +197,18 @@ export async function createUpdateTarget(input: { backend: string; configPath?: 
   if (running && !owner && (!legacy || !existsSync(legacy.entry))) throw new Error(`The legacy ${input.backend} Bridge runtime entry could not be verified (${input.configPath ? 'selected configuration' : 'shared service'}). Stop that Bridge explicitly, then rerun update.`);
   const previousEntry = owner?.entry ?? legacy?.entry ?? null;
   let expectedEntry = previousEntry;
-  const previousNode = owner?.node ?? process.execPath;
+  const previousNode = owner?.node ?? process.execPath, previousVersion = owner?.version;
+  const verifyPrevious = async () => {
+    const deadline = Date.now() + 30_000;
+    while (Date.now() < deadline) {
+      const next = legacyEntry(input.backend, input.backend === 'hermes' || input.backend === 'hermes-relay' ? undefined : input.configPath);
+      if (next && next.entry === previousEntry) { await input.probe(); return; }
+      await delay(200);
+    }
+    throw new Error('The restored runtime could not be verified.');
+  };
   return {
-    backend: input.backend, running, previousEntry, previousVersion: owner?.version,
+    backend: input.backend, running, previousEntry, previousVersion,
     async preflight() {
       if (!running) return;
       if (owner) { await queryRuntimeOwner(owner, 'info'); return; }
@@ -178,8 +226,16 @@ export async function createUpdateTarget(input: { backend: string; configPath?: 
           await input.legacyStop(current.pid); await waitForExit(current.pid); owner = null; return;
         }
         const deadline = Date.now() + 120_000;
-        while (!(await queryRuntimeOwner(current, 'stop')).stopped) {
-          if (Date.now() >= deadline) throw new Error('Finish the active task, then rerun update.');
+        for (let busy = 1; !(await queryRuntimeOwner(current, 'stop')).stopped; busy++) {
+          if (busy === 1) reportUpdateProgress({ backend: input.backend, event: 'waiting' });
+          // Prove idle sessions the same way as for legacy owners, then use the authenticated lifecycle stop.
+          if (input.backend === 'codex' && CODEX_IDLE_LEAK_VERSIONS.has(current.version) && input.legacyStop && busy >= CODEX_IDLE_LEAK_GRACE_POLLS) {
+            let idle = true;
+            try { idleSessions(await input.probe('sessions.list')); }
+            catch (error) { if ((error as NodeJS.ErrnoException).code !== 'BRIDGE_BUSY') throw error; idle = false; }
+            if (idle) { await input.legacyStop(current.pid); await waitForExit(current.pid); owner = null; return; }
+          }
+          if (Date.now() >= deadline) throw Object.assign(new Error('Finish the active task, then rerun update.'), { code: 'BRIDGE_BUSY' });
           await delay(1000);
         }
         await waitForExit(current.pid); owner = null;
@@ -191,11 +247,18 @@ export async function createUpdateTarget(input: { backend: string; configPath?: 
       }
     },
     async start(entry) { expectedEntry = entry; await input.start(entry, entry === previousEntry ? previousNode : process.execPath); },
-    async verifyPrevious() {
+    verifyPrevious,
+    async verifyRestored() {
+      // A legacy source without owner records is verified through its captured process entry.
+      if (!previousVersion) { await verifyPrevious(); return undefined; }
       const deadline = Date.now() + 30_000;
       while (Date.now() < deadline) {
-        const next = legacyEntry(input.backend, input.backend === 'hermes' || input.backend === 'hermes-relay' ? undefined : input.configPath);
-        if (next && next.entry === previousEntry) { await input.probe(); return; }
+        const next = readRuntimeOwner(ownerPath);
+        if (next) {
+          if (next.entry !== previousEntry || next.backend !== input.backend || next.configPath !== input.configPath) throw new Error('Unexpected restored owner.');
+          await queryRuntimeOwner(next, 'info'); owner = next;
+          await input.probe(); return next.version;
+        }
         await delay(200);
       }
       throw new Error('The restored runtime could not be verified.');
@@ -298,19 +361,22 @@ export async function handleUpdateCommand(args: string[]): Promise<void> {
     if (!args.includes('--json')) console.log(`Installing Bridge ${version}; saved connections are retained. Active replies must finish before their Bridge can restart.`);
     const entry = await stageBridgeRelease(version);
     const forwarded = args.filter((arg, index) => arg !== '--version' && args[index - 1] !== '--version');
-    const output = await run(process.execPath, [entry, 'update', '--activate', ...forwarded], undefined, true);
+    const output = await run(process.execPath, [entry, 'update', '--activate', ...forwarded], undefined, true, progress => {
+      if (!args.includes('--json')) console.log(`${progress.backend}: waiting for its current task to finish (up to 2 minutes)…`);
+    });
     const result = JSON.parse(output) as { version: string; results: UpdateResult[] };
     if (result.version !== version || !Array.isArray(result.results) || !result.results.length || result.results.some(r => !['updated', 'stopped', 'manual'].includes(r.state))) {
       if (args.includes('--json')) console.log(JSON.stringify({ ok: false, ...result }));
-      else for (const row of result.results ?? []) console.log(`${row.backend}: ${row.state}`);
-      throw new Error('Bridge update was not fully confirmed. Inspect local runtime status.');
+      else for (const row of result.results ?? []) console.log(describeUpdateResult(row));
+      const busy = Array.isArray(result.results) ? result.results.find(row => row.state === 'failed' && row.reason === 'busy') : undefined;
+      throw new Error(busy ? `No Bridge was updated: ${busy.backend} is still running a task. Run update again once it finishes.` : 'Bridge update was not fully confirmed. Inspect local runtime status.');
     }
     const manifest = join(runtimeRoot(), 'active.json');
     if (existsSync(manifest)) writeFileSync(manifest + '.previous', readFileSync(manifest), { mode: 0o600 });
     writeFileSync(manifest + '.pending', JSON.stringify({ version, entry, node: process.execPath }), { mode: 0o600 }); renameSync(manifest + '.pending', manifest);
     const complete = !result.results.some(row => row.state === 'manual');
     if (args.includes('--json')) console.log(JSON.stringify({ ok: complete, ...result }));
-    else { console.log(`Bridge ${version}: managed runtime update confirmed. Pairing and history retained.`); for (const row of result.results) console.log(`${row.backend}: ${row.state === 'updated' ? 'running the updated Bridge' : row.state === 'manual' ? 'manual update required: use the original deployment method and preserve configuration' : 'kept stopped'}`); }
+    else { console.log(`Bridge ${version}: managed runtime update confirmed. Pairing and history retained.`); for (const row of result.results) console.log(describeUpdateResult(row)); }
     if (!complete) process.exitCode = 1;
   } finally { unlinkSync(lock); }
 }

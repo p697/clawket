@@ -74,7 +74,9 @@ export class CodexService extends EventEmitter {
   private nextRecoveryAt = 0;
   private recoveryFailures = 0;
   private runs = new Map<string, Run>();
+  // Bounded lookup for follower start replies; settled entries stay here, so only `pendingStarts` means busy.
   private starts = new Map<string, Promise<any>>();
+  private readonly pendingStarts = new Set<string>();
   private queues = new Map<string, Promise<unknown>>();
   private approvals = new Map<string, Consent>();
   private questions = new Map<string, QuestionGroup>();
@@ -1473,6 +1475,9 @@ export class CodexService extends EventEmitter {
       const accepted = desktopOwned ? this.desktopTurn(r, params) : this.rpc.request('turn/start', params);
       if (this.starts.size >= 256) this.starts.delete(this.starts.keys().next().value!);
       this.starts.set(runId, accepted);
+      this.pendingStarts.add(runId);
+      const settled = () => { this.pendingStarts.delete(runId); };
+      void accepted.then(settled, settled);
       void accepted.then(result => {
         const run = this.runs.get(r.id); if (run?.id !== runId) return;
         run.turnId = result.turn?.id;
@@ -1626,7 +1631,7 @@ export class CodexService extends EventEmitter {
       message: { role: 'assistant', content: terminalMessage.text } } : run.final || generated.length ? { message: { role: 'assistant', content: run.final ?? '', ...(timestampMs !== undefined ? { timestampMs } : {}), ...(generated.length ? { attachments: generated } : {}), model: r.model, provider: r.provider } } : {}) });
     this.update({ type: 'session_info_update', session: this.descriptor(r) });
   }
-  prepareForUpdate(): boolean { return this.updateAdmission.prepare(() => this.runs.size > 0 || this.starts.size > 0); }
+  prepareForUpdate(): boolean { return this.updateAdmission.prepare(() => this.runs.size > 0 || this.pendingStarts.size > 0); }
 
   async stop(): Promise<void> {
     if (this.stopped) return; this.stopped = true; this.freshThreads.clear(); this.artifacts.clear();

@@ -3,7 +3,7 @@ import { writeFileSync, existsSync, unlinkSync, mkdirSync, readFileSync, mkdtemp
 import * as childProcess from 'node:child_process';
 import { homedir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
-import { stableBridgeVersion, compareStableVersions, legacyEntryFromCommands, acquireUpdateLock, stageBridgeRelease, readReleaseMetadata, createUpdateTarget } from './update.js';
+import { stableBridgeVersion, compareStableVersions, legacyEntryFromCommands, acquireUpdateLock, stageBridgeRelease, readReleaseMetadata, createUpdateTarget, parseUpdateProgress, describeUpdateResult } from './update.js';
 
 vi.mock('node:child_process', async importOriginal => {
   const original = await importOriginal<typeof childProcess>();
@@ -141,4 +141,17 @@ it('validates supported packages in distinct snapshots without activating either
   vi.stubEnv('npm_execpath', fakeNpm);
   try { const first = await stageBridgeRelease('3.1.11'), second = await stageBridgeRelease('3.1.11'); expect(first).not.toBe(second); expect(existsSync(first)).toBe(true); expect(existsSync(second)).toBe(true); expect(existsSync(join(homedir(), '.clawket/runtime/active.json'))).toBe(false); }
   finally { vi.unstubAllEnvs(); }
+});
+it('recognizes only fixed activation progress categories', () => {
+  expect(parseUpdateProgress('clawket-update-progress {"backend":"codex","event":"waiting"}')).toEqual({ backend: 'codex', event: 'waiting' });
+  for (const line of ['npm warn deprecated', 'clawket-update-progress {"backend":"/private/path","event":"waiting"}', 'clawket-update-progress {"backend":"codex","event":"done"}',
+    'clawket-update-progress {bad', `clawket-update-progress {"backend":"codex","event":"waiting","pad":"${'x'.repeat(300)}"}`]) expect(parseUpdateProgress(line)).toBeNull();
+});
+it('describes each runtime outcome in words instead of bare states', () => {
+  expect(describeUpdateResult({ backend: 'codex', state: 'failed', reason: 'busy' })).toBe('codex: still running a task, so it was not updated');
+  expect(describeUpdateResult({ backend: 'openclaw', state: 'failed', reason: 'update_not_applied' })).toBe('openclaw: not changed');
+  expect(describeUpdateResult({ backend: 'hermes', state: 'restored', version: '3.1.13' })).toBe('hermes: restarted on 3.1.13');
+  expect(describeUpdateResult({ backend: 'pi', state: 'restored', version: 'latest;rm' })).toBe('pi: restarted on its previous installation');
+  expect(describeUpdateResult({ backend: 'pi', state: 'failed', reason: 'restore_unverified' })).toBe('pi: needs attention: check it with clawket status');
+  expect(describeUpdateResult({ backend: 'codex', state: 'updated' })).toBe('codex: running the updated Bridge');
 });

@@ -2771,6 +2771,30 @@ it('reports package version and protects active work before fencing update admis
   await expect((subject as any).desktopRequest('thread-owner-discovery', { conversationId: threadId })).rejects.toThrow('restarting');
 });
 
+it('becomes idle for update once a sent turn has finished', async () => {
+  // 3.1.11–3.1.13 kept every settled start in the reply lookup and reported busy forever after one turn.
+  let acknowledge!: (value: unknown) => void;
+  const answer = mock.request.getMockImplementation()!;
+  mock.request.mockImplementation((method: string, params: any) => method === 'turn/start'
+    ? new Promise(resolve => { acknowledge = resolve; }) : answer(method, params));
+  await request('chat.send', { sessionKey: key, text: 'before update', idempotencyKey: 'update-idle' });
+  (service as any).runs.clear();
+  expect(service.prepareForUpdate()).toBe(false);
+  acknowledge({ turn: { id: 'turn-1' } });
+  await new Promise(resolve => setImmediate(resolve));
+  expect((service as any).starts.size).toBe(1);
+  expect(service.prepareForUpdate()).toBe(true);
+});
+
+it('stays busy until an acknowledged turn completes', async () => {
+  await request('chat.send', { sessionKey: key, text: 'still running', idempotencyKey: 'update-running' });
+  await new Promise(resolve => setImmediate(resolve));
+  expect(service.prepareForUpdate()).toBe(false);
+  notify('turn/completed', { turn: { id: 'turn-1', status: 'completed', items: [] } });
+  expect((service as any).runs.size).toBe(0);
+  expect(service.prepareForUpdate()).toBe(true);
+});
+
 
 describe('Desktop owner acquisition following status', () => {
   it('forwards Desktop IPC metadata through the service diagnostic channel', () => {
