@@ -16,14 +16,29 @@ export function desktopTurns(state: any): any[] {
   return Array.isArray(state?.turns) ? state.turns : [];
 }
 
+/** Native stdio permits omission; Desktop's text consumers require an array. */
+function desktopInput(input: any[]): any[] {
+  return input.map(part => {
+    if (part?.type !== 'text') return part;
+    if (part.text_elements === undefined) return { ...part, text_elements: [] };
+    if (!Array.isArray(part.text_elements) || part.text_elements.some((element: any) =>
+      !element || typeof element !== 'object' || Array.isArray(element))) throw new Error('Invalid Desktop text elements');
+    return part;
+  });
+}
+
 export function desktopState(thread: any, requests: any[], settings: NativeSettings, olderCursor: string | null = null): any {
   if (!nativeSettings(settings) || settings.cwd !== thread.cwd) throw new Error('Native effective settings are unavailable');
-  const turns = (thread.turns ?? []).map((t: any) => ({ ...t, turnId: t.id,
-    params: { cwd: settings.cwd, input: (t.items ?? []).find((i: any) => i.type === 'userMessage')?.content ?? [], attachments: [],
-      summary: settings.summary, personality: settings.personality, outputSchema: null, collaborationMode: settings.collaborationMode }, hookRuns: [],
-    ...(t.itemsView === 'summary' ? { itemsPagination: { olderCursor: null, isLoadingOlder: false, hasLoadedOldest: false,
-      summaryItemIds: (t.items ?? []).map((item: any) => item.id) } } : {}),
-  }));
+  const turns = (thread.turns ?? []).map((t: any) => {
+    const items = (t.items ?? []).map((item: any) => item.type === 'userMessage'
+      ? { ...item, content: desktopInput(item.content ?? []) } : item);
+    return { ...t, items, turnId: t.id,
+      params: { cwd: settings.cwd, input: items.find((i: any) => i.type === 'userMessage')?.content ?? [], attachments: [],
+        summary: settings.summary, personality: settings.personality, outputSchema: null, collaborationMode: settings.collaborationMode }, hookRuns: [],
+      ...(t.itemsView === 'summary' ? { itemsPagination: { olderCursor: null, isLoadingOlder: false, hasLoadedOldest: false,
+        summaryItemIds: items.map((item: any) => item.id) } } : {}),
+    };
+  });
   const entries = turns.map((t: any) => ({ key: `turn:${t.id}`, value: `turn:${t.id}` }));
   const entitiesByKey = Object.fromEntries(turns.map((t: any) => [`turn:${t.id}`, t]));
   const oldestLoadedTurnId = turns[0]?.id ?? null;

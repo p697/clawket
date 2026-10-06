@@ -1,5 +1,11 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-06 手机 Codex 续聊后 Desktop 整页错误已定位到文本输入协议缺字段，Bridge 窄修完成。
+  - 当前会话 Native turn/start 在01:21:51.579UTC成功，34ms后Desktop错误边界；01:27另两次相同静态栈。安装版26.930.51102/build13100的continuation detector读取text_elements.some，而Clawket start/steer和快照投影允许缺该数组。推理接受不等于Desktop渲染兼容，不归因网络或两端只能择一连接。
+  - 本地/桌面owner的普通文本start/steer显式空数组；快照仅补缺失数组，双表示保留既有合法元数据、原文、图片与Native身份，畸形既有数组在广播前拒绝。不改Native文件/ownership/replay/其他后端。原代码回归先红：快照5项、实际service dispatch2项；修后desktop-state12与service339项逐文件串行通过，窄修门禁继续。
+  - 初次手机失败附近01:19:25有五条IPC重置、01:19:30Desktop重新启动，但尚不能把该输入精确关联到失败dispatch。后续只读observer三snapshot/六turn/13文本表示均有合法数组、0consumer失败；已在Desktop再次重启之后，不算修后手机/GUI验收。自有observer socket已关闭，0prompt/resume/settings/进程操作；脱敏证据保留。详见[续聊事故记录](../3.1/codex-desktop-continuation-20261005.md)。
+  - 文档8指令对/5检查、whitespace通过；完整类型与其他后端/桌面兼容门禁在PR CI执行，不运行本地全套。无版本变更、发布、生产部署或安装/重启运行中Bridge。安装版本获取修复仍需后续明确授权的Bridge发布与更新。
+
 - 2026-10-06 Codex Send 弹窗布局优化：截图中的 Current task / Next message 直接使用无水平内边距的 plain 行，图标贴屏幕边缘；固定 32% 高度留下大块空白。改为随内容高度的 grouped Sheet，16pt 内容边距、comfortable 圆角白色按钮组、64pt 最小点击行与统一图标列/内缩分隔线，长翻译与大字自然换行。保持 Current 待确认禁用/Sending…、Next 可选和关闭后 scope-fenced 发送交接。独占 heavy 串行验证 ThreadSheets.test.tsx 12项、Mobile types、UI257文件/984token来源、8对指令文档/5检查、设计系统文档/5检查与 whitespace 通过；完整门禁交 CI。无版本、打包或发布动作，真机观感待负责人验收。
   - PR #179 / `83c30bbf` 的 CI37399938834 全仓 types、三 Mobile 分片、功能/static、v1 与 secret scan 通过（纯 Mobile 改动两桌面任务按规则跳过）；依赖审计因既有 source-map-js GHSA-68fv-2mgg-jv7q / tinypool GHSA-5gmw-xhrv-c9v3、GHSA-85c8-ppgw-ccpr 失败。公开修补分别为1.2.2及2.1.2；当前 tinypool1.1.1来自Vitest3.2.7，主版本工具升级独立于本UI任务。本UI任务未改依赖、批准例外或绕过保护；初次提交尚未合并。2026-10-06负责人确认独立依赖修复PR #181已合入main，本任务重基至97ee5d5b、保留原验证与失败记录，重新等待完整CI。
 

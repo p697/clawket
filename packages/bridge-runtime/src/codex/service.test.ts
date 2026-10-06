@@ -1081,7 +1081,8 @@ describe('Codex owned sessions', () => {
   it('steers only the current run', async () => {
     const run = await start(); await expect(request('chat.steer', { sessionKey: key, runId: 'old', text: 'x' })).rejects.toThrow();
     await request('chat.steer', { sessionKey: key, runId: run.runId, text: 'do less' });
-    expect(mock.request).toHaveBeenCalledWith('turn/steer', { threadId, expectedTurnId: 'turn-1', input: [{ type: 'text', text: 'do less' }] });
+    expect(mock.request).toHaveBeenCalledWith('turn/steer', { threadId, expectedTurnId: 'turn-1', input: [{ type: 'text', text: 'do less', text_elements: [] }] });
+    expect(mock.request.mock.calls.find(([method]) => method === 'turn/start')?.[1].input).toEqual([{ type: 'text', text: 'hello', text_elements: [] }]);
   });
   it('withholds reset and delete from dispatch through cancellation until native confirms the original turn ended', async () => {
     const original = mock.request.getMockImplementation()!;
@@ -2808,6 +2809,8 @@ describe('Desktop owner acquisition following status', () => {
               : { resultType: 'error', error: 'no-client-found' }) });
           if (frame.method === 'thread-follower-start-turn') send({ type: 'response', method: frame.method, requestId: frame.requestId,
             resultType: 'success', handledByClientId: 'desktop', result: { result: { turn: { id: `desktop-turn-${++starts}` } } } });
+          if (frame.method === 'thread-follower-steer-turn') send({ type: 'response', method: frame.method, requestId: frame.requestId,
+            resultType: 'success', handledByClientId: 'desktop', result: { result: { turnId: frame.params.expectedTurnId } } });
         }
       });
     });
@@ -2821,7 +2824,11 @@ describe('Desktop owner acquisition following status', () => {
       await vi.waitFor(() => expect(starts).toBe(1));
       expect((service as any).runs.get(key).turnId).toBe('desktop-turn-1');
       expect(frames.filter(frame => frame.method === 'thread-follower-start-turn')[0]).toMatchObject({ version: 2,
-        params: { conversationId: threadId, turnStart: { request: { threadId, clientUserMessageId: 'native-first' }, context: { inheritThreadSettings: true } } } });
+        params: { conversationId: threadId, turnStart: { request: { threadId, clientUserMessageId: 'native-first', input: [{ type: 'text', text: 'Continue', text_elements: [] }] }, context: { inheritThreadSettings: true } } } });
+      await request('chat.steer', { sessionKey: key, runId: first.runId, text: '  Continue this turn\n' });
+      expect(frames.find(frame => frame.method === 'thread-follower-steer-turn')).toMatchObject({
+        params: { conversationId: threadId, expectedTurnId: 'desktop-turn-1', input: [{ type: 'text', text: '  Continue this turn\n', text_elements: [] }] },
+      });
       expect(await request('chat.send', { sessionKey: key, text: 'Continue', idempotencyKey: 'native-first' })).toEqual(first);
       expect(starts).toBe(1);
       send({ type: 'broadcast', method: 'thread-stream-state-changed', version: 11, sourceClientId: 'desktop',

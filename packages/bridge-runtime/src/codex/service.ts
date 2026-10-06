@@ -1179,7 +1179,8 @@ export class CodexService extends EventEmitter {
       case 'chat.steer': {
         const r = this.record(p.sessionKey), run = this.runs.get(r.id);
         if (!run?.turnId || run.id !== p.runId || typeof p.text !== 'string' || !p.text.trim() || p.text.length > 128000) throw new Error('Task is no longer running');
-        await (run.desktop ? this.desktop!.request('thread-follower-steer-turn', { conversationId: r.threadId, expectedTurnId: run.turnId, input: [{ type: 'text', text: p.text }] }) : this.rpc.request('turn/steer', { threadId: r.threadId, expectedTurnId: run.turnId, input: [{ type: 'text', text: p.text }] })); return { ok: true };
+        const input = [{ type: 'text', text: p.text, text_elements: [] }];
+        await (run.desktop ? this.desktop!.request('thread-follower-steer-turn', { conversationId: r.threadId, expectedTurnId: run.turnId, input }) : this.rpc.request('turn/steer', { threadId: r.threadId, expectedTurnId: run.turnId, input })); return { ok: true };
       }
       case 'approvals.list': this.record(p.sessionKey); return [...this.approvals.values()].filter(a => a.entry.id === p.sessionKey).map(a => ({ sessionKey: a.entry.id, approval: a.approval }));
       case 'approvals.resolve': {
@@ -1465,7 +1466,8 @@ export class CodexService extends EventEmitter {
       try { this.save(); } catch (error) { delete r.keys[input.idempotencyKey]; Object.assign(r, previousMetadata); throw error; }
       this.invalidateDesktopHistory(r);
       this.runs.set(r.id, { id: runId, text: '', started: Date.now(), items: new Map() }); this.update({ type: 'run_started', sessionKey: r.id, runId });
-      const params = { threadId: r.threadId, input: [{ type: 'text', text: input.text }, ...images.map(a => ({ type: 'image', url: `data:${a.mimeType};base64,${a.content}` }))], ...(desktopOwned ? {} : { model: r.model, effort: r.effort, ...(r.serviceTier !== undefined ? { serviceTier: r.serviceTier } : {}), ...turnPermissions }), clientUserMessageId: input.idempotencyKey };
+      // Desktop stores the request input before native serde can supply defaults.
+      const params = { threadId: r.threadId, input: [{ type: 'text', text: input.text, text_elements: [] }, ...images.map(a => ({ type: 'image', url: `data:${a.mimeType};base64,${a.content}` }))], ...(desktopOwned ? {} : { model: r.model, effort: r.effort, ...(r.serviceTier !== undefined ? { serviceTier: r.serviceTier } : {}), ...turnPermissions }), clientUserMessageId: input.idempotencyKey };
       // Retire before dispatch, including rejected/unknown acknowledgements; no fresh fallback or replay.
       this.freshThreads.delete(r);
       const accepted = desktopOwned ? this.desktopTurn(r, params) : this.rpc.request('turn/start', params);
