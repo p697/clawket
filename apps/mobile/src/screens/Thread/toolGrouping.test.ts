@@ -20,7 +20,6 @@ it('takes a finished turn out of the conversation and leaves its receipt on the 
   expect(keys(items)).toEqual(['message:answer', 'message:said', 'message:ask']);
   const answer = items[0];
   expect(answer?.type === 'message' ? answer.receipt?.steps.map((step) => step.id) : null).toEqual(['a', 'b', 'c']);
-  expect(answer?.type === 'message' ? answer.receipt?.failed : null).toBe(false);
 });
 
 it('gives a turn that said nothing a receipt of its own, keyed by its oldest call and standing at its newest', () => {
@@ -28,16 +27,15 @@ it('gives a turn that said nothing a receipt of its own, keyed by its oldest cal
   expect(keys(quiet)).toEqual(['receipt:a', 'message:ask']);
   const receipt = quiet[0];
   expect(receipt?.type === 'receipt'
-    ? [receipt.receipt.steps.map((message) => message.id), receipt.receipt.failed, receipt.anchorKey] : null)
-    .toEqual([['a', 'b'], false, 'b']);
+    ? [receipt.receipt.steps.map((message) => message.id), receipt.anchorKey] : null)
+    .toEqual([['a', 'b'], 'b']);
 });
 
-it('puts the receipt on words said before the last step, red when the turn ended on a failure', () => {
+it('puts the receipt on words said before the last step, a final failure included', () => {
   const failed = timeline(newestFirst(prompt('ask'), reply('trying'), tool('a', 'error')));
   expect(keys(failed)).toEqual(['message:trying', 'message:ask']);
   const trying = failed[0];
-  expect(trying?.type === 'message' ? [trying.receipt?.steps.map((step) => step.id), trying.receipt?.failed] : null)
-    .toEqual([['a'], true]);
+  expect(trying?.type === 'message' ? trying.receipt : null).toEqual({ steps: [expect.objectContaining({ id: 'a', toolStatus: 'error' })] });
   expect(failed.some((item) => item.type === 'receipt')).toBe(false);
 });
 
