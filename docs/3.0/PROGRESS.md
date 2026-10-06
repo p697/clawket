@@ -1,5 +1,10 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-06 「Bridge 更新」的最新版本改为实时查询（负责人：必须实时，每次打开设置都查）。
+  - 原来 App 启动时只在缓存超过 24 小时才查 npm，页面本身不查，所以负责人手机显示 3.1.12 时 npm 实际已是 3.1.13。现在启动时、每次进入设置页或 Bridge 更新页、以及手动「检查更新」都实时查 npm `latest`；同时发起的检查共用一个请求，保存的结果只在等待和失败时显示，晚到的缓存不会覆盖已拿到的实时结果。
+  - 命令仍固定为查到的版本号而不是 `@latest`：`npx @p697/clawket@latest` 与配对命令启动的运行时共用同一个 npx 缓存目录，更新会把它们的文件原地换掉（本次更新事故的成因之一）；版本号实时之后，固定版本既是最新又不碰这些目录。
+  - 验证：useBridgeRelease 4 项（含实时覆盖缓存、失败保留缓存、并发共用请求）单文件串行通过；Mobile 类型检查（持 heavy）通过。完整门禁交给 PR CI。只改 Mobile。
+
 - 2026-10-06 Bridge 统一更新在用过 Codex 后必然回滚（负责人本机 `npx -y @p697/clawket@latest update` 卡约 2 分钟后报 hermes/codex/claude-code/pi failed）：根因已修，待授权发布。
   - 根因：#125 让 Codex `prepareForUpdate` 把 `starts.size > 0` 当作忙，而 `starts` 是 #43 起只增不删的回复查找表；手机发过一条消息后 3.1.11–3.1.13 的 Codex 永远报忙，更新器等满 120 秒后回滚已停的 OpenClaw/Hermes Relay/Hermes。Codex 现只把未落定的 start 与进行中的 run 算忙。
   - 更新器：独立 Agent 运行时先停，忙时不再连带重启共享服务和 Hermes；等待时逐个提示；失败原因 `busy`/`stop_unverified` 写进结果，摘要用文字说明每个运行时的去向，回滚报告实际运行的版本（`@latest` 共用 npx 缓存目录，原地被换成新版本时不再误报 failed）。仅对已知有缺陷的 Codex 3.1.11–3.1.13，在约 10 秒忙等后用认证的 `sessions.list` 证明无进行中 run，再用 `bridge.stop` 停止，与旧版迁移同一非原子规则。

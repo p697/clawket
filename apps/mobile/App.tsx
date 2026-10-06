@@ -428,6 +428,8 @@ function AppContent({
   const legacyBridgeUpgradeIds = useBridgeUpgrade(connections.initialized, connections.connections, connections.connectionDetails);
   const bridgeRelease = useBridgeRelease(connections.initialized);
   const bridgeVersions = useBridgeVersions(connections.initialized, connections.connections, connections.connectionDetails);
+  // The latest Bridge release is checked live whenever Settings or the Bridge guide opens.
+  const checkBridgeRelease = useCallback(() => { void bridgeRelease.refresh(); }, [bridgeRelease.refresh]);
   const bridgeUpgradeIds = Array.from(new Set([...legacyBridgeUpgradeIds, ...connections.connections.filter(c => usesBridge(c) && bridgeRelease.release && bridgeVersions[c.id] && newerVersion(bridgeRelease.release.version, bridgeVersions[c.id])).map(c => c.id)]));
   const rootNavigationRef = useMemo(() => createNavigationContainerRef<RootStackParamList>(), []);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
@@ -1951,8 +1953,8 @@ function AppContent({
                 <RootStack.Screen name="DesignSystem">
                   {({ navigation }) => <DesignSystemScreen onBack={navigation.goBack} />}
                 </RootStack.Screen>
-                <RootStack.Screen name="BridgeUpgrade">
-                  {({ navigation }) => <BridgeUpgradeScreen onBack={navigation.goBack} connections={connections.connections} versions={bridgeVersions} outdatedIds={bridgeUpgradeIds} {...bridgeRelease} onCheck={() => { void bridgeRelease.refresh(); }} onOpenConnection={(connectionId) => navigation.navigate('Connection', { connectionId })} />}
+                <RootStack.Screen name="BridgeUpgrade" listeners={{ focus: checkBridgeRelease }}>
+                  {({ navigation }) => <BridgeUpgradeScreen onBack={navigation.goBack} connections={connections.connections} versions={bridgeVersions} outdatedIds={bridgeUpgradeIds} {...bridgeRelease} onCheck={checkBridgeRelease} onOpenConnection={(connectionId) => navigation.navigate('Connection', { connectionId })} />}
                 </RootStack.Screen>
                 <RootStack.Screen name="Connection">
                   {({ navigation, route }) => {
@@ -1974,7 +1976,7 @@ function AppContent({
                       onRemove={() => removeConnectionAndExit(connection.id)} />;
                   }}
                 </RootStack.Screen>
-                <RootStack.Screen name="AccountSettings">
+                <RootStack.Screen name="AccountSettings" listeners={{ focus: checkBridgeRelease }}>
                   {({ navigation }) => (
                     <AccountSettingsScreen
                       onUpgradeBridge={() => navigation.navigate('BridgeUpgrade')} bridgeUpdateAvailable={bridgeUpgradeIds.length > 0}
