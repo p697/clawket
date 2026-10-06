@@ -15,6 +15,8 @@ import {
 
 const mockLoadSummary = jest.fn();
 
+jest.mock('@react-navigation/native', () => ({ useIsFocused: () => true }));
+
 jest.mock('../../components/ui/Sheet', () => ({ Sheet: ({ visible, children, onAfterClose }: any) => {
   const ReactRuntime = require('react');
   const previous = ReactRuntime.useRef(false);

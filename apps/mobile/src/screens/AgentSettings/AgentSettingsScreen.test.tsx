@@ -59,6 +59,8 @@ const darkColors = {
 let mockTheme = { scheme: 'light' as 'light' | 'dark', colors: lightColors };
 const mockedAnalyticsEvents = analyticsEvents as jest.Mocked<typeof analyticsEvents>;
 
+jest.mock('@react-navigation/native', () => ({ useIsFocused: () => true }));
+
 jest.mock('../../components/ui/Sheet', () => ({ Sheet: ({ visible, children, onAfterClose }: any) => {
   const ReactRuntime = require('react');
   const previous = ReactRuntime.useRef(false);
