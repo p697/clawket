@@ -87,6 +87,27 @@ describe('Claude service durable send and ownership boundary', () => {
     await expect(request(service, 'sessions.sync')).rejects.toThrow('Conversation catalog could not be refreshed completely');
     expect(await request(service, 'sessions.list')).toHaveLength(100);
   });
+  it.each([false, true])('syncs native and owned history despite an SDK row without cwd, without starting a writer (device=%s)', async device => {
+    const { service, project } = fixture(device);
+    await request(service, 'sessions.create', { title: 'Owned' });
+    const native = { sessionId: randomUUID(), cwd: project, summary: 'Native', lastModified: 1 };
+    mocks.list.mockResolvedValue([native, { sessionId: randomUUID(), summary: 'Unscoped', lastModified: 2 }]);
+    const first = await request(service, 'sessions.sync') as any;
+    expect(first).toMatchObject({ kind: 'full', total: 2, nextOffset: null });
+    expect(first.sessions.map((session: any) => session.title)).toEqual(['Owned', 'Native']);
+    expect(await request(service, 'sessions.list')).toEqual(first.sessions);
+    const base = { epoch: first.epoch, revision: first.revision };
+    expect(await request(service, 'sessions.sync', { base })).toEqual({ kind: 'unchanged', ...base });
+    const nativeKey = first.sessions.find((session: any) => session.source === 'native').key;
+    expect(await request(service, 'chat.history', { sessionKey: nativeKey })).toMatchObject({ messages: [] });
+    mocks.list.mockResolvedValue([{ sessionId: native.sessionId, summary: 'Native', lastModified: 2 }]);
+    const next = await request(service, 'sessions.sync') as any;
+    expect(next).toMatchObject({ kind: 'full', total: 1 });
+    await expect(request(service, 'chat.history', { sessionKey: nativeKey })).rejects.toThrow('Unknown');
+    // The last frozen page remains intact; no global/project fallback gains write authority.
+    expect(await request(service, 'sessions.sync', { page: { ...base, offset: 0 } })).toEqual(first);
+    expect(mocks.starts).not.toHaveBeenCalled(); expect(mocks.send).not.toHaveBeenCalled();
+  });
   it('looks up durable receipts after restart without native discovery, owner takeover or replay', async () => {
     const { service, open } = fixture();
     const row = await request(service, 'sessions.create') as { key: string };

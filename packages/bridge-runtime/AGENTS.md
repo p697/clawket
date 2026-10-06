@@ -197,6 +197,8 @@ Pi Relay owner-lease conflicts (HTTP 409) retry every two seconds within the sta
 
 ## Claude Code Agent SDK
 
+Claude SDK rows with absent optional `cwd` are excluded from the eligible native catalog, without failing sync or borrowing a default/cached project. A complete scan withdraws their native lookup; imported/owned records keep their independently validated scope. Count fresh SDK identities before scope filtering so a full page of unscoped/foreign-project rows cannot hide later eligible sessions. Malformed present cwd, invalid required metadata, repeated identities and scan limits retain incomplete-scan protection.
+
 `src/claude-code/` implements the independent Claude Code runtime using the official SDK and an explicitly selected installed CLI. Native discovery/history reads are read-only; an explicit send or model selection may resume a released imported session using its original ID/cwd. Require fresh native ownership evidence plus a machine-wide Clawket writer lock before starting; release imported processes after each settled turn. Retain native source, opaque key and disabled rename/reset/delete actions. Opaque mappings and acceptance fingerprints may be stored, transcripts and Claude credentials may not. Live ownership includes idle owners and unknown states fail closed. Keep native consent and question identities, respect abort signals, and declare only supported dialogs. See `../../docs/3.1/claude-code.md`; do not change another backend's process or native ownership protocol.
 
 Model choices retain native aliases and optional resolved IDs. Exclude exact native model-switch and interruption envelopes from human chat history without stripping ordinary text discussing commands.

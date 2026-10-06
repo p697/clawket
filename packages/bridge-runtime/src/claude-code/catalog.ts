@@ -72,6 +72,7 @@ export class ClaudeCatalog {
       for (const path of await this.savedProjects()) await this.addProject(path);
     }
     const refreshedProjects = new Map<string, ProjectDescriptor>();
+    const seen = new Set<string>();
     let truncated = false, complete = true;
     const root = await canonical(this.scope.project);
     for (let offset = 0; offset < MAX_SESSIONS; offset += PAGE_SIZE) {
@@ -79,10 +80,16 @@ export class ClaudeCatalog {
         includeProgrammatic: false, includeWorktrees: false,
         ...(!this.scope.device ? { dir: root } : {}) });
       if (!Array.isArray(rows) || rows.length > PAGE_SIZE) throw new ClaudeFault('Invalid Claude discovery response');
-      let added = 0;
+      let scanned = 0;
       for (const info of rows) {
-        if (!info || !UUID.test(info.sessionId) || typeof info.cwd !== 'string' || !isAbsolute(info.cwd)
-          || typeof info.summary !== 'string' || !Number.isFinite(info.lastModified)) { complete = false; continue; }
+        if (!info || !UUID.test(info.sessionId) || typeof info.summary !== 'string'
+          || !Number.isFinite(info.lastModified)) { complete = false; continue; }
+        if (seen.has(info.sessionId)) { complete = false; continue; }
+        seen.add(info.sessionId); scanned++;
+        // cwd is optional in SDKSessionInfo. An unscoped row is not a corrupt
+        // scan, but cannot authorize history or a writer in any project.
+        if (info.cwd === undefined) continue;
+        if (typeof info.cwd !== 'string' || !isAbsolute(info.cwd)) { complete = false; continue; }
         const cwd = await canonical(info.cwd);
         if (!this.scope.device && cwd !== root) continue;
         const key = `native:${opaqueId(info.sessionId)}`;
@@ -91,10 +98,9 @@ export class ClaudeCatalog {
         const project = refreshedProjects.get(cwd) ?? await this.addProject(cwd);
         refreshedProjects.set(cwd, project);
         next.set(key, { info, project });
-        added++;
       }
       if (rows.length < PAGE_SIZE) break;
-      if (!added || offset + PAGE_SIZE >= MAX_SESSIONS) { truncated = true; break; }
+      if (!scanned || offset + PAGE_SIZE >= MAX_SESSIONS) { truncated = true; break; }
     }
     if (complete && !truncated) this.entries = next;
     else {

@@ -10,6 +10,8 @@ Use the official Agent SDK with the user's installed, unmodified Claude Code exe
 
 ## Ownership and discovery
 
+The SDK permits a history row without `cwd`. Such a row has no verified project and is excluded from the native catalog rather than failing every other conversation's refresh. Never substitute the paired project's path or a previously cached cwd; a complete scan withdraws that row's native lookup. Existing imported/Bridge-owned records retain their separately validated stored scope. Discovery still visits later pages when a full page contains only unscoped or foreign-project rows, while retaining the 2,000-row scan limit, duplicate detection and strict rejection of malformed present fields. This does not edit native files or grant continuation to an unscoped session.
+
 Use official SDK session discovery/history and `claude agents --json --all` for live ownership evidence. Saved project metadata and optional, version-sensitive Desktop metadata may supplement discovery, never confer write authority. SDK/programmatic sessions are excluded from the native recent list unless Clawket owns them. Project identities are opaque and scoped to the paired device; a missing directory remains visible and cannot silently become another cwd.
 
 A discovered transcript is not a writable session. Busy, idle and waiting all mean an existing owner is still present. Unknown ownership fails closed. Arbitrary active Desktop/TUI takeover is not advertised; never kill another application's process or start a second writer. Original-session continuation and explicit branching are separate operations. Desktop round-trip continuity requires actual UI verification, not only a successful SDK resume.
