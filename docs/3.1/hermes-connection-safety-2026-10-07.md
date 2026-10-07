@@ -32,6 +32,8 @@ The phone connected through isolated local candidate Registry/Relay/Bridge runti
 
 Sanitized local Relay logs recorded zero owner replacements with 4001 across these scenarios and one expected phone generation retirement with 4011 during the deliberate owner restart. This is controlled recovery evidence, not a claim that every historical user failure is resolved. Production billing savings and physical iOS behavior remain unmeasured.
 
+Cleanup completed: the original QA APK was restored and its installed bytes matched the backup SHA-256; the isolated connection and QR image were removed, with the existing OpenClaw pairing retained. Owned local Relay/Registry/proxy processes and their control listener stopped. The existing Hermes Bridge still reported 3.1.16, running/healthy/reachable. Android/heavy leases were released; private device evidence stays outside the repository.
+
 ## Delivery and remaining limits
 
 Relay protections require an authorized Hermes Relay deployment. Queue changes require a new Bridge publication and installed updates. Foreground health validation requires an App update. This task does not change versions, production bindings, live admission rules or the owner's running Bridge.
