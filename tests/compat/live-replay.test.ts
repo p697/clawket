@@ -222,6 +222,41 @@ describe('v1 compatibility live replay', () => {
     }
   });
 
+  it('allows a silent legacy Hermes owner takeover after one absolute contention probe deadline', async () => {
+    const paired = await pairHermes('Silent Legacy Hermes Owner');
+    const ownerUrl = wsUrl(paired.relayUrl, { bridgeId: paired.bridgeId, role: 'gateway', clientId: 'silent-shared-owner' });
+    const headers = { Authorization: `Bearer ${paired.relaySecret}` };
+    const first = await openWebSocket(ownerUrl, { headers });
+    let silent: WebSocketInbox | undefined;
+    let phone: WebSocketInbox | undefined;
+    let replacement: WebSocketInbox | undefined;
+    try {
+      silent = await openWebSocket(ownerUrl, { headers });
+      expect((await first.waitForCloseFrameWithMiniflareWorkaround()).code).toBe(4001);
+      await expectRelayReadyFirst(silent);
+      phone = await openHermesClient(paired, 'silent-owner-phone');
+      await expectRelayReadyFirst(phone);
+      // Socket stays OPEN but does not answer the existing gateway_ping.
+      expect((await rejectWebSocketUpgrade(ownerUrl, { headers })).status).toBe(409);
+      const deadline = Date.now() + 12_100;
+      for (let retry = 0; retry < 3; retry++) {
+        await delay(3_000);
+        expect((await rejectWebSocketUpgrade(ownerUrl, { headers })).status).toBe(409);
+      }
+      expect(silent.socket.readyState).toBe(WebSocket.OPEN);
+      expect(phone.socket.readyState).toBe(WebSocket.OPEN);
+      await delay(Math.max(0, deadline - Date.now()));
+      replacement = await openWebSocket(ownerUrl, { headers });
+      await expectRelayReadyFirst(replacement);
+      expect((await silent.waitForCloseFrameWithMiniflareWorkaround()).code).toBe(4001);
+      // A backend generation change retires the phone so it re-handshakes.
+      expect((await phone.waitForCloseFrameWithMiniflareWorkaround()).code).toBe(4011);
+    } finally {
+      closeWebSocket(first); if (silent) closeWebSocket(silent);
+      if (phone) closeWebSocket(phone); if (replacement) closeWebSocket(replacement);
+    }
+  });
+
   it.each(['openclaw', 'hermes'] as const)('negotiates isolated owner/client echoes without changing legacy %s ready frames', async backend => {
     const paired = backend === 'openclaw' ? await pairOpenClaw('Owner Echo Replay') : await pairHermes('Owner Echo Replay');
     if ('gatewayId' in paired) ownerEchoPair = paired;

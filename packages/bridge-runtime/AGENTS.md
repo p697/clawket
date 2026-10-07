@@ -83,6 +83,8 @@ Ignore late frames from replaced local Bridge sockets too. Cloud status probes a
 
 Only an explicit validated Relay client-count of zero may suppress local periodic `tick`/`health` events on the cloud leg. Preserve real messages, responses, local probes and Relay ping/pong. Reset presence to unknown on every new cloud socket so old servers and reconnects keep forwarding safely.
 
+Hermes pending local-Bridge frames belong to their captured cloud socket: bound the queue to 256 frames and 8 MiB total UTF-8/binary wire bytes, clear it on cloud retirement/stop, and recycle that cloud generation on capacity or flush-send failure. Preserve initial ordering and never replay a retired batch into a successor. Recheck generations after diagnostic callbacks without clearing successor work. See `../../docs/3.1/hermes-connection-safety-2026-10-07.md`.
+
 ## Test Boundary
 
 1. `npm run test:required` is self-contained and must not inspect a developer home directory or external checkout.

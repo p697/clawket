@@ -412,6 +412,7 @@ export class HermesRelayRuntime {
       if (message.text !== undefined) {
         this.traceRelayFrame('bridge_queue', message.text);
       }
+      if (this.relaySocket !== source || source.readyState !== WebSocket.OPEN || this.stopped) return;
       // Count UTF-8 wire bytes, including binary frames. Never silently drop
       // requests or carry them into a replacement cloud client generation.
       const bytes = getWebSocketFrameByteLength(message.text ?? message.data!);
@@ -420,7 +421,6 @@ export class HermesRelayRuntime {
         this.recycleRelaySocket('bridge_queue_capacity');
         return;
       }
-      if (this.relaySocket !== source || this.stopped) return;
       this.pendingBridgeMessages.push({ ...message, source, bytes });
       this.pendingBridgeBytes += bytes;
       this.connectBridge();
@@ -453,7 +453,9 @@ export class HermesRelayRuntime {
       if (next.text !== undefined) this.traceRelayFrame('bridge_flush', next.text);
       // Diagnostic callbacks are not allowed to revive a retired batch.
       if (this.relaySocket !== relay || this.bridgeSocket !== bridge || this.stopped) {
-        this.clearPendingBridgeMessages(); return;
+        // Replacement/stop already clears the retired queue. A synchronous
+        // observer may have queued successor work; do not clear that batch.
+        return;
       }
       try { this.sendFrame(bridge, next.text ?? next.data!, 'bridge_out'); }
       catch { this.recycleRelaySocket('bridge_queue_send_failed'); return; }

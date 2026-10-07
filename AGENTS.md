@@ -105,6 +105,8 @@ Active client routing must survive Durable Object hibernation through WebSocket 
 
 ## Relay Resource Safety Rule
 
+Hermes legacy `bridge-status` authenticates the owner before resolving a room and remains read-only inside it. Bound Registry verification to ten seconds and cancel unused bodies. Repeated capability-free, same-instance owner replacement within 60 seconds must probe the current owner with the existing `gateway_ping`, preserve one absolute 12-second deadline in its attachment, and return 409 while responsive. Preserve immediate ordinary/disconnected replacement and modern owner/transfer liveness. See `docs/3.1/hermes-connection-safety-2026-10-07.md`.
+
 Authenticated room admission applies to every backend: at most 128 full-client sockets, 16 restricted pairing sockets, and eight sockets per authenticated token fingerprint. Replacing a current client ID remains possible at capacity only with its matching fingerprint; another valid room credential cannot replace a bound socket. Keep the private fingerprint only in socket attachments; never log it or reuse it as a diagnostic ID. Legacy attachments without fingerprints retain existing replacement semantics until their first reconnect and the room-wide limit; hibernation must preserve new per-device accounting and binding.
 
 1. Relay `/ws` requests must prove the backend-specific pairing record exists before resolving a room Durable Object. Keep the bounded 60-second existence cache free of credentials and request-scoped state.

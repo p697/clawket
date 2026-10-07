@@ -86,6 +86,8 @@ Keep recovery origin separate from transport failure cause. Record only the firs
 
 ### Connection and protocol safety
 
+- Foreground/recovery health probes must validate their fresh payload through the backend health profile. A successful RPC envelope alone cannot make degraded Hermes ready. Return negative probe evidence to the coordinator without first emitting a phase-changing health event that skips its recovery; fence health revisions and retired transports so a late failure cannot erase a newer healthy connection.
+
 - Publish successful Agent discovery independently of conversation catalog loading. A pending/failed catalog keeps its last complete sessions, freshness and unread baseline; do not cache a partial catalog or certify it as a first live snapshot. Fence partial discovery and late errors by adapter, ready generation and roster read. A ready connection's roster error offers `Retry list` and refreshes the roster; genuine connection failures still reconnect. Transport readiness and catalog completeness are distinct evidence.
 
 - The copied pairing prompt stays close to the original length: exact environment command, open-source CLI purpose, explicit authorization to return the printed temporary code in this conversation, and code/backend-only output without other credentials. Keep all locales aligned.

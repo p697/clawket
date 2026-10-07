@@ -97,4 +97,23 @@ describe('Hermes cloud-generation queue safety', () => {
     expect(f.local.sent).toEqual([]); expect(f.runtime.getSnapshot().running).toBe(false);
     await f.runtime.stop();
   });
+
+  it.each(['bridge_queue', 'bridge_flush'])('preserves successor work created inside a %s diagnostic callback', async direction => {
+    let replace: (() => void) | undefined;
+    const f = fixture(line => { if (line.includes(direction)) replace?.(); });
+    replace = () => {
+      replace = undefined;
+      void f.runtime.stop(); f.runtime.start(); f.sockets[2].open();
+      f.sockets[2].message(Buffer.alloc(WEBSOCKET_FRAME_LIMIT_BYTES));
+    };
+    try {
+      f.cloud.message(JSON.stringify({ type: 'req', id: 'retired', method: 'health' }));
+      if (direction === 'bridge_flush') f.local.open();
+      expect(f.sockets[2].readyState).toBe(1);
+      f.sockets[3].open();
+      expect(f.sockets[3].sent).toHaveLength(1);
+      expect(Buffer.byteLength(f.sockets[3].sent[0])).toBe(WEBSOCKET_FRAME_LIMIT_BYTES);
+      expect(f.local.sent).toEqual([]);
+    } finally { await f.runtime.stop(); }
+  });
 });
