@@ -1,5 +1,10 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-07 客户端版本更新为 3.1.2（负责人要求）。
+  - Mobile `package.json`、`app.json`、根 workspace lockfile 与 Mobile 独立 lockfile 同步；App 显示版本继续从 package manifest 读取，Bridge/共享包版本保持独立。任务 worktree 无生成的 iOS/Android 项目。
+  - 配置验证：五处版本值一致；默认 Android versionCode=30102，显式覆盖 30103 可用。30102 已被 3.1.1 上传占用，后续获授权的商店打包须先核对 Play 最高上传 code，再指定至少 30103；已同步 Mobile 指令与 Android 构建文档。
+  - 本地通过：五处版本/Expo 与 Android code 断言、两份 lockfile 仅版本变化校验、App 配置四项检查、文档八对指令/五项测试与 whitespace。仅版本配置与文档更新，不新增未经确认的商店日期或公告文案；未准备分发包、上传、提审、发布 OTA 或部署服务。完整门禁由 PR CI 执行。
+
 - 2026-10-06 Bridge 3.1.16 patch 已公开发布，公共安装验证通过（负责人授权基于最新 main）。
   - 起点 `be4ca502`（PR208），纳入 Claude 首次输入前模型读取、Codex 流式段落/分页历史排序与官方 clawket.ai 域名映射；仅公开 CLI manifest/lock、publish guard 升版，内部 workspace/App 版本保持。
   - 固定源码 `ee2e3508` 的 CI37441584545 十一项全绿，包含 Windows/macOS；六 guard、八指令对/五 checker、v1 五文件42项、最新生产快照矩阵4用例/24阶段、双锁文件审计零阻挡（沿用两例外）、92模块/144输入 provenance、固定包 dry-run、空认证候选安装通过。首次本地回放缺少新 worktree 的 Core 构建，补齐后两次完整回放全绿。

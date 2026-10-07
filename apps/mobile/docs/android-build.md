@@ -166,10 +166,10 @@ android/app/build/outputs/apk/release/app-release.apk
 `-PreactNativeArchitectures=arm64-v8a` builds only arm64. This keeps APK size lower.  
 Remove it to include `armeabi-v7a` for older devices, at the cost of a larger APK.
 
-If you need to upload a replacement build to Google Play and the previous `versionCode` is already used, rebuild with a higher override:
+If you need to upload a replacement build to Google Play and the previous `versionCode` is already used, rebuild with a higher override. For 3.1.2, the computed code 30102 is already used by the uploaded 3.1.1 build; recheck Play's highest uploaded code and use at least 30103:
 
 ```bash
-EXPO_ANDROID_VERSION_CODE=30102 npm run build:android:aab
+EXPO_ANDROID_VERSION_CODE=30103 npm run build:android:aab
 ```
 
 ### Local QA package
