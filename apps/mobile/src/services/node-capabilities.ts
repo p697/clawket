@@ -14,6 +14,11 @@ export type NodeCapabilityToggleKey = typeof NODE_CAPABILITY_COMMANDS[number];
 
 export type NodeCapabilityToggles = Record<NodeCapabilityToggleKey, boolean>;
 
+/** Android uses system pickers and cannot query the user's latest library photos. */
+export function isNodeCommandSupported(command: string, platform: string): boolean {
+  return command !== 'photos.latest' || platform !== 'android';
+}
+
 type LegacyNodeCapabilityToggles = {
   camera?: boolean;
   location?: boolean;

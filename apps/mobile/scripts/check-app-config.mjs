@@ -4,6 +4,37 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 
+const ANDROID_MEDIA_READ_PERMISSIONS = [
+  'android.permission.READ_EXTERNAL_STORAGE',
+  'android.permission.READ_MEDIA_VISUAL_USER_SELECTED',
+  'android.permission.READ_MEDIA_IMAGES',
+  'android.permission.READ_MEDIA_VIDEO',
+  'android.permission.READ_MEDIA_AUDIO',
+];
+
+export function validateAndroidMediaPermissions(expo) {
+  const android = expo?.android;
+  if (!android || typeof android !== 'object' || Array.isArray(android)) {
+    return ['expo.android must contain the system-picker media permission policy.'];
+  }
+  if (!Array.isArray(android.permissions) || !Array.isArray(android.blockedPermissions)
+    || !android.permissions.every(permission => typeof permission === 'string')
+    || !android.blockedPermissions.every(permission => typeof permission === 'string')
+    || ANDROID_MEDIA_READ_PERMISSIONS.some(permission => android.permissions.includes(permission)
+      || !android.blockedPermissions.includes(permission))) {
+    return ['Android media read permissions must be blocked, never explicitly requested; use system pickers.'];
+  }
+  const mediaPlugins = Array.isArray(expo.plugins)
+    ? expo.plugins.filter(plugin => plugin === 'expo-media-library'
+      || (Array.isArray(plugin) && plugin[0] === 'expo-media-library')) : [];
+  if (mediaPlugins.length !== 1 || !Array.isArray(mediaPlugins[0])
+    || !Array.isArray(mediaPlugins[0][1]?.granularPermissions)
+    || mediaPlugins[0][1].granularPermissions.length !== 0) {
+    return ['expo-media-library must explicitly set granularPermissions to [] to prevent implicit Android media reads.'];
+  }
+  return [];
+}
+
 export function validateAppConfig(config) {
   if (!config || typeof config !== 'object' || Array.isArray(config)) {
     return ['app.json must contain a JSON object.'];
@@ -44,7 +75,7 @@ export function validateAppConfig(config) {
     return ['iPad must support all four orientations and allow resizable windows (requireFullScreen: false).'];
   }
 
-  return [];
+  return validateAndroidMediaPermissions(expo);
 }
 
 export function validateAppConfigSource(source) {
@@ -71,7 +102,7 @@ function main() {
     return;
   }
 
-  console.log('[check-app-config] verified 4 iOS invariants: tablet support, scene lifecycle, native plugin ordering, and iPad window resizing.');
+  console.log('[check-app-config] verified 4 iOS invariants and 2 Android media invariants: blocked reads and an explicit write-only plugin configuration.');
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

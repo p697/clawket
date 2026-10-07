@@ -187,6 +187,13 @@ describe('handleCameraCapture', () => {
 });
 
 describe('handleCameraPick', () => {
+  it('opens the Android system picker without asking for library read permission', async () => {
+    Platform.OS = 'android';
+    const ImagePicker = require('expo-image-picker');
+    await expect(handleCameraPick()).resolves.toMatchObject({ ok: true });
+    expect(ImagePicker.requestMediaLibraryPermissionsAsync).not.toHaveBeenCalled();
+    expect(ImagePicker.launchImageLibraryAsync).toHaveBeenCalled();
+  });
   it('returns picked image data on success', async () => {
     const result = await handleCameraPick();
     expect(result.ok).toBe(true);
@@ -380,6 +387,18 @@ describe('handleClipboardWrite', () => {
 // ── media ───────────────────────────────────────────────────────────────────
 
 describe('handleMediaSave', () => {
+  it('saves on Android 13+ without requesting media read access', async () => {
+    const originalVersion = Platform.Version;
+    Object.assign(Platform, { OS: 'android', Version: 33 });
+    try {
+      const ML = require('expo-media-library/legacy');
+      await expect(handleMediaSave({ base64: 'image', filename: 'test.png' })).resolves.toMatchObject({ ok: true });
+      expect(ML.requestPermissionsAsync).not.toHaveBeenCalled();
+      expect(ML.saveToLibraryAsync).toHaveBeenCalledWith('file:///cache/test.png');
+    } finally {
+      Object.assign(Platform, { Version: originalVersion });
+    }
+  });
   it('saves base64 image to library', async () => {
     const FS = require('expo-file-system/legacy') as Record<string, jest.Mock>;
     const ML = require('expo-media-library/legacy');
@@ -418,4 +437,14 @@ describe('handleMediaSave', () => {
     if (result.ok) return;
     expect(result.error.code).toBe('PERMISSION_DENIED');
   });
+});
+
+it('rejects Android latest-photo reads before accessing the library', async () => {
+  Platform.OS = 'android';
+  const ML = require('expo-media-library/legacy');
+  await expect(handlePhotosLatest({ limit: 1 })).resolves.toMatchObject({
+    ok: false, error: { code: 'UNSUPPORTED_FEATURE' },
+  });
+  expect(ML.requestPermissionsAsync).not.toHaveBeenCalled();
+  expect(ML.getAssetsAsync).not.toHaveBeenCalled();
 });

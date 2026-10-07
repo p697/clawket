@@ -130,9 +130,10 @@
       ],
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ],
+      "blockedPermissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE",
         "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
         "android.permission.READ_MEDIA_IMAGES",
         "android.permission.READ_MEDIA_VIDEO",
@@ -162,6 +163,7 @@
       [
         "expo-media-library",
         {
+          "granularPermissions": [],
           "photosPermission": "Allow Clawket to show your recent photos when attaching images and to save stats posters to your photo library.",
           "savePhotosPermission": "Allow Clawket to save stats posters to your photo library."
         }

@@ -5,6 +5,24 @@ import {
   NODE_COMMANDS,
   NODE_CAPS,
 } from './node-invoke-dispatcher';
+import { Platform } from 'react-native';
+import * as MediaLibrary from 'expo-media-library/legacy';
+
+const originalOS = Platform.OS;
+afterEach(() => { Platform.OS = originalOS; });
+
+it('excludes Android latest-photo reads from commands and namespaces even with saved toggles enabled', async () => {
+  Platform.OS = 'android';
+  jest.clearAllMocks();
+  expect(getEnabledNodeCommands()).not.toContain('photos.latest');
+  expect(getEnabledNodeCaps()).not.toContain('photos');
+  expect(getEnabledNodeCommands()).toEqual(expect.arrayContaining(['camera.snap', 'media.save', 'device.info']));
+  await expect(dispatchNodeInvoke('photos.latest', { limit: 1 })).resolves.toMatchObject({
+    ok: false, error: { code: 'UNSUPPORTED_FEATURE' },
+  });
+  expect(MediaLibrary.requestPermissionsAsync).not.toHaveBeenCalled();
+  expect(MediaLibrary.getAssetsAsync).not.toHaveBeenCalled();
+});
 
 jest.mock('./node-camera-capture', () => ({
   NodeCameraCaptureError: class NodeCameraCaptureError extends Error {

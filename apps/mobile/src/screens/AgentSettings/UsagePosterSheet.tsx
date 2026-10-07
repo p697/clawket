@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { captureRef } from 'react-native-view-shot';
 import * as MediaLibrary from 'expo-media-library/legacy';
+import { requestPhotoLibraryWritePermission } from '../../services/photo-library-permissions';
 import * as Sharing from 'expo-sharing';
 import type { AgentDescriptor } from '@clawket/agent-protocol';
 import { AgentAvatar } from '../../components/ui/AgentAvatar';
@@ -65,8 +66,7 @@ export function UsagePosterSheet({
     setBusy('save');
     setMessage(null);
     try {
-      const permission = await MediaLibrary.requestPermissionsAsync();
-      if (permission.status !== 'granted') {
+      if (!await requestPhotoLibraryWritePermission()) {
         setMessage(t('Permission denied', { ns: 'settings' }));
         return;
       }

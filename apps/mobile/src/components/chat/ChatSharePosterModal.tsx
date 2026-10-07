@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
 import * as MediaLibrary from 'expo-media-library/legacy';
+import { requestPhotoLibraryWritePermission } from '../../services/photo-library-permissions';
 import * as Sharing from 'expo-sharing';
 import { EnrichedMarkdownText } from 'react-native-enriched-markdown';
 import { Download, Share2, X } from 'lucide-react-native';
@@ -236,8 +237,7 @@ export function ChatSharePosterModal({
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
-      const { status } = await MediaLibrary.requestPermissionsAsync();
-      if (status !== 'granted') {
+      if (!await requestPhotoLibraryWritePermission()) {
         Alert.alert(t('Permission denied'));
         return;
       }

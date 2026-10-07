@@ -14,6 +14,18 @@ Do not treat them as the same thing:
 - APK packaging is only for first install, native changes, or distribution verification.
 - Google Play closed testing requires a release-signed `.aab`, not a debug-signed APK.
 
+## Photo and media permissions
+
+Clawket uses the system Photo Picker for chat attachments, QR import, avatars and wallpaper. Android does not enumerate recent library photos; the Add sheet strip remains iOS-only. The owner approved removing broad Android media reads on 2026-10-07 after Play blocked submission.
+
+- `app.json` blocks `READ_MEDIA_IMAGES`, `READ_MEDIA_VIDEO`, `READ_MEDIA_AUDIO`, `READ_MEDIA_VISUAL_USER_SELECTED` and `READ_EXTERNAL_STORAGE`, and explicitly sets `expo-media-library.granularPermissions` to `[]`. Removing only `android.permissions` entries is insufficient because config plugins and dependency manifests can add permissions back.
+- Photo, poster, bundled-image and Node `media.save` writes share `src/services/photo-library-permissions.ts`. Android API 33+ writes app-created media without a permission prompt. API 24–32 requests only Expo's legacy write access; its dependency manifest bounds `WRITE_EXTERNAL_STORAGE` to API 32. iOS requests add-only photo access. Camera and microphone permissions remain independent.
+- Android Node handshakes omit `photos.latest` and the `photos` namespace even when a saved toggle is enabled. A stale invoke returns `UNSUPPORTED_FEATURE` before any library access. Do not substitute a picker for “latest photos” under the same command. The user can select photos in chat; iOS retains the original Node operation. Other Node operations and OpenClaw/Hermes attachment delivery retain their existing contracts.
+
+`npm run check:app-config` checks the source permission policy with corrupted-input regressions and runs in CI. Before an authorized Play upload, inspect the **merged manifest of the actual candidate AAB**, not only the source config, for all five blocked reads and the legacy write SDK bound. Check every active Play track for affected bundles. Permission removal requires a native rebuild; a JavaScript update or Console declaration edit cannot remove permissions from an existing binary.
+
+Device acceptance covers multiple or cancelled photo picks, QR import, cropped avatars, wallpaper, camera capture, incoming shares, all image/poster saves, both OpenClaw/Hermes image sends, and Android Node command advertisement/rejection. Cover denied photo read access on Android 13+ and legacy write refusal on an older Android device when available; preserve iOS recent-photo access and add-only saves. Local tests/builds do not establish Play approval or physical acceptance.
+
 ## Environment Setup
 
 ```bash

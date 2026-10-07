@@ -1,4 +1,5 @@
 import React from 'react';
+import { Platform } from 'react-native';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import type { AgentDescriptor } from '@clawket/agent-protocol';
 import { UsagePosterSheet } from './UsagePosterSheet';
@@ -39,7 +40,7 @@ jest.mock('react-i18next', () => ({
 }));
 
 jest.mock('expo-media-library/legacy', () => ({
-  requestPermissionsAsync: () => mockRequestPermissions(),
+  requestPermissionsAsync: (...args: unknown[]) => mockRequestPermissions(...args),
   saveToLibraryAsync: (uri: string) => mockSaveToLibrary(uri),
 }));
 
@@ -123,6 +124,22 @@ const agent: AgentDescriptor = {
 };
 
 describe('UsagePosterSheet', () => {
+  it('saves on Android 13+ without requesting photo read access', async () => {
+    const originalPlatform = { OS: Platform.OS, Version: Platform.Version };
+    Object.assign(Platform, { OS: 'android', Version: 33 });
+    try {
+      const view = render(
+        <UsagePosterSheet visible agent={agent}
+          data={{ cost: '$1.25', tokens: '1K', messages: '4', toolCalls: '3' }}
+          onClose={jest.fn()} />,
+      );
+      fireEvent.press(view.getByTestId('agent-usage-poster-save'));
+      await waitFor(() => expect(mockSaveToLibrary).toHaveBeenCalledWith('file:///tmp/poster.png'));
+      expect(mockRequestPermissions).not.toHaveBeenCalled();
+    } finally {
+      Object.assign(Platform, originalPlatform);
+    }
+  });
   let consoleErrorSpy: jest.SpyInstance;
 
   beforeEach(() => {
@@ -158,7 +175,7 @@ describe('UsagePosterSheet', () => {
   });
 
   it('captures for save and share after permission is granted', async () => {
-    mockRequestPermissions.mockResolvedValue({ status: 'granted' });
+    mockRequestPermissions.mockResolvedValue({ status: 'granted', granted: true });
     const view = render(
       <UsagePosterSheet
         visible
@@ -170,6 +187,7 @@ describe('UsagePosterSheet', () => {
 
     fireEvent.press(view.getByTestId('agent-usage-poster-save'));
     await waitFor(() => expect(mockSaveToLibrary).toHaveBeenCalledWith('file:///tmp/poster.png'));
+    expect(mockRequestPermissions).toHaveBeenCalledWith(true, ['photo']);
 
     fireEvent.press(view.getByTestId('agent-usage-poster-share'));
     await waitFor(() => expect(mockShare).toHaveBeenCalledWith(

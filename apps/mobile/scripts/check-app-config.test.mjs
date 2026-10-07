@@ -6,6 +6,7 @@ import appConfig from '../app.config.js';
 import {
   validateAppConfig,
   validateAppConfigSource,
+  validateAndroidMediaPermissions,
 } from './check-app-config.mjs';
 
 test('source config has no operator account and supports explicitly supplied build identities', () => {
@@ -92,4 +93,32 @@ test('widget resources recover the invalid Xcode group path without changing a r
   const existing = { path: 'Assets', children: [] };
   homeWidgets.normalizeWidgetResources({ pbxGroupByName: () => existing });
   assert.equal(existing.path, 'Assets');
+});
+
+test('rejects restored media reads, missing blocks and default media-library permissions', () => {
+  const source = () => JSON.parse(readFileSync(new URL('../app.json', import.meta.url), 'utf8'));
+  for (const permission of source().expo.android.blockedPermissions) {
+    const requested = source();
+    requested.expo.android.permissions.push(permission);
+    assert.match(validateAppConfig(requested)[0], /must be blocked/);
+    const unblocked = source();
+    unblocked.expo.android.blockedPermissions = unblocked.expo.android.blockedPermissions.filter(value => value !== permission);
+    assert.match(validateAppConfig(unblocked)[0], /must be blocked/);
+  }
+  for (const granularPermissions of [undefined, ['photo'], ['video'], ['audio'], '']) {
+    const config = source();
+    config.expo.plugins.find(plugin => Array.isArray(plugin) && plugin[0] === 'expo-media-library')[1].granularPermissions = granularPermissions;
+    assert.match(validateAppConfig(config)[0], /granularPermissions/);
+  }
+  for (const field of ['permissions', 'blockedPermissions']) {
+    const malformed = source();
+    malformed.expo.android[field].push(null);
+    assert.match(validateAppConfig(malformed)[0], /must be blocked/);
+  }
+});
+
+test('media permission validation fails closed on missing or malformed inputs', () => {
+  for (const expo of [undefined, {}, { android: [] }, { android: {} }, { android: { permissions: [], blockedPermissions: '' } }]) {
+    assert.equal(validateAndroidMediaPermissions(expo).length, 1);
+  }
 });

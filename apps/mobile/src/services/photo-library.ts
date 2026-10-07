@@ -2,6 +2,7 @@ import { Asset } from 'expo-asset';
 import * as FileSystem from 'expo-file-system';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import * as MediaLibrary from 'expo-media-library/legacy';
+import { requestPhotoLibraryWritePermission } from './photo-library-permissions';
 
 export type SaveBundledImageToPhotoLibraryResult = 'saved' | 'permission_denied';
 export type SaveImageUriToPhotoLibraryResult = 'saved' | 'permission_denied';
@@ -19,8 +20,7 @@ export async function saveBundledImageToPhotoLibrary(
   moduleId: number,
   filenameBase: string,
 ): Promise<SaveBundledImageToPhotoLibraryResult> {
-  const permission = await MediaLibrary.requestPermissionsAsync();
-  if (!permission.granted) {
+  if (!await requestPhotoLibraryWritePermission()) {
     return 'permission_denied';
   }
 
@@ -45,8 +45,7 @@ export async function saveImageUriToPhotoLibrary(
   uri: string,
   filenameBase: string,
 ): Promise<SaveImageUriToPhotoLibraryResult> {
-  const permission = await MediaLibrary.requestPermissionsAsync(true, ['photo']);
-  if (!permission.granted) {
+  if (!await requestPhotoLibraryWritePermission()) {
     return 'permission_denied';
   }
 

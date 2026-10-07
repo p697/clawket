@@ -1,5 +1,6 @@
 import type { ConnectionRecord } from '@clawket/agent-protocol';
 import nacl from 'tweetnacl';
+import { Platform } from 'react-native';
 import { NodeClient } from './node-client';
 import { StorageService } from './storage';
 import {
@@ -121,6 +122,23 @@ describe('NodeClient', () => {
 
   it('starts in idle state', () => {
     expect(client.getConnectionState()).toBe('idle');
+  });
+
+  it.each(['android', 'ios'] as const)('advertises only implemented photo commands on %s in the actual handshake', async (platform) => {
+    const originalOS = Platform.OS;
+    Platform.OS = platform;
+    try {
+      client.configure(openClawRecord());
+      client.connect();
+      const send = jest.spyOn(client as any, 'sendRequest').mockResolvedValue({});
+      await (client as any).handleConnectChallenge('photo-policy-handshake');
+      const params = send.mock.calls[0][1] as { commands: string[]; caps: string[] };
+      expect(params.commands.includes('photos.latest')).toBe(platform === 'ios');
+      expect(params.caps.includes('photos')).toBe(platform === 'ios');
+      expect(params.commands).toEqual(expect.arrayContaining(['camera.snap', 'media.save']));
+    } finally {
+      Platform.OS = originalOS;
+    }
   });
 
   it('emits error when connecting without config', () => {

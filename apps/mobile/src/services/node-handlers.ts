@@ -1,5 +1,7 @@
 import { AppState, Platform } from 'react-native';
 import { getRuntimePlatform, getRuntimeSystemName, isMacCatalyst } from '../utils/platform';
+import { isNodeCommandSupported } from './node-capabilities';
+import { requestPhotoLibraryWritePermission } from './photo-library-permissions';
 import {
   NodeCameraCaptureError,
   requestNodeCameraCapture,
@@ -195,9 +197,9 @@ async function captureCameraAsset(options?: {
 
 async function pickPhotoAssets(limit = 1): Promise<PickerAsset[] | null | { canceled: true }> {
   const ImagePicker = getImagePicker();
-  const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (!perm.granted) {
-    return null;
+  if (Platform.OS !== 'android') {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) return null;
   }
 
   const allowsMultipleSelection = limit > 1;
@@ -532,6 +534,9 @@ export async function handleCameraSnap(params?: unknown): Promise<HandlerResult>
 }
 
 export async function handlePhotosLatest(params: unknown): Promise<HandlerResult> {
+  if (!isNodeCommandSupported('photos.latest', Platform.OS)) {
+    return unavailable('On Android, choose photos in the chat attachment picker instead of requesting photos.latest.', 'UNSUPPORTED_FEATURE');
+  }
   const parsed = parsePhotosLatestParams(params);
   const MediaLibrary = getMediaLibrary();
   const perm = await MediaLibrary.requestPermissionsAsync();
@@ -650,8 +655,7 @@ export async function handleMediaSave(params: unknown): Promise<HandlerResult> {
   }
 
   const ML = getMediaLibrary();
-  const perm = await ML.requestPermissionsAsync();
-  if (perm.status !== 'granted') {
+  if (!await requestPhotoLibraryWritePermission()) {
     return permissionDenied('Media library permission was denied.');
   }
 

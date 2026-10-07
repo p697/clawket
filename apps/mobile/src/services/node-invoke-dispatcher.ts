@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import {
   HandlerResult,
   NodeInvokeHandler,
@@ -14,6 +15,7 @@ import {
 import {
   DEFAULT_NODE_CAPABILITY_TOGGLES,
   NodeCapabilityToggles,
+  isNodeCommandSupported,
 } from './node-capabilities';
 
 const PRIMARY_HANDLERS: Record<string, NodeInvokeHandler> = {
@@ -28,7 +30,7 @@ const PRIMARY_HANDLERS: Record<string, NodeInvokeHandler> = {
   'media.save': handleMediaSave,
 };
 
-/** All registered command names. Sent to gateway during connect handshake. */
+/** All implemented commands; the handshake uses the platform-filtered getEnabledNodeCommands. */
 export const NODE_COMMANDS: string[] = Object.keys(PRIMARY_HANDLERS);
 
 /** Capability namespaces derived from command prefixes. */
@@ -42,7 +44,8 @@ function isCommandAllowedByToggles(command: string, toggles: NodeCapabilityToggl
 }
 
 export function getEnabledNodeCommands(toggles: NodeCapabilityToggles = DEFAULT_NODE_CAPABILITY_TOGGLES): string[] {
-  return NODE_COMMANDS.filter((command) => isCommandAllowedByToggles(command, toggles));
+  return NODE_COMMANDS.filter((command) => isNodeCommandSupported(command, Platform.OS)
+    && isCommandAllowedByToggles(command, toggles));
 }
 
 export function getEnabledNodeCaps(toggles: NodeCapabilityToggles = DEFAULT_NODE_CAPABILITY_TOGGLES): string[] {
@@ -56,6 +59,15 @@ export async function dispatchNodeInvoke(
   params: unknown,
   toggles: NodeCapabilityToggles = DEFAULT_NODE_CAPABILITY_TOGGLES,
 ): Promise<HandlerResult> {
+  if (!isNodeCommandSupported(command, Platform.OS)) {
+    return {
+      ok: false,
+      error: {
+        code: 'UNSUPPORTED_FEATURE',
+        message: 'On Android, choose photos in the chat attachment picker instead of requesting photos.latest.',
+      },
+    };
+  }
   if (!isCommandAllowedByToggles(command, toggles)) {
     return {
       ok: false,

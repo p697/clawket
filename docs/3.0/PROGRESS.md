@@ -1,5 +1,12 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-07 Google Play 照片/视频权限整改（负责人确认按系统选择器方案修改）。
+  - Android 显式阻止现代/旧存储媒体读取并关闭 media-library 插件默认读取权限；聊天/QR/头像/壁纸沿用系统选择器。所有图片/海报与 Node 保存走共同仅写授权；API33+无媒体读取弹窗，旧 Android 保留 SDK32 上限的依赖写入权限。iOS 相册/最近照片与相机/麦克风、双后端附件发送保持。
+  - Android 的 `photos.latest` 从 Node 握手命令与命名空间中移除，保存的开启开关不能覆盖平台限制；旧请求与直接 handler 在访问相册前返回 `UNSUPPORTED_FEATURE`，不把用户选图伪装成最新照片。配置检查新增反向损坏输入回归，防止权限被依赖/插件重新引入。
+  - 逐文件 in-band：photo-library 15、node-handlers 33、node-invoke-dispatcher 17、node-client 29、UsagePosterSheet 3、useChatImagePicker 20、recent-photos 9、GatewayScannerContext 5、agent-avatar 8、image-store 4、gateway-adapters recorded 41，共 184 项通过；App config 9 项损坏输入/配置回归、Mobile 类型检查、文档八对指令/五项检查通过。
+  - 干净双平台 prebuild、132 Pods、Android arm64 Debug 与 Xcode27 unsigned arm64 generic Simulator Debug 编译通过（两 build job，未启动 Simulator/安装手机）；实际 APK 与打包 Manifest 的 36 项权限确认无五项读取权限、旧写入 maxSdkVersion=32，相机/麦克风/网络保持。默认 Gradle 缓存首次配置失败，改用仓库已验证的 SSD 缓存后通过。实体设备验收/最终 AAB 与所有轨道检查登记 HUMAN TODO。本轮不另升版本、不准备分发包、不上传或提交审核。实现规则见 Mobile AGENTS 与 Android build guide。
+  - 同步最新 main 的负责人 3.1.2 版本与依赖/CI 更新，原生工程版本同步；最终复查修正新增测试多传的参数后，Mobile 类型、node-handlers 33项、配置9项和文档检查再次通过。既有客户端版本决定保持，不另改版本或商店 code。
+
 - 2026-10-07 依赖审计移出 PR 合并门禁（负责人批准方案）。
   - Required workflow 的类型任务只做类型检查；四个受保护检查名、Mobile 三分片、静态/自包含测试、v1 回放、双桌面与密钥扫描保留。依赖公告不再因实时数据库变化阻挡普通 PR 或 main push；未修改 GitHub 分支保护。
   - 新增独立 `Dependency security review`：每周一 09:23 JST 排程（GitHub 可延迟）、支持手动触发、只读权限、无需安装依赖；审计发现和畸形报告仍令该任务失败，保留 GitHub 失败提醒及摘要。`npm run security:audit` 供手动/发布前复核；审计与例外有效期测试继续留在必需测试中，不访问网络。
@@ -2012,6 +2019,7 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 
 | 编号 | 事项 | 怎么做 | 验证方法 | 状态 |
 |---|---|---|---|---|
+| HT-ANDROID-MEDIA-1007 | Android 媒体权限整改真机与 Play 交付 | 负责人在包含修复的 main QA 构建中验收选图/QR/头像/壁纸/拍照/外部分享、图片与两种海报保存，OpenClaw/Hermes 图片收发；另行授权正式 AAB/上传/送审时核查所有轨道。 | Android13+拒绝照片读取仍能选图/保存；Node 不声明 photos.latest 且旧调用不读取；iOS最近照片/保存保持；实际候选 merged Manifest 无五项读取权限、旧写入权限有SDK上限。 | 代码、184项定向测试、类型/配置/文档、双平台Debug编译和实际APK权限检查通过；真机验收和发行尚未执行，本轮未授权分发/上传/审核。 |
 | HT-CONNECTION-DOMAINS-1006 | 官方域名客户端交付与旧 Workers 退役 | 负责人决定包含此迁移的 App/Bridge 发布版本；在新原生 App 与 Bridge 上验收旧配对、六位码/QR/邀请、重连和两个服务环境，并补齐实际 Android 分发签名的关联指纹。 | 新客户端不请求 Workers 域名；旧客户端兼容窗口与真实迁移验收满足后，另行授权关闭 Workers 入口。 | Cloudflare 22 个入口与服务配置迁移已完成，11 组真实云配对/合成 WS 验证通过；客户端公开交付/真机验收/旧入口关闭待后续决定。 |
 
 | HT-CODEX-STREAM-ORDER-1006 | 本轮 Codex 流式排序修复真机验收 | 在含本修复的 main 构建（Bridge 与 Mobile）中启动持续多步骤任务，观察多段 commentary、刷新历史、运行中切出再进入。 | 原始输入在其回复前；段落不在工具/刷新时重复合并或反复换位，时间与已确认段落对应；再验一次完成后历史。 | 负责人已授权先合 main 再验收；手机测试待完成，无构建分发/发布/运行中 Bridge 重启。 |
