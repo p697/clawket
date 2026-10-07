@@ -15,7 +15,7 @@ Modern Bridge releases already poll status every 90 seconds, suppress idle appli
 - Mobile foreground/recovery probes validate their fresh `health` payload through the backend profile. An RPC `ok` envelope with `degraded` or `hermesApiReachable: false` no longer certifies Hermes ready. Negative evidence returns to the coordinator without changing its phase first, allowing its reconnect action to run. Transport epochs and adapter health revisions fence late results. Payload-free old healthy replies retain compatibility; OpenClaw follows its existing profile.
 - The Hermes cloud-to-local queue is limited to 256 frames and 8 MiB total UTF-8/binary bytes. Frames belong to their captured cloud socket and are cleared on retirement/stop. Overflow or flush-send failure recycles that generation rather than silently dropping or replaying writes. Initial ordering, exactly-8-MiB frames and successor work created by synchronous diagnostic callbacks are preserved.
 
-A reachable local Bridge reporting degraded native health is not automatically restarted. Transport reachability and native readiness remain distinct; reconnect backoff prevents a degraded backend from creating a tight retry loop. No timers, recurring DO alarms, frame payload storage or credential-derived diagnostic identities were added.
+A reachable local Bridge reporting degraded native health is not automatically restarted. Transport reachability and native readiness remain distinct; reconnect backoff prevents a degraded backend from creating a tight retry loop. No periodic timers, recurring DO alarms, frame payload storage or credential-derived diagnostic identities were added.
 
 ## Validation
 
