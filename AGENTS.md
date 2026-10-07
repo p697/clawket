@@ -156,7 +156,7 @@ When implementation, architecture, or release behavior changes, update the close
 4. New check logic should expose testable validation functions and include a corrupted-input regression test.
 5. `test:release:compat` is the explicit release integration matrix: read-only production Worker exports are supplied through `CLAWKET_RELEASE_SNAPSHOTS`, exercised locally with historical and candidate Bridges. Missing snapshots must fail. Local code rollback is not proof of Cloudflare migration rollback.
 6. Tests that require an external checkout or live service must have an explicit integration command and must not make the CI-safe gate depend on a developer's home directory. Keep the ordinary `npm test` command as the broader local suite.
-7. `scripts/ci/dependency-audit.mjs` (CI job `Typecheck and dependency audit`) fails on any high or critical npm advisory in the root or Mobile lockfile. An exception needs owner approval and names one advisory in one package, with a reason and an expiry; expired or unused exceptions fail. Current: GHSA-86w9-cpqp-85rv (node-forge via Expo CLI code signing, no patched release) and GHSA-vfj7-8cjw-p6xm (braces via micromatch in the Expo/Metro bundler and Jest, no patched release), both until 2026-11-01.
+7. `scripts/ci/dependency-audit.mjs` (CI job `Typecheck and dependency audit`) fails on any high or critical npm advisory in the root or Mobile lockfile. An exception needs owner approval and names one advisory in one package, with a reason and an expiry; expired or unused exceptions fail. Current: GHSA-86w9-cpqp-85rv (node-forge via Expo CLI code signing, no patched release), GHSA-vfj7-8cjw-p6xm (braces via micromatch in the Expo/Metro bundler and Jest, no patched release), and GHSA-wq5f-xc86-pv6w (Miniflare's exact sharp 0.35.4 dependency; adopt the upstream fix without a native override, owner-approved 2026-10-07), all until 2026-11-01. Mobile's direct sharp build-tool dependency must use patched 0.35.5 or later.
 
 `relay:test:integration` runs self-contained local Relay/model servers and recorded mobile adapters. Real local-model inference uses `test:local-model:recovery` (`CLAWKET_RECOVERY_CONFIG`) or `test:local-model:preview` (`CLAWKET_LOCAL_MODEL_PREVIEW_SMOKE=1`, optional model endpoint configuration); these commands fail when prerequisites are absent, never silently skip.
 
@@ -227,6 +227,8 @@ Before handling any frame, verify that its WebSocket is still the current owner,
 ## Worker Toolchain Audit
 
 Keep the root Vitest worker pool pinned to patched `tinypool` 2.1.2, compatible with the repository’s Node 22 baseline, and root/standalone Mobile source maps pinned to `source-map-js` 1.2.2. Audit both lockfiles; preserve existing approved exceptions without broad suppression.
+
+Keep shell-quote pinned to patched 1.11.0 in both install entry points and the Claude Agent SDK's MCP SDK peer pinned to patched 1.31.0 in the root overrides.
 
 Keep Wrangler on a security-patched v4 release (current minimum 4.144.0) with its matching Miniflare/workerd dependencies. Do not force a transitive native override to hide an audit finding; validate the resolved lockfile with both dependency audits and v1 replay after toolchain changes.
 

@@ -15,6 +15,15 @@ const BLOCKING_SEVERITIES = new Set(['high', 'critical']);
 /** Owner-approved exceptions. Each names one advisory in one package and expires. */
 export const AUDIT_EXCEPTIONS = [
   {
+    advisory: 'GHSA-wq5f-xc86-pv6w',
+    package: 'sharp',
+    expires: '2026-11-01',
+    reason: 'Miniflare pins sharp 0.35.4, including the latest Miniflare 5.20261006.0-alpha. '
+      + 'Do not override its native dependency; update when upstream adopts patched sharp. '
+      + 'This copy is local Worker tooling, not a shipped app or Bridge dependency; Mobile\'s '
+      + 'direct build-tool copy is updated to 0.35.5 (owner approval 2026-10-07).',
+  },
+  {
     advisory: 'GHSA-86w9-cpqp-85rv',
     package: 'node-forge',
     expires: '2026-11-01',

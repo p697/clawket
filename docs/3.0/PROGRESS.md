@@ -3,7 +3,9 @@
 - 2026-10-07 客户端版本更新为 3.1.2（负责人要求）。
   - Mobile `package.json`、`app.json`、根 workspace lockfile 与 Mobile 独立 lockfile 同步；App 显示版本继续从 package manifest 读取，Bridge/共享包版本保持独立。任务 worktree 无生成的 iOS/Android 项目。
   - 配置验证：五处版本值一致；默认 Android versionCode=30102，显式覆盖 30103 可用。30102 已被 3.1.1 上传占用，后续获授权的商店打包须先核对 Play 最高上传 code，再指定至少 30103；已同步 Mobile 指令与 Android 构建文档。
-  - 本地通过：五处版本/Expo 与 Android code 断言、两份 lockfile 仅版本变化校验、App 配置四项检查、文档八对指令/五项测试与 whitespace。仅版本配置与文档更新，不新增未经确认的商店日期或公告文案；未准备分发包、上传、提审、发布 OTA 或部署服务。完整门禁由 PR CI 执行。
+  - 本地初轮通过：五处版本/Expo 与 Android code 断言、两份 lockfile 仅版本变化校验、App 配置四项检查、文档八对指令/五项测试与 whitespace。不新增未经确认的商店日期或公告文案；未准备分发包、上传、提审、发布 OTA 或部署服务。完整门禁由 PR CI 执行。
+  - 首轮 CI37574383974 类型检查、Mobile 三分片、静态测试、v1 回放与双桌面全通过；昨日新收录的 MCP SDK、shell-quote、sharp 三项公告阻挡审计。为完成门禁，将 Claude SDK 的 MCP peer 更新/固定 1.31.0、双入口 shell-quote 1.11.0、Mobile 直接 sharp 0.35.5。Miniflare（包括最新 5.20261006.0-alpha）精确依赖 0.35.4，保留该原生依赖；负责人明确批准仅 sharp/GHSA-wq5f-xc86-pv6w 临时例外至 2026-11-01，修复其他副本，不扩大现有例外。审计脚本仍拒绝过期/未使用例外与其他高危/严重公告。
+  - 更新后双锁文件真实审计零阻挡（根三例外、Mobile 两例外）、审计脚本七项回归、文档八对/五项通过；两入口 `npm ci --dry-run --ignore-scripts` 验证 lockfile 安装闭包。锁文件差异限定于 Mobile 版本/开发工具 manifest、三项修复依赖与 sharp 平台二进制，未改 Wrangler/Miniflare/workerd 或 App 原生运行依赖。
 
 - 2026-10-06 Bridge 3.1.16 patch 已公开发布，公共安装验证通过（负责人授权基于最新 main）。
   - 起点 `be4ca502`（PR208），纳入 Claude 首次输入前模型读取、Codex 流式段落/分页历史排序与官方 clawket.ai 域名映射；仅公开 CLI manifest/lock、publish guard 升版，内部 workspace/App 版本保持。

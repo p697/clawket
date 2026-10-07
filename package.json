@@ -18,6 +18,7 @@
     "ws": "^8.21.3"
   },
   "overrides": {
+    "@modelcontextprotocol/sdk": "1.31.0",
     "@xmldom/xmldom": "0.8.15",
     "brace-expansion@>=1 <2": "1.1.21",
     "brace-expansion@>=2 <3": "2.1.7",
@@ -32,7 +33,7 @@
     "lodash": "4.18.1",
     "picomatch@>=2 <3": "2.3.2",
     "picomatch@>=4 <5": "4.0.7",
-    "shell-quote": "1.10.0",
+    "shell-quote": "1.11.0",
     "source-map-js": "1.2.2",
     "tinypool": "2.1.2",
     "react": "19.2.3",

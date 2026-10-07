@@ -13,6 +13,8 @@ This document records the durable engineering baseline for the Clawket mobile wo
 
 The client is prepared at version 3.1.2. `apps/mobile/package.json` drives Expo's runtime version; `app.json` and both lockfiles mirror it. Locally generated native projects are ignored by Git and should be resynchronized before a build. Android's 3.1.2 base `versionCode` is 30102, already used by the uploaded 3.1.1 build. The store bundle script advances beyond a code already in the native project; recheck Play's highest uploaded code and use `EXPO_ANDROID_VERSION_CODE` with at least 30103 for authorized 3.1.2 packaging. iOS build numbers are managed separately by EAS.
 
+Build tools use patched sharp 0.35.5 and shell-quote 1.11.0 in both lockfiles. The root keeps a separate sharp 0.35.4 copy required by Miniflare, covered by the owner's temporary audit exception through 2026-11-01; never force its native version. These tools do not enter the mobile app bundle.
+
 Do not cross an Expo or React Native minor/major boundary as incidental cleanup. Patch updates within the active Expo SDK are allowed only when `npx expo install --check`, TypeScript, focused backend tests, the full mobile test suite, native dependency sync, and at least one native platform build are evaluated together.
 
 ## Required commands
