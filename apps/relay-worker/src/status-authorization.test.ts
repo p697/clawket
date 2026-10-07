@@ -77,4 +77,21 @@ describe('Hermes bridge status resource admission', () => {
     expect((await room.fetch(new Request(STATUS, { headers: { authorization: 'Bearer owner-secret' } }))).status).toBe(200);
     expect(e.put).not.toHaveBeenCalled();
   });
+
+  it('rejects client credentials even when the real Registry contract returns HTTP 200', async () => {
+    const e = await environment(); e.env.REGISTRY_VERIFY_URL = 'https://registry.example';
+    const fallback = vi.fn(async () => Response.json({ ok: true, role: 'client' }));
+    vi.stubGlobal('fetch', fallback);
+    try {
+      const headers = { authorization: 'Bearer phone-token' };
+      expect((await e.fetch(new Request(STATUS, { headers }))).status).toBe(401);
+      expect(e.resolve).not.toHaveBeenCalled(); expect(e.put).not.toHaveBeenCalled();
+      const room = new HermesRelayRoom(e.state, e.env); await e.ready();
+      expect((await room.fetch(new Request(STATUS, { headers }))).status).toBe(401);
+      expect((await room.fetch(new Request('https://relay.example/ws?bridgeId=hbg_status&role=gateway&clientId=test-owner', {
+        headers: { ...headers, Upgrade: 'websocket' },
+      }))).status).toBe(401);
+      expect(e.put).not.toHaveBeenCalled(); expect(fallback).toHaveBeenCalledTimes(3);
+    } finally { vi.unstubAllGlobals(); }
+  });
 });

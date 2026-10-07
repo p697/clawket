@@ -8,7 +8,7 @@ import WebSocket from 'ws';
 import { BridgeRuntime } from '../../packages/bridge-runtime/src/openclaw/runtime';
 import { HermesRelayRuntime } from '../../packages/bridge-runtime/src/hermes/relay';
 import { getFreePort } from '../integration/harness';
-import { CompatWranglerDevProcess, startWebSocketServer, closeWebSocketServer, openWebSocket, closeWebSocket, wsUrl, parseJson, waitFor, delay } from '../compat/live-harness';
+import { CompatWranglerDevProcess, startWebSocketServer, closeWebSocketServer, openWebSocket, rejectWebSocketUpgrade, closeWebSocket, wsUrl, parseJson, waitFor, delay } from '../compat/live-harness';
 import { loadCompatFixture } from '../compat/loader';
 import { findFrame, materializeFixtureValue } from '../compat/schema';
 import { prepareLegacyBridgeMatrix, preparePublishedHermesRelay } from '../compat/legacy-bridge-build';
@@ -20,6 +20,7 @@ if (!snapshotDir)
 const root = process.cwd();
 const phases = [
   { name: 'production snapshot baseline', registry: false, relay: false },
+  { name: 'Relay upgraded, Registry remains production', registry: false, relay: true },
   { name: 'Registry upgraded, Relay old', registry: true, relay: false },
   { name: 'both upgraded', registry: true, relay: true },
   { name: 'Relay rolled back, Registry new', registry: true, relay: false },
@@ -49,7 +50,7 @@ beforeAll(async () => {
 });
 afterAll(async () => { if (generatedRecovery) await rm(generatedRecovery, { recursive: true, force: true }); });
 describe('real production bundles → candidate → rollback, isolated local Workers', () => {
-  it.each(['openclaw', 'hermes'].flatMap(backend => ['candidate', 'published-0.7.0'].map(vintage => ({ backend, vintage }))))('$backend / $vintage retains old pairing across all six service phases', async ({ backend, vintage }) => {
+  it.each(['openclaw', 'hermes'].flatMap(backend => ['candidate', 'published-0.7.0'].map(vintage => ({ backend, vintage }))))('$backend / $vintage retains old pairing across all seven service phases', async ({ backend, vintage }) => {
     const OpenClawRuntime = backend === 'openclaw' && vintage === 'published-0.7.0'
       ? await (await prepareLegacyBridgeMatrix(root)).find(artifact => artifact.pin.key === 'bd69')!.loadRuntime()
       : BridgeRuntime;
@@ -129,7 +130,7 @@ describe('real production bundles → candidate → rollback, isolated local Wor
           const claim = await post('/v1/pair/claim', { [idKey]: registration[idKey], accessCode: registration.accessCode, clientLabel: 'old installed app' });
           paired = { ...registration, clientToken: claim.clientToken };
         }
-        if (index === 2) {
+        if (phase.registry === true && phase.relay === true) {
           candidateRegistration = await post('/v1/pair/register', { displayName: 'created after upgrade', preferredRegion: 'us' });
         }
         if (candidateRegistration) {
@@ -166,6 +167,20 @@ describe('real production bundles → candidate → rollback, isolated local Wor
           else {
             client.socket.send(JSON.stringify({ type: 'req', id: 'health-probe', method: 'health', params: {} }));
             expect(await client.nextJson(f => f.id === 'health-probe')).toMatchObject({ ok: true, payload: { status: 'ok' } });
+          }
+          if (phase.relay) {
+            // Both tokens verify with 200, but only for their own Registry role.
+            for (const [role, token] of [['gateway', paired!.clientToken], ['client', paired!.relaySecret]]) {
+              const rejected = await rejectWebSocketUpgrade(wsUrl(relayUrl, {
+                [idKey]: paired![idKey], role, clientId: 'wrong-role-probe',
+              }), { headers: { authorization: `Bearer ${token}` } });
+              expect(rejected.status, `${backend} ${phase.name}: cross-role authorization`).toBe(401);
+            }
+            if (backend === 'hermes') {
+              const statusUrl = new URL(`/v1/internal/hermes/bridge-status?bridgeId=${encodeURIComponent(paired!.bridgeId)}`, `http://127.0.0.1:${relayPort}`);
+              expect((await fetch(statusUrl, { headers: { authorization: `Bearer ${paired!.clientToken}` } })).status).toBe(401);
+              expect((await fetch(statusUrl, { headers: { authorization: `Bearer ${paired!.relaySecret}` } })).status).toBe(200);
+            }
           }
           for (const method of ['chat.send', 'sessions.list']) {
             const request = { type: 'req', id: `${index}-${method}`, method, params: { sessionKey: 'agent:main:main', message: 'compatibility', idempotencyKey: `rollout-${index}` } };

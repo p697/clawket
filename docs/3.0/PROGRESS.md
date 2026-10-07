@@ -1,5 +1,10 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-07 Hermes Relay 生产部署与 Registry 回退角色修复（负责人明确授权仅部署服务端）。
+  - 固定 `ef86ba39` bundle 在 v1 44项、真实线上导出28阶段兼容后部署至 Hermes Relay `77cd91a0-72eb-4b82-9211-0cff592318f5`；线上源码 hash 与固定产物一致，OpenClaw Relay/两Registry版本保持。无新migration、配置/凭据/用户配对变更、Bridge发布、App分发或本机服务重启。
+  - 真实手机令牌抽验发现旧 Registry fallback 仅看HTTP200，忽略已有gateway/client字段；原status测试未提供真实回退。现在所有后端校验ok和请求角色，响应最多1KiB/读body亦限10秒，畸形/缺角色拒绝。褚一确认最早正式OpenClaw/Hermes协议已有角色；修改错误空200替身，补六后端、真实Registry双向越权及Relay单独升级阶段，正常旧客户端/RPC同时验证。修复源码待CI/合并及第二次仅Hermes部署，详情见[记录](../3.1/hermes-connection-safety-2026-10-07.md)。
+  - 串行窄验证：鉴权84、status/owner入场8、OpenClaw index118、Hermes index46共256项，Relay类型与八指令对/五文档回归通过；真实线上快照28阶段含16次双向错角色WS拒绝、4次手机status拒绝，之后正常连接/RPC仍通过。初次上线后五分钟聚合owner4001=0，上线前十分钟304次；短窗口不等于费用或长期稳定性证明。
+
 - 2026-10-07 Hermes 连接稳定性与 Cloudflare 资源安全（负责人要求结合账单/代码修复，并授权与褚一复核、安卓实测）。
   - 96.6% 为30天原始 DO 调用占比，并非账单占比；未发现 alarm 失控。旧版5秒 status 轮询/空闲帧和同实例 owner 约5.9秒互抢是可确认的浪费来源，旧安装仍需实际升级。
   - Relay status 在解析 room 前鉴权且只读；Registry 验证10秒 abort/释放 body。Hermes 旧同实例反复接管用原 gateway_ping 探针和附件保存绝对12秒截止，健康当前 owner 返回409，半开可以恢复；现代 owner/transfer 和其他后端保持。Mobile 验证新 health 载荷并把负证据交回 coordinator，防迟到旧结果；Bridge 队列256帧/总8MiB，退休清空、溢出/发送失败回收整代，诊断同步回调不能误伤继任队列。
@@ -2031,7 +2036,7 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 
 | 编号 | 事项 | 怎么做 | 验证方法 | 状态 |
 |---|---|---|---|---|
-| HT-HERMES-SAFETY-1007 | Hermes 安全修复交付与线上效果复核 | 负责人分别授权 Hermes Relay 部署、Bridge 发布/已安装旧版升级、App 更新；安装候选后复核首次扫码与物理iOS，并在交付后比较同口径调用/owner4001/费用。 | 固定候选与CI通过；新旧客户端兼容；实际后台恢复；日调用趋势下降且没有新的重连循环。 | 代码及安卓隔离故障恢复已验证；尚未生产部署/发布/替换现有Bridge。实际费用下降与首次扫码/iOS矩阵待交付后验证，不能以本地成功代替。 |
+| HT-HERMES-SAFETY-1007 | Hermes 安全修复交付与线上效果复核 | Relay已获授权；Bridge发布/已安装旧版升级与App更新仍需分别授权。复核首次扫码与物理iOS，并在交付后比较同口径调用/owner4001/费用。 | 固定候选与CI通过；新旧客户端兼容；实际后台恢复；日调用趋势下降且没有新的重连循环。 | 初次Hermes Relay已部署，真实权限抽验发现Registry角色回退旧缺陷，补修复后继续仅Hermes部署。未发布Bridge/App或替换现有Bridge；实际费用与首次扫码/iOS矩阵待交付后验证。 |
 | HT-ANDROID-MEDIA-1007 | Android 媒体权限整改剩余真机验收与审核后发布 | 复查 QR/头像/壁纸/拍照/外部分享、两种海报保存与 Hermes 图片收发；Google 批准后检查托管发布的待发布更改，公开发布保持独立阶段。 | Android13+无需媒体读取即可选图/保存；Node 不声明 photos.latest 且旧调用不读取；iOS最近照片/保存保持；实际候选 Manifest 无五项读取、旧写入有SDK上限。 | 2026-10-07 3.1.2/30103 QA 实机 OpenClaw 文字/选图/图片识别/预览/保存/后台恢复通过，正式 AAB 校验及所有有效轨道替换完成；内部测试已发布、正式/Alpha59项已请求送审，托管开启。其余权限/入口与 iOS/Hermes 实机矩阵未宣称完成。 |
 | HT-CONNECTION-DOMAINS-1006 | 官方域名客户端交付与旧 Workers 退役 | 负责人决定包含此迁移的 App/Bridge 发布版本；在新原生 App 与 Bridge 上验收旧配对、六位码/QR/邀请、重连和两个服务环境，并补齐实际 Android 分发签名的关联指纹。 | 新客户端不请求 Workers 域名；旧客户端兼容窗口与真实迁移验收满足后，另行授权关闭 Workers 入口。 | Cloudflare 22 个入口与服务配置迁移已完成，11 组真实云配对/合成 WS 验证通过；客户端公开交付/真机验收/旧入口关闭待后续决定。 |
 

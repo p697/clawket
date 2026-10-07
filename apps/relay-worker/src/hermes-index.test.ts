@@ -359,7 +359,7 @@ describe('relay worker helpers', () => {
   });
 
   it('falls back to registry verification when the pair record is not in local KV', async () => {
-    const fetchMock = globalThis.fetch = vi.fn(async () => new Response(null, { status: 200 })) as unknown as typeof fetch;
+    const fetchMock = globalThis.fetch = vi.fn(async () => Response.json({ ok: true, role: 'client' })) as unknown as typeof fetch;
 
     await expect(
       __testing.isRelayTokenAuthorized({
@@ -390,7 +390,7 @@ describe('relay worker helpers', () => {
         clientTokens: [],
       }),
     );
-    const fetchMock = globalThis.fetch = vi.fn(async () => new Response(null, { status: 200 })) as unknown as typeof fetch;
+    const fetchMock = globalThis.fetch = vi.fn(async () => Response.json({ ok: true, role: 'client' })) as unknown as typeof fetch;
 
     await expect(
       __testing.isRelayTokenAuthorized({
