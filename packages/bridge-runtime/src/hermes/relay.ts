@@ -86,7 +86,8 @@ export class HermesRelayRuntime {
   private bridgeAttempt = 0;
   private stopped = true;
   private bridgeStatusProbe: AbortController | null = null;
-  private readonly pendingBridgeMessages: Array<{ text?: string; data?: Buffer }> = [];
+  private readonly pendingBridgeMessages: Array<{ text?: string; data?: Buffer; source: WebSocket; bytes: number }> = [];
+  private pendingBridgeBytes = 0;
   private bridgeHealthProbeSeq = 0;
   private relayMessageSeq = 0;
   private relayActivityAfterOpen = false;
@@ -140,7 +141,7 @@ export class HermesRelayRuntime {
     this.bridgeSocket?.close();
     this.relaySocket = null;
     this.bridgeSocket = null;
-    this.pendingBridgeMessages.length = 0;
+    this.clearPendingBridgeMessages();
     this.updateSnapshot({
       running: false,
       relayConnected: false,
@@ -158,6 +159,7 @@ export class HermesRelayRuntime {
       return;
     }
     const attempt = this.relaySession.beginConnectAttempt();
+    this.clearPendingBridgeMessages();
     this.relayAttempt = attempt;
     const relay = this.createWebSocket(buildHermesRelayWsUrl(this.options.config), {
       ...this.relayNetwork,
@@ -233,6 +235,7 @@ export class HermesRelayRuntime {
         return;
       }
       this.relaySocket = null;
+      this.clearPendingBridgeMessages();
       // The Relay deliberately elected a different socket for this owner.
       // Retrying this connection would evict that winner again, allowing two
       // runtimes with the same persisted instanceId to fight indefinitely.
@@ -325,6 +328,7 @@ export class HermesRelayRuntime {
 
   private handleRelayMessage(data: RawData, isBinary: boolean): void {
     const relay = this.relaySocket;
+    if (!relay || relay.readyState !== WebSocket.OPEN) return;
     if (relay && this.rejectOversizedFrame(relay, data, 'relay_in')) return;
     this.relayActivityAfterOpen = true;
     if (this.relaySession.confirmHealth()) {
@@ -332,7 +336,7 @@ export class HermesRelayRuntime {
       this.log('relay health confirmed; reconnect backoff reset');
     }
     if (isBinary) {
-      this.forwardOrQueueBridgeMessage({ data: normalizeBinary(data) });
+      this.forwardOrQueueBridgeMessage({ data: normalizeBinary(data) }, relay);
       return;
     }
     const text = normalizeText(data);
@@ -342,7 +346,7 @@ export class HermesRelayRuntime {
       this.handleRelayControl(text);
       return;
     }
-    this.forwardOrQueueBridgeMessage({ text });
+    this.forwardOrQueueBridgeMessage({ text }, relay);
   }
 
   private handleRelayControl(text: string): void {
@@ -401,20 +405,30 @@ export class HermesRelayRuntime {
     this.sendFrame(relay, text, 'relay_out');
   }
 
-  private forwardOrQueueBridgeMessage(message: { text?: string; data?: Buffer }): void {
+  private forwardOrQueueBridgeMessage(message: { text?: string; data?: Buffer }, source: WebSocket): void {
+    if (this.relaySocket !== source || source.readyState !== WebSocket.OPEN || this.stopped) return;
     const bridge = this.bridgeSocket;
     if (!bridge || bridge.readyState !== WebSocket.OPEN) {
       if (message.text !== undefined) {
         this.traceRelayFrame('bridge_queue', message.text);
       }
-      if (this.pendingBridgeMessages.length < 256) {
-        this.pendingBridgeMessages.push(message);
+      // Count UTF-8 wire bytes, including binary frames. Never silently drop
+      // requests or carry them into a replacement cloud client generation.
+      const bytes = getWebSocketFrameByteLength(message.text ?? message.data!);
+      if (this.pendingBridgeMessages.length >= 256
+        || this.pendingBridgeBytes + bytes > WEBSOCKET_FRAME_LIMIT_BYTES) {
+        this.recycleRelaySocket('bridge_queue_capacity');
+        return;
       }
+      if (this.relaySocket !== source || this.stopped) return;
+      this.pendingBridgeMessages.push({ ...message, source, bytes });
+      this.pendingBridgeBytes += bytes;
       this.connectBridge();
       return;
     }
     if (message.text !== undefined) {
       this.traceRelayFrame('bridge_send', message.text);
+      if (this.relaySocket !== source || this.bridgeSocket !== bridge || this.stopped) return;
       this.sendFrame(bridge, message.text, 'bridge_out');
       return;
     }
@@ -425,17 +439,30 @@ export class HermesRelayRuntime {
 
   private flushPendingBridgeMessages(): void {
     const bridge = this.bridgeSocket;
+    const relay = this.relaySocket;
     if (!bridge || bridge.readyState !== WebSocket.OPEN) return;
     while (this.pendingBridgeMessages.length > 0) {
       const next = this.pendingBridgeMessages.shift();
       if (!next) break;
-      if (next.text !== undefined) {
-        this.traceRelayFrame('bridge_flush', next.text);
-        this.sendFrame(bridge, next.text, 'bridge_out');
-      } else if (next.data) {
-        this.sendFrame(bridge, next.data, 'bridge_out');
+      this.pendingBridgeBytes -= next.bytes;
+      if (next.source !== relay || this.relaySocket !== relay || relay?.readyState !== WebSocket.OPEN
+        || this.bridgeSocket !== bridge || bridge.readyState !== WebSocket.OPEN || this.stopped) {
+        this.clearPendingBridgeMessages();
+        return;
       }
+      if (next.text !== undefined) this.traceRelayFrame('bridge_flush', next.text);
+      // Diagnostic callbacks are not allowed to revive a retired batch.
+      if (this.relaySocket !== relay || this.bridgeSocket !== bridge || this.stopped) {
+        this.clearPendingBridgeMessages(); return;
+      }
+      try { this.sendFrame(bridge, next.text ?? next.data!, 'bridge_out'); }
+      catch { this.recycleRelaySocket('bridge_queue_send_failed'); return; }
     }
+  }
+
+  private clearPendingBridgeMessages(): void {
+    this.pendingBridgeMessages.length = 0;
+    this.pendingBridgeBytes = 0;
   }
 
   private traceRelayFrame(direction: 'relay_in' | 'bridge_send' | 'bridge_queue' | 'bridge_flush' | 'bridge_in', text: string): void {
@@ -661,6 +688,7 @@ export class HermesRelayRuntime {
     if (!relay) return;
 
     this.relaySocket = null;
+    this.clearPendingBridgeMessages();
     this.clearRelayPing();
     this.clearRelayStabilityReset();
     this.clearBridgeStatusProbe();

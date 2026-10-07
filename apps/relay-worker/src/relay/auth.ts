@@ -2,6 +2,8 @@ import { isSecurePairingSecretConfigured, sha256Hex, verifyPairingRelayTicket } 
 import { HERMES_BACKEND_POLICY, OPENCLAW_BACKEND_POLICY } from '../backend-policy';
 import type { BackendPolicy, PairBridgeRecord, PairGatewayRecord, PairRecord } from './types';
 
+const REGISTRY_VERIFY_TIMEOUT_MS = 10_000;
+
 type RelayAuthCommon = {
   routesKv: KVNamespace;
   registryVerifyUrl?: string;
@@ -161,14 +163,23 @@ async function verifyViaRegistry(
   const base = registryVerifyUrl?.trim();
   if (!base) return false;
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REGISTRY_VERIFY_TIMEOUT_MS);
   try {
     const endpoint = `${base.replace(/\/+$/, '')}${policy.registryVerifyPath}${encodeURIComponent(principalId)}`;
     const response = await fetch(endpoint, {
       method: 'GET',
       headers: { authorization: `Bearer ${token}` },
+      signal: controller.signal,
     });
-    return response.status === 200;
+    const authorized = response.status === 200;
+    // Verification needs the status only. Release the unread body before a DO
+    // can return to hibernation, including on rejected registry responses.
+    await response.body?.cancel();
+    return authorized;
   } catch {
     return false;
+  } finally {
+    clearTimeout(timeout);
   }
 }

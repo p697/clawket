@@ -64,6 +64,7 @@ import {
 } from './relay/routing';
 import { isReservedPresenceControl, replaceBridge, replaceGateway, retireOwnerClients, sendControlToGateway, sendRelayReady } from './relay/control';
 import { consumeOwnerHeartbeatControl } from './relay/owner-heartbeat';
+import { admitHermesOwner } from './relay/owner-contention';
 import { consumeClientHeartbeatControl } from './relay/client-heartbeat';
 import { isReservedTransferControl } from './relay/transfer';
 import { initializeRelayRuntime } from './relay/initialization';
@@ -94,6 +95,10 @@ type NormalizedRelayQuery = {
   clientId?: string;
   token?: string;
 };
+
+// Only fetchForPolicy can forward this action after owner authentication.
+// The public Worker rejects this path; DO bindings are the internal boundary.
+const VERIFIED_HERMES_BRIDGE_STATUS_PATH = '/__clawket/verified-hermes-bridge-status';
 
 function parseBackendQuery(url: URL, policy: BackendPolicy): NormalizedRelayQuery {
   if (policy.backend === 'hermes') {
@@ -150,11 +155,19 @@ async function fetchForPolicy(request: Request, env: Env, policy: BackendPolicy)
     && url.pathname === policy.internalRoutes.bridgeStatus) {
     const principalId = url.searchParams.get(policy.principalParam)?.trim() ?? '';
     if (!principalId) return invalidPrincipalResponse(policy);
+    const { token } = resolveRelayAuthToken(undefined, request);
+    if (!token) return errorResponse('UNAUTHORIZED', 'Missing token for relay bridge status', 401);
+    if (!await isRelayTokenAuthorized({
+      routesKv: routesKv(env, policy), registryVerifyUrl: env.REGISTRY_VERIFY_URL,
+      principalId, policy, role: 'gateway', token,
+    })) return errorResponse('UNAUTHORIZED', 'Invalid token for relay bridge status', 401);
+    // Do not resolve/create a room for failed authentication, or repeat the KV
+    // authorization inside the room for every legacy five-second poll.
+    url.pathname = VERIFIED_HERMES_BRIDGE_STATUS_PATH;
+    url.search = '';
+    url.searchParams.set(policy.principalParam, principalId);
     const namespace = roomNamespace(env, policy);
-    return namespace.get(namespace.idFromName(principalId)).fetch(new Request(request.url, {
-      method: request.method,
-      headers: request.headers,
-    }));
+    return namespace.get(namespace.idFromName(principalId)).fetch(new Request(url));
   }
 
   if (url.pathname !== '/ws') return errorResponse('NOT_FOUND', 'Route not found', 404);
@@ -187,6 +200,10 @@ class BaseRelayRoom {
   async fetch(request: Request): Promise<Response> {
     const { policy } = this.runtime;
     const url = new URL(request.url);
+    if (policy.backend === 'hermes' && request.method === 'GET'
+      && url.pathname === VERIFIED_HERMES_BRIDGE_STATUS_PATH) {
+      return this.readHermesBridgeStatus(url);
+    }
     if (request.method === 'POST' && url.pathname === policy.internalRoutes.clientTokens) {
       const body = await readJson<Record<string, unknown>>(request);
       const rawPrincipal = body?.[policy.principalParam];
@@ -219,7 +236,6 @@ class BaseRelayRoom {
     const query = parseBackendQuery(url, policy);
     const traceId = (url.searchParams.get('traceId') ?? '').trim() || undefined;
     if (!query.principalId) return invalidPrincipalResponse(policy);
-    await storeRoomMeta(this.runtime, query.principalId);
     const { token, authSource } = resolveRelayAuthToken(query.token, request);
     if (!token) {
       logRuntimeTelemetry(this.runtime, 'ws_auth_rejected', {
@@ -247,6 +263,7 @@ class BaseRelayRoom {
       });
       return errorResponse('UNAUTHORIZED', 'Invalid token for relay connection', 401);
     }
+    await storeRoomMeta(this.runtime, query.principalId);
 
     const targetConnectionId = url.searchParams.get('targetConnectionId') || undefined;
     if (targetConnectionId && (policy.backend !== 'openclaw' || query.role !== 'gateway'
@@ -275,6 +292,8 @@ class BaseRelayRoom {
     const ownerClientId = query.role === 'gateway'
       ? (query.clientId || `legacy-${(await sha256Hex(token)).slice(0, 16)}`)
       : '';
+    const requestedCapabilities = parseCapabilities(url);
+    let ownerReplacementAt: number | undefined;
     if (query.role === 'gateway') {
       const leaseMs = parsePositiveInt(this.runtime.env.GATEWAY_OWNER_LEASE_MS, policy.ownerLeaseMs);
       if (!canAcceptGatewayOwner(this.runtime, ownerClientId, Date.now(), leaseMs)) {
@@ -285,10 +304,15 @@ class BaseRelayRoom {
         });
         return errorResponse('GATEWAY_OWNER_LOCKED', policy.ownerLockedMessage, 409);
       }
+      const admission = admitHermesOwner(this.runtime, ownerClientId, requestedCapabilities, Date.now());
+      if (!admission.allowed) {
+        logRuntimeTelemetry(this.runtime, policy.ownerLockedEvent, { role: 'gateway', hasBridge: true });
+        return errorResponse('GATEWAY_OWNER_LOCKED', policy.ownerLockedMessage, 409);
+      }
+      ownerReplacementAt = admission.replacementAt;
     }
 
     const clientId = query.role === 'gateway' ? ownerClientId : (query.clientId || crypto.randomUUID());
-    const requestedCapabilities = parseCapabilities(url);
     const ownerCapabilities = query.role === 'gateway' ? [
       ...(policy.backend === 'openclaw' && !targetConnectionId && requestedCapabilities.includes(CLIENT_CHANNELS)
         ? [CLIENT_CHANNELS] : []),
@@ -311,6 +335,7 @@ class BaseRelayRoom {
       role: query.role,
       clientId,
       connectedAt: Date.now(),
+      ...(ownerReplacementAt === undefined ? {} : { ownerContention: { lastAttemptAt: ownerReplacementAt } }),
       traceId,
       clientLabel: query.role === 'client' ? authorization.clientLabel : null,
       ...(credentialHash ? { credentialHash } : {}),
@@ -580,7 +605,6 @@ class BaseRelayRoom {
     if (!principalId) return invalidPrincipalResponse(policy);
     const { token } = resolveRelayAuthToken(undefined, request);
     if (!token) return errorResponse('UNAUTHORIZED', 'Missing token for relay bridge status', 401);
-    await storeRoomMeta(this.runtime, principalId);
     const authorized = await isRelayTokenAuthorized({
       routesKv: routesKv(this.runtime.env, policy),
       registryVerifyUrl: this.runtime.env.REGISTRY_VERIFY_URL,
@@ -591,6 +615,12 @@ class BaseRelayRoom {
       mirroredClientTokenHashes: this.runtime.mirroredClientTokenHashes,
     });
     if (!authorized) return errorResponse('UNAUTHORIZED', 'Invalid token for relay bridge status', 401);
+    return this.readHermesBridgeStatus(url);
+  }
+
+  private readHermesBridgeStatus(url: URL): Response {
+    const principalId = url.searchParams.get(this.runtime.policy.principalParam)?.trim() ?? '';
+    if (!principalId) return invalidPrincipalResponse(this.runtime.policy);
     reconcileSockets(this.runtime);
     return jsonResponse({
       ok: true,

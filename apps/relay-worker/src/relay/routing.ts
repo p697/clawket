@@ -27,6 +27,7 @@ import {
 import { parsePositiveInt } from './utils';
 import { rememberPendingRequest, takePendingRequest } from './pending-requests';
 import { sendRelayFrame } from './transfer';
+import { acknowledgeOwnerContention } from './owner-contention';
 
 export function allowMessage(
   runtime: RelayRuntime,
@@ -263,6 +264,9 @@ export async function handleGatewayMessage(
     const gatewayControl = parseControlEnvelope(text);
     if (gatewayControl) {
       if (runtime.policy.watchdog !== 'none' && gatewayControl.event === 'gateway_pong') {
+        // Contention probes do not renew the periodic client alarm deadline.
+        if (acknowledgeOwnerContention(runtime, ownerSocket, gatewayControl.event, gatewayControl.ts, Date.now())
+          && runtime.pendingGatewayPingAt !== gatewayControl.ts) return;
         runtime.pendingGatewayPingAt = 0;
         runtime.gatewayPingCapability = 'supported';
         logRuntimeTelemetry(runtime, 'gateway_pong_received', {

@@ -179,6 +179,49 @@ afterAll(async () => {
 });
 
 describe('v1 compatibility live replay', () => {
+  it('contains legacy Hermes same-instance reconnect fights without evicting a healthy phone', async () => {
+    const paired = await pairHermes('Legacy Hermes Contention');
+    const ownerUrl = wsUrl(paired.relayUrl, { bridgeId: paired.bridgeId, role: 'gateway', clientId: 'legacy-shared-owner' });
+    const headers = { Authorization: `Bearer ${paired.relaySecret}` };
+    const first = await openWebSocket(ownerUrl, { headers });
+    let second: WebSocketInbox | undefined;
+    let phone: WebSocketInbox | undefined;
+    let replacement: WebSocketInbox | undefined;
+    try {
+      second = await openWebSocket(ownerUrl, { headers });
+      expect((await first.waitForCloseFrameWithMiniflareWorkaround()).code).toBe(4001);
+      await expectRelayReadyFirst(second);
+      const current = second;
+      current.socket.on('message', data => {
+        const text = toText(data);
+        if (!text.startsWith(CONTROL_PREFIX)) return;
+        const control = JSON.parse(text.slice(CONTROL_PREFIX.length));
+        // Recorded 0.7.x behavior: existing gateway_ping/pong, no new capability.
+        if (control.event === 'gateway_ping') current.socket.send(CONTROL_PREFIX + JSON.stringify({
+          type: 'control', event: 'gateway_pong', ts: control.ts,
+        }));
+      });
+      phone = await openHermesClient(paired, 'contention-phone');
+      await expectRelayReadyFirst(phone);
+      for (let attempt = 0; attempt < 4; attempt++) {
+        expect((await rejectWebSocketUpgrade(ownerUrl, { headers })).status).toBe(409);
+        await delay(100);
+      }
+      expect(current.socket.readyState).toBe(WebSocket.OPEN);
+      expect(phone.socket.readyState).toBe(WebSocket.OPEN);
+      current.socket.send(JSON.stringify({ type: 'event', event: 'health', payload: { status: 'ok' } }));
+      await phone.nextJson(frame => frame.event === 'health');
+      // A genuinely disconnected owner still recovers immediately.
+      closeWebSocket(current);
+      await delay(100);
+      replacement = await openWebSocket(ownerUrl, { headers });
+      await expectRelayReadyFirst(replacement);
+    } finally {
+      closeWebSocket(first); if (second) closeWebSocket(second);
+      if (phone) closeWebSocket(phone); if (replacement) closeWebSocket(replacement);
+    }
+  });
+
   it.each(['openclaw', 'hermes'] as const)('negotiates isolated owner/client echoes without changing legacy %s ready frames', async backend => {
     const paired = backend === 'openclaw' ? await pairOpenClaw('Owner Echo Replay') : await pairHermes('Owner Echo Replay');
     if ('gatewayId' in paired) ownerEchoPair = paired;

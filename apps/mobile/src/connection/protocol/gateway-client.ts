@@ -416,7 +416,18 @@ export class GatewayProtocolClient {
       const isCurrent = () => !this.manuallyClosed && this.epoch === epoch
         && this.handshakeSerial === serial && this.#transport === transport;
       try {
-        await this.sendRequest('health', {}, timeoutMs);
+        const payload = await this.sendRequest<GatewayProtocolEvents['health']>('health', {}, timeoutMs);
+        if (!isCurrent()) return false;
+        if (this.profile.healthReadiness) {
+          const hasPayload = isRecord(payload);
+          const health = hasPayload ? payload : {};
+          const readiness = this.profile.healthReadiness(health, { hasPayload });
+          // A negative result belongs to coordinator recovery. Emitting it as
+          // an unsolicited event would change phase mid-probe and skip recovery.
+          if (readiness.state !== 'ready') return false;
+          this.emit('health', health);
+          return isCurrent();
+        }
         return isCurrent();
       } catch {
         // Disposal rejects pending probes too. A retired adapter must never

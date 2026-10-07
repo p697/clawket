@@ -71,6 +71,7 @@ export class HermesAdapter extends GatewayAdapterBase {
   public readonly management: ManagementOperations;
 
   private healthObserved = false;
+  private healthRevision = 0;
   private bridgeName: string | undefined;
   private bridgeVersion: string | undefined;
   private bridgeCapabilities: ReadonlyArray<string> = Object.freeze([]);
@@ -96,6 +97,7 @@ export class HermesAdapter extends GatewayAdapterBase {
   }
 
   public override disconnect(): void {
+    this.healthRevision += 1;
     this.healthObserved = false;
     this.bridgeVersion = undefined;
     this.bridgeCapabilities = Object.freeze([]);
@@ -116,7 +118,9 @@ export class HermesAdapter extends GatewayAdapterBase {
   }
 
   public override async probe(timeoutMs?: number): Promise<boolean> {
+    const revision = this.healthRevision;
     const healthy = await super.probe(timeoutMs);
+    if (!healthy && this.healthRevision === revision) this.healthObserved = false;
     if (healthy && this.healthObserved) this.confirmHealthReady();
     return healthy && this.healthObserved;
   }
@@ -215,6 +219,7 @@ export class HermesAdapter extends GatewayAdapterBase {
   }
 
   protected override handleGatewayHealth(payload: GatewayEvents['health']): void {
+    this.healthRevision += 1;
     this.bridgeVersion = readString(payload.bridgeVersion);
     const capabilities = Array.isArray(payload.capabilities)
       ? payload.capabilities.filter((value): value is string => typeof value === 'string')
@@ -256,6 +261,7 @@ export class HermesAdapter extends GatewayAdapterBase {
 
   protected override handleGatewayConnectionTransition(state: LegacyConnectionState): void {
     if (state === 'connecting' || state === 'reconnecting' || state === 'closed') {
+      this.healthRevision += 1;
       this.healthObserved = false;
       this.bridgeVersion = undefined;
       this.bridgeCapabilities = Object.freeze([]);

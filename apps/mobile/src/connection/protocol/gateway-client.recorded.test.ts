@@ -348,6 +348,32 @@ describe('GatewayProtocolClient recorded protocol', () => {
     client.disconnect();
   });
 
+  it.each([
+    [{ status: 'degraded', hermesApiReachable: false }, false],
+    [{ status: 'ok', hermesApiReachable: false }, false],
+    [{ status: 'degraded' }, false],
+    [null, false],
+    [{ status: 'healthy', hermesApiReachable: true }, true],
+    [{}, true],
+  ])('validates fresh Hermes probe payload after initial readiness (%j)', async (payload, expected) => {
+    const { client, sockets } = harness(HERMES_GATEWAY_PROTOCOL_PROFILE);
+    client.configure({ url: 'ws://hermes.fixture.invalid/v1/hermes/ws', backendKind: 'hermes', transportKind: 'local' });
+    client.connect(); await waitFor(() => sockets.length === 1);
+    const socket = sockets[0].socket; socket.open();
+    socket.receive(frame(hermesFixture, 'health.event'));
+    await waitFor(() => client.getConnectionState() === 'ready');
+    const observed = jest.fn(); client.on('health', observed);
+    try {
+      const probe = client.probeConnection();
+      const request = sentJson(socket).at(-1)!;
+      expect(request.method).toBe('health');
+      socket.receive({ type: 'res', id: request.id, ok: true, payload });
+      await expect(probe).resolves.toBe(expected);
+      if (expected) expect(observed).toHaveBeenCalledWith(payload);
+      else expect(observed).not.toHaveBeenCalled();
+    } finally { client.disconnect(); }
+  });
+
   it('waits for the recorded Hermes health frame and cannot revive after disconnect', async () => {
     const { client, sockets } = harness(HERMES_GATEWAY_PROTOCOL_PROFILE);
     const order: string[] = [];

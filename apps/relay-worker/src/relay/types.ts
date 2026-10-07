@@ -69,6 +69,8 @@ export type SocketAttachment = {
   credentialHash?: string;
   capabilities?: string[];
   lastPongAt?: number;
+  /** Bounded legacy owner contention evidence; no identities or payloads. */
+  ownerContention?: { lastAttemptAt: number; probeAt?: number; ackAt?: number };
   /** Echo rate limit survives hibernation; no heartbeat nonce is persisted. */
   lastOwnerPingAt?: number;
   lastOwnerPingRateLimitedAt?: number;
