@@ -43,6 +43,7 @@
   "scripts": {
     "postinstall": "node scripts/setup-mobile-node-modules.mjs && node apps/mobile/scripts/patch-paste-input-podspec.mjs && node apps/mobile/scripts/patch-paste-input-android-state.mjs && node apps/mobile/scripts/patch-expo-permissions.mjs && node apps/mobile/scripts/patch-enriched-markdown-tail-fade.mjs && node apps/mobile/scripts/patch-enriched-markdown-android-width.mjs && node apps/mobile/scripts/patch-enriched-markdown-list-indent.mjs && node apps/mobile/scripts/patch-expo-sharing.mjs && node apps/mobile/scripts/patch-expo-camera-barcodes.mjs && node apps/mobile/scripts/patch-react-native-svg-group-opacity.mjs && node apps/mobile/scripts/patch-reanimated-sync-props.mjs",
     "check:docs": "node scripts/check-agent-docs.mjs && node --test scripts/check-agent-docs.test.mjs",
+    "security:audit": "node scripts/ci/dependency-audit.mjs",
     "check:required": "npm run typecheck && npm run test:required && npm run check:static",
     "typecheck": "npm run protocol:typecheck && npm run mobile:typecheck && npm run relay:typecheck && npm run bridge:typecheck && npm run speech:typecheck",
     "test": "npm run protocol:test && npm run mobile:test -- --runInBand && npm run relay:test && npm run bridge:test && npm run speech:test",

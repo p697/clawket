@@ -1,5 +1,11 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-07 依赖审计移出 PR 合并门禁（负责人批准方案）。
+  - Required workflow 的类型任务只做类型检查；四个受保护检查名、Mobile 三分片、静态/自包含测试、v1 回放、双桌面与密钥扫描保留。依赖公告不再因实时数据库变化阻挡普通 PR 或 main push；未修改 GitHub 分支保护。
+  - 新增独立 `Dependency security review`：每周一 09:23 JST 排程（GitHub 可延迟）、支持手动触发、只读权限、无需安装依赖；审计发现和畸形报告仍令该任务失败，保留 GitHub 失败提醒及摘要。`npm run security:audit` 供手动/发布前复核；审计与例外有效期测试继续留在必需测试中，不访问网络。
+  - 发布前基于固定候选的新报告和实际交付依赖记录修复或负责人接受的风险，不把开发工具公告或审计退出码自动视为发布决定；同步根指令、CI 文档与发布复核说明。无服务/协议/客户端行为、版本、生产配置或发布改动。
+  - 本地通过：workflow YAML 与必需任务/聚合关系检查、精确 shell 的失败透传及有/无报告摘要验证、审计七项回归、文档八对指令/五项测试、双 lockfile 真实审计与 whitespace；未安装依赖或运行本地完整套件。完整门禁交 PR CI，合并后手动触发独立任务验证 GitHub 执行。
+
 - 2026-10-07 客户端版本更新为 3.1.2（负责人要求）。
   - Mobile `package.json`、`app.json`、根 workspace lockfile 与 Mobile 独立 lockfile 同步；App 显示版本继续从 package manifest 读取，Bridge/共享包版本保持独立。任务 worktree 无生成的 iOS/Android 项目。
   - 配置验证：五处版本值一致；默认 Android versionCode=30102，显式覆盖 30103 可用。30102 已被 3.1.1 上传占用，后续获授权的商店打包须先核对 Play 最高上传 code，再指定至少 30103；已同步 Mobile 指令与 Android 构建文档。

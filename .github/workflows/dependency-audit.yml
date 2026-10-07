@@ -1,0 +1,37 @@
+name: Dependency security review
+
+# Independent of PR checks: new advisories must not block unrelated merges.
+on:
+  schedule:
+    - cron: '23 0 * * 1' # Monday 09:23 Asia/Tokyo; GitHub may delay scheduled runs.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Review dependency advisories
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # The checker reads committed lockfiles; no dependency install or build is needed.
+      - name: Audit both lockfiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run security:audit 2>&1 | tee "$RUNNER_TEMP/dependency-audit.log"
+      - name: Summarize the review
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          printf '## Dependency security review\n\nThis review does not block PR merges. Assess findings before an authorized release.\n\n' >> "$GITHUB_STEP_SUMMARY"
+          if [ -f "$RUNNER_TEMP/dependency-audit.log" ]; then
+            sed 's/^/    /' "$RUNNER_TEMP/dependency-audit.log" >> "$GITHUB_STEP_SUMMARY"
+          else
+            printf 'The audit did not produce a report; inspect the failed setup step.\n' >> "$GITHUB_STEP_SUMMARY"
+          fi

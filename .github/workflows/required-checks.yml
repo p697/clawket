@@ -96,7 +96,7 @@ jobs:
 
   # `npm run check:required` split into parallel jobs; the gate job below keeps the required name.
   typecheck:
-    name: Typecheck and dependency audit
+    name: Typecheck
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -106,8 +106,6 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
-      - name: Audit high-severity dependencies in both lockfiles
-        run: node scripts/ci/dependency-audit.mjs
 
   mobile-tests:
     name: Mobile tests (shard ${{ matrix.shard }}/3)

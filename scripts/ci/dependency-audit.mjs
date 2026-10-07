@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// Fails CI on any high or critical npm advisory in the root or the standalone
-// Mobile lockfile. The only way past one is an owner-approved exception below:
+// Reports any high or critical npm advisory in the root or standalone Mobile
+// lockfile for independent scheduled/manual security review, outside PR gates.
+// Findings keep a nonzero exit status; suppressing one needs an approved exception:
 // one advisory in one package, with a reason and an expiry date. An expired
 // exception blocks again, an exception no report needs any more fails until it
 // is removed, and a report that cannot be read fails rather than passing.
