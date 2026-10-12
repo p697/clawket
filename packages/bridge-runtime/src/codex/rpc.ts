@@ -8,7 +8,7 @@ export class CodexRpcError extends Error {
 }
 
 export type CodexRpcDiagnostic = Readonly<{
-  reason: 'native_spawn_error' | 'native_exit' | 'native_write_error' | 'frame_too_large' | 'invalid_frame' | 'request_timeout' | 'stopped';
+  reason: 'native_spawn_error' | 'native_exit' | 'native_write_error' | 'frame_too_large' | 'invalid_frame' | 'request_timeout' | 'workspace_requirements_unavailable' | 'stopped';
   pendingCount: number;
   frameBytes?: number;
 }>;
@@ -60,6 +60,11 @@ export class CodexRpc extends EventEmitter {
           if (!call) continue;
           clearTimeout(call.timer); this.pending.delete(frame.id);
           if (frame.error) {
+            // Exact native category only: never log its error text or recycle a
+            // live writer merely because a read-only health request was rejected.
+            if (frame.error.code === -32603 && frame.error.message === 'failed to load workspace requirements') {
+              this.diagnose('workspace_requirements_unavailable');
+            }
             const busy = typeof frame.error.message === 'string' && /thread [a-f0-9-]{36} already has an active writer/.test(frame.error.message);
             call.reject(new CodexRpcError(busy ? 'This conversation is controlled by another Codex process. Continue there or release it before trying again.' : `Codex rejected the operation (${Number(frame.error.code) || 'server'}). Check project trust and model configuration on your computer.`, 'rejected', busy ? 'native_writer_busy' : undefined));
           }

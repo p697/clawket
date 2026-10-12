@@ -15,6 +15,8 @@ beforeEach(() => {
     else if(f.method==='utf8'){const b=Buffer.from(JSON.stringify({method:'delta',params:{text:'你好 🌸\\n '}})+'\\n');let i=0;const t=setInterval(()=>{process.stdout.write(b.subarray(i,i+1));if(++i===b.length){clearInterval(t);send({id:f.id,result:{ok:true}})}},1)}
     else if(f.method==='request'){send({id:'native-id',method:'approval',params:{}});send({id:f.id,result:{ok:true}})}
     else if(f.method==='rejected')send({id:f.id,error:{code:-32602,message:'secret native detail'}});
+    else if(f.method==='workspace-requirements')send({id:f.id,error:{code:-32603,message:'failed to load workspace requirements'}});
+    else if(f.method==='workspace-lookalike')send({id:f.id,error:{code:-32603,message:'failed to load workspace requirements: private detail'}});
     else if(f.method==='writer-busy')send({id:f.id,error:{code:-32603,message:'thread 12345678-1234-1234-1234-123456789abc already has an active writer'}});
     else if(f.method==='malformed')process.stdout.write('{broken\\n');
     else if(f.method==='null')send(null);
@@ -37,6 +39,14 @@ it('reports explicit refusal without exposing native secrets', async () => {
   await expect(rpc.request('rejected')).rejects.not.toThrow('secret native detail');
   await expect(rpc.request('writer-busy')).rejects.toMatchObject({ outcome:'rejected',code:'native_writer_busy' });
   await expect(rpc.request('writer-busy')).rejects.not.toThrow('12345678-1234-1234-1234-123456789abc');
+});
+it('diagnoses a workspace requirements rejection without recycling or replaying the native process', async () => {
+  const events: unknown[] = []; rpc.on('diagnostic', value => events.push(value));
+  await expect(rpc.request('workspace-requirements')).rejects.toMatchObject({ outcome: 'rejected' });
+  expect(events).toEqual([{ reason: 'workspace_requirements_unavailable', pendingCount: 0 }]);
+  await expect(rpc.request('workspace-lookalike')).rejects.not.toThrow('private detail');
+  expect(events).toHaveLength(1);
+  await expect(rpc.request('still-alive')).resolves.toEqual({ ok: true });
 });
 it('fails pending requests on malformed framing and process loss', async () => {
   await expect(rpc.request('malformed')).rejects.toThrow('disconnected');

@@ -294,6 +294,10 @@ Claude service project scope uses `realpathSync.native` to match the catalog’s
 
 Codex native RPC diagnostics emit only a fixed lifecycle/failure reason, pending count and optional frame byte count. Forward them to the Clawket-owned local log without methods, params, transcripts, stderr, native error strings, paths or IDs. Logging failures must not interrupt request settlement or process cleanup; a timeout retains uncertain dispatch and never authorizes replay.
 
+An exact native `-32603` workspace-requirements load rejection emits only `workspace_requirements_unavailable` and pending count. It remains a rejected request, never proof the process exited or authorization to recycle a writer; preserve explicit authenticated restart and do not classify arbitrary native error text as this category.
+
+Codex owner locks retain the legacy plain PID format. Serialize dead-owner recovery with an exclusive recovery guard, recheck the bounded regular lock and its generation, and release only the acquired lock. A competing recovery, live/uncertain PID or changed lock must fail closed; never let late cleanup delete a replacement owner.
+
 Negotiated `chat.promptStatus` is a read-only lookup of a bounded, durable input fingerprint. `recorded` proves Bridge receipt only, never native execution/completion; `unknown` never authorizes automatic resend. Codex echoes use exact native client message IDs. Pi may persist an exact native entry mapping only with the owned process/session, pre-dispatch leaf, ordered acknowledgement and a single unambiguous native user entry; any branching, extension ordering, persistence or bounded-read uncertainty leaves the receipt unresolved. Store identity metadata only, never duplicate transcript text.
 
 ## OpenClaw attachment transfer

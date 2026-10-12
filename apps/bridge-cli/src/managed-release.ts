@@ -30,7 +30,10 @@ export async function delegateManagedRuntime(argv: string[]): Promise<boolean> {
   if (changed >= 0 && next[changed] < current[changed]) return false;
   await new Promise<void>((resolve, reject) => {
     const ipc = typeof process.send === 'function';
-    const child = spawn(manifest.node, [entry, ...argv], { stdio: ipc ? ['inherit', 'inherit', 'inherit', 'ipc'] : 'inherit', windowsHide: true });
+    // The snapshot pins Bridge code, not a package-manager-owned Node binary.
+    // The install-time executable may still exist with removed shared libraries
+    // after a Node upgrade. Use the interpreter already running this CLI.
+    const child = spawn(process.execPath, [entry, ...argv], { stdio: ipc ? ['inherit', 'inherit', 'inherit', 'ipc'] : 'inherit', windowsHide: true });
     if (ipc) child.on('message', message => { if (process.connected) process.send?.(message, () => {}); });
     const disconnect = () => { if (child.connected) child.disconnect(); };
     if (ipc) process.once('disconnect', disconnect);

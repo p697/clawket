@@ -47,6 +47,34 @@ it('does not launch another Codex runtime while a refused owner retains its writ
   await expect(handleCodexCommand(['start', '--config', path])).rejects.toThrow('locked without verified health');
   expect(mock.background).not.toHaveBeenCalled(); expect(readFileSync(path, 'utf8')).toContain('local-test-token');
 });
+it.each(['start', 'restart', 'pair'])('allows %s after connection refusal and proof the saved owner exited', async command => {
+  saved({}); mkdirSync(join(root, 'sessions'));
+  const lock = join(root, 'sessions', 'owner.lock'); writeFileSync(lock, '12345');
+  const before = readFileSync(path, 'utf8');
+  const kill = vi.spyOn(process, 'kill').mockImplementation(() => { throw Object.assign(new Error('gone'), { code: 'ESRCH' }); });
+  await handleCodexCommand([command, '--config', path]);
+  expect(kill).toHaveBeenCalledWith(12345, 0);
+  expect(mock.background).toHaveBeenCalledTimes(1);
+  expect(mock.fetch).not.toHaveBeenCalled();
+  expect(readFileSync(path, 'utf8')).toBe(before);
+  // The runtime constructor must recheck and acquire the lock; the CLI never deletes it.
+  expect(readFileSync(lock, 'utf8')).toBe('12345');
+});
+it.each(['alive', 'permission', 'unknown'])('preserves an offline owner lock when its PID is %s', async state => {
+  saved({}); mkdirSync(join(root, 'sessions')); writeFileSync(join(root, 'sessions', 'owner.lock'), '12345');
+  vi.spyOn(process, 'kill').mockImplementation(() => {
+    if (state === 'alive') return true;
+    throw Object.assign(new Error('unverified'), { code: state === 'permission' ? 'EPERM' : 'EIO' });
+  });
+  await expect(handleCodexCommand(['restart', '--config', path])).rejects.toThrow('locked without verified health');
+  expect(mock.background).not.toHaveBeenCalled(); expect(mock.fetch).not.toHaveBeenCalled();
+});
+it.each(['', '0', '-1', '123\n456', '9'.repeat(33)])('rejects malformed owner lock %j without probing a process', async value => {
+  saved({}); mkdirSync(join(root, 'sessions')); writeFileSync(join(root, 'sessions', 'owner.lock'), value);
+  const kill = vi.spyOn(process, 'kill');
+  await expect(handleCodexCommand(['restart', '--config', path])).rejects.toThrow('locked without verified health');
+  expect(kill).not.toHaveBeenCalled(); expect(mock.background).not.toHaveBeenCalled();
+});
 it('reuses one device label for Registry, QR and code invitations after a computer rename', async () => {
   mock.fetch.mockImplementation(async (url: string) => {
     if (url.endsWith('/register')) return Response.json({ gatewayId: 'new-id', relaySecret: 'new-secret', relayUrl: 'wss://relay.example', accessCode: 'code' });
@@ -207,6 +235,8 @@ it('does not start a replacement when authenticated stop is unconfirmed', async 
 
 it.each(['pair', 'start'])('does not treat a failed %s health check as an absent owner', async command => {
   saved({});
+  mkdirSync(join(root, 'sessions')); writeFileSync(join(root, 'sessions', 'owner.lock'), '12345');
+  const kill = vi.spyOn(process, 'kill').mockImplementation(() => { throw Object.assign(new Error('gone'), { code: 'ESRCH' }); });
   const before = readFileSync(path, 'utf8');
   const errors = [
     new Error('The existing Codex Bridge failed its native health check'),
@@ -221,6 +251,7 @@ it.each(['pair', 'start'])('does not treat a failed %s health check as an absent
     expect(mock.control.mock.calls[0][1]).toBeUndefined();
     expect(mock.background).not.toHaveBeenCalled();
     expect(mock.fetch).not.toHaveBeenCalled();
+    expect(kill).not.toHaveBeenCalled();
     expect(readFileSync(path, 'utf8')).toBe(before);
   }
 });

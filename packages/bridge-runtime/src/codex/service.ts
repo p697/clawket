@@ -8,7 +8,7 @@ import { InteractionAttention } from '../interaction-attention.js';
 import { lastVisiblePreview, sessionPreview } from '../session-preview.js';
 import { isDeepStrictEqual } from 'node:util';
 import { EventEmitter } from 'node:events';
-import { mkdirSync, readFileSync, writeFileSync, renameSync, lstatSync, realpathSync, existsSync, unlinkSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, renameSync, lstatSync, realpathSync, existsSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
 import type { SessionDescriptor, SessionUpdate, SessionHistory, PromptInput, AgentQuestion, ApprovalRequest } from '@clawket/agent-protocol';
@@ -16,6 +16,7 @@ import { nativeSettings, nativePermissionSettings, nativeTurnPermissions, matche
 import { fastServiceTier, isFastServiceTier, hasServiceTier } from './speed.js';
 import { CodexProfile } from './profile.js';
 import { CodexRpc } from './rpc.js';
+import { acquireCodexOwnerLock } from './owner-lock.js';
 import { codexMessages, codexGeneratedImage, codexTool, codexTurnFailure, codexReplyTimestamp, codexFinalReplyId, codexItemClock, codexItemTimestamp,
   codexToolTiming, codexDesktopItemClock, mergeCodexLiveItems, type CodexItemClock } from './history.js';
 import { loadDesktopHistory } from './desktop-history.js';
@@ -59,7 +60,7 @@ export class CodexService extends EventEmitter {
   readonly conversation = this;
   private readonly catalogSync = new SessionCatalogSync(() => this.listSessions(true));
   private readonly project: string;
-  private readonly lockPath: string;
+  private readonly releaseOwnerLock: () => void;
   private rpc: CodexRpc;
   private sessionActivity?: CodexSessionActivity;
   private profile!: CodexProfile;
@@ -105,16 +106,7 @@ export class CodexService extends EventEmitter {
     this.rememberProject(this.project);
     if (!lstatSync(this.project).isDirectory()) throw new Error('Codex project must be a directory');
     mkdirSync(options.directory, { recursive: true, mode: 0o700 });
-    this.lockPath = join(options.directory, 'owner.lock');
-    try { writeFileSync(this.lockPath, String(process.pid), { flag: 'wx', mode: 0o600 }); }
-    catch {
-      const pid = Number(readFileSync(this.lockPath, 'utf8'));
-      if (!Number.isSafeInteger(pid) || pid <= 0) throw new Error('Invalid Codex owner lock');
-      let alive = true;
-      try { process.kill(pid, 0); } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ESRCH') alive = false; }
-      if (alive) throw new Error('This Codex project is already managed by another Bridge');
-      unlinkSync(this.lockPath); writeFileSync(this.lockPath, String(process.pid), { flag: 'wx', mode: 0o600 });
-    }
+    this.releaseOwnerLock = acquireCodexOwnerLock(join(options.directory, 'owner.lock'));
     try {
       if (existsSync(this.indexPath)) {
         if (lstatSync(this.indexPath).size > 8 * 1024 * 1024) throw new Error('Codex index too large');
@@ -161,7 +153,7 @@ export class CodexService extends EventEmitter {
       }
       this.rpc = this.createRpc();
       this.profile = this.createProfile();
-    } catch (error) { unlinkSync(this.lockPath); throw error; }
+    } catch (error) { this.releaseOwnerLock(); throw error; }
   }
   private createProfile(): CodexProfile {
     const rpc = this.rpc;
@@ -1694,6 +1686,6 @@ export class CodexService extends EventEmitter {
     for (const waiter of this.settingsWaiters.values()) { clearTimeout(waiter.timer); waiter.reject(new Error('Codex Bridge stopped')); }
     this.settingsWaiters.clear(); this.sessionActivity?.stop(); this.desktop?.stop();
     this.profile.clear(); await this.rpc.stop(); this.artifacts.clear();
-    if (existsSync(this.lockPath)) unlinkSync(this.lockPath);
+    this.releaseOwnerLock();
   }
 }

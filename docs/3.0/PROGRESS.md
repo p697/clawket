@@ -1,5 +1,11 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-12 Codex 本机配对恢复与启动链路修复（负责人授权定位、恢复本机并修复代码）。
+  - 原常驻 Bridge 3.1.16 的本地鉴权与 1,138 条目录读取成功，但原生健康请求反复返回 workspace-requirements 加载拒绝。该原生进程自 10 月 6 日运行，引用桌面更新前已删除的二进制；新的当前 Codex 账户/模型/在线额度读取成功。旧原生失败的更深层原因未证实，不把独立插件 OAuth 告警或历史 Relay 超时当成此次根因。
+  - 恢复又确认 active manifest 固定的旧 Homebrew Node 因移除的 simdjson 动态库无法启动，以及已退出进程留下的锁阻挡恢复。本机仅备份/修正托管解释器路径、归档确认无 PID/监听者的旧锁并恢复 Codex；恢复时配对文件 hash 完全一致。随后实际终端 `pair choose → Codex` 22.9 秒生成六位码并正常退出，连接身份、owner 凭据、本地 token 和设备范围保持；本地健康/全目录与 Relay ready 通过。配对验证刷新了访问码和邀请；未删除历史、触碰其他后端或进行手机/推理验收。
+  - 代码：托管快照使用调用 CLI 的可用 Node；Codex 在明确 ECONNREFUSED 且锁内有效 PID 返回 ESRCH 后允许启动，运行时串行重验/取得锁并按文件代际清理，保留旧 PID 格式和不确定状态的拒绝。精确原生 workspace-requirements 拒绝只记固定诊断类别，不记录错误正文、不自动回收原生 writer 或重放请求。
+  - 原代码上失效 Node 两项、死锁恢复三项及诊断一项回归先失败；修复后逐文件串行验证 managed-release 6、CLI Codex 38、lifecycle 6、RPC 15、owner-lock 13、Service 351，共 429 项通过；Bridge 类型检查通过。完整跨后端/桌面门禁交 PR CI。无版本变更、分发包、npm 发布、Worker 部署或生产服务配置变更。
+
 - 2026-10-07 Hermes Relay 授权生产部署完成。
   - 鉴权修复PR216合入`4a4a5b30`，CI37596077737十一项全绿含Windows/macOS；固定源码与main消费路径一致。Hermes Relay最终版本`b7d2c87e-1afa-4954-9cc1-6a8c0e458836` / 源码hash`d66d765f…`读回一致；绑定、迁移tag、日志与三项原服务锚点保持，无新migration/配置或其他服务部署。
   - 窄验证256项、v1 44项、实时线上导出四用例28阶段通过，两次部署各跑44项v1门禁。生产隔离配对验证手机status与双向错角色WS 401、旧客户端130秒空闲/保存令牌重连、首次接管4001/4011与三次409保护、health/目录读取；后端回复受控，不声明模型或手机UI验收。
