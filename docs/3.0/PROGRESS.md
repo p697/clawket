@@ -1,8 +1,9 @@
 # PROGRESS · Clawket 3.0 进度日志
 
-- 2026-10-12 Bridge 3.1.17 npm patch 发布准备（负责人授权发布并用公共 latest 完整复验 Codex 配对）。
-  - 基于 `0191e116` 纳入 PR218 的 Node 解释器、Codex 已死 owner 锁恢复与原生健康分类修复，及 main 已合入的 Hermes 安全修复；仅公开 CLI manifest/lock、发布 guard 升版，内部 workspace/App 不变。
-  - 发布与公共验收尚未完成；执行固定包、跨后端兼容、双桌面 CI、真实云端只读快照与新审计门禁，之后核对公共 latest 和实际 Codex 交互配对。新 Handlebars 公告来自 Mobile 测试工具，保留审计失败并核对实际交付闭包，不新增例外。详情见[发布记录](../3.1/bridge-3.1.17-release.md)。
+- 2026-10-12 Bridge 3.1.17 npm patch 已公开发布，公共 latest Codex 配对全链路通过（负责人授权）。
+  - 固定源码 `25833c5d` 基于 `0191e116`；CI38259330340 十一项全绿含 Windows/macOS，六 guard、八指令对/五文档回归、两次 v1 各44项、实时生产导出4用例/28阶段、145输入/93模块 provenance、固定包 dry-run 与空认证候选安装通过。新 Handlebars 严重公告仅在 Mobile 测试工具，确认不在 Bridge bundle/provenance/147项安装闭包中，保留失败审计且不新增例外。
+  - 负责人完成 npm 登录与独立发布认证，固定287,357B包受理后经历分发404；23:14:58 JST公共 version/latest=3.1.17且完整下载逐字节/三哈希一致，23:16:48空认证全新公共 latest 安装通过。六生产 Worker 源码/config/部署锚点与观测设置前后不变，无 Worker/App 发布。
+  - 公共 npx 实际 `pair choose → Codex` 29.8秒正常退出并生成六位码；Mobile同源解析器的真实加密握手/领取、Relay原生健康、1,138条/11页目录、保存令牌重连及已用码拒绝全部通过，本地 modelReady/目录也通过。保留连接身份、owner凭据、本地token与设备范围；最后27.6秒刷新新邀请，本机运行公共3.1.17精确字节，17项其他后端状态不变。未操作手机UI/发送推理消息/删除历史。初次外部验证脚本模块格式问题已修正后复验。详情见[发布记录](../3.1/bridge-3.1.17-release.md)。
 
 
 - 2026-10-12 Codex 本机配对恢复与启动链路修复（负责人授权定位、恢复本机并修复代码）。

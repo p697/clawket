@@ -8,7 +8,7 @@ Only the public CLI manifest/lock entry and publication guard advance to 3.1.17.
 
 Require publish-guard and documentation checks, fresh audits of both lockfiles with shipped-dependency assessment, v1 replay, fresh read-only Production Worker exports and the four-case/seven-phase release matrix, exact-source CI including Windows/macOS, bundle provenance, fixed-artifact dry run and isolated empty-auth installation. Publish the fixed artifact only after those gates; independently verify public version/latest, complete tarball bytes and npm integrity, public installation, and the actual interactive Codex chooser plus authenticated local and Relay readiness.
 
-Private evidence is retained at `/Volumes/Lucy-SSD/clawket-release-evidence/bridge-3.1.17-20261012`. Publication and latest verification are pending. Keep public 3.1.16 available for deliberate recovery.
+Private evidence is retained at `/Volumes/Lucy-SSD/clawket-release-evidence/bridge-3.1.17-20261012`. Publication and public-latest verification are complete. Keep public 3.1.16 available for deliberate recovery.
 
 The fresh audit reports GHSA-8r5x-fm3f-whwj and GHSA-p8wg-vrv2-v86f in Handlebars 4.7.9 through Mobile's development-only ts-jest. This is separate from the three existing approved tool exceptions. Preserve the failing audit report; verify that Handlebars is absent from the Bridge bundle/provenance and isolated production dependency tree before publication. No new audit suppression is authorized or added.
 
@@ -21,3 +21,11 @@ The fixed artifact is `p697-clawket-3.1.17.tgz`, 287,357 bytes, SHA-256 `402d165
 The new Handlebars dependency is absent from the Bridge bundle, its provenance and all 147 entries in the isolated candidate installation lockfile. Its two critical advisories concern an unshipped Mobile test tool; the report remains failing with no suppression added. Existing owner-approved tool exceptions remain unchanged.
 
 The owner completed separate npm login and publication security-key challenges. npm accepted the fixed artifact with exit zero; initial public 404 responses are distinct from upload acceptance and remain recorded.
+
+## Public release and Codex acceptance
+
+At `2026-10-12T14:14:58.250Z` (23:14:58 JST), unauthenticated public version/latest both report 3.1.17 and the complete tarball matches the fixed candidate byte-for-byte, SHA-256, npm SHA-1 and SHA-512 integrity. After initial distribution 404s, a new empty-auth/cache installation resolving `@p697/clawket@latest` passed identity, exact bundle bytes, update protocol and help at `2026-10-12T14:16:48.452Z`.
+
+Actual public `npx -y @p697/clawket@latest pair choose` selected Codex, generated a six-digit code and exited zero (29.8 seconds on the completed end-to-end run). The native command, token, device/project scope, host/port and Relay identity/owner credentials were preserved. A release probe used the actual Mobile pairing resolver: secure six-digit proof/decryption, Registry claim, authenticated Relay native health, one Codex agent, all 1,138 conversation descriptors across 11 pages, saved-client-token reconnect and consumed-code rejection passed. Only fixed categories/counts were recorded; the ephemeral test client credential was not saved. An initial probe-module ESM/CommonJS packaging issue was corrected in the external test harness before the successful run; no product change was needed.
+
+Final pairing refresh passed in 27.6 seconds and leaves a new unconsumed invitation. Local authenticated health reports modelReady=true and full catalog validation passes. The running Codex owner resolves to the public 3.1.17 bundle and exact candidate bytes. Seventeen non-Codex state files remain unchanged (the Codex updater-owner registration is correctly replaced); no other backend was restarted, no history deleted, no native inference sent, and no physical-phone UI acceptance is claimed. The refreshed invitation is intentionally not stored in release evidence. Re-run the public chooser to display a fresh code when connecting a phone.
