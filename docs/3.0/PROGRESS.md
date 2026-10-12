@@ -1,5 +1,10 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-12 Bridge 3.1.17 npm patch 发布准备（负责人授权发布并用公共 latest 完整复验 Codex 配对）。
+  - 基于 `0191e116` 纳入 PR218 的 Node 解释器、Codex 已死 owner 锁恢复与原生健康分类修复，及 main 已合入的 Hermes 安全修复；仅公开 CLI manifest/lock、发布 guard 升版，内部 workspace/App 不变。
+  - 发布与公共验收尚未完成；执行固定包、跨后端兼容、双桌面 CI、真实云端只读快照与新审计门禁，之后核对公共 latest 和实际 Codex 交互配对。新 Handlebars 公告来自 Mobile 测试工具，保留审计失败并核对实际交付闭包，不新增例外。详情见[发布记录](../3.1/bridge-3.1.17-release.md)。
+
+
 - 2026-10-12 Codex 本机配对恢复与启动链路修复（负责人授权定位、恢复本机并修复代码）。
   - 原常驻 Bridge 3.1.16 的本地鉴权与 1,138 条目录读取成功，但原生健康请求反复返回 workspace-requirements 加载拒绝。该原生进程自 10 月 6 日运行，引用桌面更新前已删除的二进制；新的当前 Codex 账户/模型/在线额度读取成功。旧原生失败的更深层原因未证实，不把独立插件 OAuth 告警或历史 Relay 超时当成此次根因。
   - 恢复又确认 active manifest 固定的旧 Homebrew Node 因移除的 simdjson 动态库无法启动，以及已退出进程留下的锁阻挡恢复。本机仅备份/修正托管解释器路径、归档确认无 PID/监听者的旧锁并恢复 Codex；恢复时配对文件 hash 完全一致。随后实际终端 `pair choose → Codex` 22.9 秒生成六位码并正常退出，连接身份、owner 凭据、本地 token 和设备范围保持；本地健康/全目录与 Relay ready 通过。配对验证刷新了访问码和邀请；未删除历史、触碰其他后端或进行手机/推理验收。
