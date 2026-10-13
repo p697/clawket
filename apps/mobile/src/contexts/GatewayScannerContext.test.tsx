@@ -24,6 +24,10 @@ const mockClearPendingAddGateway = jest.fn(() => { mockPendingAddGateway = false
 let mockScannerScreenProps: { onChoosePhoto?: () => void } | null = null;
 let scanner: ReturnType<typeof useGatewayScanner> | null = null;
 
+jest.mock('../components/ui/PresentationSafeAreaProvider', () => ({
+  PresentationSafeAreaProvider: ({ children }: React.PropsWithChildren) => require('react').createElement('LocalScannerPresentation', {}, children),
+}));
+
 jest.mock('react-native', () => {
   const ReactRuntime = require('react');
   return {

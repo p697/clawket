@@ -40,6 +40,8 @@ jest.mock('react-native', () => {
   };
   return {
     ActivityIndicator: primitive('ActivityIndicator'),
+    I18nManager: { isRTL: false },
+    ScrollView: primitive('ScrollView'),
     Modal: primitive('Modal'),
     Platform: {
       OS: 'ios',
@@ -98,6 +100,8 @@ jest.mock('../../theme', () => {
     }),
   };
 });
+
+jest.mock('./PresentationSafeAreaProvider', () => ({ PresentationSafeAreaProvider: ({ children }: React.PropsWithChildren) => children }));
 
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
@@ -304,7 +308,7 @@ describe.each(['light', 'dark'] as const)('%s navigation primitives', (scheme) =
       alignSelf: 'center',
       borderRadius: Radius.xl,
     });
-    expect(flattened(result.getByTestId('delete-confirmation').props.style)).toMatchObject({
+    expect(flattened(result.getByTestId('delete-confirmation').props.contentContainerStyle)).toMatchObject({
       paddingTop: Space.md,
       paddingBottom: Space.xl,
       gap: Space.xl,

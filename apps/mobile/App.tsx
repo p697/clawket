@@ -28,7 +28,7 @@ import {
   Text,
 } from 'react-native';
 import { AdaptiveWorkspace } from './src/navigation/AdaptiveWorkspace';
-import { isIPad } from './src/utils/platform';
+import { getRuntimePlatform } from './src/utils/platform';
 import { IPAD_CHAT_MAX_WIDTH } from './src/utils/ipad-layout';
 import { FontSize, Space } from './src/theme/tokens';
 import { StatusBar } from 'expo-status-bar';
@@ -134,7 +134,9 @@ import {
   buildRosterRows,
   renameRosterSession,
   resolveRosterCreateAgentTarget,
-  RosterScreen,
+  RosterController,
+  RosterView,
+  type RosterViewProps,
   type RosterDisplayRow,
 } from './src/screens/Roster';
 import {
@@ -454,6 +456,7 @@ function AppContent({
   const [pendingAddGateway, setPendingAddGateway] = useState(false);
   const sessionPanelRef = useRef<SessionPanelHandle>(null);
   const [sessionPanelVisible, setSessionPanelVisible] = useState(false);
+  const [rosterReviewBusy, setRosterReviewBusy] = useState(false);
   const [exportTarget, setExportTarget] = useState<SessionPanelRow | null>(null);
   const pendingExport = useRef<SessionPanelRow | null>(null);
   useEffect(() => { pendingExport.current = null; }, [connections.activeAdapter]);
@@ -1279,7 +1282,7 @@ function AppContent({
     && !activeRosterGroup?.agents.some(agent => agent.sessions.some(session => session.hasActiveRun || session.attention === 'input' || session.attention === 'approval'))
     && !permissionsLoading && !pendingApprovalTarget && !pendingAutoOpen
     && launchAnnouncement === null && !announcementPresentation && !paywallVisible
-    && !sessionPanelVisible && !exportTarget && !debugMode);
+    && !sessionPanelVisible && !rosterReviewBusy && !exportTarget && !debugMode);
 
   const handleToggleRosterAgentPinned = useCallback(async (row: RosterDisplayRow) => {
     if (!canAccessRosterAgent(row.connectionId, row.agentId)) {
@@ -1584,9 +1587,12 @@ function AppContent({
   const renderRoster = (
     navigation: Pick<NativeStackScreenProps<RootStackParamList, 'Roster'>['navigation'], 'navigate'>,
     presentation: 'page' | 'sidebar' = 'page',
+    children: (props: RosterViewProps) => React.ReactNode = (props) => <RosterView {...props} />,
   ) => (
-                    <RosterScreen
+                    <RosterController
+                      children={children}
                       onReviewInteraction={cancelReviewOpportunity}
+                      onReviewBusyChange={setRosterReviewBusy}
                       presentation={presentation}
                       selectedThread={threadContext ?? undefined}
                       onManageActiveConnection={(connectionId) => navigation.navigate('Connection', { connectionId })}
@@ -1701,53 +1707,14 @@ function AppContent({
                     />
   );
 
-  return (
-    <AppContextProvider value={appContextValue}>
-      <GlobalLoadingOverlayProvider>
-        <GatewayScannerProvider>
-          {!permissionsLoading ? (
-            <AppDeepLinkHandler
-              rootNavigationRef={rootNavigationRef}
-              navigationReady={navigationReady && connections.initialized}
-              widgetTarget={widgetTarget}
-              activeConnectionId={connections.activeConnectionId}
-              activeAdapter={connections.activeAdapter}
-              currentAgentId={currentAgentId}
-              mainSessionKey={mainSessionKey}
-              canAddConnection={canAddSettingsConnection}
-              activeAccessDeniedReason={activeConnection && !canAccessConnection(activeConnection.id)
-                ? 'gatewayConnections'
-                : activeConnection && !canAccessRosterAgent(activeConnection.id, currentAgentId)
-                  ? 'agents'
-                  : null}
-              onOpenPaywall={presentPaywall}
-            />
-          ) : null}
-          <NodeCameraCaptureProvider>
-            <NavigationContainer
-              ref={rootNavigationRef}
-              theme={navigationTheme}
-              direction={I18nManager.isRTL ? 'rtl' : 'ltr'}
-              onReady={() => {
-                setNavigationReady(true);
-                const routeName = rootNavigationRef.getCurrentRoute()?.name;
-                if (routeName) {
-                  activeRouteRef.current = routeName;
-                  setActiveRouteName(routeName);
-                }
-                trackInitialScreen();
-              }}
-              onStateChange={handleNavigationStateChange}
-            >
-              <BottomSheetModalProvider>
-              <StatusBar style={theme.scheme === 'dark' ? 'light' : 'dark'} />
-              <AdaptiveWorkspace routeName={activeRouteName ?? 'Roster'} selectionKey={threadContext ? `${threadContext.connectionId}:${threadContext.sessionKey}` : undefined} roster={renderRoster(rootNavigationRef, 'sidebar')}>
+  const renderWorkspace = (rosterViewProps?: RosterViewProps) => (
+              <AdaptiveWorkspace routeName={activeRouteName ?? 'Roster'} selectionKey={threadContext ? `${threadContext.connectionId}:${threadContext.sessionKey}` : undefined} roster={rosterViewProps ? <RosterView {...rosterViewProps} /> : renderRoster(rootNavigationRef, 'sidebar')}>
               {(wideRoster) => <RootStack.Navigator
                 initialRouteName={connections.connections.length > 0 ? 'Roster' : 'Onboarding'}
                 screenOptions={({ route }) => ({
                   headerShown: false,
                   contentStyle: { backgroundColor: theme.colors.canvas,
-                    ...(isIPad && !['Thread', 'Roster', 'Paywall'].includes(route.name)
+                    ...(getRuntimePlatform() === 'ios' && !['Thread', 'Roster', 'Paywall'].includes(route.name)
                       ? { maxWidth: IPAD_CHAT_MAX_WIDTH, width: '100%', alignSelf: 'center' } : {}),
                   },
                 })}
@@ -1785,7 +1752,7 @@ function AppContent({
                     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: Space.lg }}>
                       <Text style={{ color: theme.colors.inkSecondary, fontSize: FontSize.body }}>{translate('Select an Agent', { ns: 'common' })}</Text>
                     </View>
-                  ) : renderRoster(navigation)}
+                  ) : rosterViewProps ? <RosterView {...rosterViewProps} selectedThread={undefined} /> : renderRoster(navigation)}
                 </RootStack.Screen>
                 <RootStack.Screen name="Thread">
                   {(props) => (
@@ -2112,6 +2079,51 @@ function AppContent({
                 />
               </RootStack.Navigator>}
               </AdaptiveWorkspace>
+  );
+
+  return (
+    <AppContextProvider value={appContextValue}>
+      <GlobalLoadingOverlayProvider>
+        <GatewayScannerProvider>
+          {!permissionsLoading ? (
+            <AppDeepLinkHandler
+              rootNavigationRef={rootNavigationRef}
+              navigationReady={navigationReady && connections.initialized}
+              widgetTarget={widgetTarget}
+              activeConnectionId={connections.activeConnectionId}
+              activeAdapter={connections.activeAdapter}
+              currentAgentId={currentAgentId}
+              mainSessionKey={mainSessionKey}
+              canAddConnection={canAddSettingsConnection}
+              activeAccessDeniedReason={activeConnection && !canAccessConnection(activeConnection.id)
+                ? 'gatewayConnections'
+                : activeConnection && !canAccessRosterAgent(activeConnection.id, currentAgentId)
+                  ? 'agents'
+                  : null}
+              onOpenPaywall={presentPaywall}
+            />
+          ) : null}
+          <NodeCameraCaptureProvider>
+            <NavigationContainer
+              ref={rootNavigationRef}
+              theme={navigationTheme}
+              direction={I18nManager.isRTL ? 'rtl' : 'ltr'}
+              onReady={() => {
+                setNavigationReady(true);
+                const routeName = rootNavigationRef.getCurrentRoute()?.name;
+                if (routeName) {
+                  activeRouteRef.current = routeName;
+                  setActiveRouteName(routeName);
+                }
+                trackInitialScreen();
+              }}
+              onStateChange={handleNavigationStateChange}
+            >
+              <BottomSheetModalProvider>
+              <StatusBar style={theme.scheme === 'dark' ? 'light' : 'dark'} />
+              {getRuntimePlatform() === 'ios'
+                ? renderRoster(rootNavigationRef, 'sidebar', renderWorkspace)
+                : renderWorkspace()}
               <AppUpdateAnnouncementSheet
                 bridgeUpgradeAvailable={bridgeUpgradeIds.length > 0}
                 visible={announcementVisible}

@@ -111,11 +111,40 @@ describe('messageActionsLayout', () => {
     expect(isUsableAnchor({ x: Number.NaN, y: 0, width: 10, height: 10 })).toBe(false);
     expect(isUsableAnchor({ x: 0, y: 0, width: 10, height: 0 })).toBe(false);
     expect(isUsableAnchor({ x: 0, y: 0, width: 10, height: 10 })).toBe(true);
-    expect(canReturnToAnchor({ x: 0, y: 900, width: 10, height: 10 }, 852)).toBe(false);
-    expect(canReturnToAnchor({ x: 0, y: -20, width: 10, height: 10 }, 852)).toBe(false);
-    expect(canReturnToAnchor({ x: 0, y: -5, width: 10, height: 10 }, 852)).toBe(true);
-    expect(canReturnToAnchor({ x: 0, y: 100, width: 10, height: 10 }, 0)).toBe(false);
+    expect(canReturnToAnchor({ x: 0, y: 900, width: 10, height: 10 }, 852, 393)).toBe(false);
+    expect(canReturnToAnchor({ x: 0, y: -20, width: 10, height: 10 }, 852, 393)).toBe(false);
+    expect(canReturnToAnchor({ x: 0, y: -5, width: 10, height: 10 }, 852, 393)).toBe(true);
+    expect(canReturnToAnchor({ x: 0, y: 100, width: 10, height: 10 }, 0, 393)).toBe(false);
     expect(getMessageCloneAnchor(null, 100)).toBeNull();
     expect(getMessageCloneAnchor({ x: 0, y: 0, width: 10, height: 10 }, 0)).toBeNull();
+  });
+});
+
+
+describe('resized presentation bounds', () => {
+  it.each([false, true])('keeps clone and both role menus inside asymmetric edges, RTL=%s', (isRTL) => {
+    for (const role of ['user', 'assistant'] as const) {
+      const layout = computeMessageActionsLayout(input({ leftInset: 84, rightInset: 12, isRTL, role }))!;
+      expect(layout.messageLeft).toBe(84);
+      expect(layout.messageWidth).toBe(297);
+      expect(layout.menuLeft).toBeGreaterThanOrEqual(84 + Space.lg);
+      expect(layout.menuLeft + layout.menuWidth).toBeLessThanOrEqual(393 - 12 - Space.lg);
+      const alignRight = (role === 'user') !== isRTL;
+      expect(layout.menuLeft).toBe(alignRight ? 393 - 12 - Space.lg - layout.menuWidth : 84 + Space.lg);
+    }
+  });
+
+  it.each([180, 130])('prioritizes the bounded scrollable menu in a %s-point short window', (screenHeight) => {
+    const layout = computeMessageActionsLayout(input({ screenHeight, menuHeight: 58 }))!;
+    expect(layout.messageTop).toBeGreaterThanOrEqual(TOP_BOUND);
+    expect(layout.messageHeight).toBeGreaterThanOrEqual(0);
+    expect(layout.menuTop + layout.menuHeight).toBeLessThanOrEqual(screenHeight - 34 - Space.sm);
+  });
+
+  it('caps an overwide menu and rejects a horizontally departed anchor', () => {
+    const layout = computeMessageActionsLayout(input({ screenWidth: 250 }))!;
+    expect(layout.menuWidth).toBe(250 - Space.lg * 2);
+    expect(layout.menuLeft + layout.menuWidth).toBe(250 - Space.lg);
+    expect(canReturnToAnchor({ x: 500, y: 20, width: 200, height: 40 }, 852, 393)).toBe(false);
   });
 });

@@ -1,19 +1,26 @@
 import React, { useCallback, useState } from 'react';
 import { Animated, StyleSheet, TouchableOpacity, View } from 'react-native';
-import { BorderWidth, PresentationColor, Radius } from '../../theme/tokens';
+import { useTranslation } from 'react-i18next';
+import { BorderWidth, ControlSize, PresentationColor, Radius, Space } from '../../theme/tokens';
 import { POSTER_THEMES, PosterTheme } from './posterThemes';
 
 type Props = {
+  disabled?: boolean;
   current: PosterTheme;
   onSelect: (theme: PosterTheme) => void;
 };
 
 /**
  * A small circular button showing the current theme accent color.
- * Tapping it reveals a floating row of color dots below, using absolute
- * positioning so it does not affect the parent action bar layout.
+ * The palette stays in normal flow so every color remains reachable when the
+ * presentation narrows or becomes short. The caller supplies a full-width row.
  */
-export function PosterThemePicker({ current, onSelect }: Props) {
+export function PosterThemePicker({ current, onSelect, disabled = false }: Props) {
+  const { t } = useTranslation('config');
+  const labels: Record<PosterTheme['id'], string> = {
+    iceBlue: t('Ice Blue'), jadeGreen: t('Jade Green'), oceanTeal: t('Ocean Teal'),
+    sunsetOrange: t('Sunset Orange'), rosePink: t('Rose Pink'), royalPurple: t('Royal Purple'),
+  };
   const [expanded, setExpanded] = useState(false);
   const [anim] = useState(() => new Animated.Value(0));
 
@@ -48,17 +55,23 @@ export function PosterThemePicker({ current, onSelect }: Props) {
   };
 
   return (
-    <View style={s.root}>
-      <TouchableOpacity style={s.trigger} onPress={toggle} activeOpacity={0.7}>
+    <View testID="poster-theme-picker" style={s.root}>
+      <TouchableOpacity testID="poster-theme-trigger" accessibilityRole="button" accessibilityLabel={t('Color')}
+        accessibilityState={{ expanded, disabled }} disabled={disabled} style={s.trigger} onPress={toggle} activeOpacity={0.7}>
         <View style={[s.triggerDot, { backgroundColor: current.swatch }]} />
       </TouchableOpacity>
       {expanded && (
-        <Animated.View style={[s.palette, paletteStyle]}>
+        <Animated.View testID="poster-theme-palette" style={[s.palette, paletteStyle]}>
           {POSTER_THEMES.map((theme) => {
             const isActive = theme.id === current.id;
             return (
               <TouchableOpacity
                 key={theme.id}
+                testID={`poster-theme-${theme.id}`}
+                accessibilityRole="button"
+                accessibilityLabel={labels[theme.id]}
+                accessibilityState={{ selected: isActive, disabled }}
+                disabled={disabled}
                 activeOpacity={0.7}
                 onPress={() => handleSelect(theme)}
                 style={s.dotTouch}
@@ -79,11 +92,12 @@ export function PosterThemePicker({ current, onSelect }: Props) {
 
 const s = StyleSheet.create({
   root: {
-    // Keep the trigger in normal flow; palette floats below via absolute positioning.
+    width: '100%',
+    alignItems: 'center',
   },
   trigger: {
-    width: 40,
-    height: 40,
+    width: ControlSize.floatingButton,
+    height: ControlSize.floatingButton,
     borderRadius: Radius.full,
     backgroundColor: PresentationColor.mediaControl,
     justifyContent: 'center',
@@ -95,10 +109,11 @@ const s = StyleSheet.create({
     borderRadius: Radius.full,
   },
   palette: {
-    position: 'absolute',
-    top: 48,
-    left: 0,
+    maxWidth: '100%',
+    marginTop: Space.sm,
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: PresentationColor.mediaControlSoft,
     borderRadius: Radius.full,
@@ -107,7 +122,10 @@ const s = StyleSheet.create({
     gap: 2,
   },
   dotTouch: {
-    padding: 4,
+    width: ControlSize.floatingButton,
+    height: ControlSize.floatingButton,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   dot: {
     width: 20,

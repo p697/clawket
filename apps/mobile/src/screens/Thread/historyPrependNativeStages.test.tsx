@@ -1,3 +1,10 @@
+// Keep the real confirmation flow; native presentation measurement has its own boundary test.
+jest.mock('../../components/ui/PresentationSafeAreaProvider', () => ({
+  PresentationSafeAreaProvider: ({ children }: React.PropsWithChildren) => children,
+}));
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 44, bottom: 34, left: 0, right: 0 }),
+}));
 import React from 'react';
 import { act, cleanup, render } from '@testing-library/react-native';
 import type { FlashListProps, FlashListRef } from '@shopify/flash-list';

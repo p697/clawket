@@ -10,7 +10,7 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaFrame, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Check, X } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { buildPaywallTheme } from '../../theme/paywall';
@@ -106,8 +106,11 @@ function PaywallPresentation({
 }: Props): React.JSX.Element {
   const { t } = useTranslation(['common']);
   const { theme } = useAppTheme();
-  const { height, width, fontScale } = useWindowDimensions();
+  const { fontScale } = useWindowDimensions();
+  const frame = useSafeAreaFrame();
   const insets = useSafeAreaInsets();
+  const width = Math.max(0, frame.width - insets.left - insets.right);
+  const height = frame.height;
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
   const content = useMemo(() => resolvePaywallContent(blockedFeature), [blockedFeature]);
   const orderedPackages = useMemo(() => orderPaywallPackages(packages), [packages]);

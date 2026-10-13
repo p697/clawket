@@ -5,8 +5,10 @@ import { PaywallScreen } from './PaywallScreen';
 import type { ProPaywallPackage } from '../../services/pro-subscription';
 
 let mockLocale: string | null = null;
+let mockInsets = { top: 24, bottom: 16, left: 0, right: 0 };
+let mockFrame: { x: number; y: number; width: number; height: number } | null = null;
 let mockDimensions = { width: 390, height: 844, scale: 3, fontScale: 1 };
-beforeEach(() => { mockLocale = null; mockDimensions = { width: 390, height: 844, scale: 3, fontScale: 1 }; });
+beforeEach(() => { mockFrame = null; mockInsets = { top: 24, bottom: 16, left: 0, right: 0 }; mockLocale = null; mockDimensions = { width: 390, height: 844, scale: 3, fontScale: 1 }; });
 
 const mockTheme = {
   scheme: 'light',
@@ -43,7 +45,8 @@ jest.mock('react-native', () => {
 });
 
 jest.mock('react-native-safe-area-context', () => ({
-  useSafeAreaInsets: () => ({ top: 24, right: 0, bottom: 16, left: 0 }),
+  useSafeAreaInsets: () => mockInsets,
+  useSafeAreaFrame: () => mockFrame ?? { x: 0, y: 0, width: mockDimensions.width, height: mockDimensions.height },
 }));
 
 jest.mock('lucide-react-native', () => new Proxy({}, {
@@ -471,4 +474,24 @@ describe('store redemption entry', () => {
     expect(screen.getByText('No new Pro access confirmed yet. If you redeemed a code, tap Restore.')).toBeTruthy();
     expect(screen.getByTestId('paywall-restore').props.accessibilityState.disabled).toBe(false);
   });
+});
+
+it('uses local presentation width and keeps plan disclosure through safe-area and frame changes', () => {
+  mockDimensions = { width: 1024, height: 900, scale: 3, fontScale: 1 };
+  mockFrame = { x: 0, y: 0, width: 390, height: 600 };
+  const screen = renderPaywall();
+  const card = screen.getByTestId('paywall-plan-annual');
+  const rerender = () => screen.rerender(<PaywallScreen failureReason={null} failureOperation={null} phase="ready" blockedFeature={null} packages={PACKAGES} selectedPackageId="annual" {...callbacks} />);
+  expect(StyleSheet.flatten(card.props.style).flexDirection).toBe('column');
+  mockInsets = { top: 0, bottom: 24, left: 48, right: 0 };
+  rerender();
+  expect(screen.getByTestId('paywall-plan-annual')).toBe(card);
+  expect(StyleSheet.flatten(card.props.style).flexDirection).toBe('row');
+  mockFrame = { x: 0, y: 0, width: 720, height: 600 };
+  rerender();
+  expect(StyleSheet.flatten(card.props.style).flexDirection).toBe('column');
+  fireEvent.press(screen.getByTestId('paywall-show-monthly'));
+  mockFrame = { x: 0, y: 0, width: 320, height: 700 };
+  rerender();
+  expect(screen.getByTestId('paywall-plan-monthly')).toBeTruthy();
 });

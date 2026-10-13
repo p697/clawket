@@ -10,6 +10,16 @@ import {
 } from './ThreadMessageActionsOverlay';
 
 let mockReducedMotion = false;
+let mockFrame = { x: 0, y: 0, width: 393, height: 852 };
+let mockInsets = { top: 59, bottom: 34, left: 0, right: 0 };
+let mockRTL = false;
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaFrame: () => mockFrame,
+  useSafeAreaInsets: () => mockInsets,
+}));
+jest.mock('../../../components/ui/PresentationSafeAreaProvider', () => ({
+  PresentationSafeAreaProvider: ({ children }: React.PropsWithChildren) => children,
+}));
 const mockScrollTo = jest.fn();
 
 jest.mock('react-native', () => {
@@ -28,6 +38,7 @@ jest.mock('react-native', () => {
     },
   );
   return {
+    I18nManager: { get isRTL() { return mockRTL; } },
     Platform: { OS: 'ios', select: (options: Record<string, unknown>) => options.ios ?? options.default },
     Modal: ({ children, visible, ...props }: Record<string, unknown>) => (
       visible ? ReactRuntime.createElement('Modal', props, children) : null
@@ -110,7 +121,8 @@ function flattenStyle(value: unknown): Record<string, unknown> {
 
 const message: UiMessage = { id: 'reply-1', role: 'assistant', text: 'Lifted reply' };
 const anchor = { x: 0, y: 300, width: 393, height: 160 };
-const MENU_SIZE = { width: 248, height: 58 };
+const MENU_CHROME = (Space.xs + 1) * 2; // Mocked 1x hairline border, included in the native content box.
+const MENU_SIZE = { width: 250, height: 60 };
 const TOP_BOUND = 59 + Space.sm;
 
 function createSelection(overrides: Partial<ThreadMessageSelection> = {}): ThreadMessageSelection {
@@ -128,8 +140,6 @@ function createProps(overrides: Partial<ThreadMessageActionsOverlayProps> = {}):
     selection: createSelection(),
     message,
     favorited: false,
-    topInset: 59,
-    bottomInset: 34,
     contentInset: Space.lg,
     renderMessage: jest.fn((target: UiMessage, width: number) => (
       React.createElement('Clone', { testID: 'clone-content', width }, target.text)
@@ -143,20 +153,24 @@ function createProps(overrides: Partial<ThreadMessageActionsOverlayProps> = {}):
 }
 
 function layoutOverlay(view: ReturnType<typeof render>, contentHeight = 120) {
+  const width = Number(flattenStyle(view.getByTestId('thread-message-actions-menu').props.style).width);
   act(() => {
-    fireEvent(view.getByTestId('thread-message-actions-menu'), 'layout', {
-      nativeEvent: { layout: { x: 0, y: 0, ...MENU_SIZE } },
+    fireEvent(view.getByTestId('thread-message-actions-menu-content'), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 0, width: width - MENU_CHROME, height: MENU_SIZE.height - MENU_CHROME } },
     });
   });
   act(() => {
     fireEvent(view.getByTestId('clone-content').parent!, 'layout', {
-      nativeEvent: { layout: { x: 0, y: 0, width: 393, height: contentHeight } },
+      nativeEvent: { layout: { x: 0, y: 0, width: view.getByTestId('clone-content').props.width, height: contentHeight } },
     });
   });
 }
 
 beforeEach(() => {
   mockReducedMotion = false;
+  mockFrame = { x: 0, y: 0, width: 393, height: 852 };
+  mockInsets = { top: 59, bottom: 34, left: 0, right: 0 };
+  mockRTL = false;
   mockScrollTo.mockClear();
   jest.useRealTimers();
 });
@@ -182,11 +196,11 @@ describe('ThreadMessageActionsOverlay', () => {
     layoutOverlay(view, 120);
     const clone = flattenStyle(view.getByTestId('thread-message-actions-message').props.style);
     // Bottom-aligned to the row so the shorter clone (no identity chrome) lands on the bubble.
-    expect(clone).toMatchObject({ top: 300 + 160 - 120, left: 0, height: 120, width: 393, opacity: 1 });
+    expect(clone).toMatchObject({ top: 300 + 160 - 120, start: 0, height: 120, width: 393, opacity: 1 });
     const menu = view.getByTestId('thread-message-actions-menu');
     expect(menu.props.pointerEvents).toBe('auto');
     const menuStyle = flattenStyle(menu.props.style);
-    expect(menuStyle).toMatchObject({ top: 340 + 120 + Space.md, left: Space.lg, opacity: 1 });
+    expect(menuStyle).toMatchObject({ top: 340 + 120 + Space.md, start: Space.lg, opacity: 1 });
     expect(menuStyle.transform).toEqual([{ translateY: 0 }, { scale: 1 }]);
     expect(mockScrollTo).not.toHaveBeenCalled();
     // The lifted message takes touches so its text can be selected there.
@@ -218,7 +232,7 @@ describe('ThreadMessageActionsOverlay', () => {
     expect(mockScrollTo).toHaveBeenCalledWith({ y: expect.any(Number), animated: false });
     expect(mockScrollTo.mock.calls[0][0].y).toBeGreaterThan(0);
     expect(clone.props.pointerEvents).toBe('auto');
-    expect(view.UNSAFE_getByType(require('react-native').ScrollView).props.scrollEnabled).toBe(true);
+    expect(view.UNSAFE_getAllByType(require('react-native').ScrollView)[0].props.scrollEnabled).toBe(true);
   });
 
   it('lays the three actions out as equal cells in one capsule', () => {
@@ -226,8 +240,9 @@ describe('ThreadMessageActionsOverlay', () => {
     layoutOverlay(view);
     const menu = view.getByTestId('thread-message-actions-menu');
     const menuStyle = flattenStyle(menu.props.style);
-    expect(menuStyle).toMatchObject({ flexDirection: 'row', borderRadius: Radius.full, padding: Space.xs });
-    expect(menuStyle.width).toBeUndefined();
+    expect(menuStyle).toMatchObject({ borderRadius: Radius.full, padding: Space.xs });
+    expect(menuStyle.width).toBe(250);
+    expect(flattenStyle(view.getByTestId('thread-message-actions-menu-content').props.style)).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap' });
     const cells = ['thread-message-copy', 'thread-message-favorite', 'thread-message-share']
       .map((id) => flattenStyle(view.getByTestId(id).props.style));
     for (const cell of cells) {
@@ -505,6 +520,103 @@ test('keeps five actions inside the viewport and lets longer labels wrap', () =>
   const props = createProps({ onBranch: jest.fn(), canBranch: () => true, onSchedule: jest.fn(), canSchedule: () => true });
   const view = render(<ThreadMessageActionsOverlay {...props} />);
   const style = flattenStyle(view.getByTestId('thread-message-branch').props.style);
-  expect(Number(style.width) * 5 + Space.xs * 2).toBeLessThanOrEqual(393 - Space.lg * 2);
+  expect(Number(style.width) * 5 + MENU_CHROME).toBeLessThanOrEqual(393 - Space.lg * 2);
   expect(view.getByText('New session').props.numberOfLines).toBe(2);
+});
+
+describe('local presentation changes', () => {
+  it.each([false, true])('uses four local edges and preserves confirmation across resize, RTL=%s', (rtl) => {
+    jest.useFakeTimers();
+    mockRTL = rtl;
+    const props = createProps();
+    const view = render(<ThreadMessageActionsOverlay {...props} />);
+    layoutOverlay(view);
+    const clone = view.getByTestId('clone-content');
+    fireEvent.press(view.getByTestId('thread-message-copy'));
+    mockFrame = { x: 40, y: 0, width: 669, height: 951 };
+    mockInsets = { top: 0, bottom: 21, left: 84, right: 12 };
+    view.rerender(<ThreadMessageActionsOverlay {...props} />);
+    layoutOverlay(view);
+    expect(view.getByTestId('clone-content')).toBe(clone);
+    expect(view.getByText('Copied')).toBeTruthy();
+    const style = flattenStyle(view.getByTestId('thread-message-actions-message').props.style);
+    const x = rtl ? 669 - Number(style.start) - Number(style.width) : Number(style.start);
+    expect(x).toBeGreaterThanOrEqual(84);
+    expect(x + Number(style.width)).toBeLessThanOrEqual(657);
+    mockInsets = { ...mockInsets, left: 12, right: 84 };
+    view.rerender(<ThreadMessageActionsOverlay {...props} />);
+    act(() => { jest.advanceTimersByTime(Motion.duration.slow * 2); });
+    view.rerender(<ThreadMessageActionsOverlay {...props} />);
+    expect(props.onClosed).toHaveBeenCalledTimes(1);
+    expect(flattenStyle(view.getByTestId('thread-message-actions-message').props.style).opacity).toBe(0);
+    expect(props.onCopy).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects late old-width content measurements and keeps wrapped action targets at least 44 points', () => {
+    const props = createProps({ onBranch: jest.fn(), canBranch: () => true, onSchedule: jest.fn() });
+    const view = render(<ThreadMessageActionsOverlay {...props} />);
+    layoutOverlay(view);
+    const staleLayout = view.getByTestId('clone-content').parent!.props.onLayout;
+    mockFrame = { x: 0, y: 0, width: 250, height: 180 };
+    view.rerender(<ThreadMessageActionsOverlay {...props} />);
+    const pending = flattenStyle(view.getByTestId('thread-message-actions-menu').props.style);
+    expect(Number(pending.start) + Number(pending.width)).toBeLessThanOrEqual(250);
+    expect(Number(pending.top) + Number(pending.height)).toBeLessThanOrEqual(180 - 34);
+    layoutOverlay(view, 90);
+    fireEvent(view.getByTestId('thread-message-actions-menu-content'), 'layout', {
+      nativeEvent: { layout: { width: 250 - Space.lg * 2 - MENU_CHROME, height: 100 } },
+    });
+    const before = flattenStyle(view.getByTestId('thread-message-actions-message').props.style);
+    act(() => staleLayout({ nativeEvent: { layout: { width: 393, height: 999 } } }));
+    expect(flattenStyle(view.getByTestId('thread-message-actions-message').props.style)).toEqual(before);
+    expect(Number(flattenStyle(view.getByTestId('thread-message-copy').props.style).width)).toBeGreaterThanOrEqual(44);
+    expect(flattenStyle(view.getByTestId('thread-message-actions-menu-content').props.style).flexWrap).toBe('wrap');
+    const menu = flattenStyle(view.getByTestId('thread-message-actions-menu').props.style);
+    expect(Number(menu.top) + Number(menu.height)).toBeLessThanOrEqual(180 - 34 - Space.sm);
+    expect(view.UNSAFE_getAllByType(require('react-native').ScrollView)[1].props.showsVerticalScrollIndicator).toBe(true);
+    mockFrame = { x: 0, y: 0, width: 951, height: 669 };
+    view.rerender(<ThreadMessageActionsOverlay {...props} />);
+    const expanded = flattenStyle(view.getByTestId('thread-message-actions-menu').props.style);
+    expect(Number(expanded.start) + Number(expanded.width)).toBeLessThanOrEqual(951);
+    expect(Number(expanded.top) + Number(expanded.height)).toBeLessThanOrEqual(669 - 34);
+  });
+
+  it('fades when the window changes while closing measurement is pending', () => {
+    let complete!: (frame: typeof anchor) => void;
+    const props = createProps({ selection: createSelection({ remeasure: callback => { complete = callback; } }) });
+    const view = render(<ThreadMessageActionsOverlay {...props} />);
+    layoutOverlay(view);
+    fireEvent.press(view.getByTestId('thread-message-actions-scrim'));
+    mockFrame = { x: 0, y: 0, width: 951, height: 669 };
+    view.rerender(<ThreadMessageActionsOverlay {...props} />);
+    act(() => complete(anchor));
+    view.rerender(<ThreadMessageActionsOverlay {...props} />);
+    expect(flattenStyle(view.getByTestId('thread-message-actions-message').props.style).opacity).toBe(0);
+    expect(props.onClosed).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not animate a manually scrolled clone back to its row', () => {
+    const props = createProps();
+    const view = render(<ThreadMessageActionsOverlay {...props} />);
+    layoutOverlay(view);
+    fireEvent(view.UNSAFE_getAllByType(require('react-native').ScrollView)[0], 'scroll', { nativeEvent: { contentOffset: { y: 24 } } });
+    fireEvent.press(view.getByTestId('thread-message-actions-scrim'));
+    view.rerender(<ThreadMessageActionsOverlay {...props} />);
+    expect(flattenStyle(view.getByTestId('thread-message-actions-message').props.style).opacity).toBe(0);
+  });
+
+  it('retires a pending favorite when a different message replaces the selection', async () => {
+    jest.useFakeTimers();
+    let fail!: (reason: Error) => void;
+    const props = createProps({ onToggleFavorite: () => new Promise((_resolve, reject) => { fail = reject; }) });
+    const view = render(<ThreadMessageActionsOverlay {...props} />);
+    layoutOverlay(view);
+    fireEvent.press(view.getByTestId('thread-message-favorite'));
+    const next = { ...props, selection: createSelection({ messageId: 'next' }), message: { ...message, id: 'next' } };
+    view.rerender(<ThreadMessageActionsOverlay {...next} />);
+    await act(async () => { fail(new Error('late failure')); await Promise.resolve(); });
+    act(() => { jest.advanceTimersByTime(Motion.duration.slow * 2); });
+    expect(props.onClosed).not.toHaveBeenCalled();
+    expect(view.getByText('Favorite')).toBeTruthy();
+  });
 });

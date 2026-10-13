@@ -1,0 +1,9 @@
+{
+  "name": "clawket-reserved-regions",
+  "version": "1.0.0",
+  "private": true,
+  "description": "View-local UIKit reserved region observations for Clawket.",
+  "license": "Proprietary",
+  "author": "Clawket",
+  "homepage": "https://github.com/p697/clawket"
+}

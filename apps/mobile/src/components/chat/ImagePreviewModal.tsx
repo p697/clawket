@@ -1,10 +1,12 @@
 import { ImageZoom, type ImageZoomRef } from '@likashefqet/react-native-image-zoom';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, I18nManager, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import type { Metrics } from 'react-native-safe-area-context';
 import { Gesture, GestureDetector, gestureHandlerRootHOC } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
+  cancelAnimation,
   interpolate,
   makeMutable,
   runOnJS,
@@ -21,15 +23,12 @@ import { saveImageUriToPhotoLibrary } from '../../services/photo-library';
 import { useAppTheme } from '../../theme';
 import { BorderWidth, ControlSize, FontSize, FontWeight, IconSize, LineHeight, PresentationColor, Radius, Space } from '../../theme/tokens';
 import { FloatingButton, SettingsGroup, SettingsRow, Sheet } from '../ui';
+import { PresentationSafeAreaProvider } from '../ui/PresentationSafeAreaProvider';
 
 type Props = {
   visible: boolean;
   uris: string[];
   index: number;
-  screenWidth: number;
-  screenHeight: number;
-  insetsTop: number;
-  insetsBottom: number;
   onClose: () => void;
   onIndexChange: (index: number) => void;
 };
@@ -101,13 +100,19 @@ export function ImagePreviewModal({
   visible,
   uris,
   index,
-  screenWidth,
-  screenHeight,
-  insetsTop,
-  insetsBottom,
   onClose,
   onIndexChange,
 }: Props): React.JSX.Element {
+  const [metrics, setMetrics] = useState<Metrics | null>(null);
+  const screenWidth = metrics?.frame.width ?? 0;
+  const screenHeight = metrics?.frame.height ?? 0;
+  const insetsTop = metrics?.insets.top ?? 0;
+  const insetsBottom = metrics?.insets.bottom ?? 0;
+  const horizontalEdges = {
+    start: (I18nManager.isRTL ? metrics?.insets.right : metrics?.insets.left) ?? 0,
+    end: (I18nManager.isRTL ? metrics?.insets.left : metrics?.insets.right) ?? 0,
+  };
+  const hasMetrics = metrics !== null;
   const { t } = useTranslation('chat');
   const { theme } = useAppTheme();
   const imageHeight = Math.max(ControlSize.floatingButton, screenHeight - insetsTop - insetsBottom
@@ -144,28 +149,56 @@ export function ImagePreviewModal({
   const overlayProgress = useSharedValue(0);
   const gestureMode = useSharedValue<0 | 1 | 2>(0);
   const gestureStartPageX = useSharedValue(0);
+  const closing = useSharedValue(false);
+  const geometryKey = `${screenWidth}:${screenHeight}`;
+  const activeGeometry = useSharedValue(geometryKey);
+  const geometryGeneration = useSharedValue(0);
+  const gestureGeneration = useSharedValue(-1);
+  const viewportWidth = useSharedValue(screenWidth);
+  const gestureGeometry = useSharedValue(geometryKey);
+
+  // A resized viewport keeps the selected image but invalidates an unfinished drag,
+  // including a fold/unfold cycle that returns to the same dimensions.
+  useLayoutEffect(() => {
+    activeGeometry.value = geometryKey;
+    geometryGeneration.value += 1;
+    viewportWidth.value = screenWidth;
+    gestureMode.value = 0;
+    cancelAnimation(pageTranslateX);
+    pageTranslateX.value = -currentIndex.value * screenWidth;
+    if (!closing.value) {
+      cancelAnimation(dismissTranslateY);
+      dismissTranslateY.value = 0;
+    }
+  }, [activeGeometry, closing, currentIndex, dismissTranslateY, geometryGeneration, geometryKey, gestureMode, pageTranslateX, screenWidth, viewportWidth]);
 
   useEffect(() => {
     closeRequestedRef.current = false;
-    if (!visible) setImageActionsIndex(null);
+    if (!visible) {
+      setImageActionsIndex(null);
+      setMetrics(null);
+    }
   }, [visible, uris]);
 
   useEffect(() => {
     currentIndex.value = index;
-    pageTranslateX.value = withSpring(-index * screenWidth, {
+    pageTranslateX.value = withSpring(-index * viewportWidth.value, {
       damping: 18,
       stiffness: 210,
       mass: 0.35,
     });
-  }, [currentIndex, index, pageTranslateX, screenWidth]);
+  }, [currentIndex, index, pageTranslateX, viewportWidth]);
 
   useEffect(() => {
     if (!visible) {
+      closing.value = false;
       overlayProgress.value = 0;
       dismissTranslateY.value = 0;
       return;
     }
 
+    // Resize updates the existing viewer; only a newly measured presentation enters.
+    if (!hasMetrics || closing.value) return;
     dismissTranslateY.value = OPEN_SHIFT;
     overlayProgress.value = 0;
     pageTranslateX.value = -index * screenWidth;
@@ -179,7 +212,7 @@ export function ImagePreviewModal({
       stiffness: 180,
       mass: 0.4,
     });
-  }, [dismissTranslateY, overlayProgress, pageTranslateX, screenWidth, visible]);
+  }, [closing, dismissTranslateY, hasMetrics, overlayProgress, pageTranslateX, visible]);
 
   const finishClose = useCallback(() => {
     if (closeRequestedRef.current) {
@@ -190,6 +223,9 @@ export function ImagePreviewModal({
   }, [onClose]);
 
   const animateClose = useCallback(() => {
+    if (closing.value) return;
+    closing.value = true;
+    if (!hasMetrics) { finishClose(); return; }
     overlayProgress.value = withTiming(0, {
       duration: 150,
       easing: Easing.out(Easing.quad),
@@ -206,7 +242,7 @@ export function ImagePreviewModal({
         }
       },
     );
-  }, [dismissTranslateY, finishClose, overlayProgress, screenHeight]);
+  }, [closing, dismissTranslateY, finishClose, hasMetrics, overlayProgress, screenHeight]);
 
   const setPageIndex = useCallback(
     (nextIndex: number) => {
@@ -261,16 +297,18 @@ export function ImagePreviewModal({
         .maxPointers(1)
         .onTouchesDown((_, manager) => {
           const currentScale = scales[currentIndex.value]?.value ?? 1;
-          if (!uris.length || currentScale > 1.02) {
+          if (!uris.length || closing.value || currentScale > 1.02) {
             manager.fail();
           }
         })
         .onStart(() => {
+          gestureGeometry.value = geometryKey;
+          gestureGeneration.value = geometryGeneration.value;
           gestureMode.value = 0;
           gestureStartPageX.value = pageTranslateX.value;
         })
         .onUpdate((event) => {
-          if (!uris.length) {
+          if (!uris.length || closing.value || gestureGeneration.value !== geometryGeneration.value || gestureGeometry.value !== activeGeometry.value || activeGeometry.value !== geometryKey) {
             return;
           }
 
@@ -309,7 +347,7 @@ export function ImagePreviewModal({
           pageTranslateX.value = applyEdgeResistance(nextTranslateX, minTranslateX, 0);
         })
         .onEnd((event) => {
-          if (!uris.length) {
+          if (!uris.length || closing.value || gestureGeneration.value !== geometryGeneration.value || gestureGeometry.value !== activeGeometry.value || activeGeometry.value !== geometryKey) {
             return;
           }
 
@@ -322,6 +360,7 @@ export function ImagePreviewModal({
               dismissTranslateY.value >= closeDistance ||
               event.velocityY >= SWIPE_VELOCITY_THRESHOLD
             ) {
+              closing.value = true;
               overlayProgress.value = withTiming(0, {
                 duration: 140,
                 easing: Easing.out(Easing.quad),
@@ -381,6 +420,7 @@ export function ImagePreviewModal({
           gestureMode.value = 0;
         })
         .onFinalize(() => {
+          if (closing.value || gestureGeneration.value !== geometryGeneration.value || gestureGeometry.value !== activeGeometry.value || activeGeometry.value !== geometryKey) return;
           if (gestureMode.value === 1) {
             dismissTranslateY.value = withSpring(0, {
               damping: 18,
@@ -391,6 +431,12 @@ export function ImagePreviewModal({
           gestureMode.value = 0;
         }),
     [
+      activeGeometry,
+      closing,
+      geometryKey,
+      geometryGeneration,
+      gestureGeneration,
+      gestureGeometry,
       currentIndex,
       dismissTranslateY,
       finishClose,
@@ -466,11 +512,12 @@ export function ImagePreviewModal({
 
   return (
     <>
-      <Modal visible={visible} animationType="none" transparent onRequestClose={animateClose}>
-        <ModalGestureRoot>
+      <Modal testID="image-preview-modal" visible={visible} animationType="none" transparent onRequestClose={animateClose}>
+        <PresentationSafeAreaProvider onMetrics={setMetrics} style={{ backgroundColor: PresentationColor.cameraBackground }}>
+        {hasMetrics ? <ModalGestureRoot>
           <Animated.View style={[styles.previewOverlay, overlayAnimatedStyle]}>
           <View pointerEvents="none" style={[styles.statusBarScrim, { height: insetsTop }]} />
-          <Animated.View style={[styles.previewClose, { top: insetsTop + Space.md }, closeButtonAnimatedStyle]}>
+          <Animated.View testID="image-preview-chrome" style={[styles.previewClose, { top: insetsTop + Space.md, start: horizontalEdges.start + Space.lg, end: horizontalEdges.end + Space.lg }, closeButtonAnimatedStyle]}>
             <View style={styles.actionBar}>
               {(['copy', 'save'] as const).map(kind => {
                 const Icon = action?.kind === kind && action.status === 'done' ? Check : kind === 'copy' ? Copy : Download;
@@ -498,8 +545,9 @@ export function ImagePreviewModal({
           </Animated.View>
 
           <GestureDetector gesture={Gesture.Simultaneous(panGesture, longPressGesture)}>
-            <Animated.View style={[styles.gestureSurface, contentAnimatedStyle]}>
+            <Animated.View testID="image-preview-viewport" style={[styles.gestureSurface, contentAnimatedStyle]}>
               <Animated.View
+                testID="image-preview-pages"
                 style={[
                   styles.pageRow,
                   { width: Math.max(uris.length, 1) * screenWidth },
@@ -527,7 +575,7 @@ export function ImagePreviewModal({
             </Animated.View>
           </GestureDetector>
 
-          <View style={[styles.viewerFooter, { bottom: Math.max(insetsBottom, Space.lg) }]}>
+          <View testID="image-preview-footer" style={[styles.viewerFooter, { bottom: Math.max(insetsBottom, Space.lg), start: horizontalEdges.start + Space.lg, end: horizontalEdges.end + Space.lg }]}>
             <Pressable testID="image-preview-zoom" accessibilityRole="button" accessibilityLabel={t('Zoom image')}
               onPress={() => {
                 const zoom = zoomRefs.current[index];
@@ -542,12 +590,13 @@ export function ImagePreviewModal({
             </Text> : null}
           </View>
           {uris.length > 1 ? (
-            <Text style={[styles.previewPager, { bottom: Math.max(insetsBottom, Space.lg) + ControlSize.floatingButton + Space.md }]}>
-              {index + 1} / {uris.length}
-            </Text>
+            <View style={{ position: 'absolute', alignItems: 'center', start: horizontalEdges.start + Space.lg, end: horizontalEdges.end + Space.lg, bottom: Math.max(insetsBottom, Space.lg) + ControlSize.floatingButton + Space.md }}>
+              <Text style={styles.previewPager}>{index + 1} / {uris.length}</Text>
+            </View>
           ) : null}
           </Animated.View>
-        </ModalGestureRoot>
+        </ModalGestureRoot> : null}
+        </PresentationSafeAreaProvider>
       </Modal>
       <Sheet
         visible={imageActionsIndex != null}
@@ -584,8 +633,6 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     previewClose: {
       position: 'absolute',
-      left: Space.lg,
-      right: Space.lg,
       flexDirection: 'row',
       justifyContent: 'space-between',
       gap: Space.sm,
@@ -596,7 +643,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     imageAction: { minHeight: ControlSize.floatingButton, borderRadius: Radius.full, paddingHorizontal: Space.md,
       flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Space.sm, flexShrink: 1 },
     imageActionText: { color: PresentationColor.onMedia, fontSize: FontSize.caption, lineHeight: LineHeight.caption, fontWeight: FontWeight.semibold, flexShrink: 1 },
-    viewerFooter: { position: 'absolute', left: Space.lg, right: Space.lg, alignItems: 'center', gap: Space.sm },
+    viewerFooter: { position: 'absolute', alignItems: 'center', gap: Space.sm },
     zoomHint: { minHeight: ControlSize.floatingButton, paddingHorizontal: Space.lg, borderRadius: Radius.full, flexDirection: 'row', alignItems: 'center', gap: Space.sm },
     feedback: { backgroundColor: PresentationColor.mediaOverlayStrong, borderRadius: Radius.full, paddingHorizontal: Space.md, paddingVertical: Space.xs, color: PresentationColor.onMedia, fontSize: FontSize.caption, lineHeight: LineHeight.caption },
     // A 15% white disc vanished over white screenshots (device review 2026-09-27); a dark
@@ -607,10 +654,12 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       borderColor: PresentationColor.onMediaBorder,
     },
     gestureSurface: {
+      direction: 'ltr',
       flex: 1,
       overflow: 'hidden',
     },
     pageRow: {
+      direction: 'ltr',
       flex: 1,
       flexDirection: 'row',
     },
@@ -624,8 +673,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       paddingBottom: Space.lg,
     },
     previewPager: {
-      position: 'absolute',
-      alignSelf: 'center',
+      textAlign: 'center',
       color: PresentationColor.onMedia,
       fontSize: FontSize.caption,
       backgroundColor: PresentationColor.mediaControl,

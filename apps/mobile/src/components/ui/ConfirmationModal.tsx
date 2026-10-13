@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { I18nManager, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X } from 'lucide-react-native';
 import { useAppTheme } from '../../theme';
 import {
@@ -13,6 +14,7 @@ import {
 } from '../../theme/tokens';
 import { Button } from './Button';
 import { FloatingButton } from './FloatingButton';
+import { PresentationSafeAreaProvider } from './PresentationSafeAreaProvider';
 
 export type ConfirmationModalProps = Readonly<{
   visible: boolean;
@@ -29,6 +31,19 @@ export type ConfirmationModalProps = Readonly<{
 /** App-owned centered confirmation chrome. */
 export function ConfirmationModal({
   visible,
+  onClose,
+  ...props
+}: ConfirmationModalProps): React.JSX.Element {
+  return (
+    <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose} statusBarTranslucent>
+      <PresentationSafeAreaProvider>
+        <ConfirmationContent {...props} onClose={onClose} />
+      </PresentationSafeAreaProvider>
+    </Modal>
+  );
+}
+
+function ConfirmationContent({
   title,
   message,
   cancelLabel,
@@ -37,7 +52,8 @@ export function ConfirmationModal({
   onConfirm,
   destructive = false,
   testID = 'confirmation-modal',
-}: ConfirmationModalProps): React.JSX.Element {
+}: Omit<ConfirmationModalProps, 'visible'>): React.JSX.Element {
+  const insets = useSafeAreaInsets();
   const { theme } = useAppTheme();
   const styles = useMemo(
     () => createStyles(theme.colors, theme.scheme),
@@ -45,57 +61,54 @@ export function ConfirmationModal({
   );
 
   return (
-    <Modal
-      transparent
-      visible={visible}
-      animationType="fade"
-      onRequestClose={onClose}
-      statusBarTranslucent
-    >
-      <View style={styles.root} accessibilityViewIsModal>
-        <Pressable
-          testID={`${testID}-backdrop`}
-          accessible={false}
-          onPress={onClose}
-          style={styles.backdrop}
-        />
-        <View testID={`${testID}-card`} style={styles.card}>
-          <View style={styles.header}>
-            <View style={styles.sideSlot} />
-            {/* Two lines: pairing names a computer (`Connect to Claude Code · Computer?`), which one line cut off. */}
-            <Text testID={`${testID}-title`} style={styles.title} numberOfLines={2}>{title}</Text>
-            <View style={styles.sideSlot}>
-              <FloatingButton
-                testID={`${testID}-close`}
-                icon={X}
-                onPress={onClose}
-                accessibilityLabel={cancelLabel}
-                appearance="plain"
-              />
-            </View>
-          </View>
-          <View testID={testID} style={styles.content}>
-            <Text style={styles.message} numberOfLines={4}>{message}</Text>
-            <View style={styles.actions}>
-              <Button
-                testID={`${testID}-cancel`}
-                label={cancelLabel}
-                variant="secondary"
-                onPress={onClose}
-                style={styles.action}
-              />
-              <Button
-                testID={`${testID}-confirm`}
-                label={confirmLabel}
-                variant={destructive ? 'destructive' : 'primary'}
-                onPress={onConfirm}
-                style={styles.action}
-              />
-            </View>
+    <View testID={`${testID}-safe-area`} style={[styles.root, {
+      paddingTop: insets.top + Space.xl,
+      paddingBottom: insets.bottom + Space.xl,
+      paddingStart: (I18nManager.isRTL ? insets.right : insets.left) + Space.xl,
+      paddingEnd: (I18nManager.isRTL ? insets.left : insets.right) + Space.xl,
+    }]} accessibilityViewIsModal>
+      <Pressable
+        testID={`${testID}-backdrop`}
+        accessible={false}
+        onPress={onClose}
+        style={styles.backdrop}
+      />
+      <View testID={`${testID}-card`} style={styles.card}>
+        <View style={styles.header}>
+          <View style={styles.sideSlot} />
+          {/* Two lines: pairing names a computer (`Connect to Claude Code · Computer?`), which one line cut off. */}
+          <Text testID={`${testID}-title`} style={styles.title} numberOfLines={2}>{title}</Text>
+          <View style={styles.sideSlot}>
+            <FloatingButton
+              testID={`${testID}-close`}
+              icon={X}
+              onPress={onClose}
+              accessibilityLabel={cancelLabel}
+              appearance="plain"
+            />
           </View>
         </View>
+        <ScrollView testID={testID} style={styles.scroll} contentContainerStyle={styles.content} bounces={false} keyboardShouldPersistTaps="handled">
+          <Text style={styles.message} numberOfLines={4}>{message}</Text>
+          <View style={styles.actions}>
+            <Button
+              testID={`${testID}-cancel`}
+              label={cancelLabel}
+              variant="secondary"
+              onPress={onClose}
+              style={styles.action}
+            />
+            <Button
+              testID={`${testID}-confirm`}
+              label={confirmLabel}
+              variant={destructive ? 'destructive' : 'primary'}
+              onPress={onConfirm}
+              style={styles.action}
+            />
+          </View>
+        </ScrollView>
       </View>
-    </Modal>
+    </View>
   );
 }
 
@@ -107,7 +120,6 @@ function createStyles(
     root: {
       flex: 1,
       justifyContent: 'center',
-      paddingHorizontal: Space.xl,
     },
     backdrop: {
       ...StyleSheet.absoluteFill,
@@ -116,7 +128,7 @@ function createStyles(
     card: {
       width: '100%',
       maxWidth: 440,
-      maxHeight: '60%',
+      maxHeight: '100%',
       alignSelf: 'center',
       borderRadius: Radius.xl,
       overflow: 'hidden',
@@ -149,6 +161,10 @@ function createStyles(
       paddingTop: Space.md,
       paddingBottom: Space.xl,
       gap: Space.xl,
+    },
+    scroll: {
+      flexGrow: 0,
+      flexShrink: 1,
     },
     message: {
       color: colors.inkSecondary,

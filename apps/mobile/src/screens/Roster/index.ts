@@ -1,5 +1,6 @@
 export {
   RosterScreen,
+  RosterController,
   RosterView,
   type RosterGraceBanner,
   type RosterScreenProps,

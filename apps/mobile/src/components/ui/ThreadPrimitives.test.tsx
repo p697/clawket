@@ -48,6 +48,7 @@ jest.mock('react-native', () => {
   );
   return {
     DynamicColorIOS: (variants: unknown) => ({ dynamic: variants }),
+    I18nManager: { isRTL: false },
     Keyboard: { dismiss: jest.fn() },
     PanResponder: { create: (config: Record<string, unknown>) => ({ panHandlers: { __config: config } }) },
     Modal: primitive('Modal'),

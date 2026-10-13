@@ -1,4 +1,5 @@
 import React from 'react';
+import { I18nManager } from 'react-native';
 import { act, render, waitFor } from '@testing-library/react-native';
 import { ProPaywallOverlay } from './ProPaywallOverlay';
 
@@ -10,10 +11,13 @@ const mockSelectPackage = jest.fn();
 var mockAnalytics: Record<string, jest.Mock>;
 
 let mockContext: Record<string, unknown>;
+let mockInsets = { top: 20, bottom: 34, left: 0, right: 0 };
 
 jest.mock('react-native', () => {
   const ReactRuntime = require('react');
   return {
+    I18nManager: { isRTL: false },
+    View: ({ children, ...props }: React.PropsWithChildren) => ReactRuntime.createElement('View', props, children),
     Alert: { alert: jest.fn() },
     Linking: { openURL: jest.fn(() => Promise.resolve()) },
     Modal: ({ children, ...props }: { children?: React.ReactNode }) => ReactRuntime.createElement('Modal', props, children),
@@ -22,6 +26,10 @@ jest.mock('react-native', () => {
     StyleSheet: { flatten: (style: unknown) => style ?? {} },
   };
 });
+
+jest.mock('../ui/PresentationSafeAreaProvider', () => ({ PresentationSafeAreaProvider: ({ children }: React.PropsWithChildren) => children }));
+jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => mockInsets }));
+jest.mock('../../theme', () => ({ useAppTheme: () => ({ theme: { colors: {} } }) }));
 
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -119,10 +127,35 @@ describe('ProPaywallOverlay', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockContext = baseContext();
+    mockInsets = { top: 20, bottom: 34, left: 0, right: 0 };
+    I18nManager.isRTL = false;
   });
 
   afterEach(() => {
     jest.restoreAllMocks();
+  });
+
+  it.each([false, true])('keeps a pending purchase and analytics session while safe edges change (RTL=%s)', async (rtl) => {
+    I18nManager.isRTL = rtl;
+    const purchase = deferred<{ success: boolean; reason: null }>();
+    mockPurchasePro.mockReturnValue(purchase.promise);
+    const onContinue = jest.fn();
+    const props = { visible: true, onClose: jest.fn(), onContinue };
+    const screen = render(<ProPaywallOverlay {...props} />);
+    const content = screen.getByTestId('mock-paywall-screen');
+    act(() => { content.props.onPurchase(); });
+    mockInsets = { top: 0, bottom: 24, left: 48, right: 0 };
+    screen.rerender(<ProPaywallOverlay {...props} />);
+    expect(screen.getByTestId('paywall-modal-safe-area').props.style).toMatchObject({ paddingStart: rtl ? 0 : 48, paddingEnd: rtl ? 48 : 0 });
+    expect(screen.getByTestId('mock-paywall-screen')).toBe(content);
+    act(() => { content.props.onPurchase(); });
+    mockInsets = { top: 0, bottom: 24, left: 0, right: 48 };
+    screen.rerender(<ProPaywallOverlay {...props} />);
+    expect(screen.getByTestId('paywall-modal-safe-area').props.style).toMatchObject({ paddingStart: rtl ? 48 : 0, paddingEnd: rtl ? 0 : 48 });
+    expect(mockPurchasePro).toHaveBeenCalledTimes(1);
+    expect(mockAnalytics.paywallViewed).toHaveBeenCalledTimes(1);
+    await act(async () => { purchase.resolve({ success: true, reason: null }); });
+    expect(onContinue).toHaveBeenCalledTimes(1);
   });
 
   it('gives the Android paywall window light status bar icons before presenting it', () => {

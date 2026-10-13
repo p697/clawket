@@ -1,13 +1,8 @@
 import { act, renderHook } from '@testing-library/react-native';
-import * as ReactNative from 'react-native';
 import { useChatImagePreview } from './useChatImagePreview';
 
 describe('useChatImagePreview', () => {
   it('opens preview with clamped index and resets state on close', () => {
-    jest
-      .spyOn(ReactNative, 'useWindowDimensions')
-      .mockReturnValue({ width: 390, height: 844, scale: 3, fontScale: 1 });
-
     const { result } = renderHook(() => useChatImagePreview());
 
     act(() => {

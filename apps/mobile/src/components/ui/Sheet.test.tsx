@@ -4,6 +4,13 @@ import { BackHandler, Platform } from 'react-native';
 import { Sheet } from './Sheet';
 import { Space } from '../../theme/tokens';
 
+let mockDimensions = { width: 390, height: 844, scale: 3, fontScale: 1 };
+let mockInsets = { top: 59, bottom: 34, left: 0, right: 0 };
+beforeEach(() => {
+  mockDimensions = { width: 390, height: 844, scale: 3, fontScale: 1 };
+  mockInsets = { top: 59, bottom: 34, left: 0, right: 0 };
+});
+
 jest.mock('react-native', () => {
   const ReactRuntime = require('react');
   const host = (name: string) => ({ children, ...props }: Record<string, unknown>) => (
@@ -19,12 +26,12 @@ jest.mock('react-native', () => {
     },
     Text: host('Text'),
     View: host('View'),
-    useWindowDimensions: () => ({ width: 390, height: 844, scale: 3, fontScale: 1 }),
+    useWindowDimensions: () => mockDimensions,
   };
 });
 
 jest.mock('react-native-safe-area-context', () => ({
-  useSafeAreaInsets: () => ({ top: 59, bottom: 34, left: 0, right: 0 }),
+  useSafeAreaInsets: () => mockInsets,
 }));
 
 // Mirrors gorhom's contract: the container renders `footerComponent` with the
@@ -48,11 +55,11 @@ jest.mock('./AdaptiveBottomSheetModal', () => {
   const { View } = require('react-native');
   return {
     AdaptiveBottomSheetModal: ReactRuntime.forwardRef(function AdaptiveBottomSheetModal(
-      { children }: { children: React.ReactNode },
+      { children, ...props }: { children: React.ReactNode },
       ref: React.Ref<{ present: () => void; dismiss: () => void }>,
     ) {
       ReactRuntime.useImperativeHandle(ref, () => ({ present: jest.fn(), dismiss: jest.fn() }));
-      return ReactRuntime.createElement(View, { testID: 'modal' }, children);
+      return ReactRuntime.createElement(View, { ...props, testID: 'modal' }, children);
     }),
   };
 });
@@ -68,8 +75,8 @@ jest.mock('./SheetHeader', () => {
   };
 });
 jest.mock('./ThemedFullWindowOverlay', () => ({ ThemedFullWindowOverlay: ({ children }: { children: React.ReactNode }) => children }));
-jest.mock('../../utils/platform', () => ({ isIPad: false }));
-jest.mock('../../utils/ipad-layout', () => ({ getIpadModalSheetMetrics: () => ({ height: 0 }) }));
+jest.mock('../../utils/platform', () => ({ getRuntimePlatform: () => require('react-native').Platform.OS }));
+
 jest.mock('../../theme', () => ({
   useAppTheme: () => ({ theme: { colors: { canvas: '#ffffff', canvasGrouped: '#f5f5f7' } } }),
 }));
@@ -127,6 +134,40 @@ describe('Sheet footer', () => {
 });
 
 describe('Content-sized sheet', () => {
+  it('uses the same available-width boundary as the centered iPhone shell', () => {
+    mockDimensions = { ...mockDimensions, width: 650, height: 960 };
+    const sheet = () => <Sheet visible onClose={jest.fn()} closeAccessibilityLabel="Close" testID="sheet">body</Sheet>;
+    const view = render(sheet());
+    expect(flatten(view.getByTestId('sheet').props.style).height).toBeUndefined();
+    expect(flatten(view.getByTestId('sheet').props.style).maxHeight).toBe(720 - Space.lg);
+    fireEvent(view.getByTestId('sheet'), 'layout', { nativeEvent: { layout: { width: 602, height: 200 } } });
+    expect(view.getByTestId('modal').props.preferredHeight).toBe(200 + Space.lg);
+    mockInsets = { ...mockInsets, left: 40, right: 20 };
+    view.rerender(sheet());
+    expect(flatten(view.getByTestId('sheet').props.style).height).toBeUndefined();
+    expect(flatten(view.getByTestId('sheet-body').props.style).flex).toBeUndefined();
+    expect(view.getByTestId('modal').props.preferredHeight).toBeUndefined();
+  });
+
+  it('caps natural content using the presentation frame and ignores a delayed measurement at another width', () => {
+    const view = render(<Sheet visible onClose={jest.fn()} closeAccessibilityLabel="Close" maxHeight={350} testID="sheet">body</Sheet>);
+    const measure = (width: number, height: number) => fireEvent(view.getByTestId('sheet'), 'layout', { nativeEvent: { layout: { width, height } } });
+    fireEvent(view.getByTestId('modal'), 'presentationMetrics', { frame: { x: 0, y: 0, width: 951, height: 669 }, insets: { top: 0, left: 0, right: 84, bottom: 34 } });
+    measure(640, 500);
+    expect(view.getByTestId('modal').props.preferredHeight).toBe(350);
+    measure(640, 200);
+    expect(view.getByTestId('modal').props.preferredHeight).toBe(200 + Space.lg);
+    fireEvent(view.getByTestId('modal'), 'presentationMetrics', { frame: { x: 0, y: 0, width: 669, height: 951 }, insets: { top: 82, left: 0, right: 0, bottom: 34 } });
+    measure(640, 400);
+    expect(view.getByTestId('modal').props.preferredHeight).toBeUndefined();
+    measure(621, 220);
+    expect(view.getByTestId('modal').props.preferredHeight).toBe(220 + Space.lg);
+    measure(640, 400);
+    expect(view.getByTestId('modal').props.preferredHeight).toBe(220 + Space.lg);
+    expect(flatten(view.getByTestId('sheet').props.style).height).toBeUndefined();
+    expect(flatten(view.getByTestId('sheet-body').props.style).flex).toBeUndefined();
+  });
+
   it('hands Gorhom one flat style so the padding, tone and viewport limit survive', () => {
     const { Text } = require('react-native');
     const view = render(

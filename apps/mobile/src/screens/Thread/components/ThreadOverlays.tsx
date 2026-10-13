@@ -15,10 +15,6 @@ type PreviewState = Readonly<{
   visible: boolean;
   uris: string[];
   index: number;
-  width: number;
-  height: number;
-  topInset: number;
-  bottomInset: number;
   onClose: () => void;
   onIndexChange: (index: number) => void;
 }>;
@@ -145,10 +141,6 @@ export function ThreadOverlays({
         visible={preview.visible}
         uris={preview.uris}
         index={preview.index}
-        screenWidth={preview.width}
-        screenHeight={preview.height}
-        insetsTop={preview.topInset}
-        insetsBottom={preview.bottomInset}
         onClose={preview.onClose}
         onIndexChange={preview.onIndexChange}
       />

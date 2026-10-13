@@ -25,6 +25,8 @@ export type MessageActionsLayout = Readonly<{
   scrollEnabled: boolean;
   menuTop: number;
   menuLeft: number;
+  menuWidth: number;
+  menuHeight: number;
 }>;
 
 export type MessageActionsLayoutInput = Readonly<{
@@ -39,6 +41,9 @@ export type MessageActionsLayoutInput = Readonly<{
   contentInset: number;
   topInset: number;
   bottomInset: number;
+  leftInset?: number;
+  rightInset?: number;
+  isRTL?: boolean;
   screenWidth: number;
   screenHeight: number;
 }>;
@@ -46,7 +51,6 @@ export type MessageActionsLayoutInput = Readonly<{
 export const MESSAGE_ACTIONS_MENU_GAP = Space.md;
 const EDGE_MARGIN = Space.sm;
 const MENU_SIDE_MARGIN = Space.lg;
-const MIN_MESSAGE_HEIGHT = 40;
 
 function clamp(value: number, min: number, max: number): number {
   if (max < min) return min;
@@ -90,6 +94,9 @@ export function computeMessageActionsLayout({
   contentInset,
   topInset,
   bottomInset,
+  leftInset = 0,
+  rightInset = 0,
+  isRTL = false,
   screenWidth,
   screenHeight,
 }: MessageActionsLayoutInput): MessageActionsLayout | null {
@@ -98,42 +105,50 @@ export function computeMessageActionsLayout({
   if (!isPositiveFinite(contentHeight)) return null;
 
   const usableAnchor = isUsableAnchor(anchor) ? anchor : null;
-  const topBound = Math.max(topInset, 0) + EDGE_MARGIN;
-  const bottomBound = screenHeight - Math.max(bottomInset, 0) - EDGE_MARGIN;
-  const availableForMessage = bottomBound - topBound - menuHeight - MESSAGE_ACTIONS_MENU_GAP;
+  const leftBound = Math.min(screenWidth, Math.max(leftInset, 0));
+  const rightBound = Math.max(leftBound, screenWidth - Math.max(rightInset, 0));
+  const safeWidth = rightBound - leftBound;
+  const sideMargin = Math.min(MENU_SIDE_MARGIN, safeWidth / 2);
+  const safeTop = Math.min(screenHeight, Math.max(topInset, 0));
+  const safeBottom = Math.max(safeTop, screenHeight - Math.max(bottomInset, 0));
+  const edgeMargin = Math.min(EDGE_MARGIN, (safeBottom - safeTop) / 2);
+  const topBound = safeTop + edgeMargin;
+  const bottomBound = safeBottom - edgeMargin;
+  const boundedMenuWidth = Math.min(menuWidth, Math.max(0, safeWidth - sideMargin * 2));
+  const boundedMenuHeight = Math.min(menuHeight, bottomBound - topBound);
+  const remainingHeight = bottomBound - topBound - boundedMenuHeight;
+  const gap = Math.min(MESSAGE_ACTIONS_MENU_GAP, remainingHeight);
+  const availableForMessage = Math.max(0, remainingHeight - gap);
 
-  const messageWidth = usableAnchor ? Math.min(usableAnchor.width, screenWidth) : screenWidth;
-  const messageHeight = Math.max(
-    Math.min(contentHeight, availableForMessage),
-    Math.min(contentHeight, MIN_MESSAGE_HEIGHT),
-  );
+  const messageWidth = usableAnchor ? Math.min(usableAnchor.width, safeWidth) : safeWidth;
+  const messageHeight = Math.min(contentHeight, availableForMessage);
   const scrollEnabled = contentHeight > messageHeight + 0.5;
 
   const cloneAnchor = getMessageCloneAnchor(usableAnchor, contentHeight);
   const naturalTop = cloneAnchor ? cloneAnchor.top : topBound;
-  const messageLeft = usableAnchor ? clamp(usableAnchor.x, 0, screenWidth - messageWidth) : 0;
+  const messageLeft = usableAnchor ? clamp(usableAnchor.x, leftBound, rightBound - messageWidth) : leftBound;
   const messageTop = clamp(
     naturalTop,
     topBound,
-    bottomBound - menuHeight - MESSAGE_ACTIONS_MENU_GAP - messageHeight,
+    bottomBound - boundedMenuHeight - gap - messageHeight,
   );
   // A message that starts above the viewport is pulled down to the top bound.
   // Scrolling the clone by the same distance keeps the pressed content where
   // the finger was instead of jumping to the start of the message.
   const scrollOffset = clamp(messageTop - naturalTop, 0, Math.max(0, contentHeight - messageHeight));
-  const menuTop = messageTop + messageHeight + MESSAGE_ACTIONS_MENU_GAP;
+  const menuTop = messageTop + messageHeight + gap;
 
   const contentLeft = messageLeft + contentInset;
   const contentRight = messageLeft + messageWidth - contentInset;
   const preferredMenuLeft = usableAnchor
-    ? role === 'user'
-      ? contentRight - menuWidth
+    ? (role === 'user') !== isRTL
+      ? contentRight - boundedMenuWidth
       : contentLeft
-    : (screenWidth - menuWidth) / 2;
+    : leftBound + (safeWidth - boundedMenuWidth) / 2;
   const menuLeft = clamp(
     preferredMenuLeft,
-    MENU_SIDE_MARGIN,
-    screenWidth - menuWidth - MENU_SIDE_MARGIN,
+    leftBound + sideMargin,
+    rightBound - boundedMenuWidth - sideMargin,
   );
 
   return {
@@ -145,6 +160,8 @@ export function computeMessageActionsLayout({
     scrollEnabled,
     menuTop,
     menuLeft,
+    menuWidth: boundedMenuWidth,
+    menuHeight: boundedMenuHeight,
   };
 }
 
@@ -152,7 +169,9 @@ export function computeMessageActionsLayout({
 export function canReturnToAnchor(
   anchor: MessageAnchorFrame | null,
   screenHeight: number,
+  screenWidth: number,
 ): anchor is MessageAnchorFrame {
-  if (!isUsableAnchor(anchor) || !isPositiveFinite(screenHeight)) return false;
-  return anchor.y + anchor.height > 0 && anchor.y < screenHeight;
+  if (!isUsableAnchor(anchor) || !isPositiveFinite(screenHeight) || !isPositiveFinite(screenWidth)) return false;
+  return anchor.y + anchor.height > 0 && anchor.y < screenHeight
+    && anchor.x + anchor.width > 0 && anchor.x < screenWidth;
 }

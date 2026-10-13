@@ -138,6 +138,7 @@ export type RosterScreenProps = Readonly<{
   isPro?: boolean;
   accountAttentionCount?: number;
   onReviewInteraction?: () => void;
+  onReviewBusyChange?: (busy: boolean) => void;
   onOpenAccount: () => void;
   onSearch: () => void;
   onAdd: () => void;
@@ -427,7 +428,7 @@ export function RosterView({
   onOpenPro,
 }: RosterViewProps): React.JSX.Element {
   const { t } = useTranslation('common');
-  const { dismissRoster } = useWorkspaceLayout();
+  const { dismissRoster, paneWidth } = useWorkspaceLayout();
   const { theme } = useAppTheme();
   const insets = useSafeAreaInsets();
   const swipeGroup = useSwipeableRowGroup();
@@ -627,7 +628,8 @@ export function RosterView({
         accessibilityLabel={t('Add Connection', { ns: 'config' })}
         onPress={onAdd}
         style={[styles.addButton, {
-          right: insets.right + Space.xl,
+          right: paneWidth === undefined ? insets.right + Space.xl : undefined,
+          end: paneWidth !== undefined ? Space.xl : undefined,
           bottom: insets.bottom + Space.xl,
         }]}
       />
@@ -635,7 +637,13 @@ export function RosterView({
   );
 }
 
-export function RosterScreen({
+export function RosterScreen(props: RosterScreenProps): React.JSX.Element {
+  return <RosterController {...props}>{(viewProps) => <RosterView {...viewProps} />}</RosterController>;
+}
+
+// Keep tasks and their sheets alive while the workspace moves the list between hosts.
+export function RosterController({
+  children,
   presentation = 'page',
   selectedThread,
   onManageActiveConnection,
@@ -649,6 +657,7 @@ export function RosterScreen({
   isPro = false,
   accountAttentionCount = 0,
   onReviewInteraction,
+  onReviewBusyChange,
   onOpenAccount,
   onSearch,
   onAdd,
@@ -664,7 +673,7 @@ export function RosterScreen({
   onRenameSession,
   onGraceAction,
   onOpenPro,
-}: RosterScreenProps): React.JSX.Element {
+}: RosterScreenProps & { children: (props: RosterViewProps) => React.ReactNode }): React.JSX.Element {
   const { t } = useTranslation(['common', 'chat', 'config']);
   const { theme } = useAppTheme();
   const connections = useConnections();
@@ -683,6 +692,12 @@ export function RosterScreen({
   useEffect(() => {
     if (refreshing || addVisible || actionRow || removeRow || renameRow) onReviewInteraction?.();
   }, [refreshing, addVisible, actionRow, removeRow, renameRow, onReviewInteraction]);
+  const reviewBusy = Boolean(refreshing || addVisible || actionRow || removeRow || renameRow);
+  // A persistent task may already be open when navigation creates a new review opportunity.
+  useEffect(() => {
+    onReviewBusyChange?.(reviewBusy);
+    return () => onReviewBusyChange?.(false);
+  }, [reviewBusy, onReviewBusyChange]);
   const rows = useMemo(() => buildRosterRows(roster, {
     runActivities: connections.runActivities,
     ...(pinnedSessionKeys ? { pinnedSessionKeys } : {}),
@@ -867,35 +882,35 @@ export function RosterScreen({
 
   return (
     <>
-      <RosterView
-        onReviewInteraction={onReviewInteraction}
-        selectedThread={presentation === 'sidebar' ? selectedThread : undefined}
-        connecting={connections.activeState === 'connecting' || connections.activeState === 'handshaking'}
-        connectionFailure={shownFailure ? { ...shownFailure, retrying: heldForActive !== undefined } : undefined}
-        state={state}
-        rows={rows}
-        activeConnectionId={connections.activeConnectionId}
-        liveConnectionId={liveConnectionId}
-        refreshing={refreshing}
-        graceBanner={graceBanner}
-        accountBadge={accountBadge}
-        showProEntry={!isPro}
-        recovering={connections.recovering}
-        showOfflineBanner={offline}
-        showErrorBanner={connections.error !== null && !offline}
-        rosterError={connections.error?.operation === 'roster' && connections.activeState === 'ready'}
-        onOpenAccount={onOpenAccount}
-        onSearch={onSearch}
-        onAdd={() => addActions.length === 1 ? onAdd() : setAddVisible(true)}
-        onOpenRow={onOpenRow}
-        onOpenLockedRow={onOpenLockedRow}
-        onLongPressRow={handleLongPressRow}
-        rowSwipeActions={rowSwipeActions}
-        onRefresh={refresh}
-        onReconnect={reconnect}
-        onGraceAction={onGraceAction}
-        onOpenPro={onOpenPro}
-      />
+      {children({
+        onReviewInteraction,
+        selectedThread: presentation === 'sidebar' ? selectedThread : undefined,
+        connecting: connections.activeState === 'connecting' || connections.activeState === 'handshaking',
+        connectionFailure: shownFailure ? { ...shownFailure, retrying: heldForActive !== undefined } : undefined,
+        state,
+        rows,
+        activeConnectionId: connections.activeConnectionId,
+        liveConnectionId,
+        refreshing,
+        graceBanner,
+        accountBadge,
+        showProEntry: !isPro,
+        recovering: connections.recovering,
+        showOfflineBanner: offline,
+        showErrorBanner: connections.error !== null && !offline,
+        rosterError: connections.error?.operation === 'roster' && connections.activeState === 'ready',
+        onOpenAccount,
+        onSearch,
+        onAdd: () => addActions.length === 1 ? onAdd() : setAddVisible(true),
+        onOpenRow,
+        onOpenLockedRow,
+        onLongPressRow: handleLongPressRow,
+        rowSwipeActions,
+        onRefresh: refresh,
+        onReconnect: reconnect,
+        onGraceAction,
+        onOpenPro,
+      })}
       <Sheet
         testID="roster-add-sheet"
         visible={addVisible}

@@ -1176,10 +1176,6 @@ function ThreadScreenContent({
           visible: controller.preview.previewVisible && (!sessionPreview || visibleMessages.some((message) => message.imageUris?.some((uri) => controller.preview.previewUris.includes(uri)))),
           uris: controller.preview.previewUris,
           index: controller.preview.previewIndex,
-          width: controller.preview.screenWidth,
-          height: controller.preview.screenHeight,
-          topInset: insets.top,
-          bottomInset: insets.bottom,
           onClose: controller.preview.closePreview,
           onIndexChange: controller.preview.setPreviewIndex,
         }}

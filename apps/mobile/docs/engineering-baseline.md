@@ -52,6 +52,8 @@ With only the two production files restored to prerequisite `7bf33d97`, the sele
 
 ## Native synchronization
 
+`modules/clawket-reserved-regions` is a local Apple-only Expo view module for the scanner. Its Objective-C helper isolates iOS 27.1 symbols with SDK and runtime availability checks; the Swift/TypeScript boundary contains only view-local numeric rectangles. Old SDK/iOS and Catalyst builds use empty regions, and non-iOS or older development clients without the module retain the existing safe-area layout. Adding this module requires a native development rebuild; Metro reload alone cannot validate it. Same-bounds fold transitions must be tested on the actual runtime to verify UIKit observation, separately from static region queries.
+
 After changing Expo, React Native, an Expo module, or another native dependency:
 
 1. Run `npm run mobile:sync:native` from the monorepo root.
@@ -214,3 +216,18 @@ The QA viewport module resolves Expo 57's generic exposed `Context` only when it
 ## Source-map and test worker security pins
 
 Root and standalone Mobile pin `source-map-js` 1.2.2 for [GHSA-68fv-2mgg-jv7q](https://github.com/advisories/GHSA-68fv-2mgg-jv7q). The root pins Vitest's `tinypool` to 2.1.2 for [worker-option pollution](https://github.com/advisories/GHSA-5gmw-xhrv-c9v3) and [run-option pollution](https://github.com/advisories/GHSA-85c8-ppgw-ccpr). The latter raises its Node minimum from 18 to 20, within this repository's Node 22 baseline; Vitest stays on 3.2.7, with its existing bounded worker/isolation configuration and worker-thread/child-process API. Only those two transitive packages change. Verify both real audits plus focused real Vitest thread/fork consumers after changing the override. This introduces no new audit exceptions, native package changes or release work.
+
+## Bottom sheet resize compatibility
+
+`patch-bottom-sheet-layout.mjs` is reviewed against @gorhom/bottom-sheet 5.2.14. Its `useAnimatedLayout` reactions originally observed only the raw container height; a later safe-area/centering-inset update reused that height and skipped recalculation. The Duo theme sheet consequently extended beyond the portrait screen after rotation, while dismiss/reopen restored its bounds. A second defect rejected the valid zero detent in the resize position setter; effective height alone did not resolve the native failure. Both reactions now observe effective height and the setter accepts zero, retaining the unmeasured sentinel, non-modal geometry, existing shared state and sheet content. No imperative snap, key change or keyboard/offset rewrite is used.
+
+Root and standalone Mobile postinstall validate all six hook/component entries across source, CommonJS and ES modules before writing; exact version and source hashes reject drift and partial patches. The required gate exercises the retained upstream hook against both height sources and both event orders with reaction history preserved, plus installation integrity. This JavaScript patch requires a new bundle, not a native dependency upgrade; native rotation/state acceptance remains distinct from the controlled hook test.
+
+
+### Image picker Live Photo opt-in
+
+`patch-expo-image-picker-live-photo.mjs` is reviewed against expo-image-picker 57.0.18 and the complete SHA-256 of `ios/MediaHandler.swift`. It backports [Expo PR #50435](https://github.com/expo/expo/pull/50435): first check `options.mediaTypes.contains(.livePhotos)`, then query `hasItemConformingToTypeIdentifier(UTType.livePhoto.identifier)` instead of introspecting the Live Photo class. On the iOS 27.1 Duo simulator, selecting an image-only QR triggered an Objective-C exception inside `PHLivePhoto.readableTypeIdentifiersForItemProvider`; Swift cannot catch that exception. Both postinstall entry points apply the idempotent patch and the required gate verifies source drift, missing inputs and version changes. Live Photo handling and image/video fallback branches stay intact. Official npm 57.0.19 and 57.0.20 still contain the original probe; avoid a whole SDK migration for this source fix. Actual Live Photo delivery remains outside this image-only acceptance. Native selection and decoding must be retested after each upgrade.
+
+Compact adaptive iOS sheets also consume local left/right safe insets through direction-aware container margins. The native Duo session panel originally put New session under the right system bar (x406…450 in a 466pt window with right inset84); the corrected panel is382pt wide and its44pt action is x322…366. Preserve the same Gorhom host, content, detents and keyboard policy while changing these margins. Non-iOS and explicitly non-adaptive callers retain their own geometry.
+
+Local Duo simulator builds must use Xcode simulator ad-hoc signing (`CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM=`). Disabling signing omitted the main executable’s simulated entitlement sections and connection persistence failed at SecureStore. Standard signing generates the simulator application identifier and restores pairing; this is a local Debug build, not a distribution package or production entitlement change.

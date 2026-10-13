@@ -1860,7 +1860,7 @@ export function ThreadView({
             onExpandedChange={setComposerExpanded}
             appearance={wallpaperActive ? 'glass' : 'surface'}
             editable
-            style={[styles.composer, workspace.tablet ? { width: Math.max(0, Math.min(workspace.paneWidth, IPAD_CHAT_MAX_WIDTH) - Space.lg * 2), alignSelf: 'center' } : null]}
+            style={[styles.composer, workspace.constrainContent && workspace.paneWidth !== undefined ? { width: Math.max(0, Math.min(workspace.paneWidth, IPAD_CHAT_MAX_WIDTH) - Space.lg * 2), alignSelf: 'center' } : null]}
           />
         </View>
       ) : null}
@@ -1898,8 +1898,6 @@ export function ThreadView({
           selection={messageSelection}
           message={selectedActionMessage}
           favorited={selectedActionMessage ? favoriteMessageIds?.has(selectedActionMessage.id) ?? false : false}
-          topInset={topInset}
-          bottomInset={bottomInset}
           contentInset={THREAD_ROW_INSET}
           renderMessage={renderSelectedMessage}
           onCopy={messageActions.onCopy}
@@ -2135,6 +2133,11 @@ const ThreadMessageTimelineItem = React.memo(function ThreadMessageTimelineItem(
 }: ThreadMessageTimelineItemProps): React.JSX.Element | null {
   const { t } = useTranslation('chat');
   const rowRef = useRef<View>(null);
+  const rowMountedRef = useRef(true);
+  useEffect(() => {
+    rowMountedRef.current = true;
+    return () => { rowMountedRef.current = false; };
+  }, []);
   // FlashList may reuse this row for another message; a stale measurement
   // closure must notice and report nothing rather than the wrong frame.
   const messageIdRef = useRef(message.id);
@@ -2150,15 +2153,18 @@ const ThreadMessageTimelineItem = React.memo(function ThreadMessageTimelineItem(
     }
     node.measureInWindow((x, y, width, height) => {
       const frame = { x, y, width, height };
-      callback(isUsableAnchor(frame) ? frame : null);
+      callback(rowMountedRef.current && rowRef.current === node && messageIdRef.current === expectedId && isUsableAnchor(frame) ? frame : null);
     });
   }, []);
   const handleLongPress = useCallback(() => {
     if (!onLongPress) return;
     const expectedId = message.id;
+    const expectedNode = rowRef.current;
     triggerLightImpact();
     const remeasure: MessageAnchorRemeasure = (callback) => measureRow(expectedId, callback);
-    remeasure((anchor) => onLongPress(message, anchor, remeasure));
+    remeasure((anchor) => {
+      if (rowMountedRef.current && rowRef.current === expectedNode && messageIdRef.current === expectedId) onLongPress(message, anchor, remeasure);
+    });
   }, [measureRow, message, onLongPress]);
 
   let content: React.ReactNode;
@@ -2375,7 +2381,7 @@ function UserBubble({
   const workspace = useWorkspaceLayout();
   const surfaces = useChatSurfaces();
   const surface = incoming ? surfaces.incoming : surfaces.outgoing;
-  const paneWidth = Math.min(workspace.tablet ? workspace.paneWidth : windowWidth, IPAD_CHAT_MAX_WIDTH);
+  const paneWidth = Math.min(workspace.paneWidth ?? windowWidth, IPAD_CHAT_MAX_WIDTH);
   const contentWidth = Math.max(0, (paneWidth - THREAD_ROW_INSET * 2) * (incoming ? 0.92 : 0.82)
     - Space.md * 2 - surface.borderWidth * 2);
   // Android leaves CJK lines low in their line box (`chat/textCentering`):
@@ -2445,7 +2451,7 @@ const MESSAGE_ALBUM_WIDTH_RATIO = 0.76;
 function useMessageAlbumWidth(): number {
   const { width } = useWindowDimensions();
   const workspace = useWorkspaceLayout();
-  const availableWidth = workspace.tablet ? workspace.paneWidth : width;
+  const availableWidth = workspace.paneWidth ?? width;
   return Math.round(Math.max(0, Math.min(availableWidth, IPAD_CHAT_MAX_WIDTH) - THREAD_ROW_INSET * 2) * MESSAGE_ALBUM_WIDTH_RATIO);
 }
 

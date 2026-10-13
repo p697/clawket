@@ -1,3 +1,10 @@
+// Keep the real confirmation flow; native presentation measurement has its own boundary test.
+jest.mock('../../components/ui/PresentationSafeAreaProvider', () => ({
+  PresentationSafeAreaProvider: ({ children }: React.PropsWithChildren) => children,
+}));
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 44, bottom: 34, left: 0, right: 0 }),
+}));
 // Keep the real attachment components; native file/share behavior has its own focused tests.
 jest.mock('expo-file-system', () => ({
   Paths: { cache: 'file:///cache' }, FileMode: { WriteOnly: 1 },
@@ -25,6 +32,36 @@ import { preserveHydratedMessageKeys } from '../../chat/historyMergePolicy';
 import { ThreadView, resolveThreadHeaderHeight, type ThreadCopy, type ThreadViewProps } from './ThreadView';
 import type { ThreadRunCard } from './model';
 import { messageMetaSpacer } from '../../components/chat/MessageMeta';
+import { WorkspaceContext } from '../../navigation/workspace-context';
+
+it('keeps the editor, draft and timeline when the available pane changes without sending or navigating', () => {
+  const { FlashList } = require('@shopify/flash-list');
+  const { Composer } = require('../../components/ui/Composer');
+  const { StyleSheet } = require('react-native');
+  const props = createProps({ input: '保留中文草稿' });
+  const tree = (paneWidth: number | undefined, constrainContent = false) => <WorkspaceContext.Provider value={{ paneWidth, constrainContent }}><ThreadView {...props} /></WorkspaceContext.Provider>;
+  const view = render(tree(894, true));
+  const input = view.getByTestId('thread-screen-composer-input');
+  const list = view.UNSAFE_getByType(FlashList);
+  const composer = () => view.UNSAFE_getByType(Composer);
+  expect(StyleSheet.flatten(composer().props.style).width).toBe(760 - Space.lg * 2);
+  view.rerender(tree(656, true));
+  expect(StyleSheet.flatten(composer().props.style).width).toBe(656 - Space.lg * 2);
+  for (const width of [390, undefined, 894]) {
+    view.rerender(tree(width, width === 894));
+    expect(view.getByTestId('thread-screen-composer-input')).toBe(input);
+    expect(view.UNSAFE_getByType(FlashList)).toBe(list);
+    expect(composer().props.value).toBe('保留中文草稿');
+    if (width !== 894) {
+      expect(StyleSheet.flatten(composer().props.style)).toMatchObject({ marginHorizontal: Space.md });
+      expect(StyleSheet.flatten(composer().props.style).width).toBeUndefined();
+      expect(StyleSheet.flatten(composer().props.style).alignSelf).toBeUndefined();
+    }
+  }
+  expect(props.onSend).not.toHaveBeenCalled();
+  expect(props.onBack).not.toHaveBeenCalled();
+  expect(props.onChangeInput).not.toHaveBeenCalled();
+});
 
 it.each(['ios', 'android'])('uses the stable platform keyboard padding container with its safe-area offset on %s', (platform) => {
   const { Platform } = require('react-native');
@@ -2124,6 +2161,38 @@ describe('ThreadView', () => {
     expect(measured).toHaveBeenCalledWith(null);
     act(() => overlay.props.onClosed());
     expect(view.queryByTestId('thread-message-actions')).toBeNull();
+  });
+
+  it('rejects a long-press measurement delivered after the cell was recycled', () => {
+    const first: UiMessage = { id: 'measure-old', role: 'assistant', text: 'Old row' };
+    const next: UiMessage = { id: 'measure-new', role: 'assistant', text: 'New row' };
+    const pending: Array<(x: number, y: number, width: number, height: number) => void> = [];
+    const node = { measureInWindow: jest.fn(callback => pending.push(callback)) };
+    const props = createProps({ messages: [first, next], messageActions: { onCopy: jest.fn(), onToggleFavorite: jest.fn(), onShare: jest.fn() } });
+    mockRecycledTimelineMessageId = first.id;
+    const view = render(<ThreadView {...props} />, { createNodeMock: element => (element.props as { testID?: string }).testID?.startsWith('thread-message-measure-') ? node : null });
+    fireEvent(view.getByTestId('thread-message-measure-old'), 'longPress');
+    expect(pending).toHaveLength(1);
+    mockRecycledTimelineMessageId = next.id;
+    view.rerender(<ThreadView {...props} input="rerender" />);
+    act(() => pending[0](0, 300, 393, 120));
+    expect(view.queryByTestId('thread-message-actions')).toBeNull();
+    mockRecycledTimelineMessageId = null;
+  });
+
+  it('rejects a close measurement delivered after its row unmounted', () => {
+    const message: UiMessage = { id: 'measure-retire', role: 'assistant', text: 'Retired row' };
+    const pending: Array<(x: number, y: number, width: number, height: number) => void> = [];
+    const node = { measureInWindow: jest.fn(callback => pending.push(callback)) };
+    const props = createProps({ messages: [message], messageActions: { onCopy: jest.fn(), onToggleFavorite: jest.fn(), onShare: jest.fn() } });
+    const view = render(<ThreadView {...props} />, { createNodeMock: element => (element.props as { testID?: string }).testID === 'thread-message-measure-retire' ? node : null });
+    fireEvent(view.getByTestId('thread-message-measure-retire'), 'longPress');
+    act(() => pending[0](0, 300, 393, 120));
+    const measured = jest.fn();
+    view.getByTestId('thread-message-actions').props.selection.remeasure(measured);
+    view.unmount();
+    act(() => pending[1](0, 300, 393, 120));
+    expect(measured).toHaveBeenCalledWith(null);
   });
 
   it('lifts only the message block into the actions overlay and drops identity chrome', () => {

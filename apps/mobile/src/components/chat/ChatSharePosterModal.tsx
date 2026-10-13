@@ -1,8 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Image,
+  I18nManager,
   Modal,
   Platform,
   Pressable,
@@ -11,7 +12,6 @@ import {
   Text,
   TouchableOpacity,
   View,
-  useWindowDimensions,
 } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
 import * as MediaLibrary from 'expo-media-library/legacy';
@@ -20,10 +20,11 @@ import * as Sharing from 'expo-sharing';
 import { EnrichedMarkdownText } from 'react-native-enriched-markdown';
 import { Download, Share2, X } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaFrame, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CHAT_MARKDOWN_BREAK_STRATEGY, getChatMarkdownFlavor, openChatMarkdownLink } from './chatMarkdown';
 import {
   BorderWidth,
+  ControlSize,
   FontSize,
   FontWeight,
   IconSize,
@@ -41,6 +42,7 @@ import { sanitizeDisplayText } from '../../utils/chat-message';
 import { PosterThemePicker } from '../poster/PosterThemePicker';
 import { getPosterThemeForAccent } from '../poster/posterThemes';
 import { ThemedSwitch } from '../ui/ThemedSwitch';
+import { PresentationSafeAreaProvider } from '../ui/PresentationSafeAreaProvider';
 
 // ---- Types ----
 
@@ -78,9 +80,6 @@ const C = {
 
 const CHAT_MARKDOWN_FLAVOR = getChatMarkdownFlavor();
 
-// Close button + toggle + actions + margins
-const CHROME_HEIGHT = 36 + 44 + 52 + 48;
-
 // Matches the poster avatar box and the app's face proportion for official marks.
 const POSTER_AVATAR_SIZE = 56;
 const POSTER_FACE_GLYPH = 0.54;
@@ -102,12 +101,30 @@ export function ChatSharePosterModal({
   const { t, i18n } = useTranslation('chat');
   const { accentId } = useAppTheme();
   const locale = i18n.resolvedLanguage ?? i18n.language ?? 'en';
-  const insets = useSafeAreaInsets();
-  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
-  const posterWidth = Math.min(screenWidth - 48, 360);
-  const topPadding = insets.top + 16;
-  const maxPosterPreviewHeight = screenHeight - CHROME_HEIGHT - topPadding;
   const posterRef = useRef<View>(null);
+  const captureReadyRef = useRef(false);
+  const exportInFlight = useRef(false);
+  const presentationGeneration = useRef(0);
+  const captureWaiter = useRef<((ready: boolean) => void) | null>(null);
+  const finishCaptureWait = useCallback((ready: boolean) => {
+    const resolve = captureWaiter.current;
+    captureWaiter.current = null;
+    resolve?.(ready);
+  }, []);
+  useLayoutEffect(() => {
+    presentationGeneration.current += 1;
+    finishCaptureWait(false);
+  }, [visible, agentName, agentEmoji, agentAvatarUri, agentPlatform, shareProductLabel, messageText, modelLabel, timestampMs, finishCaptureWait]);
+  useLayoutEffect(() => () => {
+    presentationGeneration.current += 1;
+    finishCaptureWait(false);
+  }, [finishCaptureWait]);
+  const [captureReady, setCaptureReady] = useState(false);
+  const onCaptureReadyChange = useCallback((ready: boolean) => {
+    captureReadyRef.current = ready;
+    setCaptureReady(ready);
+    if (ready) finishCaptureWait(true);
+  }, [finishCaptureWait]);
   const [saving, setSaving] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [theme, setTheme] = useState(() => getPosterThemeForAccent(accentId));
@@ -199,8 +216,6 @@ export function ChatSharePosterModal({
   // Reset to user's current accent when modal opens
   useEffect(() => {
     if (visible) {
-      setSaving(false);
-      setSharing(false);
       setTheme(getPosterThemeForAccent(accentId));
       setShowModel(true);
     }
@@ -215,57 +230,78 @@ export function ChatSharePosterModal({
       })
     : null;
 
-  const capture = useCallback(async () => {
-    if (!posterRef.current) return null;
-    try {
-      return await captureRef(posterRef, { format: 'png', quality: 1 });
-    } catch (error) {
-      if (Platform.OS !== 'ios') {
-        throw error;
+  type ExportRequest = { target: View; generation: number };
+  const isCurrentExport = useCallback((request: ExportRequest) => (
+    request.generation === presentationGeneration.current && request.target === posterRef.current
+  ), []);
+  const capture = useCallback(async (request: ExportRequest) => {
+    const takeSnapshot = async (useRenderInContext = false) => {
+      // One export owns this waiter. Consecutive resizes may supersede a ready callback
+      // before its continuation runs; keep waiting within this presentation.
+      while (isCurrentExport(request) && !captureReadyRef.current) {
+        const ready = await new Promise<boolean>(resolve => { captureWaiter.current = resolve; });
+        if (!ready) return null;
       }
-
-      // `drawViewHierarchyInRect` can fail for complex markdown trees on iOS,
-      // especially when the renderer introduces nested scroll containers (for example tables).
-      return captureRef(posterRef, {
-        format: 'png',
-        quality: 1,
-        useRenderInContext: true,
+      if (!isCurrentExport(request)) return null;
+      return captureRef(request.target, {
+        format: 'png', quality: 1, ...(useRenderInContext ? { useRenderInContext: true } : {}),
       });
+    };
+    try {
+      return await takeSnapshot();
+    } catch (error) {
+      if (!isCurrentExport(request)) return null;
+      if (Platform.OS !== 'ios') throw error;
+      // Preserve the iOS fallback for complex Markdown, but never change capture targets.
+      return takeSnapshot(true);
     }
+  }, [isCurrentExport]);
+
+  const beginExport = useCallback((): ExportRequest | null => {
+    if (exportInFlight.current || !captureReadyRef.current || !posterRef.current) return null;
+    exportInFlight.current = true;
+    return { target: posterRef.current, generation: presentationGeneration.current };
   }, []);
 
   const handleSave = useCallback(async () => {
+    const request = beginExport();
+    if (!request) return;
     setSaving(true);
     try {
-      if (!await requestPhotoLibraryWritePermission()) {
-        Alert.alert(t('Permission denied'));
-        return;
-      }
-      const uri = await capture();
-      if (!uri) return;
+      const granted = await requestPhotoLibraryWritePermission();
+      if (!isCurrentExport(request)) return;
+      if (!granted) { Alert.alert(t('Permission denied')); return; }
+      const uri = await capture(request);
+      if (!uri || !isCurrentExport(request)) return;
       const fileUri = uri.startsWith('file://') ? uri : 'file://' + uri;
       await MediaLibrary.saveToLibraryAsync(fileUri);
-      Alert.alert(t('Saved to Photos!'));
+      if (isCurrentExport(request)) Alert.alert(t('Saved to Photos!'));
     } catch (e) {
-      console.warn('[ChatSharePoster] save failed:', e);
-      Alert.alert(t('Failed to save'));
+      if (isCurrentExport(request)) {
+        console.warn('[ChatSharePoster] save failed:', e);
+        Alert.alert(t('Failed to save'));
+      }
     } finally {
+      exportInFlight.current = false;
       setSaving(false);
     }
-  }, [capture, t]);
+  }, [beginExport, capture, isCurrentExport, t]);
 
   const handleShare = useCallback(async () => {
+    const request = beginExport();
+    if (!request) return;
     setSharing(true);
     try {
-      const uri = await capture();
-      if (!uri) return;
+      const uri = await capture(request);
+      if (!uri || !isCurrentExport(request)) return;
       await Sharing.shareAsync(uri, { mimeType: 'image/png' });
     } catch {
       // user cancelled
     } finally {
+      exportInFlight.current = false;
       setSharing(false);
     }
-  }, [capture]);
+  }, [beginExport, capture, isCurrentExport]);
 
   const agentAvatarSource = resolveAgentAvatarImageSource(agentAvatarUri);
   const displayEmoji = extractDisplayAgentEmoji(agentEmoji);
@@ -319,43 +355,14 @@ export function ChatSharePosterModal({
 
   return (
     <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
-      <View style={[s.backdrop, { paddingTop: topPadding }]}>
-        {/* Backdrop dismiss layer */}
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
-
-        {/* Off-screen full-height poster for capture */}
-        <View ref={posterRef} collapsable={false} style={[s.poster, s.captureTarget, { width: posterWidth }]}>
-          {posterContent}
-        </View>
-
-        <View style={[s.container, { width: posterWidth + 40 }]} pointerEvents="box-none">
-          <TouchableOpacity
-            testID="chat-share-poster-close"
-            accessibilityRole="button"
-            accessibilityLabel={t('Close', { ns: 'common' })}
-            style={s.closeBtn}
-            onPress={onClose}
-            activeOpacity={0.7}
-            hitSlop={Space.xs}
-          >
-            <X size={IconSize.md} color={C.chromeText} strokeWidth={2} />
-          </TouchableOpacity>
-
-          <ScrollView
-            style={{ maxHeight: maxPosterPreviewHeight }}
-            bounces={false}
-            showsVerticalScrollIndicator
-          >
-            <View style={[s.poster, { width: posterWidth }]}>
-              {posterContent}
-            </View>
-          </ScrollView>
-
-          {/* Model toggle */}
+      <PresentationSafeAreaProvider style={{ backgroundColor: PresentationColor.mediaOverlayStrong }}>
+        <PosterPresentation posterRef={posterRef} posterContent={posterContent} onClose={onClose} onCaptureReadyChange={onCaptureReadyChange}>
           {modelLabel ? (
             <View style={s.toggleRow}>
               <Text style={s.toggleLabel}>{t('Show model')}</Text>
               <ThemedSwitch
+                testID="chat-share-poster-model"
+                disabled={saving || sharing}
                 value={showModel}
                 onValueChange={setShowModel}
                 trackColor={{ false: PresentationColor.mediaControl, true: theme.accent }}
@@ -364,36 +371,89 @@ export function ChatSharePosterModal({
               />
             </View>
           ) : null}
-
-          {/* Actions */}
+          <PosterThemePicker current={theme} onSelect={setTheme} disabled={saving || sharing} />
           <View style={s.actions}>
-            <PosterThemePicker current={theme} onSelect={setTheme} />
-            <TouchableOpacity style={s.actionBtn} onPress={handleSave} activeOpacity={0.7} disabled={saving}>
-              {saving ? (
-                <ActivityIndicator size="small" color={C.chromeText} />
-              ) : (
-                <Download size={18} color={C.chromeText} strokeWidth={2} />
-              )}
+            <TouchableOpacity testID="chat-share-poster-save" accessibilityRole="button"
+              style={s.actionBtn} onPress={handleSave} activeOpacity={0.7} disabled={saving || sharing || !captureReady}>
+              {saving ? <ActivityIndicator size="small" color={C.chromeText} />
+                : <Download size={18} color={C.chromeText} strokeWidth={2} />}
               <Text style={s.actionText}>{t('Save')}</Text>
             </TouchableOpacity>
-            <TouchableOpacity
+            <TouchableOpacity testID="chat-share-poster-share" accessibilityRole="button"
               style={[s.actionBtn, { backgroundColor: theme.accent }]}
-              onPress={handleShare}
-              activeOpacity={0.7}
-              disabled={sharing}
-            >
-              {sharing ? (
-                <ActivityIndicator size="small" color={C.chromeText} />
-              ) : (
-                <Share2 size={18} color={C.chromeText} strokeWidth={2} />
-              )}
+              onPress={handleShare} activeOpacity={0.7} disabled={saving || sharing || !captureReady}>
+              {sharing ? <ActivityIndicator size="small" color={C.chromeText} />
+                : <Share2 size={18} color={C.chromeText} strokeWidth={2} />}
               <Text style={s.actionText}>{t('Share')}</Text>
             </TouchableOpacity>
           </View>
-
-        </View>
-      </View>
+        </PosterPresentation>
+      </PresentationSafeAreaProvider>
     </Modal>
+  );
+}
+
+function PosterPresentation({ posterRef, posterContent, onClose, onCaptureReadyChange, children }: React.PropsWithChildren<{
+  posterRef: React.RefObject<View | null>;
+  posterContent: React.ReactNode;
+  onClose: () => void;
+  onCaptureReadyChange: (ready: boolean) => void;
+}>): React.JSX.Element {
+  const { t } = useTranslation('common');
+  const insets = useSafeAreaInsets();
+  const frame = useSafeAreaFrame();
+  const posterWidth = Math.min(360, Math.max(0, frame.width - insets.left - insets.right - Space.xl * 2));
+  const safeHeight = Math.max(0, frame.height - insets.top - insets.bottom - Space.lg * 2);
+  // Preview stays bounded; the containing scroll keeps all controls reachable in short windows.
+  const maxPosterPreviewHeight = safeHeight * 0.6;
+  const measurementGeneration = useRef(0);
+  const expectedWidth = useRef(posterWidth);
+  const measureCapture = useCallback(() => {
+    const generation = ++measurementGeneration.current;
+    onCaptureReadyChange(false);
+    posterRef.current?.measure((_x, _y, width, height) => {
+      if (generation !== measurementGeneration.current) return;
+      onCaptureReadyChange(width > 0 && height > 0 && Math.abs(width - expectedWidth.current) < 0.5);
+    });
+  }, [onCaptureReadyChange, posterRef]);
+  useLayoutEffect(() => {
+    expectedWidth.current = posterWidth;
+    // Explicit measurement also handles A→B→A when native layout coalesces the middle size.
+    measureCapture();
+    return () => { measurementGeneration.current += 1; onCaptureReadyChange(false); };
+  }, [measureCapture, onCaptureReadyChange, posterWidth]);
+  return (
+    <View style={s.backdrop}>
+      <Pressable testID="chat-share-poster-backdrop" style={StyleSheet.absoluteFill} onPress={onClose} accessible={false} />
+      {/* Only this full-height, unscrolled target is exported; chrome and safe padding stay outside. */}
+      <View testID="chat-share-poster-capture" ref={posterRef} collapsable={false}
+        pointerEvents="none" onLayout={measureCapture}
+        accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
+        style={[s.poster, s.captureTarget, { width: posterWidth }]}>
+        {posterContent}
+      </View>
+      <View testID="chat-share-poster-safe-area" pointerEvents="box-none" style={[s.safeArea, {
+        paddingTop: insets.top + Space.lg,
+        paddingBottom: insets.bottom + Space.lg,
+        paddingStart: (I18nManager.isRTL ? insets.right : insets.left) + Space.xl,
+        paddingEnd: (I18nManager.isRTL ? insets.left : insets.right) + Space.xl,
+      }]}>
+        <ScrollView testID="chat-share-poster-controls-scroll" style={[s.presentationScroll, { width: posterWidth }]}
+          contentContainerStyle={s.container} bounces={false} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+          <TouchableOpacity testID="chat-share-poster-close" accessibilityRole="button"
+            accessibilityLabel={t('Close')} style={s.closeBtn} onPress={onClose} activeOpacity={0.7}>
+            <X size={IconSize.md} color={C.chromeText} strokeWidth={2} />
+          </TouchableOpacity>
+          <ScrollView testID="chat-share-poster-preview-scroll" style={{ maxHeight: maxPosterPreviewHeight }}
+            bounces={false} nestedScrollEnabled keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator>
+            <View testID="chat-share-poster-preview" style={[s.poster, { width: posterWidth }]}>
+              {posterContent}
+            </View>
+          </ScrollView>
+          {children}
+        </ScrollView>
+      </View>
+    </View>
   );
 }
 
@@ -402,21 +462,26 @@ export function ChatSharePosterModal({
 const s = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: PresentationColor.mediaOverlayStrong,
+  },
+  safeArea: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
+  presentationScroll: {
+    maxHeight: '100%',
+    flexGrow: 0,
+  },
   container: {
-    alignItems: 'center',
+    alignItems: 'stretch',
+    gap: Space.md,
   },
   // A 30%-white X floated past the poster's corner and was hard to find over photos (device review
   // 2026-09-27): a filled control aligned with the poster's right edge reads as the way out.
   closeBtn: {
-    position: 'absolute',
-    top: -44,
-    right: 20,
-    width: 36,
-    height: 36,
+    alignSelf: 'flex-end',
+    width: ControlSize.floatingButton,
+    height: ControlSize.floatingButton,
     borderRadius: Radius.full,
     backgroundColor: PresentationColor.mediaControl,
     justifyContent: 'center',
@@ -520,8 +585,9 @@ const s = StyleSheet.create({
   toggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginTop: 12,
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+    gap: Space.sm,
   },
   toggleLabel: {
     fontSize: FontSize.caption,
@@ -532,11 +598,14 @@ const s = StyleSheet.create({
   // Actions
   actions: {
     flexDirection: 'row',
-    gap: 8,
-    marginTop: 12,
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: Space.sm,
     alignItems: 'center',
   },
   actionBtn: {
+    minHeight: ControlSize.floatingButton,
+    maxWidth: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -546,6 +615,7 @@ const s = StyleSheet.create({
     borderRadius: Radius.full,
   },
   actionText: {
+    flexShrink: 1,
     fontSize: FontSize.secondary,
     fontWeight: FontWeight.semibold,
     color: C.chromeText,

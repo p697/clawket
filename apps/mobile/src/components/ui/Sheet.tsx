@@ -30,11 +30,11 @@ import {
   type ReduceMotion,
   type WithTimingConfig,
 } from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets, type Metrics } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../theme';
 import { Motion, Radius, Space } from '../../theme/tokens';
-import { getIpadModalSheetMetrics } from '../../utils/ipad-layout';
-import { isIPad } from '../../utils/platform';
+import { getIpadModalSheetMetrics, hasPanelSpace } from '../../utils/ipad-layout';
+import { getRuntimePlatform } from '../../utils/platform';
 import {
   AdaptiveBottomSheetModal,
   type AdaptiveBottomSheetModalRef,
@@ -154,7 +154,7 @@ export function resolveSheetContentHeightLimit(
   return Math.max(1, boundedSheetHeight - Space.lg);
 }
 
-/** Shared phone bottom sheet and automatically centered iPad panel. */
+/** Shared bottom sheet that centers a panel when the iOS window has room. */
 export function Sheet({
   visible,
   onClose,
@@ -184,8 +184,12 @@ export function Sheet({
   testID,
 }: SheetProps): React.JSX.Element {
   const { theme } = useAppTheme();
-  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-  const insets = useSafeAreaInsets();
+  const window = useWindowDimensions();
+  const inheritedInsets = useSafeAreaInsets();
+  const [presentation, setPresentation] = useState<Metrics | null>(null);
+  const windowWidth = presentation?.frame.width ?? window.width;
+  const windowHeight = presentation?.frame.height ?? window.height;
+  const insets = presentation?.insets ?? inheritedInsets;
   const modalRef = useRef<AdaptiveBottomSheetModalRef>(null);
   const presentedRef = useRef(false);
   const visibleRef = useRef(visible);
@@ -206,29 +210,47 @@ export function Sheet({
     ),
     [insets.bottom, insets.top, maxHeight, windowHeight],
   );
-  const fixedIpadSheetHeight = useMemo(
-    () => (isIPad && windowWidth >= 600
+  const adaptive = getRuntimePlatform() === 'ios';
+  const panelMetrics = useMemo(
+    () => (adaptive && hasPanelSpace(windowWidth - insets.left - insets.right)
       ? getIpadModalSheetMetrics({
         windowWidth,
         windowHeight,
         topInset: insets.top,
         bottomInset: insets.bottom,
-      }).height
+        leftInset: insets.left,
+        rightInset: insets.right,
+      })
       : undefined),
-    [insets.bottom, insets.top, windowHeight, windowWidth],
+    [adaptive, insets.bottom, insets.top, insets.left, insets.right, windowHeight, windowWidth],
   );
+  const fixedPanelHeight = panelMetrics?.height;
+  const [contentMeasurement, setContentMeasurement] = useState<{ width: number; height: number } | null>(null);
+  const panelWidthRef = useRef(panelMetrics?.width);
+  panelWidthRef.current = panelMetrics?.width;
+  const handleContentLayout = useCallback((event: LayoutChangeEvent) => {
+    const { width, height } = event.nativeEvent.layout;
+    if (panelWidthRef.current !== undefined && Math.abs(width - panelWidthRef.current) >= 1) return;
+    if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
+      setContentMeasurement(current => current?.width === width && current.height === height ? current : { width, height });
+    }
+  }, []);
+  const preferredHeight = !usesFixedSnapPoints && panelMetrics && contentMeasurement
+    && Math.abs(contentMeasurement.width - panelMetrics.width) < 1
+    ? Math.min(contentMeasurement.height + Space.lg, maxDynamicContentSize)
+    : undefined;
   const contentHeightLimit = useMemo(
     () => resolveSheetContentHeightLimit(
       maxDynamicContentSize,
-      fixedIpadSheetHeight,
+      fixedPanelHeight,
     ),
-    [fixedIpadSheetHeight, maxDynamicContentSize],
+    [fixedPanelHeight, maxDynamicContentSize],
   );
   const contentViewportStyle = useMemo<ViewStyle>(
-    () => (fixedIpadSheetHeight === undefined
+    () => (fixedPanelHeight === undefined || !usesFixedSnapPoints
       ? { maxHeight: contentHeightLimit }
       : { height: contentHeightLimit, maxHeight: contentHeightLimit }),
-    [contentHeightLimit, fixedIpadSheetHeight],
+    [contentHeightLimit, fixedPanelHeight, usesFixedSnapPoints],
   );
 
   useEffect(() => {
@@ -336,7 +358,7 @@ export function Sheet({
       <View
         testID={testID ? `${testID}-body` : undefined}
         style={[
-          (usesFixedSnapPoints || fixedIpadSheetHeight !== undefined) && styles.fixedBody,
+          usesFixedSnapPoints && styles.fixedBody,
           contentStyle,
           footer ? { paddingBottom: footerHeight + FOOTER_TOP_PADDING } : null,
         ]}
@@ -350,6 +372,8 @@ export function Sheet({
   return (
     <AdaptiveBottomSheetModal
       ref={modalRef}
+      onPresentationMetrics={setPresentation}
+      preferredHeight={preferredHeight}
       accessible={false}
       index={initialIndex}
       stackBehavior={stackBehavior}
@@ -380,6 +404,7 @@ export function Sheet({
       ) : (
         <BottomSheetView
           testID={testID}
+          onLayout={handleContentLayout}
           style={dynamicSheetStyle}
           accessibilityViewIsModal
         >

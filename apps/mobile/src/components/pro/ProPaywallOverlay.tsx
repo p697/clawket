@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Linking, Modal } from 'react-native';
+import { Alert, I18nManager, Linking, Modal, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { publicAppLinks } from '../../config/public';
 import { useProPaywall } from '../../contexts/ProPaywallContext';
@@ -9,6 +10,9 @@ import { hasRenewingProSubscription, isRevenueCatPackagePurchaseLocked, proSubsc
 import { PaywallScreen } from '../../screens/Paywall/PaywallScreen';
 import { resolvePaywallContent } from '../../screens/Paywall/model';
 import type { ProFeature } from '../../utils/pro';
+import { PresentationSafeAreaProvider } from '../ui/PresentationSafeAreaProvider';
+import { useAppTheme } from '../../theme';
+import { buildPaywallTheme } from '../../theme/paywall';
 
 export type ProPaywallContinueSource = 'purchase' | 'restore' | 'redeem';
 
@@ -36,6 +40,7 @@ type PurchasePaywallSession = Readonly<{
 
 export function ProPaywallOverlay({ visible, onClose, onContinue }: Props): React.JSX.Element | null {
   const { t } = useTranslation(['common']);
+  const { theme } = useAppTheme();
   const purchaseSessionRef = useRef<PurchasePaywallSession | null>(null);
   const submissionInFlightRef = useRef(false);
   const {
@@ -196,45 +201,58 @@ export function ProPaywallOverlay({ visible, onClose, onContinue }: Props): Reac
       allowSwipeDismissal={!interactionLocked}
       onRequestClose={handleClose}
     >
-      <PaywallScreen
-        blockedFeature={blockedFeature}
-        phase={paywallPhase}
-        packages={paywallPackages}
-        selectedPackageId={selectedPackageId}
-        failureReason={failureReason}
-        failureOperation={failureOperation}
-        disabledPackageIds={disabledPackageIds}
-        purchaseDisabled={!isConfigured || selectedPackageLocked}
-        restoreDisabled={previewOnly && isPro}
-        isMember={Boolean(snapshot?.isActive)}
-        currentPackageId={selectDisplayedRevenueCatPackage(paywallPackages, snapshot)?.packageIdentifier}
-        planChange={Boolean(snapshot?.isActive && snapshot.expirationDate && selectedPackage?.packageType !== 'LIFETIME' && !selectedPackageLocked)}
-        lifetimeRenewalWarning={hasRenewingProSubscription(snapshot) && selectedPackage?.packageType === 'LIFETIME'}
-        statusCode={statusCode}
-        onManageSubscription={proSubscriptionManagementUrl(snapshot) ? () => {
-          analyticsEvents.paywallManageSubscriptionTapped({ ...analyticsContext });
-          void openExternalUrl(proSubscriptionManagementUrl(snapshot));
-        } : undefined}
-        onClose={handleClose}
-        onRestore={handleRestore}
-        onRedeem={handleRedeem}
-        redeemDisabled={!isConfigured || (previewOnly && isPro)}
-        onRetry={() => { void refreshOfferings(); }}
-        onSelectPackage={(packageId) => {
-          const selected = paywallPackages.find((item) => item.packageIdentifier === packageId) ?? null;
-          const session = purchaseSessionRef.current;
-          if (session && packageId !== selectedPackageId) session.planToggled = true;
-          analyticsEvents.paywallPackageSelected(selected, {
-            ...analyticsContext,
-          });
-          selectPackage(packageId);
-        }}
-        onPurchase={handlePurchase}
-        onOpenTerms={() => { void openExternalUrl(publicAppLinks.termsOfUseUrl); }}
-        onOpenPrivacy={() => { void openExternalUrl(publicAppLinks.privacyPolicyUrl); }}
-      />
+      <PresentationSafeAreaProvider style={{ backgroundColor: buildPaywallTheme(theme).colors.canvas }}>
+        <PaywallModalFrame>
+          <PaywallScreen
+            blockedFeature={blockedFeature}
+            phase={paywallPhase}
+            packages={paywallPackages}
+            selectedPackageId={selectedPackageId}
+            failureReason={failureReason}
+            failureOperation={failureOperation}
+            disabledPackageIds={disabledPackageIds}
+            purchaseDisabled={!isConfigured || selectedPackageLocked}
+            restoreDisabled={previewOnly && isPro}
+            isMember={Boolean(snapshot?.isActive)}
+            currentPackageId={selectDisplayedRevenueCatPackage(paywallPackages, snapshot)?.packageIdentifier}
+            planChange={Boolean(snapshot?.isActive && snapshot.expirationDate && selectedPackage?.packageType !== 'LIFETIME' && !selectedPackageLocked)}
+            lifetimeRenewalWarning={hasRenewingProSubscription(snapshot) && selectedPackage?.packageType === 'LIFETIME'}
+            statusCode={statusCode}
+            onManageSubscription={proSubscriptionManagementUrl(snapshot) ? () => {
+              analyticsEvents.paywallManageSubscriptionTapped({ ...analyticsContext });
+              void openExternalUrl(proSubscriptionManagementUrl(snapshot));
+            } : undefined}
+            onClose={handleClose}
+            onRestore={handleRestore}
+            onRedeem={handleRedeem}
+            redeemDisabled={!isConfigured || (previewOnly && isPro)}
+            onRetry={() => { void refreshOfferings(); }}
+            onSelectPackage={(packageId) => {
+              const selected = paywallPackages.find((item) => item.packageIdentifier === packageId) ?? null;
+              const session = purchaseSessionRef.current;
+              if (session && packageId !== selectedPackageId) session.planToggled = true;
+              analyticsEvents.paywallPackageSelected(selected, {
+                ...analyticsContext,
+              });
+              selectPackage(packageId);
+            }}
+            onPurchase={handlePurchase}
+            onOpenTerms={() => { void openExternalUrl(publicAppLinks.termsOfUseUrl); }}
+            onOpenPrivacy={() => { void openExternalUrl(publicAppLinks.privacyPolicyUrl); }}
+          />
+        </PaywallModalFrame>
+      </PresentationSafeAreaProvider>
     </Modal>
   );
+}
+
+function PaywallModalFrame({ children }: React.PropsWithChildren): React.JSX.Element {
+  const insets = useSafeAreaInsets();
+  return <View testID="paywall-modal-safe-area" style={{
+    flex: 1,
+    paddingStart: I18nManager.isRTL ? insets.right : insets.left,
+    paddingEnd: I18nManager.isRTL ? insets.left : insets.right,
+  }}>{children}</View>;
 }
 
 function buildPurchasePaywallAnalyticsContext(

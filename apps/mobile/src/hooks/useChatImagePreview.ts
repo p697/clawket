@@ -1,8 +1,6 @@
 import { useCallback, useState } from 'react';
-import { useWindowDimensions } from 'react-native';
 
 export function useChatImagePreview() {
-  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const [previewVisible, setPreviewVisible] = useState(false);
   const [previewUris, setPreviewUris] = useState<string[]>([]);
   const [previewIndex, setPreviewIndex] = useState(0);
@@ -25,8 +23,6 @@ export function useChatImagePreview() {
     previewVisible,
     previewUris,
     previewIndex,
-    screenWidth,
-    screenHeight,
     setPreviewIndex,
     openPreview,
     closePreview,

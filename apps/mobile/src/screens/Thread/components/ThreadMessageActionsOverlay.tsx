@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  I18nManager,
   Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
-  useWindowDimensions,
 } from 'react-native';
 import Animated, {
   Easing,
@@ -18,6 +18,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import { ArrowUp, CalendarClock, GitBranch, Check, Copy, Pencil, Share2, Star, StarOff, Trash2 } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
+import { useSafeAreaFrame, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { PresentationSafeAreaProvider } from '../../../components/ui/PresentationSafeAreaProvider';
 import type { UiMessage } from '../../../types/chat';
 import { useAppTheme } from '../../../theme';
 import {
@@ -84,8 +86,6 @@ export type ThreadMessageActionsOverlayProps = Readonly<{
   /** Live message for the selection, so a streaming reply keeps updating in the clone. */
   message: UiMessage | null;
   favorited: boolean;
-  topInset: number;
-  bottomInset: number;
   /** Horizontal padding of the timeline row; aligns the menu with the bubble edge. */
   contentInset: number;
   renderMessage: (message: UiMessage, width: number) => React.ReactNode;
@@ -122,6 +122,7 @@ type MenuCell = Readonly<{
 // Equal cells keep the capsule the same size in every locale and while a
 // cell shows its confirmation, so the anchored edge never shifts.
 const MENU_CELL_WIDTH = 80;
+const MENU_CHROME = (Space.xs + StyleSheet.hairlineWidth) * 2;
 const MENU_ENTER_OFFSET = Space.sm;
 const MENU_ENTER_SCALE = Motion.pressedScale;
 const EASE_OUT = Easing.out(Easing.cubic);
@@ -134,8 +135,6 @@ export function ThreadMessageActionsOverlay({
   selection,
   message,
   favorited,
-  topInset,
-  bottomInset,
   contentInset,
   renderMessage,
   onCopy,
@@ -171,6 +170,7 @@ export function ThreadMessageActionsOverlay({
       navigationBarTranslucent
       onRequestClose={handleRequestClose}
     >
+      <PresentationSafeAreaProvider>
       {selection && message ? (
         <ThreadMessageActionsContent
           key={selection.messageId}
@@ -178,8 +178,6 @@ export function ThreadMessageActionsOverlay({
           selection={selection}
           message={message}
           favorited={favorited}
-          topInset={topInset}
-          bottomInset={bottomInset}
           contentInset={contentInset}
           renderMessage={renderMessage}
           onCopy={onCopy}
@@ -194,6 +192,7 @@ export function ThreadMessageActionsOverlay({
           testID={testID}
         />
       ) : null}
+      </PresentationSafeAreaProvider>
     </Modal>
   );
 }
@@ -203,8 +202,6 @@ type ContentProps = Readonly<{
   selection: ThreadMessageSelection;
   message: UiMessage;
   favorited: boolean;
-  topInset: number;
-  bottomInset: number;
   contentInset: number;
   renderMessage: (message: UiMessage, width: number) => React.ReactNode;
   onCopy: (message: UiMessage) => void;
@@ -224,8 +221,6 @@ function ThreadMessageActionsContent({
   selection,
   message,
   favorited,
-  topInset,
-  bottomInset,
   contentInset,
   renderMessage,
   onCopy,
@@ -246,13 +241,26 @@ function ThreadMessageActionsContent({
     () => createStyles(theme.colors, theme.scheme),
     [theme.colors, theme.scheme],
   );
-  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  const { width: screenWidth, height: screenHeight } = useSafeAreaFrame();
+  const { top: topInset, bottom: bottomInset, left: leftInset, right: rightInset } = useSafeAreaInsets();
+  const isRTL = I18nManager.isRTL;
+  const safeWidth = Math.max(0, screenWidth - leftInset - rightInset);
+  const geometryKey = `${screenWidth}:${screenHeight}:${topInset}:${bottomInset}:${leftInset}:${rightInset}:${isRTL}`;
+  const geometryRef = useRef({ key: geometryKey, generation: 0 });
+  if (geometryRef.current.key !== geometryKey) {
+    geometryRef.current = { key: geometryKey, generation: geometryRef.current.generation + 1 };
+  }
   const [contentHeight, setContentHeight] = useState<number | null>(null);
   const [menuSize, setMenuSize] = useState<{ width: number; height: number } | null>(null);
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
 
   const anchor = isUsableAnchor(selection.anchor) ? selection.anchor : null;
-  const initialWidth = anchor ? Math.min(anchor.width, screenWidth) : screenWidth;
+  const initialWidth = anchor ? Math.min(anchor.width, safeWidth) : safeWidth;
+  const currentWidthRef = useRef(initialWidth);
+  currentWidthRef.current = initialWidth;
+  const aliveRef = useRef(true);
+  const closedRef = useRef(false);
+  const closeCurrentRef = useRef<((after?: () => void) => void) | null>(null);
 
   const scrimOpacity = useSharedValue(0);
   // The clone container starts with the row's exact frame and bottom-aligns
@@ -285,8 +293,10 @@ function ThreadMessageActionsContent({
   const hasText = Boolean(message.text?.trim());
 
   useEffect(() => {
+    aliveRef.current = true;
     scrimOpacity.value = withTiming(1, { duration: Motion.duration.normal, easing: EASE_OUT });
     return () => {
+      aliveRef.current = false;
       if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
       if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
     };
@@ -294,61 +304,9 @@ function ThreadMessageActionsContent({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const layout = useMemo(() => computeMessageActionsLayout({
-    anchor: anchor && openedTopRef.current !== null && contentHeight !== null
-      ? { ...anchor, y: openedTopRef.current, height: contentHeight }
-      : anchor,
-    role: selection.role,
-    contentHeight,
-    menuWidth: menuSize?.width ?? null,
-    menuHeight: menuSize?.height ?? null,
-    contentInset,
-    topInset,
-    bottomInset,
-    screenWidth,
-    screenHeight,
-  }), [anchor, bottomInset, contentHeight, contentInset, menuSize, screenHeight, screenWidth, selection.role, topInset]);
-
-  const move = useCallback((target: number) => (
-    reduceMotion
-      ? target
-      : withTiming(target, { duration: Motion.duration.normal, easing: EASE_OUT })
-  ), [reduceMotion]);
-
-  useEffect(() => {
-    if (!layout || closingRef.current) return;
-    if (!openedRef.current) {
-      openedRef.current = true;
-      const cloneAnchor = getMessageCloneAnchor(anchor, contentHeight)
-        ?? { top: layout.messageTop, height: layout.messageHeight };
-      openedTopRef.current = cloneAnchor.top;
-      appliedScrollOffsetRef.current = layout.scrollOffset;
-      cloneLeft.value = layout.messageLeft;
-      if (layout.scrollOffset > 0) {
-        // The pressed content stays optically still: the container jumps to
-        // its clamped top while the inner scroll offset compensates.
-        scrollRef.current?.scrollTo({ y: layout.scrollOffset, animated: false });
-        cloneTop.value = layout.messageTop;
-      } else {
-        cloneTop.value = cloneAnchor.top;
-        cloneTop.value = move(layout.messageTop);
-      }
-      cloneHeight.value = cloneAnchor.height;
-      cloneHeight.value = move(layout.messageHeight);
-      menuTop.value = layout.menuTop;
-      menuLeft.value = layout.menuLeft;
-      menuProgress.value = withTiming(1, { duration: Motion.duration.normal, easing: EASE_OUT });
-      return;
-    }
-    // Streaming growth or a rotation re-derives the layout from fresh sizes.
-    cloneTop.value = move(layout.messageTop);
-    cloneLeft.value = move(layout.messageLeft);
-    cloneHeight.value = move(layout.messageHeight);
-    menuTop.value = move(layout.menuTop);
-    menuLeft.value = move(layout.menuLeft);
-  }, [anchor, cloneHeight, cloneLeft, cloneTop, contentHeight, layout, menuLeft, menuProgress, menuTop, move]);
-
   const finishClose = useCallback(() => {
+    if (!aliveRef.current || closedRef.current) return;
+    closedRef.current = true;
     const after = pendingAfterRef.current;
     pendingAfterRef.current = undefined;
     onClosedRef.current();
@@ -356,19 +314,23 @@ function ThreadMessageActionsContent({
   }, []);
 
   const requestClose = useCallback((after?: () => void) => {
-    if (closingRef.current) return;
+    if (!aliveRef.current || closingRef.current) return;
     closingRef.current = true;
+    const closeGeneration = geometryRef.current.generation;
     pendingAfterRef.current = after;
     if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
     menuProgress.value = withTiming(0, { duration: Motion.duration.fast, easing: EASE_OUT });
 
     const settle = (frame: MessageAnchorFrame | null) => {
-      if (settledRef.current) return;
+      if (!aliveRef.current || settledRef.current) return;
       settledRef.current = true;
       if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
       const returnAnchor = !reduceMotion
+        && closeGeneration === geometryRef.current.generation
+        && closeGeneration === 0
         && appliedScrollOffsetRef.current === 0
-        && canReturnToAnchor(frame, screenHeight)
+        && frame && Math.abs(frame.width - currentWidthRef.current) < 1
+        && canReturnToAnchor(frame, screenHeight, screenWidth)
         ? getMessageCloneAnchor(frame, contentHeightRef.current)
         : null;
       if (returnAnchor && frame) {
@@ -382,8 +344,8 @@ function ThreadMessageActionsContent({
       scrimOpacity.value = withTiming(
         0,
         { duration: Motion.duration.normal, easing: EASE_OUT },
-        () => {
-          runOnJS(finishClose)();
+        (finished) => {
+          if (finished) runOnJS(finishClose)();
         },
       );
     };
@@ -396,7 +358,8 @@ function ThreadMessageActionsContent({
     // Never wait on a measurement that cannot call back (detached node).
     settleTimerRef.current = setTimeout(() => settle(null), Motion.duration.fast);
     remeasure(settle);
-  }, [cloneHeight, cloneLeft, cloneOpacity, cloneTop, finishClose, menuProgress, reduceMotion, screenHeight, scrimOpacity, selection.remeasure]);
+  }, [cloneHeight, cloneLeft, cloneOpacity, cloneTop, finishClose, menuProgress, reduceMotion, screenHeight, screenWidth, scrimOpacity, selection.remeasure]);
+  closeCurrentRef.current = requestClose;
 
   useEffect(() => {
     closeRef.current = requestClose;
@@ -407,7 +370,7 @@ function ThreadMessageActionsContent({
 
   const holdThenClose = useCallback(() => {
     if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
-    holdTimerRef.current = setTimeout(() => requestClose(), CONFIRMATION_HOLD_MS);
+    holdTimerRef.current = setTimeout(() => closeCurrentRef.current?.(), CONFIRMATION_HOLD_MS);
   }, [requestClose]);
 
   const handleCopy = useCallback(() => {
@@ -427,19 +390,19 @@ function ThreadMessageActionsContent({
     const outcome = onToggleFavorite(message);
     if (!outcome || typeof outcome.then !== 'function') return;
     outcome.then((result) => {
-      if (closingRef.current) return;
+      if (!aliveRef.current || closingRef.current) return;
       if (!result) return;
       if (!result.favoriteKey) {
         // Nothing was recorded; do not claim a favorite that does not exist.
         setConfirmation(null);
-        requestClose();
+        closeCurrentRef.current?.();
         return;
       }
       setConfirmation(result.favorited ? 'favorited' : 'unfavorited');
     }, () => {
-      if (closingRef.current) return;
+      if (!aliveRef.current || closingRef.current) return;
       setConfirmation(null);
-      requestClose();
+      closeCurrentRef.current?.();
     });
   }, [confirmation, favorited, holdThenClose, message, onToggleFavorite, requestClose]);
 
@@ -572,28 +535,111 @@ function ThreadMessageActionsContent({
     ];
   }, [canBranch, onBranch, canSchedule, onSchedule, message, requestClose, confirmation, favorited, handleCopy, handleQueuedEdit, handleQueuedRemove, handleQueuedSendNow, handleShare, handleToggleFavorite, hasText, queuedActions, t, theme.colors.accent, theme.colors.bad, theme.colors.good, theme.colors.ink]);
 
-  const scrimStyle = useAnimatedStyle(() => ({ opacity: scrimOpacity.value }));
-  const cloneStyle = useAnimatedStyle(() => ({
-    top: cloneTop.value,
-    left: cloneLeft.value,
-    height: cloneHeight.value,
-    opacity: cloneOpacity.value,
-  }));
-  const menuStyle = useAnimatedStyle(() => ({
-    top: menuTop.value,
-    left: menuLeft.value,
-    opacity: menuProgress.value,
-    transform: reduceMotion
-      ? []
-      : [
-        { translateY: (1 - menuProgress.value) * MENU_ENTER_OFFSET },
-        { scale: MENU_ENTER_SCALE + (1 - MENU_ENTER_SCALE) * menuProgress.value },
-      ],
-  }));
+  const menuAvailableWidth = Math.max(0, safeWidth - Space.lg * 2);
+  const menuWidth = Math.min(cells.length * MENU_CELL_WIDTH + MENU_CHROME, menuAvailableWidth);
+  const innerMenuWidth = Math.max(0, menuWidth - MENU_CHROME);
+  const columns = Math.max(1, Math.min(cells.length, Math.floor(innerMenuWidth / ControlSize.floatingButton)));
+  const menuCellWidth = Math.min(MENU_CELL_WIDTH, innerMenuWidth / columns);
+  const menuHeightLimit = Math.max(0, screenHeight - topInset - bottomInset - Space.sm * 2);
+  const menuWidthRef = useRef(menuWidth);
+  menuWidthRef.current = menuWidth;
+  const layout = useMemo(() => computeMessageActionsLayout({
+    anchor: anchor && openedTopRef.current !== null && contentHeight !== null
+      ? { ...anchor, y: openedTopRef.current, height: contentHeight }
+      : anchor,
+    role: selection.role,
+    contentHeight,
+    menuWidth,
+    menuHeight: menuSize && Math.abs(menuSize.width - menuWidth) < 1 ? menuSize.height : menuHeightLimit,
+    contentInset,
+    topInset,
+    bottomInset,
+    leftInset,
+    rightInset,
+    isRTL,
+    screenWidth,
+    screenHeight,
+  }), [anchor, bottomInset, contentHeight, contentInset, menuSize, screenHeight, screenWidth, selection.role, topInset, leftInset, rightInset, isRTL, menuWidth, menuHeightLimit]);
+
+  const move = useCallback((target: number) => (
+    reduceMotion
+      ? target
+      : withTiming(target, { duration: Motion.duration.normal, easing: EASE_OUT })
+  ), [reduceMotion]);
+
+  useEffect(() => {
+    if (!layout || closingRef.current) return;
+    if (!openedRef.current) {
+      openedRef.current = true;
+      const cloneAnchor = getMessageCloneAnchor(anchor, contentHeight)
+        ?? { top: layout.messageTop, height: layout.messageHeight };
+      openedTopRef.current = cloneAnchor.top;
+      appliedScrollOffsetRef.current = layout.scrollOffset;
+      cloneLeft.value = layout.messageLeft;
+      if (layout.scrollOffset > 0) {
+        // The pressed content stays optically still: the container jumps to
+        // its clamped top while the inner scroll offset compensates.
+        scrollRef.current?.scrollTo({ y: layout.scrollOffset, animated: false });
+        cloneTop.value = layout.messageTop;
+      } else {
+        cloneTop.value = cloneAnchor.top;
+        cloneTop.value = move(layout.messageTop);
+      }
+      cloneHeight.value = cloneAnchor.height;
+      cloneHeight.value = move(layout.messageHeight);
+      menuTop.value = layout.menuTop;
+      menuLeft.value = layout.menuLeft;
+      menuProgress.value = withTiming(1, { duration: Motion.duration.normal, easing: EASE_OUT });
+      return;
+    }
+    // Preserve reading intent; only clamp a scroll offset when the viewport grows.
+    const boundedOffset = Math.min(appliedScrollOffsetRef.current, Math.max(0, (contentHeight ?? 0) - layout.messageHeight));
+    if (boundedOffset !== appliedScrollOffsetRef.current) {
+      appliedScrollOffsetRef.current = boundedOffset;
+      scrollRef.current?.scrollTo({ y: boundedOffset, animated: false });
+    }
+    // Streaming growth or a rotation re-derives the layout from fresh sizes.
+    cloneTop.value = move(layout.messageTop);
+    cloneLeft.value = move(layout.messageLeft);
+    cloneHeight.value = move(layout.messageHeight);
+    menuTop.value = move(layout.menuTop);
+    menuLeft.value = move(layout.menuLeft);
+  }, [anchor, cloneHeight, cloneLeft, cloneTop, contentHeight, layout, menuLeft, menuProgress, menuTop, move]);
 
   const cloneWidth = layout?.messageWidth ?? initialWidth;
+  const menuViewportHeight = layout?.menuHeight ?? menuHeightLimit;
+  const safeTop = Math.min(screenHeight, Math.max(0, topInset));
+  const safeBottom = Math.max(safeTop, screenHeight - bottomInset);
+  const scrimStyle = useAnimatedStyle(() => ({ opacity: scrimOpacity.value }));
+  const cloneStyle = useAnimatedStyle(() => {
+    // React can commit a new viewport before native onLayout arrives. Clamp
+    // the animated presentation too, rather than exposing last-frame geometry.
+    const x = Math.max(leftInset, Math.min(cloneLeft.value, screenWidth - rightInset - cloneWidth));
+    const height = Math.max(0, Math.min(cloneHeight.value, safeBottom - safeTop));
+    return {
+      top: Math.max(safeTop, Math.min(cloneTop.value, safeBottom - height)),
+      start: isRTL ? screenWidth - x - cloneWidth : x,
+      height,
+      opacity: cloneOpacity.value,
+    };
+  });
+  const menuStyle = useAnimatedStyle(() => {
+    const x = Math.max(leftInset, Math.min(menuLeft.value, screenWidth - rightInset - menuWidth));
+    const top = Math.max(safeTop, Math.min(menuTop.value, safeBottom - menuViewportHeight));
+    return {
+      top,
+      start: isRTL ? screenWidth - x - menuWidth : x,
+      opacity: menuProgress.value,
+      transform: reduceMotion
+        ? []
+        : [
+          { translateY: Math.min((1 - menuProgress.value) * MENU_ENTER_OFFSET, Math.max(0, safeBottom - top - menuViewportHeight)) },
+          { scale: MENU_ENTER_SCALE + (1 - MENU_ENTER_SCALE) * menuProgress.value },
+        ],
+    };
+  });
+
   const scrollEnabled = layout?.scrollEnabled ?? false;
-  const menuCellWidth = Math.min(MENU_CELL_WIDTH, (screenWidth - Space.lg * 2 - Space.xs * 2) / cells.length);
 
   return (
     <View style={styles.root} testID={testID} accessibilityViewIsModal>
@@ -620,11 +666,16 @@ function ThreadMessageActionsContent({
           bounces={scrollEnabled}
           scrollEnabled={scrollEnabled}
           showsVerticalScrollIndicator={scrollEnabled}
+          scrollEventThrottle={16}
+          onScroll={(event) => {
+            const y = event.nativeEvent.contentOffset.y;
+            if (Number.isFinite(y)) appliedScrollOffsetRef.current = Math.max(0, y);
+          }}
         >
           <View
             onLayout={(event) => {
-              const { height } = event.nativeEvent.layout;
-              if (Number.isFinite(height) && height > 0) setContentHeight(height);
+              const { width, height } = event.nativeEvent.layout;
+              if (Math.abs(width - currentWidthRef.current) < 1 && Number.isFinite(height) && height > 0) setContentHeight(height);
             }}
           >
             {renderMessage(message, cloneWidth)}
@@ -634,18 +685,15 @@ function ThreadMessageActionsContent({
       <Animated.View
         testID={`${testID}-menu`}
         pointerEvents={layout ? 'auto' : 'none'}
-        style={[styles.menu, menuStyle]}
-        onLayout={(event) => {
-          const { width, height } = event.nativeEvent.layout;
-          if (width > 0 && height > 0) {
-            setMenuSize((previous) => (
-              previous && previous.width === width && previous.height === height
-                ? previous
-                : { width, height }
-            ));
-          }
-        }}
+        style={[styles.menu, { width: menuWidth, height: menuViewportHeight, maxHeight: menuHeightLimit }, menuStyle]}
       >
+        <ScrollView bounces={false} showsVerticalScrollIndicator={Boolean(menuSize && menuSize.height > menuHeightLimit)} keyboardShouldPersistTaps="handled">
+        <View testID={`${testID}-menu-content`} style={styles.menuContent} onLayout={(event) => {
+          const { width, height } = event.nativeEvent.layout;
+          if (Math.abs(width + MENU_CHROME - menuWidthRef.current) < 1 && Number.isFinite(height) && height > 0) {
+            setMenuSize({ width: width + MENU_CHROME, height: height + MENU_CHROME });
+          }
+        }}>
         {cells.map((cell) => (
           <Pressable
             key={cell.key}
@@ -677,6 +725,8 @@ function ThreadMessageActionsContent({
             </Text>
           </Pressable>
         ))}
+        </View>
+        </ScrollView>
       </Animated.View>
     </View>
   );
@@ -708,10 +758,14 @@ function createStyles(
     // Capsule action bar; cells keep their own rounded press highlight.
     menu: {
       position: 'absolute',
-      flexDirection: 'row',
       padding: Space.xs,
+      overflow: 'hidden',
       borderRadius: Radius.full,
       ...createSurfaceStyle(colors, scheme, 'overlay'),
+    },
+    menuContent: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
     },
     menuCell: {
       width: MENU_CELL_WIDTH,

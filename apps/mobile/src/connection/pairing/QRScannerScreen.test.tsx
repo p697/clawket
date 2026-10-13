@@ -6,6 +6,15 @@ import { QRScannerScreen } from './QRScannerScreen';
 
 const mockMeasureLayout = jest.fn();
 
+let mockLocalFrame = { x: 0, y: 0, width: 390, height: 844 };
+let mockLocalInsets = { top: 59, bottom: 34, left: 0, right: 0 };
+let mockRTL = false;
+let mockHasRegions = false;
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaFrame: () => mockLocalFrame,
+  useSafeAreaInsets: () => mockLocalInsets,
+}));
+
 jest.mock('react-native', () => {
   const ReactRuntime = require('react');
   const primitive = (name: string) => ({ children, ...props }: Record<string, unknown>) => (
@@ -18,6 +27,8 @@ jest.mock('react-native', () => {
       return ReactRuntime.createElement('View', props, children);
     }),
     Text: primitive('Text'),
+    I18nManager: { get isRTL() { return mockRTL; } },
+    ScrollView: primitive('ScrollView'),
     Pressable: primitive('Pressable'),
     StyleSheet: {
       create: <T,>(styles: T) => styles,
@@ -27,14 +38,18 @@ jest.mock('react-native', () => {
   };
 });
 jest.mock('expo-camera', () => ({ CameraView: 'CameraView' }));
+jest.mock('./ScannerReservedRegions', () => ({
+  get hasScannerReservedRegions() { return mockHasRegions; },
+  ScannerReservedRegions: (props: Record<string, unknown>) => require('react').createElement('ReservedRegions', { ...props, testID: 'qr-scanner-reserved-regions' }),
+}));
 jest.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 jest.mock('../../theme', () => ({ useAppTheme: () => ({ theme: { colors: { accent: '#123456' } } }) }));
 
 const productionCodex = JSON.stringify({ v: 2, k: 'cp', b: 'codex', s: 'https://clawket-codex-registry.clawket.workers.dev', g: 'synthetic', a: 'synthetic' });
 const previewOpenClaw = JSON.stringify({ v: 2, k: 'cp', s: 'https://clawket-registry-preview.clawket.workers.dev', g: 'synthetic', a: 'synthetic' });
-const frame = { x: 65, y: 245, width: 250, height: 250 };
+const frame = { x: 70, y: 309.5, width: 250, height: 250 };
 
-function barcode(data: string, x = 90, y = 270): BarcodeScanningResult {
+function barcode(data: string, x = 90, y = 330): BarcodeScanningResult {
   return {
     type: 'qr', data,
     cornerPoints: [{ x, y }, { x: x + 100, y }, { x: x + 100, y: y + 100 }, { x, y: y + 100 }],
@@ -43,12 +58,7 @@ function barcode(data: string, x = 90, y = 270): BarcodeScanningResult {
 }
 
 function measure(view: ReturnType<typeof render>) {
-  const area = view.UNSAFE_getAllByType(View).find(node => {
-    const style = StyleSheet.flatten(node.props.style);
-    return style?.width === 250 && style?.height === 250;
-  })!;
-  // The original screen has no layout handler; keep the regression focused on
-  // accepting an off-frame QR, rather than failing on a newly added test ID.
+  const area = view.getByTestId('qr-scanner-frame');
   act(() => area.props.onLayout?.({ nativeEvent: { layout: frame } }));
 }
 
@@ -58,6 +68,10 @@ function emit(view: ReturnType<typeof render>, result: BarcodeScanningResult) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockLocalFrame = { x: 0, y: 0, width: 390, height: 844 };
+  mockLocalInsets = { top: 59, bottom: 34, left: 0, right: 0 };
+  mockRTL = false;
+  mockHasRegions = false;
   mockMeasureLayout.mockImplementation((_parent, success) => success(frame.x, frame.y, frame.width, frame.height));
 });
 
@@ -83,6 +97,7 @@ it('does not suppress the same QR when it moves from outside into the frame', ()
 });
 
 it('waits for a measured frame before accepting camera events', () => {
+  mockMeasureLayout.mockImplementationOnce(() => {});
   const onScanned = jest.fn();
   const view = render(<QRScannerScreen onScanned={onScanned} onCancel={jest.fn()} />);
   emit(view, barcode(productionCodex));
@@ -140,7 +155,10 @@ it('uses the displayed-frame coordinates after a new layout', () => {
   const onScanned = jest.fn();
   const view = render(<QRScannerScreen onScanned={onScanned} onCancel={jest.fn()} />);
   measure(view);
+  mockLocalFrame = { x: 0, y: 0, width: 740, height: 380 };
+  mockLocalInsets = { top: 0, bottom: 0, left: 0, right: 0 };
   mockMeasureLayout.mockImplementation((_parent, success) => success(245, 65, 250, 250));
+  view.rerender(<QRScannerScreen onScanned={onScanned} onCancel={jest.fn()} />);
   measure(view);
   emit(view, barcode(productionCodex));
   expect(onScanned).not.toHaveBeenCalled();
@@ -154,7 +172,10 @@ it('ignores a late measurement from an older layout', () => {
   let staleMeasurement!: (...values: number[]) => void;
   mockMeasureLayout.mockImplementationOnce((_parent, success) => { staleMeasurement = success; });
   measure(view);
+  mockLocalFrame = { x: 0, y: 0, width: 740, height: 380 };
+  mockLocalInsets = { top: 0, bottom: 0, left: 0, right: 0 };
   mockMeasureLayout.mockImplementation((_parent, success) => success(245, 65, 250, 250));
+  view.rerender(<QRScannerScreen onScanned={onScanned} onCancel={jest.fn()} />);
   measure(view);
   act(() => staleMeasurement(65, 245, 250, 250));
   emit(view, barcode(productionCodex));
@@ -229,4 +250,90 @@ it('ignores buffered native results after the scanner unmounts', () => {
   view.unmount();
   act(() => callback(barcode(productionCodex)));
   expect(onScanned).not.toHaveBeenCalled();
+});
+
+it('remeasures inset-only changes without replacing the camera or accepting an old measurement', () => {
+  const onScanned = jest.fn();
+  const props = { onScanned, onCancel: jest.fn() };
+  const view = render(<QRScannerScreen {...props} />);
+  const camera = view.UNSAFE_getByType(CameraView);
+  let stale!: (...values: number[]) => void;
+  mockMeasureLayout.mockImplementationOnce((_parent, success) => { stale = success; });
+  measure(view);
+  let current!: (...values: number[]) => void;
+  mockMeasureLayout.mockImplementationOnce((_parent, success) => { current = success; });
+  mockLocalInsets = { ...mockLocalInsets, left: 24 };
+  view.rerender(<QRScannerScreen {...props} />);
+  expect(view.UNSAFE_getByType(CameraView)).toBe(camera);
+  expect(current).toBeDefined();
+  act(() => stale(frame.x, frame.y, 250, 250));
+  emit(view, barcode(productionCodex));
+  expect(onScanned).not.toHaveBeenCalled();
+  act(() => current(82, 309.5, 250, 250));
+  emit(view, barcode(productionCodex, 130, 330));
+  expect(onScanned).toHaveBeenCalledTimes(1);
+});
+
+it('shrinks the frame for local width and retires scanning when controls occupy a short window', () => {
+  const onScanned = jest.fn();
+  const props = { onScanned, onCancel: jest.fn(), onChoosePhoto: jest.fn() };
+  mockLocalFrame = { x: 0, y: 0, width: 250, height: 400 };
+  const view = render(<QRScannerScreen {...props} />);
+  const size = StyleSheet.flatten(view.getByTestId('qr-scanner-frame').props.style).width;
+  expect(size).toBeLessThan(250);
+  fireEvent(view.getByTestId('qr-scanner-controls'), 'layout', { nativeEvent: { layout: { width: 250, height: 220 } } });
+  mockLocalFrame = { ...mockLocalFrame, height: 180 };
+  view.rerender(<QRScannerScreen {...props} />);
+  expect(StyleSheet.flatten(view.getByTestId('qr-scanner-frame').props.style)).toMatchObject({ width: 0, height: 0, overflow: 'hidden' });
+  emit(view, barcode(productionCodex));
+  expect(onScanned).not.toHaveBeenCalled();
+  fireEvent.press(view.getByTestId('qr-scanner-photos'));
+  expect(props.onChoosePhoto).toHaveBeenCalledTimes(1);
+});
+
+it('accepts a QR in the newly measured narrow frame, never the old full-size frame', () => {
+  mockLocalFrame = { x: 0, y: 0, width: 250, height: 400 };
+  const onScanned = jest.fn();
+  const view = render(<QRScannerScreen onScanned={onScanned} onCancel={jest.fn()} />);
+  const size = Number(StyleSheet.flatten(view.getByTestId('qr-scanner-frame').props.style).width);
+  expect(size).toBeLessThan(250);
+  emit(view, barcode(productionCodex));
+  expect(onScanned).not.toHaveBeenCalled();
+  mockMeasureLayout.mockImplementation((_parent, success) => success(24, 111.5, size, size));
+  measure(view);
+  emit(view, barcode(productionCodex, 50, 130));
+  emit(view, barcode(productionCodex, 50, 130));
+  expect(onScanned).toHaveBeenCalledTimes(1);
+});
+
+it('rejects old same-size positions and delayed region generations while preserving the camera', () => {
+  mockHasRegions = true;
+  mockLocalFrame = { x: 0, y: 0, width: 951, height: 669 };
+  mockLocalInsets = { top: 0, bottom: 34, left: 0, right: 84 };
+  const onScanned = jest.fn();
+  mockMeasureLayout.mockImplementation((_parent, success) => success(308.5, 192.5, 250, 250));
+  const view = render(<QRScannerScreen onScanned={onScanned} onCancel={jest.fn()} />);
+  const camera = view.UNSAFE_getByType(CameraView);
+  const updateRegions = (regions: Array<{ x: number; y: number; width: number; height: number }>) => fireEvent(
+    view.getByTestId('qr-scanner-reserved-regions'), 'regionsChange', { nativeEvent: { width: 951, height: 669, regions } },
+  );
+  // No region snapshot yet: the measured frame alone is insufficient.
+  emit(view, barcode(productionCodex, 330, 210));
+  expect(onScanned).not.toHaveBeenCalled();
+  updateRegions([]);
+  let stale!: (...values: number[]) => void;
+  mockMeasureLayout.mockImplementationOnce((_parent, success) => { stale = success; });
+  measure(view);
+  updateRegions([{ x: 455.5, y: 0, width: 40, height: 669 }]);
+  // A new-generation measurement still sees the old native position.
+  emit(view, barcode(productionCodex, 330, 210));
+  expect(onScanned).not.toHaveBeenCalled();
+  updateRegions([]);
+  mockMeasureLayout.mockImplementation((_parent, success) => success(102.75, 192.5, 250, 250));
+  updateRegions([{ x: 455.5, y: 0, width: 40, height: 669 }]);
+  act(() => stale(308.5, 192.5, 250, 250));
+  expect(view.UNSAFE_getByType(CameraView)).toBe(camera);
+  emit(view, barcode(productionCodex, 130, 210));
+  emit(view, barcode(productionCodex, 130, 210));
+  expect(onScanned).toHaveBeenCalledTimes(1);
 });

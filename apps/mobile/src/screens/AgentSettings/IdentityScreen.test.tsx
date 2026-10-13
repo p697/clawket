@@ -1,3 +1,7 @@
+// Keep the real confirmation flow; native presentation measurement has its own boundary test.
+jest.mock('../../components/ui/PresentationSafeAreaProvider', () => ({
+  PresentationSafeAreaProvider: ({ children }: React.PropsWithChildren) => children,
+}));
 import React from 'react';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { CAPABILITY_MATRIX, type AgentAdapter, type AgentDescriptor } from '@clawket/agent-protocol';
@@ -10,6 +14,7 @@ jest.mock('react-native', () => {
   const host = (name: string) => ReactRuntime.forwardRef(({ children, style, ...props }: Record<string, unknown>, ref: unknown) =>
     ReactRuntime.createElement(name, { ...props, ref, style: typeof style === 'function' ? style({ pressed: false }) : style }, children));
   return {
+    I18nManager: { isRTL: false },
     Platform: { OS: 'ios', select: (options: Record<string, unknown>) => options.ios ?? options.default },
     Pressable: host('Pressable'), View: host('View'), Text: host('Text'), TextInput: host('TextInput'), ScrollView: host('ScrollView'), ActivityIndicator: host('ActivityIndicator'),
     Modal: ({ visible, children }: { visible: boolean; children: React.ReactNode }) => visible ? children : null,

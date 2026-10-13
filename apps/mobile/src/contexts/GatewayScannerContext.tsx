@@ -6,6 +6,7 @@ import i18n from '../i18n';
 import { showNoticeAlert } from '../utils/notice-alert';
 import { useAppContext } from './AppContext';
 import { useGatewayOverlay } from './GatewayOverlayContext';
+import { PresentationSafeAreaProvider } from '../components/ui/PresentationSafeAreaProvider';
 import { ConfirmationModal } from '../components/ui/ConfirmationModal';
 import { QRScannerScreen } from '../connection/pairing/QRScannerScreen';
 import { parseQRPayload, type QRScanResult } from '../connection/pairing/qrPayload';
@@ -369,7 +370,9 @@ export function GatewayScannerProvider({ children }: { children: React.ReactNode
     <GatewayScannerContext.Provider value={value}>
       {children}
       <Modal visible={scannerVisible} animationType="slide" presentationStyle="fullScreen">
-        <QRScannerScreen onScanned={handleScanned} onCancel={handleCancel} onChoosePhoto={handleChoosePhoto} />
+        <PresentationSafeAreaProvider>
+          <QRScannerScreen onScanned={handleScanned} onCancel={handleCancel} onChoosePhoto={handleChoosePhoto} />
+        </PresentationSafeAreaProvider>
       </Modal>
       <ConfirmationModal
         visible={pendingPairingConfirmation !== null}
