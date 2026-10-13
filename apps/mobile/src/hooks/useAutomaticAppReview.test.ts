@@ -6,6 +6,7 @@ jest.mock('../services/auto-app-review', () => ({ requestAutomaticAppReview: jes
 let onAppState: (state: any) => void;
 beforeEach(() => {
   jest.useFakeTimers(); jest.clearAllMocks();
+  jest.mocked(requestAutomaticAppReview).mockReset().mockResolvedValue(undefined);
   jest.spyOn(AppState, 'addEventListener').mockImplementation((_event, callback) => {
     onAppState = callback;
     return { remove: jest.fn() };

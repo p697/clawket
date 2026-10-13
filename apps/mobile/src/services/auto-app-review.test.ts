@@ -11,7 +11,7 @@ import { completedReviewTurn, emptyReviewState, type AutoAppReviewState } from '
 import { __resetAutomaticAppReviewRuntimeForTests, recordCompletedTurnForAutomaticReview, requestAutomaticAppReview, requestManualAppReview } from './auto-app-review';
 const now = new Date(2026, 9, 13, 12).getTime();
 let state: AutoAppReviewState | null;
-const dev = __DEV__;
+const dev = (globalThis as any).__DEV__;
 beforeEach(() => {
   jest.clearAllMocks(); jest.useFakeTimers(); jest.setSystemTime(now);
   (globalThis as any).__DEV__ = false;
@@ -100,4 +100,14 @@ it('telemetry failure cannot consume the opportunity without requesting StoreKit
   jest.mocked(analyticsEvents.appReviewRequest).mockImplementationOnce(() => { throw new Error('telemetry'); });
   await expect(requestAutomaticAppReview(() => true)).resolves.toBeUndefined();
   expect(StoreReview.requestReview).toHaveBeenCalledTimes(1);
+});
+
+it('preserves Android store fallback and unavailable outcomes', async () => {
+  (Platform as any).OS = 'android';
+  jest.mocked(StoreReview.isAvailableAsync).mockResolvedValue(false);
+  jest.mocked(StoreReview.storeUrl).mockReturnValue('https://play.google.com/store/apps/details?id=com.p697.clawket');
+  jest.mocked(Linking.canOpenURL).mockResolvedValue(true);
+  await expect(requestManualAppReview()).resolves.toBe('store_page');
+  jest.mocked(Linking.canOpenURL).mockResolvedValue(false);
+  await expect(requestManualAppReview()).resolves.toBe('unavailable');
 });
