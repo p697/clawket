@@ -1,139 +1,64 @@
-export const AUTOMATIC_REVIEW_COLD_START_TARGET = 3;
-
+const DAY_MS = 86_400_000;
+export const REVIEW_COOLDOWN_MS = 60 * DAY_MS;
+export const REVIEW_YEAR_MS = 365 * DAY_MS;
+export const REVIEW_RECENCY_MS = 7 * DAY_MS;
 export type AutoAppReviewState = {
-  version: 2;
-  firstSuccessfulSendAtMs?: number;
-  coldStartsAfterFirstSuccessfulSend: number;
-  reviewPendingAtMs?: number;
-  reviewAttemptedAtMs?: number;
+  version: 3;
+  completedTurns: number;
+  successfulDays: string[];
+  lastCompletedAtMs?: number;
+  attempts: { atMs: number; appVersion: string }[];
+  lastManualAtMs?: number;
 };
-
-export type AutoAppReviewStateEvent = {
-  type: 'successful_send' | 'cold_start' | 'review_attempt_started';
-  atMs: number;
-};
-
-export type AutoAppReviewStateTransition = {
-  state: AutoAppReviewState | null;
-  changed: boolean;
-  shouldRequestReview: boolean;
-};
-
-export type AutoAppReviewStateStore = {
-  getAutoAppReviewState(): Promise<AutoAppReviewState | null>;
-  setAutoAppReviewState(state: AutoAppReviewState): Promise<void>;
-};
-
-function positiveFiniteNumber(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0
-    ? value
-    : undefined;
-}
+export type ReviewEligibility = 'eligible' | 'experience' | 'stale' | 'cooldown' | 'annual_limit' | 'version';
+export const emptyReviewState = (): AutoAppReviewState => ({ version: 3, completedTurns: 0, successfulDays: [], attempts: [] });
+const timestamp = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0 && value <= 8.64e15;
 
 export function normalizeAutoAppReviewState(value: unknown): AutoAppReviewState | null {
   if (!value || typeof value !== 'object') return null;
   const record = value as Record<string, unknown>;
-  const firstSuccessfulSendAtMs = positiveFiniteNumber(record.firstSuccessfulSendAtMs);
-  const reviewAttemptedAtMs = positiveFiniteNumber(record.reviewAttemptedAtMs)
-    // Conservative compatibility for an earlier v2 draft and the legacy v1 shape.
-    ?? positiveFiniteNumber(record.reviewRequestedAtMs)
-    // A user who saw the legacy prompt must not be prompted again during migration.
-    ?? positiveFiniteNumber(record.lastAttemptAtMs);
-  const reviewPendingAtMs = reviewAttemptedAtMs === undefined && firstSuccessfulSendAtMs !== undefined
-    ? positiveFiniteNumber(record.reviewPendingAtMs)
-    : undefined;
-  const rawColdStarts = typeof record.coldStartsAfterFirstSuccessfulSend === 'number'
-    && Number.isFinite(record.coldStartsAfterFirstSuccessfulSend)
-    ? Math.floor(record.coldStartsAfterFirstSuccessfulSend)
-    : 0;
-  const coldStartsAfterFirstSuccessfulSend = Math.max(
-    0,
-    Math.min(AUTOMATIC_REVIEW_COLD_START_TARGET, rawColdStarts),
-  );
-  const recognized = record.version === 2
-    || firstSuccessfulSendAtMs !== undefined
-    || reviewPendingAtMs !== undefined
-    || reviewAttemptedAtMs !== undefined
-    // Recognize the old v1 shape without treating first use as a successful send.
-    || positiveFiniteNumber(record.firstSeenAtMs) !== undefined;
-  if (!recognized) return null;
-
+  if (record.version !== 3) {
+    // Old send/launch counters prove no completed conversation. Preserve only invitations.
+    const legacy = [record.reviewAttemptedAtMs, record.reviewRequestedAtMs, record.lastAttemptAtMs].filter(timestamp);
+    if (record.version !== 2 && !timestamp(record.firstSeenAtMs) && !legacy.length) return null;
+    return { ...emptyReviewState(), attempts: legacy.length ? [{ atMs: Math.max(...legacy), appVersion: 'legacy' }] : [] };
+  }
+  // Corrupted counters must never authorize a prompt. Storage reads fail closed.
+  if (!Number.isInteger(record.completedTurns) || (record.completedTurns as number) < 0 || (record.completedTurns as number) > 3
+    || !Array.isArray(record.successfulDays) || record.successfulDays.length > 2
+    || !record.successfulDays.every(day => typeof day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(day) && Number.isFinite(Date.parse(`${day}T00:00:00Z`)) && new Date(`${day}T00:00:00Z`).toISOString().slice(0, 10) === day)
+    || !Array.isArray(record.attempts) || record.attempts.length > 3
+    || !record.attempts.every(attempt => attempt && timestamp(attempt.atMs) && typeof attempt.appVersion === 'string' && attempt.appVersion.length > 0 && attempt.appVersion.length <= 64)
+    || (record.lastCompletedAtMs !== undefined && !timestamp(record.lastCompletedAtMs))
+    || (record.lastManualAtMs !== undefined && !timestamp(record.lastManualAtMs))) return null;
   return {
-    version: 2,
-    coldStartsAfterFirstSuccessfulSend,
-    ...(firstSuccessfulSendAtMs !== undefined ? { firstSuccessfulSendAtMs } : {}),
-    ...(reviewPendingAtMs !== undefined ? { reviewPendingAtMs } : {}),
-    ...(reviewAttemptedAtMs !== undefined ? { reviewAttemptedAtMs } : {}),
+    version: 3, completedTurns: record.completedTurns as number,
+    successfulDays: [...new Set(record.successfulDays)],
+    attempts: record.attempts.map(({ atMs, appVersion }) => ({ atMs, appVersion })).sort((a, b) => a.atMs - b.atMs),
+    ...(timestamp(record.lastCompletedAtMs) ? { lastCompletedAtMs: record.lastCompletedAtMs } : {}),
+    ...(timestamp(record.lastManualAtMs) ? { lastManualAtMs: record.lastManualAtMs } : {}),
   };
 }
 
-export function transitionAutoAppReviewState(
-  state: AutoAppReviewState | null,
-  event: AutoAppReviewStateEvent,
-): AutoAppReviewStateTransition {
-  if (!Number.isFinite(event.atMs) || event.atMs <= 0) {
-    return { state, changed: false, shouldRequestReview: false };
-  }
-
-  if (event.type === 'successful_send') {
-    const current = state ?? {
-      version: 2 as const,
-      coldStartsAfterFirstSuccessfulSend: 0,
-    };
-    if (current.firstSuccessfulSendAtMs !== undefined || current.reviewAttemptedAtMs !== undefined) {
-      return { state: current, changed: false, shouldRequestReview: false };
-    }
-    return {
-      state: { ...current, firstSuccessfulSendAtMs: event.atMs },
-      changed: true,
-      shouldRequestReview: false,
-    };
-  }
-
-  if (event.type === 'review_attempt_started') {
-    if (!state?.reviewPendingAtMs || state.reviewAttemptedAtMs !== undefined) {
-      return { state, changed: false, shouldRequestReview: false };
-    }
-    const { reviewPendingAtMs: _, ...withoutPending } = state;
-    return {
-      state: { ...withoutPending, reviewAttemptedAtMs: event.atMs },
-      changed: true,
-      shouldRequestReview: true,
-    };
-  }
-
-  if (!state || state.firstSuccessfulSendAtMs === undefined || state.reviewAttemptedAtMs !== undefined) {
-    return { state, changed: false, shouldRequestReview: false };
-  }
-
-  // A persisted pending trigger survives termination before the delayed native attempt.
-  if (state.reviewPendingAtMs !== undefined) {
-    return { state, changed: false, shouldRequestReview: true };
-  }
-
-  const coldStartsAfterFirstSuccessfulSend = Math.min(
-    AUTOMATIC_REVIEW_COLD_START_TARGET,
-    state.coldStartsAfterFirstSuccessfulSend + 1,
-  );
-  const shouldRequestReview = coldStartsAfterFirstSuccessfulSend === AUTOMATIC_REVIEW_COLD_START_TARGET;
-  return {
-    state: {
-      ...state,
-      coldStartsAfterFirstSuccessfulSend,
-      ...(shouldRequestReview ? { reviewPendingAtMs: event.atMs } : {}),
-    },
-    changed: true,
-    shouldRequestReview,
-  };
+export function completedReviewTurn(state: AutoAppReviewState, now: number): AutoAppReviewState {
+  if (!timestamp(now)) return state;
+  const date = new Date(now);
+  const day = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  return { ...state, completedTurns: Math.min(3, state.completedTurns + 1),
+    successfulDays: [...new Set([...state.successfulDays, day])].slice(-2), lastCompletedAtMs: now };
 }
 
-export async function persistAutoAppReviewStateEvent(
-  store: AutoAppReviewStateStore,
-  event: AutoAppReviewStateEvent,
-): Promise<AutoAppReviewStateTransition> {
-  const transition = transitionAutoAppReviewState(await store.getAutoAppReviewState(), event);
-  if (transition.changed && transition.state) {
-    await store.setAutoAppReviewState(transition.state);
-  }
-  return transition;
+export function reviewEligibility(state: AutoAppReviewState, now: number, appVersion: string): ReviewEligibility {
+  if (!timestamp(now) || !appVersion || state.completedTurns < 3 || state.successfulDays.length < 2) return 'experience';
+  if (!state.lastCompletedAtMs || now < state.lastCompletedAtMs || now - state.lastCompletedAtMs > REVIEW_RECENCY_MS) return 'stale';
+  const lastInvitation = Math.max(state.lastManualAtMs ?? 0, ...state.attempts.map(attempt => attempt.atMs));
+  if (lastInvitation && now - lastInvitation < REVIEW_COOLDOWN_MS) return 'cooldown';
+  if (state.attempts.filter(attempt => now - attempt.atMs < REVIEW_YEAR_MS).length >= 3) return 'annual_limit';
+  if (state.attempts.some(attempt => attempt.appVersion === appVersion)) return 'version';
+  return 'eligible';
+}
+
+export function recordReviewAttempt(state: AutoAppReviewState, now: number, appVersion: string): AutoAppReviewState {
+  return { ...emptyReviewState(), ...(state.lastManualAtMs ? { lastManualAtMs: state.lastManualAtMs } : {}),
+    attempts: [...state.attempts.filter(attempt => now - attempt.atMs < REVIEW_YEAR_MS), { atMs: now, appVersion }].slice(-3) };
 }

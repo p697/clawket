@@ -108,6 +108,7 @@ export type RosterViewProps = Readonly<{
   showOfflineBanner?: boolean;
   showErrorBanner?: boolean;
   rosterError?: boolean;
+  onReviewInteraction?: () => void;
   onOpenAccount: () => void;
   onSearch: () => void;
   onAdd: () => void;
@@ -136,6 +137,7 @@ export type RosterScreenProps = Readonly<{
   graceBanner?: RosterGraceBanner;
   isPro?: boolean;
   accountAttentionCount?: number;
+  onReviewInteraction?: () => void;
   onOpenAccount: () => void;
   onSearch: () => void;
   onAdd: () => void;
@@ -411,6 +413,7 @@ export function RosterView({
   recovering,
   showErrorBanner,
   rosterError,
+  onReviewInteraction,
   onOpenAccount,
   onSearch,
   onAdd,
@@ -543,7 +546,7 @@ export function RosterView({
   const loaderPhase = useLoadingHandoff(rosterLoading, rows.length > 0);
 
   return (
-    <View testID="roster-screen" style={[styles.screen, { backgroundColor: theme.colors.canvas }]}>
+    <View testID="roster-screen" onTouchStart={onReviewInteraction} style={[styles.screen, { backgroundColor: theme.colors.canvas }]}>
       <View pointerEvents="box-none" style={[styles.header, headerInsets]}>
         <RosterHeader
           accountBadge={accountBadge}
@@ -645,6 +648,7 @@ export function RosterScreen({
   graceBanner,
   isPro = false,
   accountAttentionCount = 0,
+  onReviewInteraction,
   onOpenAccount,
   onSearch,
   onAdd,
@@ -676,6 +680,9 @@ export function RosterScreen({
   const [actionRow, setActionRow] = useState<RosterDisplayRow | null>(null);
   const [removeRow, setRemoveRow] = useState<RosterDisplayRow | null>(null);
   const [renameRow, setRenameRow] = useState<RosterDisplayRow | null>(null);
+  useEffect(() => {
+    if (refreshing || addVisible || actionRow || removeRow || renameRow) onReviewInteraction?.();
+  }, [refreshing, addVisible, actionRow, removeRow, renameRow, onReviewInteraction]);
   const rows = useMemo(() => buildRosterRows(roster, {
     runActivities: connections.runActivities,
     ...(pinnedSessionKeys ? { pinnedSessionKeys } : {}),
@@ -861,6 +868,7 @@ export function RosterScreen({
   return (
     <>
       <RosterView
+        onReviewInteraction={onReviewInteraction}
         selectedThread={presentation === 'sidebar' ? selectedThread : undefined}
         connecting={connections.activeState === 'connecting' || connections.activeState === 'handshaking'}
         connectionFailure={shownFailure ? { ...shownFailure, retrying: heldForActive !== undefined } : undefined}

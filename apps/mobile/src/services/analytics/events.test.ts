@@ -147,6 +147,7 @@ const SPEC_EVENT_PROPERTIES: Readonly<Record<string, ReadonlyArray<string>>> = {
   grace_banner_viewed: ['days_left'],
   grace_expired: ['days_left'],
   app_rating_tapped: ['source', 'result'],
+  app_review_request: ['outcome', 'reason'],
 };
 
 const RETAINED_COMPAT_EVENT_NAMES = [
@@ -491,4 +492,16 @@ it('bounds transport diagnostics and separates a recovery trigger from its under
     .toEqual({ backend: 'openclaw', transport: 'relay', reason: 'probe_failed', origin: 'health_probe', cause: 'socket_open_timeout' });
   expect(sanitizeAnalyticsEventProperties('reconnect', { origin: privateText, cause: privateText, reason: privateText }))
     .toEqual({ origin: 'other', cause: 'other', reason: 'other' });
+});
+
+
+describe('review request telemetry privacy', () => {
+  it('records only bounded request outcomes, never a star rating or claimed submission', () => {
+    expect(sanitizeAnalyticsEventProperties('app_review_request', {
+      outcome: 'requested', reason: 'eligible', stars: 5, message: 'private', url: 'https://private',
+    })).toEqual({ outcome: 'requested', reason: 'eligible' });
+    expect(sanitizeAnalyticsEventProperties('app_review_request', {
+      outcome: 'private payload', reason: 'private failure',
+    })).toEqual({ outcome: 'other', reason: 'other' });
+  });
 });

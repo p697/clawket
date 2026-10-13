@@ -455,53 +455,30 @@ describe('StorageService legacy connections and config backups', () => {
     );
   });
 
-  it('normalizes and persists the automatic review launch state', async () => {
+  it('migrates review invitations without granting experience from legacy sends', async () => {
     mockedAsyncStorage.getItem.mockResolvedValueOnce(JSON.stringify({
-      version: 2,
-      firstSuccessfulSendAtMs: 100,
-      coldStartsAfterFirstSuccessfulSend: 2,
+      version: 2, firstSuccessfulSendAtMs: 100, coldStartsAfterFirstSuccessfulSend: 3,
     }));
+    const empty = { version: 3 as const, completedTurns: 0, successfulDays: [], attempts: [] };
+    await expect(StorageService.getAutoAppReviewState()).resolves.toEqual(empty);
+    await StorageService.setAutoAppReviewState(empty);
+    expect(mockedAsyncStorage.setItem).toHaveBeenCalledWith('clawket.autoAppReviewState.v1', JSON.stringify(empty));
+    mockedAsyncStorage.getItem.mockResolvedValueOnce(JSON.stringify({ firstSeenAtMs: 10, lastAttemptAtMs: 20 }));
     await expect(StorageService.getAutoAppReviewState()).resolves.toEqual({
-      version: 2,
-      firstSuccessfulSendAtMs: 100,
-      coldStartsAfterFirstSuccessfulSend: 2,
-    });
-
-    await StorageService.setAutoAppReviewState({
-      version: 2,
-      firstSuccessfulSendAtMs: 100,
-      coldStartsAfterFirstSuccessfulSend: 3,
-      reviewPendingAtMs: 400,
-    });
-    expect(mockedAsyncStorage.setItem).toHaveBeenCalledWith(
-      'clawket.autoAppReviewState.v1',
-      JSON.stringify({
-        version: 2,
-        coldStartsAfterFirstSuccessfulSend: 3,
-        firstSuccessfulSendAtMs: 100,
-        reviewPendingAtMs: 400,
-      }),
-    );
-
-    mockedAsyncStorage.getItem.mockResolvedValueOnce(JSON.stringify({
-      firstSeenAtMs: 10,
-      lastAttemptAtMs: 20,
-      lastAttemptVersion: '2.1.2',
-    }));
-    await expect(StorageService.getAutoAppReviewState()).resolves.toEqual({
-      version: 2,
-      coldStartsAfterFirstSuccessfulSend: 0,
-      reviewAttemptedAtMs: 20,
+      ...empty, attempts: [{ atMs: 20, appVersion: 'legacy' }],
     });
   });
 
-  it('surfaces automatic review state write failures to its side-effect gate', async () => {
+  it('does not erase review history on a failed read, corrupt state, or write failure', async () => {
+    mockedAsyncStorage.getItem.mockRejectedValueOnce(new Error('read failed'));
+    await expect(StorageService.getAutoAppReviewState()).rejects.toThrow('read failed');
+    mockedAsyncStorage.getItem.mockResolvedValueOnce('{broken');
+    await expect(StorageService.getAutoAppReviewState()).rejects.toThrow();
+    mockedAsyncStorage.getItem.mockResolvedValueOnce(JSON.stringify({ version: 3, completedTurns: 999 }));
+    await expect(StorageService.getAutoAppReviewState()).rejects.toThrow('Invalid automatic app review state');
     mockedAsyncStorage.setItem.mockRejectedValueOnce(new Error('disk full'));
-
     await expect(StorageService.setAutoAppReviewState({
-      version: 2,
-      firstSuccessfulSendAtMs: 100,
-      coldStartsAfterFirstSuccessfulSend: 1,
+      version: 3, completedTurns: 0, successfulDays: [], attempts: [],
     })).rejects.toThrow('disk full');
   });
 });

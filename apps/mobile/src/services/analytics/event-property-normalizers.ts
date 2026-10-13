@@ -217,6 +217,13 @@ export function normalizeAnalyticsEventString(
   property: string,
   value: string,
 ): string {
+  if (event === 'app_review_request') {
+    const values: Record<string, readonly string[]> = {
+      outcome: ['requested', 'skipped', 'unavailable', 'error'],
+      reason: ['eligible', 'experience', 'stale', 'cooldown', 'annual_limit', 'version', 'native', 'operation'],
+    };
+    return values[property]?.includes(value) ? value : 'other';
+  }
   if (event === 'reconnect') {
     const values: Record<string, readonly string[]> = {
       backend: ['openclaw', 'hermes', 'local-model', 'pi', 'codex', 'claude-code'],

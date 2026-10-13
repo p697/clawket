@@ -1,139 +1,54 @@
-import {
-  AUTOMATIC_REVIEW_COLD_START_TARGET,
-  AutoAppReviewState,
-  normalizeAutoAppReviewState,
-  persistAutoAppReviewStateEvent,
-  transitionAutoAppReviewState,
-} from './auto-app-review-state';
-
-describe('automatic app review state', () => {
-  it('does not count cold starts before the first successful send', () => {
-    expect(transitionAutoAppReviewState(null, { type: 'cold_start', atMs: 1_000 })).toEqual({
-      state: null,
-      changed: false,
-      shouldRequestReview: false,
-    });
+import { completedReviewTurn, emptyReviewState, normalizeAutoAppReviewState, recordReviewAttempt, reviewEligibility, REVIEW_COOLDOWN_MS, REVIEW_YEAR_MS } from './auto-app-review-state';
+const day = 86_400_000;
+const now = new Date(2026, 9, 13, 12).getTime();
+function eligible() {
+  return [now - day, now, now].reduce(completedReviewTurn, emptyReviewState());
+}
+describe('review qualification and durable limits', () => {
+  it('needs three completed turns across two local dates, not sends or launches', () => {
+    expect(reviewEligibility(emptyReviewState(), now, '1')).toBe('experience');
+    const sameDay = [now, now, now].reduce(completedReviewTurn, emptyReviewState());
+    expect(reviewEligibility(sameDay, now, '1')).toBe('experience');
+    expect(reviewEligibility(eligible(), now, '1')).toBe('eligible');
   });
-
-  it('persists a pending request on the third cold start and consumes it only when an attempt starts', () => {
-    let state: AutoAppReviewState | null = null;
-    const sent = transitionAutoAppReviewState(state, { type: 'successful_send', atMs: 1_000 });
-    state = sent.state;
-    expect(sent.shouldRequestReview).toBe(false);
-
-    for (let coldStart = 1; coldStart < AUTOMATIC_REVIEW_COLD_START_TARGET; coldStart += 1) {
-      const transition = transitionAutoAppReviewState(state, {
-        type: 'cold_start',
-        atMs: 1_000 + coldStart,
-      });
-      state = transition.state;
-      expect(transition.shouldRequestReview).toBe(false);
+  it('requires recent completion and rejects clock rollback', () => {
+    expect(reviewEligibility(eligible(), now + 8 * day, '1')).toBe('stale');
+    expect(reviewEligibility(eligible(), now - 1, '1')).toBe('stale');
+  });
+  it('resets experience after every attempt and respects cooldown including legacy/manual invitations', () => {
+    const requested = recordReviewAttempt(eligible(), now, '1');
+    expect(requested.completedTurns).toBe(0);
+    for (const extra of [{ attempts: requested.attempts }, { lastManualAtMs: now }, { attempts: [{ atMs: now, appVersion: 'legacy' }] }]) {
+      const state = { ...eligible(), ...extra, lastCompletedAtMs: now + REVIEW_COOLDOWN_MS - 1 };
+      expect(reviewEligibility(state, now + REVIEW_COOLDOWN_MS - 1, '2')).toBe('cooldown');
+      expect(reviewEligibility(state, now + REVIEW_COOLDOWN_MS, '2')).toBe('eligible');
     }
-
-    const third = transitionAutoAppReviewState(state, { type: 'cold_start', atMs: 2_000 });
-    expect(third.shouldRequestReview).toBe(true);
-    expect(third.state).toEqual({
-      version: 2,
-      firstSuccessfulSendAtMs: 1_000,
-      coldStartsAfterFirstSuccessfulSend: 3,
-      reviewPendingAtMs: 2_000,
-    });
-
-    const later = transitionAutoAppReviewState(third.state, { type: 'cold_start', atMs: 3_000 });
-    expect(later).toEqual({ state: third.state, changed: false, shouldRequestReview: true });
-
-    const attempted = transitionAutoAppReviewState(later.state, {
-      type: 'review_attempt_started',
-      atMs: 3_001,
-    });
-    expect(attempted).toEqual({
-      state: {
-        version: 2,
-        firstSuccessfulSendAtMs: 1_000,
-        coldStartsAfterFirstSuccessfulSend: 3,
-        reviewAttemptedAtMs: 3_001,
-      },
-      changed: true,
-      shouldRequestReview: true,
-    });
-    expect(transitionAutoAppReviewState(attempted.state, { type: 'cold_start', atMs: 4_000 }))
-      .toEqual({ state: attempted.state, changed: false, shouldRequestReview: false });
   });
-
-  it('does not reset the launch counter on later successful sends', () => {
-    const state: AutoAppReviewState = {
-      version: 2,
-      firstSuccessfulSendAtMs: 100,
-      coldStartsAfterFirstSuccessfulSend: 2,
-    };
-    expect(transitionAutoAppReviewState(state, { type: 'successful_send', atMs: 500 }))
-      .toEqual({ state, changed: false, shouldRequestReview: false });
+  it('allows at most three attempts in a rolling year and one per recorded app version', () => {
+    const state = { ...eligible(), attempts: [300, 200, 100].map((days, i) => ({ atMs: now - days * day, appVersion: String(i) })) };
+    expect(reviewEligibility(state, now, 'new')).toBe('annual_limit');
+    state.attempts[0].atMs = now - REVIEW_YEAR_MS;
+    expect(reviewEligibility(state, now, 'new')).toBe('eligible');
+    state.attempts = state.attempts.slice(1);
+    expect(reviewEligibility(state, now, '1')).toBe('version');
   });
-
-  it('migrates legacy attempts but never mistakes first-seen time for a successful send', () => {
-    expect(normalizeAutoAppReviewState({
-      firstSeenAtMs: 10,
-      lastAttemptAtMs: 20,
-      lastAttemptVersion: '2.1.2',
-    })).toEqual({
-      version: 2,
-      coldStartsAfterFirstSuccessfulSend: 0,
-      reviewAttemptedAtMs: 20,
-    });
-    expect(normalizeAutoAppReviewState({ firstSeenAtMs: 10 })).toEqual({
-      version: 2,
-      coldStartsAfterFirstSuccessfulSend: 0,
-    });
-    expect(normalizeAutoAppReviewState({ coldStartsAfterFirstSuccessfulSend: 2 })).toBeNull();
+  it.each(['reviewAttemptedAtMs', 'reviewRequestedAtMs', 'lastAttemptAtMs'])('preserves %s without carrying over old send counters', key => {
+    expect(normalizeAutoAppReviewState({ version: 2, [key]: now, firstSuccessfulSendAtMs: now, coldStartsAfterFirstSuccessfulSend: 3 }))
+      .toEqual({ ...emptyReviewState(), attempts: [{ atMs: now, appVersion: 'legacy' }] });
   });
-
-  it('persists only changed transitions before returning the prompt decision', async () => {
-    let state: AutoAppReviewState | null = {
-      version: 2,
-      firstSuccessfulSendAtMs: 100,
-      coldStartsAfterFirstSuccessfulSend: 2,
-    };
-    const store = {
-      getAutoAppReviewState: jest.fn(async () => state),
-      setAutoAppReviewState: jest.fn(async (next: AutoAppReviewState) => {
-        state = next;
-      }),
-    };
-
-    await expect(persistAutoAppReviewStateEvent(store, { type: 'cold_start', atMs: 500 }))
-      .resolves.toMatchObject({ shouldRequestReview: true, changed: true });
-    expect(store.setAutoAppReviewState).toHaveBeenCalledWith(expect.objectContaining({
-      coldStartsAfterFirstSuccessfulSend: 3,
-      reviewPendingAtMs: 500,
-    }));
-
-    store.setAutoAppReviewState.mockClear();
-    await expect(persistAutoAppReviewStateEvent(store, { type: 'cold_start', atMs: 600 }))
-      .resolves.toMatchObject({ shouldRequestReview: true, changed: false });
-    expect(store.setAutoAppReviewState).not.toHaveBeenCalled();
-
-    await expect(persistAutoAppReviewStateEvent(store, {
-      type: 'review_attempt_started',
-      atMs: 700,
-    })).resolves.toMatchObject({ shouldRequestReview: true, changed: true });
-    expect(store.setAutoAppReviewState).toHaveBeenCalledWith(expect.objectContaining({
-      reviewAttemptedAtMs: 700,
-    }));
+  it('roundtrips state and caps stored counts and dates', () => {
+    let state = eligible();
+    for (let i = 0; i < 10; i++) state = completedReviewTurn(state, now + i * day);
+    expect(state.completedTurns).toBe(3);
+    expect(state.successfulDays).toHaveLength(2);
+    expect(normalizeAutoAppReviewState(JSON.parse(JSON.stringify(state)))).toEqual(state);
   });
-
-  it('propagates persistence failure instead of authorizing the one-time side effect', async () => {
-    const store = {
-      getAutoAppReviewState: jest.fn(async () => ({
-        version: 2 as const,
-        firstSuccessfulSendAtMs: 100,
-        coldStartsAfterFirstSuccessfulSend: 2,
-      })),
-      setAutoAppReviewState: jest.fn(async () => {
-        throw new Error('disk full');
-      }),
-    };
-
-    await expect(persistAutoAppReviewStateEvent(store, { type: 'cold_start', atMs: 500 }))
-      .rejects.toThrow('disk full');
+  it.each([
+    { completedTurns: -1 }, { completedTurns: 4 }, { completedTurns: NaN },
+    { successfulDays: ['2026-99-99'] }, { successfulDays: ['2026-02-30'] },
+    { attempts: [{ atMs: 0, appVersion: '1' }] }, { attempts: [{ atMs: now, appVersion: {} }] },
+    { lastManualAtMs: -1 }, { lastCompletedAtMs: Infinity },
+  ])('rejects corrupted persisted input: %j', extra => {
+    expect(normalizeAutoAppReviewState({ ...eligible(), ...extra })).toBeNull();
   });
 });

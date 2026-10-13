@@ -13,7 +13,6 @@ const mockActivate = jest.fn();
 const mockRequestConfirmation = jest.fn();
 const mockOpenPaywall = jest.fn();
 const mockGatewayConnectSaved = jest.fn();
-const mockRecordSuccessfulSend = jest.fn(async () => undefined);
 const mockActiveAdapter = {
   connection: { id: 'connection-1' },
   prompt: mockPrompt,
@@ -50,10 +49,6 @@ jest.mock('../services/analytics/events', () => ({
   analyticsEvents: {
     gatewayConnectSaved: (...args: unknown[]) => mockGatewayConnectSaved(...args),
   },
-}));
-
-jest.mock('../services/auto-app-review', () => ({
-  recordSuccessfulSendForAutomaticReview: () => mockRecordSuccessfulSend(),
 }));
 
 // Import after mocks are set up
@@ -299,7 +294,6 @@ describe('useDeepLinkHandler', () => {
         text: 'hello',
         idempotencyKey: expect.stringMatching(/^deeplink_[a-z0-9]+_[a-f0-9]{8}$/),
       });
-      expect(mockRecordSuccessfulSend).toHaveBeenCalledTimes(1);
     });
 
     it('should navigate and prompt a custom sessionKey for an agent action', async () => {
@@ -462,7 +456,6 @@ describe('useDeepLinkHandler', () => {
         'Connection is not ready. Please try again in the thread.',
         [{ text: 'OK' }],
       );
-      expect(mockRecordSuccessfulSend).not.toHaveBeenCalled();
     });
 
     it('should not navigate or send an agent action without an active connection', () => {

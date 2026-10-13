@@ -92,7 +92,7 @@ jest.mock('expo-document-picker', () => ({
 
 
 jest.mock('../services/auto-app-review', () => ({
-  recordSuccessfulSendForAutomaticReview: jest.fn().mockResolvedValue(undefined),
+  recordCompletedTurnForAutomaticReview: jest.fn().mockResolvedValue(undefined),
 }));
 
 jest.mock('../services/storage', () => ({

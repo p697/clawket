@@ -38,7 +38,7 @@ import * as DocumentPicker from "expo-document-picker";
 
 import { useChatImagePreview } from "../hooks/useChatImagePreview";
 import { analyticsEvents } from "../services/analytics/events";
-import { recordSuccessfulSendForAutomaticReview } from "../services/auto-app-review";
+import { recordCompletedTurnForAutomaticReview } from "../services/auto-app-review";
 import { cacheMessageImages } from "../services/image-cache";
 import { StorageService } from "../services/storage";
 import { ConnectionState, SessionInfo } from "../types";
@@ -828,7 +828,7 @@ export function useChatController({
   messageQueueRef.current = messageQueue;
   // A preflight may outlive navigation, an adapter replacement, or unmount.
   // Even returning to the same session must not revive an old continuation.
-  const sendScope = useMemo(() => ({ active: true }), [adapter, messageQueue.scopeKey]);
+  const sendScope = useMemo(() => ({ active: true, reviewRunId: null as string | null }), [adapter, messageQueue.scopeKey]);
   const sendScopeRef = useRef(sendScope);
   sendScopeRef.current = sendScope;
   useEffect(() => {
@@ -1823,6 +1823,7 @@ export function useChatController({
     }
     const previousRunId = currentRunIdRef.current;
     currentRunIdRef.current = runId;
+    if (previousRunId && sendScopeRef.current.reviewRunId === previousRunId) sendScopeRef.current.reviewRunId = runId;
     pendingOptimisticRunIdsRef.current.delete(sessionKey);
     if (showDebug) {
       dbg(
@@ -2341,6 +2342,17 @@ export function useChatController({
         const tools = chatToolMessagesRef.current;
         const hasFinalAttachments = Boolean(update.finalMessage?.artifactAttachments?.length || update.finalMessage?.imageUris?.length || update.finalMessage?.fileAttachments?.length);
         const completedText = hasFinalAttachments ? update.finalMessage!.text : (update.finalMessage?.text || streamText);
+        const reviewScope = sendScopeRef.current;
+        if (reviewScope.reviewRunId === update.runId) {
+          reviewScope.reviewRunId = null;
+          if (reviewScope.active && update.stopReason === "end_turn" && !update.unappliedInput
+            && (completedText.trim() || hasFinalAttachments || replyTextSegments(segments).some(segment => segment.text.trim()))
+            && !isAssistantSilentReplyMessage({ role: "assistant", text: completedText })
+            && !isAssistantDeliveryMirrorMessage(update.finalMessage)
+            && AppState.currentState === "active") {
+            void recordCompletedTurnForAutomaticReview();
+          }
+        }
         if (segments.length > 0 || tools.length > 0) {
           const completed = update.stopReason !== "cancelled" && update.stopReason !== "error";
           const finalText = completed
@@ -2797,6 +2809,7 @@ export function useChatController({
 
       const claimsActiveRun = !currentRunIdRef.current;
       if (claimsActiveRun) {
+        submissionScope.reviewRunId = effectiveText.trimStart().startsWith("/") ? null : idempotencyKey;
         setRunAcknowledged(false);
         clearTransientRunPresentation({ preserveCurrentStream: true });
         currentRunIdRef.current = idempotencyKey;
@@ -2844,7 +2857,6 @@ export function useChatController({
             setMessageAcceptedAt(submittedAt);
             setAcceptedSubmission({ at: submittedAt, text: effectiveText, attachmentUris: images.map((image) => image.uri) });
           }
-          void recordSuccessfulSendForAutomaticReview();
           markTransportConfirmed();
           setUnconfirmedMessageIds((previous) => {
             if (!previous.has(uiMsg.id)) return previous;
@@ -2864,6 +2876,9 @@ export function useChatController({
             serverRunId !== idempotencyKey &&
             currentRunIdRef.current === idempotencyKey
           ) {
+            if (submissionScope.active && sendScopeRef.current === submissionScope && submissionScope.reviewRunId === idempotencyKey) {
+              submissionScope.reviewRunId = serverRunId;
+            }
             currentRunIdRef.current = serverRunId;
             const existing = sessionRunStateRef.current.get(sessionKey);
             if (existing && existing.runId === idempotencyKey) {
@@ -2875,6 +2890,7 @@ export function useChatController({
           }
         })
         .catch((error: unknown) => {
+          if (submissionScope.reviewRunId === idempotencyKey) submissionScope.reviewRunId = null;
           setUnconfirmedMessageIds((previous) => {
             if (!previous.has(uiMsg.id)) return previous;
             const next = new Set(previous);

@@ -11,7 +11,6 @@ import { getConnectionRuntime } from '../connection';
 import type { RootStackParamList } from '../navigation/root-stack';
 import { useGatewayScanner } from '../contexts/GatewayScannerContext';
 import { analyticsEvents } from '../services/analytics/events';
-import { recordSuccessfulSendForAutomaticReview } from '../services/auto-app-review';
 import i18n from '../i18n';
 import { showNoticeAlert } from '../utils/notice-alert';
 
@@ -130,7 +129,6 @@ async function executeAction(
             receivedAtMs: Date.now(),
           }),
         });
-        void recordSuccessfulSendForAutomaticReview();
       } catch {
         showNoticeAlert(i18n.t('Send failed', { ns: 'common' }), i18n.t('Connection is not ready. Please try again in the thread.', { ns: 'common' }));
       }

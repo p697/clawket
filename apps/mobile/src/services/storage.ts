@@ -1059,13 +1059,11 @@ export const StorageService = {
   },
 
   async getAutoAppReviewState(): Promise<AutoAppReviewState | null> {
-    try {
-      const raw = await AsyncStorage.getItem(KEYS.autoAppReviewState);
-      if (!raw) return null;
-      return normalizeAutoAppReviewState(JSON.parse(raw));
-    } catch {
-      return null;
-    }
+    const raw = await AsyncStorage.getItem(KEYS.autoAppReviewState);
+    if (!raw) return null;
+    const state = normalizeAutoAppReviewState(JSON.parse(raw));
+    if (!state) throw new Error('Invalid automatic app review state');
+    return state;
   },
 
   async setAutoAppReviewState(state: AutoAppReviewState): Promise<void> {

@@ -86,8 +86,8 @@ import {
 import { analyticsEvents } from './src/services/analytics/events';
 import {
   requestManualAppReview,
-  scheduleAutomaticAppReviewForColdStart,
 } from './src/services/auto-app-review';
+import { useAutomaticAppReview } from './src/hooks/useAutomaticAppReview';
 import i18n from './src/i18n';
 import { useTranslation } from 'react-i18next';
 import {
@@ -292,10 +292,6 @@ function AppRoot(): React.JSX.Element {
     return () => { void connectionRuntime.stop(); };
   }, [connectionRuntime]);
 
-  useEffect(() => {
-    if (!__DEV__) void scheduleAutomaticAppReviewForColdStart();
-  }, []);
-
   if (loading) return <LaunchLoading />;
 
   return (
@@ -457,6 +453,7 @@ function AppContent({
   const [pendingMainSessionSwitch, setPendingMainSessionSwitch] = useState(false);
   const [pendingAddGateway, setPendingAddGateway] = useState(false);
   const sessionPanelRef = useRef<SessionPanelHandle>(null);
+  const [sessionPanelVisible, setSessionPanelVisible] = useState(false);
   const [exportTarget, setExportTarget] = useState<SessionPanelRow | null>(null);
   const pendingExport = useRef<SessionPanelRow | null>(null);
   useEffect(() => { pendingExport.current = null; }, [connections.activeAdapter]);
@@ -611,6 +608,7 @@ function AppContent({
   const manualScreenVisibilityRef = useRef({ paywall: false });
 
   const handleSessionPanelVisibilityChange = useCallback((visible: boolean) => {
+    setSessionPanelVisible(visible);
     setExportTarget(null);
     if (visible) trackManualScreen('SessionPanel');
   }, [trackManualScreen]);
@@ -1275,6 +1273,14 @@ function AppContent({
     permissionsLoading, isPro, pendingAutoOpen, pendingApprovalTarget, openStartupThread,
     launchAnnouncement, announcementPresentation, presentAnnouncement]);
 
+  const cancelReviewOpportunity = useAutomaticAppReview(activeRouteName,
+    navigationReady && approvalScanReady && connections.activeState === 'ready'
+    && !connections.recovering && !connections.error && !connections.runActivities?.length
+    && !activeRosterGroup?.agents.some(agent => agent.sessions.some(session => session.hasActiveRun || session.attention === 'input' || session.attention === 'approval'))
+    && !permissionsLoading && !pendingApprovalTarget && !pendingAutoOpen
+    && launchAnnouncement === null && !announcementPresentation && !paywallVisible
+    && !sessionPanelVisible && !exportTarget && !debugMode);
+
   const handleToggleRosterAgentPinned = useCallback(async (row: RosterDisplayRow) => {
     if (!canAccessRosterAgent(row.connectionId, row.agentId)) {
       presentPaywall(canAccessConnection(row.connectionId) ? 'agents' : 'gatewayConnections');
@@ -1580,6 +1586,7 @@ function AppContent({
     presentation: 'page' | 'sidebar' = 'page',
   ) => (
                     <RosterScreen
+                      onReviewInteraction={cancelReviewOpportunity}
                       presentation={presentation}
                       selectedThread={threadContext ?? undefined}
                       onManageActiveConnection={(connectionId) => navigation.navigate('Connection', { connectionId })}

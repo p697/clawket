@@ -1,252 +1,97 @@
-jest.mock('react-native', () => ({
-  InteractionManager: {
-    runAfterInteractions: (callback: () => void) => callback(),
-  },
-  Linking: {
-    canOpenURL: jest.fn(),
-    openURL: jest.fn(),
-  },
-  Platform: {
-    OS: 'ios',
-  },
-}));
-
-jest.mock('expo-store-review', () => ({
-  isAvailableAsync: jest.fn(),
-  requestReview: jest.fn(),
-  storeUrl: jest.fn(),
-}));
-
-jest.mock('./storage', () => ({
-  StorageService: {
-    getAutoAppReviewState: jest.fn(),
-    setAutoAppReviewState: jest.fn(),
-  },
-}));
-
+jest.mock('react-native', () => ({ AppState: { currentState: 'active' }, Linking: { openURL: jest.fn(), canOpenURL: jest.fn() }, Platform: { OS: 'ios' } }));
+jest.mock('expo-store-review', () => ({ isAvailableAsync: jest.fn(), requestReview: jest.fn(), storeUrl: jest.fn() }));
+jest.mock('../config/public', () => ({ publicAppLinks: { iosAppStoreId: '123' } }));
+jest.mock('./analytics/events', () => ({ analyticsEvents: { appReviewRequest: jest.fn() } }));
+jest.mock('./storage', () => ({ StorageService: { getAutoAppReviewState: jest.fn(), setAutoAppReviewState: jest.fn() } }));
+import { AppState, Linking, Platform } from 'react-native';
 import * as StoreReview from 'expo-store-review';
-import { Linking } from 'react-native';
-import {
-  __resetAutomaticAppReviewRuntimeForTests,
-  recordSuccessfulSendForAutomaticReview,
-  requestManualAppReview,
-  scheduleAutomaticAppReviewForColdStart,
-} from './auto-app-review';
-import type { AutoAppReviewState } from './auto-app-review-state';
 import { StorageService } from './storage';
-
-async function flushMicrotasks(): Promise<void> {
-  for (let index = 0; index < 12; index += 1) await Promise.resolve();
-}
-
-describe('auto app review', () => {
-  const mockedStoreReview = StoreReview as jest.Mocked<typeof StoreReview>;
-  const mockedStorage = StorageService as jest.Mocked<typeof StorageService>;
-  const mockedLinking = Linking as jest.Mocked<typeof Linking>;
-  let persistedState: AutoAppReviewState | null;
-
-  function usePersistedState(state: AutoAppReviewState | null): void {
-    persistedState = state;
-    mockedStorage.getAutoAppReviewState.mockImplementation(async () => persistedState);
-    mockedStorage.setAutoAppReviewState.mockImplementation(async (next) => {
-      persistedState = next;
-    });
-  }
-
-  beforeEach(() => {
-    jest.useFakeTimers();
-    jest.clearAllMocks();
-    __resetAutomaticAppReviewRuntimeForTests();
-    usePersistedState(null);
-  });
-
-  afterEach(() => {
-    __resetAutomaticAppReviewRuntimeForTests();
-    jest.useRealTimers();
-  });
-
-  it('records only the first successful adapter send', async () => {
-    await recordSuccessfulSendForAutomaticReview({ nowMs: 1_000 });
-
-    expect(mockedStorage.setAutoAppReviewState).toHaveBeenCalledWith({
-      version: 2,
-      firstSuccessfulSendAtMs: 1_000,
-      coldStartsAfterFirstSuccessfulSend: 0,
-    });
-
-    usePersistedState({
-      version: 2,
-      firstSuccessfulSendAtMs: 1_000,
-      coldStartsAfterFirstSuccessfulSend: 1,
-    });
-    mockedStorage.setAutoAppReviewState.mockClear();
-    await recordSuccessfulSendForAutomaticReview({ nowMs: 2_000 });
-    expect(mockedStorage.setAutoAppReviewState).not.toHaveBeenCalled();
-  });
-
-  it('does not count or prompt on a cold start before a successful send', async () => {
-    await expect(scheduleAutomaticAppReviewForColdStart({ delayMs: 0, nowMs: 1_000 }))
-      .resolves.toBe(false);
-    expect(mockedStorage.setAutoAppReviewState).not.toHaveBeenCalled();
-    expect(mockedStoreReview.requestReview).not.toHaveBeenCalled();
-  });
-
-  it('counts at most once when cold-start bootstrap is invoked repeatedly in one process', async () => {
-    usePersistedState({
-      version: 2,
-      firstSuccessfulSendAtMs: 1_000,
-      coldStartsAfterFirstSuccessfulSend: 0,
-    });
-
-    const first = scheduleAutomaticAppReviewForColdStart({ nowMs: 2_000 });
-    const duplicate = scheduleAutomaticAppReviewForColdStart({ nowMs: 2_001 });
-    await expect(Promise.all([first, duplicate])).resolves.toEqual([false, false]);
-    expect(mockedStorage.getAutoAppReviewState).toHaveBeenCalledTimes(1);
-    expect(mockedStorage.setAutoAppReviewState).toHaveBeenCalledTimes(1);
-    expect(mockedStorage.setAutoAppReviewState).toHaveBeenCalledWith(expect.objectContaining({
-      coldStartsAfterFirstSuccessfulSend: 1,
-    }));
-  });
-
-  it('persists and schedules the request on the third later cold start', async () => {
-    usePersistedState({
-      version: 2,
-      firstSuccessfulSendAtMs: 1_000,
-      coldStartsAfterFirstSuccessfulSend: 2,
-    });
-    mockedStoreReview.isAvailableAsync.mockResolvedValueOnce(true);
-    mockedStoreReview.requestReview.mockResolvedValueOnce();
-
-    await expect(scheduleAutomaticAppReviewForColdStart({ delayMs: 0, nowMs: 4_000 }))
-      .resolves.toBe(true);
-    expect(mockedStorage.setAutoAppReviewState).toHaveBeenCalledWith({
-      version: 2,
-      firstSuccessfulSendAtMs: 1_000,
-      coldStartsAfterFirstSuccessfulSend: 3,
-      reviewPendingAtMs: 4_000,
-    });
-    expect(mockedStoreReview.requestReview).not.toHaveBeenCalled();
-
-    jest.runAllTimers();
-    await flushMicrotasks();
-    expect(mockedStorage.setAutoAppReviewState).toHaveBeenLastCalledWith(expect.objectContaining({
-      coldStartsAfterFirstSuccessfulSend: 3,
-      reviewAttemptedAtMs: expect.any(Number),
-    }));
-    expect(mockedStoreReview.requestReview).toHaveBeenCalledTimes(1);
-  });
-
-  it('keeps the third-start trigger pending until a later cold start can reach the native prompt', async () => {
-    usePersistedState({
-      version: 2,
-      firstSuccessfulSendAtMs: 1_000,
-      coldStartsAfterFirstSuccessfulSend: 2,
-    });
-    mockedStoreReview.isAvailableAsync.mockResolvedValueOnce(false);
-
-    await scheduleAutomaticAppReviewForColdStart({ delayMs: 0, nowMs: 4_000 });
-    jest.runAllTimers();
-    await flushMicrotasks();
-
-    expect(persistedState).toEqual({
-      version: 2,
-      firstSuccessfulSendAtMs: 1_000,
-      coldStartsAfterFirstSuccessfulSend: 3,
-      reviewPendingAtMs: 4_000,
-    });
-    expect(mockedStoreReview.requestReview).not.toHaveBeenCalled();
-
-    __resetAutomaticAppReviewRuntimeForTests();
-    mockedStoreReview.isAvailableAsync.mockResolvedValueOnce(true);
-    mockedStoreReview.requestReview.mockResolvedValueOnce();
-    await expect(scheduleAutomaticAppReviewForColdStart({ delayMs: 0, nowMs: 5_000 }))
-      .resolves.toBe(true);
-    jest.runAllTimers();
-    await flushMicrotasks();
-
-    expect(persistedState).toEqual(expect.objectContaining({
-      coldStartsAfterFirstSuccessfulSend: 3,
-      reviewAttemptedAtMs: expect.any(Number),
-    }));
-    expect(mockedStoreReview.requestReview).toHaveBeenCalledTimes(1);
-  });
-
-  it('contains native availability failures without consuming the pending trigger', async () => {
-    usePersistedState({
-      version: 2,
-      firstSuccessfulSendAtMs: 1_000,
-      coldStartsAfterFirstSuccessfulSend: 2,
-    });
-    mockedStoreReview.isAvailableAsync.mockRejectedValueOnce(new Error('native failure'));
-
-    await expect(scheduleAutomaticAppReviewForColdStart({ delayMs: 0, nowMs: 4_000 }))
-      .resolves.toBe(true);
-    jest.runAllTimers();
-    await flushMicrotasks();
-
-    expect(persistedState).toEqual(expect.objectContaining({ reviewPendingAtMs: 4_000 }));
-    expect(mockedStoreReview.requestReview).not.toHaveBeenCalled();
-  });
-
-  it('does not schedule a prompt when the pending marker cannot be persisted', async () => {
-    usePersistedState({
-      version: 2,
-      firstSuccessfulSendAtMs: 1_000,
-      coldStartsAfterFirstSuccessfulSend: 2,
-    });
-    mockedStorage.setAutoAppReviewState.mockRejectedValueOnce(new Error('disk full'));
-
-    await expect(scheduleAutomaticAppReviewForColdStart({ delayMs: 0, nowMs: 4_000 }))
-      .resolves.toBe(false);
-    jest.runAllTimers();
-    await flushMicrotasks();
-
-    expect(mockedStoreReview.isAvailableAsync).not.toHaveBeenCalled();
-    expect(mockedStoreReview.requestReview).not.toHaveBeenCalled();
-  });
-
-  it('does not call the native prompt when persisting the attempt fails', async () => {
-    usePersistedState({
-      version: 2,
-      firstSuccessfulSendAtMs: 1_000,
-      coldStartsAfterFirstSuccessfulSend: 2,
-    });
-    mockedStoreReview.isAvailableAsync.mockResolvedValueOnce(true);
-
-    await expect(scheduleAutomaticAppReviewForColdStart({ delayMs: 0, nowMs: 4_000 }))
-      .resolves.toBe(true);
-    mockedStorage.setAutoAppReviewState.mockRejectedValueOnce(new Error('disk full'));
-    jest.runAllTimers();
-    await flushMicrotasks();
-
-    expect(persistedState).toEqual(expect.objectContaining({ reviewPendingAtMs: 4_000 }));
-    expect(mockedStoreReview.requestReview).not.toHaveBeenCalled();
-  });
-
-  it('opens the native review prompt on a manual request', async () => {
-    mockedStoreReview.isAvailableAsync.mockResolvedValueOnce(true);
-    mockedStoreReview.requestReview.mockResolvedValueOnce();
-
-    await expect(requestManualAppReview()).resolves.toBe('review_prompt');
-    expect(mockedStoreReview.requestReview).toHaveBeenCalledTimes(1);
-    expect(mockedLinking.openURL).not.toHaveBeenCalled();
-  });
-
-  it('falls back to the store page and reports unavailable devices', async () => {
-    mockedStoreReview.isAvailableAsync.mockResolvedValue(false);
-    mockedStoreReview.storeUrl.mockReturnValue('https://store.example/clawket');
-    mockedLinking.canOpenURL.mockResolvedValueOnce(true);
-    mockedLinking.openURL.mockResolvedValueOnce(true);
-
-    await expect(requestManualAppReview()).resolves.toBe('store_page');
-    expect(mockedLinking.openURL).toHaveBeenCalledWith('https://store.example/clawket');
-
-    mockedLinking.canOpenURL.mockResolvedValueOnce(false);
-    await expect(requestManualAppReview()).resolves.toBe('unavailable');
-  });
-
-  it('contains native failures in a manual request', async () => {
-    mockedStoreReview.isAvailableAsync.mockRejectedValueOnce(new Error('native failure'));
-    await expect(requestManualAppReview()).resolves.toBe('error');
-  });
+import { analyticsEvents } from './analytics/events';
+import { completedReviewTurn, emptyReviewState, type AutoAppReviewState } from './auto-app-review-state';
+import { __resetAutomaticAppReviewRuntimeForTests, recordCompletedTurnForAutomaticReview, requestAutomaticAppReview, requestManualAppReview } from './auto-app-review';
+const now = new Date(2026, 9, 13, 12).getTime();
+let state: AutoAppReviewState | null;
+const dev = __DEV__;
+beforeEach(() => {
+  jest.clearAllMocks(); jest.useFakeTimers(); jest.setSystemTime(now);
+  (globalThis as any).__DEV__ = false;
+  (Platform as any).OS = 'ios'; (AppState as any).currentState = 'active';
+  __resetAutomaticAppReviewRuntimeForTests();
+  state = [now - 86_400_000, now, now].reduce(completedReviewTurn, emptyReviewState());
+  jest.mocked(StorageService.getAutoAppReviewState).mockImplementation(async () => state);
+  jest.mocked(StorageService.setAutoAppReviewState).mockImplementation(async value => { state = value; });
+  jest.mocked(StoreReview.isAvailableAsync).mockResolvedValue(true);
+  jest.mocked(StoreReview.requestReview).mockResolvedValue(undefined);
+  jest.mocked(Linking.openURL).mockResolvedValue(undefined);
+});
+afterEach(() => { (globalThis as any).__DEV__ = dev; jest.useRealTimers(); });
+it('persists before calling native, never interprets resolution as a submitted rating, and is single flight', async () => {
+  jest.mocked(StoreReview.requestReview).mockImplementation(async () => { expect(state?.attempts).toHaveLength(1); });
+  await Promise.all([requestAutomaticAppReview(() => true), requestAutomaticAppReview(() => true)]);
+  expect(StoreReview.requestReview).toHaveBeenCalledTimes(1);
+  expect(analyticsEvents.appReviewRequest).toHaveBeenCalledWith({ outcome: 'requested', reason: 'eligible' });
+});
+it('serializes concurrent completions without losing counts and contains storage failures', async () => {
+  state = null;
+  await Promise.all([recordCompletedTurnForAutomaticReview(), recordCompletedTurnForAutomaticReview()]);
+  expect((state as AutoAppReviewState | null)?.completedTurns).toBe(2);
+  jest.mocked(StorageService.setAutoAppReviewState).mockRejectedValue(new Error('disk'));
+  await expect(recordCompletedTurnForAutomaticReview()).resolves.toBeUndefined();
+});
+it.each(['android', 'development', 'background', 'unsafe'])('does not request when %s', async mode => {
+  if (mode === 'android') (Platform as any).OS = 'android';
+  if (mode === 'development') (globalThis as any).__DEV__ = true;
+  if (mode === 'background') (AppState as any).currentState = 'background';
+  await requestAutomaticAppReview(() => mode !== 'unsafe');
+  expect(StoreReview.requestReview).not.toHaveBeenCalled();
+});
+it('rechecks safety after native availability waits', async () => {
+  let safe = true;
+  jest.mocked(StoreReview.isAvailableAsync).mockImplementation(async () => { safe = false; return true; });
+  await requestAutomaticAppReview(() => safe);
+  expect(StorageService.setAutoAppReviewState).not.toHaveBeenCalled();
+  expect(StoreReview.requestReview).not.toHaveBeenCalled();
+});
+it('rechecks safety after persistence, keeping the conservative attempt record', async () => {
+  let safe = true;
+  jest.mocked(StorageService.setAutoAppReviewState).mockImplementation(async value => { state = value; safe = false; });
+  await requestAutomaticAppReview(() => safe);
+  expect(state?.attempts).toHaveLength(1);
+  expect(StoreReview.requestReview).not.toHaveBeenCalled();
+});
+it.each(['read', 'write'])('fails closed on %s failure', async stage => {
+  jest.mocked(stage === 'read' ? StorageService.getAutoAppReviewState : StorageService.setAutoAppReviewState).mockRejectedValue(new Error('storage'));
+  await requestAutomaticAppReview(() => true);
+  expect(StoreReview.requestReview).not.toHaveBeenCalled();
+});
+it('unavailable native API does not spend the invitation', async () => {
+  jest.mocked(StoreReview.isAvailableAsync).mockResolvedValue(false);
+  await requestAutomaticAppReview(() => true);
+  expect(state?.attempts).toHaveLength(0);
+});
+it('a native error consumes the attempt and cannot immediately retry', async () => {
+  jest.mocked(StoreReview.requestReview).mockRejectedValue(new Error('native'));
+  await requestAutomaticAppReview(() => true);
+  __resetAutomaticAppReviewRuntimeForTests();
+  await requestAutomaticAppReview(() => true);
+  expect(StoreReview.requestReview).toHaveBeenCalledTimes(1);
+});
+it('manual iOS scoring opens the write-review page directly and suppresses automatic invitations', async () => {
+  await expect(requestManualAppReview()).resolves.toBe('store_page');
+  expect(Linking.openURL).toHaveBeenCalledWith('https://apps.apple.com/app/id123?action=write-review');
+  expect(StoreReview.isAvailableAsync).not.toHaveBeenCalled();
+  expect(state?.lastManualAtMs).toBe(now);
+  await requestAutomaticAppReview(() => true);
+  expect(StoreReview.requestReview).not.toHaveBeenCalled();
+});
+it('manual store link survives persistence failure and reports link failure honestly', async () => {
+  jest.mocked(StorageService.setAutoAppReviewState).mockRejectedValue(new Error('disk'));
+  await expect(requestManualAppReview()).resolves.toBe('store_page');
+  jest.mocked(Linking.openURL).mockRejectedValue(new Error('link'));
+  await expect(requestManualAppReview()).resolves.toBe('error');
+});
+it('preserves Android manual native behavior', async () => {
+  (Platform as any).OS = 'android';
+  await expect(requestManualAppReview()).resolves.toBe('review_prompt');
+  expect(StoreReview.requestReview).toHaveBeenCalledTimes(1);
 });

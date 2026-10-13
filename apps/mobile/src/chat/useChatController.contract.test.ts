@@ -6,10 +6,10 @@ import { act, cleanup, renderHook } from '@testing-library/react-native';
 import * as Network from 'expo-network';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
-import { Alert } from 'react-native';
+import { Alert, AppState } from 'react-native';
 import { AdapterError, CAPABILITY_MATRIX } from '@clawket/agent-protocol';
 import { analyticsEvents } from '../services/analytics/events';
-import { recordSuccessfulSendForAutomaticReview } from '../services/auto-app-review';
+import { recordCompletedTurnForAutomaticReview } from '../services/auto-app-review';
 import { cacheMessageImages } from '../services/image-cache';
 import { StorageService } from '../services/storage';
 import { useChatAutoCache } from '../hooks/useChatAutoCache';
@@ -174,7 +174,7 @@ jest.mock('../services/image-cache', () => ({
 }));
 
 jest.mock('../services/auto-app-review', () => ({
-  recordSuccessfulSendForAutomaticReview: jest.fn().mockResolvedValue(undefined),
+  recordCompletedTurnForAutomaticReview: jest.fn().mockResolvedValue(undefined),
 }));
 
 const mockAppContext: any = {
@@ -914,7 +914,7 @@ describe('useChatController contract', () => {
 
     expect(adapter.probe).toHaveBeenCalledTimes(1);
     expect(adapter.prompt).not.toHaveBeenCalled();
-    expect(recordSuccessfulSendForAutomaticReview).not.toHaveBeenCalled();
+    expect(recordCompletedTurnForAutomaticReview).not.toHaveBeenCalled();
     expect(result.current.input).toBe('');
     expect(result.current.listData[0]).toMatchObject({ text: 'hello', delivery: 'held' });
     expect(result.current.sendFailure).toBe('Sending failed. Check the conversation before trying again.');
@@ -942,7 +942,41 @@ describe('useChatController contract', () => {
 
     expect(adapter.probe).toHaveBeenCalledTimes(1);
     expect(adapter.prompt).toHaveBeenCalledTimes(1);
-    expect(recordSuccessfulSendForAutomaticReview).toHaveBeenCalledTimes(1);
+    expect(recordCompletedTurnForAutomaticReview).not.toHaveBeenCalled();
+  });
+
+  it.each(['openclaw', 'hermes'] as const)('counts a locally sent, normally completed reply once for %s', async backend => {
+    const previousState = AppState.currentState;
+    (AppState as any).currentState = 'active';
+    const adapter = createAdapter('ready', backend);
+    const { result } = renderHook(() => useChatController({ adapter: adapter as any, debugMode: false, showAgentAvatar: true } as any));
+    await act(async () => { result.current.setInput('hello'); });
+    await act(async () => { result.current.onSend(); });
+    expect(recordCompletedTurnForAutomaticReview).not.toHaveBeenCalled();
+    const events = jest.mocked(useAdapterChatEvents).mock.calls.at(-1)![0];
+    const finish = { type: 'run_finished' as const, sessionKey: 'agent:main:main', runId: 'run-1', stopReason: 'end_turn' as const,
+      activeRunId: null, isSending: false, finalMessage: { id: 'answer', role: 'assistant' as const, text: 'Done' } };
+    await act(async () => { events.onUpdate?.(finish); events.onUpdate?.(finish); });
+    expect(recordCompletedTurnForAutomaticReview).toHaveBeenCalledTimes(1);
+    (AppState as any).currentState = previousState;
+  });
+
+  it.each(['error', 'cancelled', 'max_tokens', 'empty', 'foreign', 'background', 'scope'] as const)('does not count a %s completion toward reviews', async mode => {
+    const previousState = AppState.currentState;
+    (AppState as any).currentState = mode === 'background' ? 'background' : 'active';
+    const adapter = createAdapter('ready');
+    const { result, rerender } = renderHook(() => useChatController({ adapter: adapter as any, debugMode: false, showAgentAvatar: true } as any));
+    if (mode !== 'foreign') {
+      await act(async () => { result.current.setInput('hello'); });
+      await act(async () => { result.current.onSend(); });
+    }
+    if (mode === 'scope') { historyMock.sessionKey = 'agent:main:other'; rerender({}); }
+    const events = jest.mocked(useAdapterChatEvents).mock.calls.at(-1)![0];
+    await act(async () => { events.onUpdate?.({ type: 'run_finished', sessionKey: 'agent:main:main', runId: 'run-1',
+      activeRunId: null, isSending: false, stopReason: mode === 'error' || mode === 'cancelled' || mode === 'max_tokens' ? mode : 'end_turn',
+      finalMessage: { id: 'answer', role: 'assistant', text: mode === 'empty' ? '' : 'Done' } }); });
+    expect(recordCompletedTurnForAutomaticReview).not.toHaveBeenCalled();
+    (AppState as any).currentState = previousState;
   });
 
   it.each([false, true])('holds an explicitly rejected permission send for review without uncertainty or replay (new draft: %s)', async (hasNewDraft) => {

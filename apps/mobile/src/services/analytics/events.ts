@@ -184,6 +184,7 @@ export const ANALYTICS_EVENT_PROPERTY_WHITELIST = Object.freeze({
   grace_banner_viewed: ['days_left'],
   grace_expired: ['days_left'],
   app_rating_tapped: ['source', 'result'],
+  app_review_request: ['outcome', 'reason'],
 
   // Existing, still-supported product telemetry referenced by 04-app-screens.
   chat_skill_picker_opened: ['source', 'session_key_present', 'skill_count'],
@@ -651,6 +652,13 @@ export const analyticsEvents = {
 
   graceExpired(properties: { days_left: number }): void {
     captureAnalyticsEvent('grace_expired', properties);
+  },
+
+  appReviewRequest(properties: {
+    outcome: 'requested' | 'skipped' | 'unavailable' | 'error';
+    reason: 'eligible' | 'experience' | 'stale' | 'cooldown' | 'annual_limit' | 'version' | 'native' | 'operation';
+  }): void {
+    captureAnalyticsEvent('app_review_request', properties);
   },
 
   appRatingTapped(properties: {
