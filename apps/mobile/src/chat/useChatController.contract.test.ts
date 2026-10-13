@@ -955,7 +955,7 @@ describe('useChatController contract', () => {
     expect(recordCompletedTurnForAutomaticReview).not.toHaveBeenCalled();
     const events = jest.mocked(useAdapterChatEvents).mock.calls.at(-1)![0];
     const finish = { type: 'run_finished' as const, sessionKey: 'agent:main:main', runId: 'run-1', stopReason: 'end_turn' as const,
-      activeRunId: null, isSending: false, finalMessage: { id: 'answer', role: 'assistant' as const, text: 'Done' } };
+      activeRunId: null, isSending: false as const, finalMessage: { id: 'answer', role: 'assistant' as const, text: 'Done' } };
     await act(async () => { events.onUpdate?.(finish); events.onUpdate?.(finish); });
     expect(recordCompletedTurnForAutomaticReview).toHaveBeenCalledTimes(1);
     (AppState as any).currentState = previousState;

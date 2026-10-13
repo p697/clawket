@@ -13,7 +13,7 @@ beforeEach(() => {
 });
 afterEach(() => { jest.restoreAllMocks(); jest.useRealTimers(); });
 it('does not invite on launch but waits for a quiet return from a thread', async () => {
-  const { rerender } = renderHook(({ route, safe }) => useAutomaticAppReview(route, safe), { initialProps: { route: 'Roster', safe: true } });
+  const { rerender } = renderHook(({ route, safe }: { route: string; safe: boolean }) => useAutomaticAppReview(route, safe), { initialProps: { route: 'Roster', safe: true } });
   await act(async () => { jest.advanceTimersByTime(3000); });
   expect(requestAutomaticAppReview).not.toHaveBeenCalled();
   rerender({ route: 'Thread', safe: true }); rerender({ route: 'Roster', safe: true });
@@ -23,7 +23,7 @@ it('does not invite on launch but waits for a quiet return from a thread', async
   expect(requestAutomaticAppReview).toHaveBeenCalledTimes(1);
 });
 it.each(['navigation', 'touch', 'background', 'unmount'])('cancels a pending invitation on %s', async reason => {
-  const { result, rerender, unmount } = renderHook(({ route }) => useAutomaticAppReview(route, true), { initialProps: { route: 'Thread' } });
+  const { result, rerender, unmount } = renderHook(({ route }: { route: string }) => useAutomaticAppReview(route, true), { initialProps: { route: 'Thread' } });
   rerender({ route: 'Roster' });
   if (reason === 'navigation') rerender({ route: 'AccountSettings' });
   if (reason === 'touch') act(() => result.current());
@@ -34,7 +34,7 @@ it.each(['navigation', 'touch', 'background', 'unmount'])('cancels a pending inv
   if (reason === 'navigation' || reason === 'unmount') expect(requestAutomaticAppReview).not.toHaveBeenCalled();
 });
 it('waits through blocked UI, and invalidates a dispatched async attempt on navigation', async () => {
-  const { rerender } = renderHook(({ route, safe }) => useAutomaticAppReview(route, safe), { initialProps: { route: 'Thread', safe: false } });
+  const { rerender } = renderHook(({ route, safe }: { route: string; safe: boolean }) => useAutomaticAppReview(route, safe), { initialProps: { route: 'Thread', safe: false } });
   rerender({ route: 'Roster', safe: false });
   await act(async () => { jest.advanceTimersByTime(3000); });
   expect(requestAutomaticAppReview).not.toHaveBeenCalled();

@@ -95,3 +95,9 @@ it('preserves Android manual native behavior', async () => {
   await expect(requestManualAppReview()).resolves.toBe('review_prompt');
   expect(StoreReview.requestReview).toHaveBeenCalledTimes(1);
 });
+
+it('telemetry failure cannot consume the opportunity without requesting StoreKit', async () => {
+  jest.mocked(analyticsEvents.appReviewRequest).mockImplementationOnce(() => { throw new Error('telemetry'); });
+  await expect(requestAutomaticAppReview(() => true)).resolves.toBeUndefined();
+  expect(StoreReview.requestReview).toHaveBeenCalledTimes(1);
+});

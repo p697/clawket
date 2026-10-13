@@ -14,6 +14,9 @@ function serial<T>(work: () => Promise<T>): Promise<T> {
   persistenceQueue = task.catch(() => undefined);
   return task;
 }
+function reportRequest(properties: Parameters<typeof analyticsEvents.appReviewRequest>[0]): void {
+  try { analyticsEvents.appReviewRequest(properties); } catch { /* Telemetry cannot gate StoreKit. */ }
+}
 async function readState(): Promise<AutoAppReviewState> {
   return await StorageService.getAutoAppReviewState() ?? emptyReviewState();
 }
@@ -39,11 +42,11 @@ export async function requestAutomaticAppReview(isSafe: () => boolean): Promise<
       if (!safe()) return;
       const reason = reviewEligibility(state, Date.now(), APP_PACKAGE_VERSION);
       if (reason !== 'eligible') {
-        analyticsEvents.appReviewRequest({ outcome: 'skipped', reason });
+        reportRequest({ outcome: 'skipped', reason });
         return;
       }
       if (!await StoreReview.isAvailableAsync()) {
-        if (safe()) analyticsEvents.appReviewRequest({ outcome: 'unavailable', reason: 'native' });
+        if (safe()) reportRequest({ outcome: 'unavailable', reason: 'native' });
         return;
       }
       if (!safe()) return;
@@ -51,11 +54,11 @@ export async function requestAutomaticAppReview(isSafe: () => boolean): Promise<
       await StorageService.setAutoAppReviewState(recordReviewAttempt(state, Date.now(), APP_PACKAGE_VERSION));
       if (!safe()) return;
       attemptedThisProcess = true;
-      analyticsEvents.appReviewRequest({ outcome: 'requested', reason: 'eligible' });
+      reportRequest({ outcome: 'requested', reason: 'eligible' });
       await StoreReview.requestReview();
       // No API result proves display, a submitted review, or the user's star rating.
     } catch {
-      analyticsEvents.appReviewRequest({ outcome: 'error', reason: 'operation' });
+      reportRequest({ outcome: 'error', reason: 'operation' });
     }
   });
 }
@@ -70,10 +73,13 @@ export async function requestManualAppReview(): Promise<ManualAppReviewResult> {
       return 'unavailable';
     } catch { return 'error'; }
   }
-  const base = publicAppLinks.iosAppStoreId
-    ? `https://apps.apple.com/app/id${publicAppLinks.iosAppStoreId}` : StoreReview.storeUrl();
-  if (!base) return 'unavailable';
-  const url = `${base}${base.includes('?') ? '&' : '?'}action=write-review`;
+  let url: string;
+  try {
+    const base = publicAppLinks.iosAppStoreId
+      ? `https://apps.apple.com/app/id${publicAppLinks.iosAppStoreId}` : StoreReview.storeUrl();
+    if (!base) return 'unavailable';
+    url = `${base}${base.includes('?') ? '&' : '?'}action=write-review`;
+  } catch { return 'error'; }
   attemptedThisProcess = true;
   // Suppress automatic requests even when storage is temporarily unavailable.
   try {
