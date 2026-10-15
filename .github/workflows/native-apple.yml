@@ -69,3 +69,48 @@ jobs:
           echo "Native test cases discovered: $(wc -l < "$RUNNER_TEMP/clawket-native-tests.txt")"
       - name: Test native package with Swift 6 concurrency checking
         run: swift test --jobs 2
+  ios-application:
+    name: Native iOS application
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check native test result validator
+        working-directory: apps/ios/scripts
+        run: python3 -m unittest test_validate_xctest_result.py
+      - name: Create a simulator matching the selected SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+
+          sdk = subprocess.check_output(["xcrun", "--sdk", "iphonesimulator", "--show-sdk-version"], text=True).strip()
+          version = lambda text: tuple(int(part) for part in text.split("."))
+          runtimes = json.loads(subprocess.check_output(["xcrun", "simctl", "list", "runtimes", "--json"], text=True))["runtimes"]
+          usable = [item for item in runtimes if item.get("isAvailable") and ".iOS-" in item["identifier"] and version(item["version"]) <= version(sdk)]
+          if not usable:
+              raise SystemExit("No available iOS simulator runtime matches the selected SDK")
+          runtime = max(usable, key=lambda item: version(item["version"]))
+          device = subprocess.check_output(["xcrun", "simctl", "create", "Clawket native CI", "com.apple.CoreSimulator.SimDeviceType.iPhone-16", runtime["identifier"]], text=True).strip()
+          if not device:
+              raise SystemExit("Simulator creation returned an empty ID")
+          with open(os.environ["GITHUB_ENV"], "a") as output:
+              output.write(f"CLAWKET_CI_SIMULATOR={device}\n")
+          print(f"Native app acceptance runtime: {runtime['name']}")
+          PY
+      - name: Build the SwiftUI app and run native recovery tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -project apps/ios/Clawket.xcodeproj -scheme Clawket \
+            -configuration Debug -destination "platform=iOS Simulator,id=$CLAWKET_CI_SIMULATOR" \
+            -derivedDataPath "$RUNNER_TEMP/clawket-native-derived" \
+            -resultBundlePath "$RUNNER_TEMP/clawket-native-tests.xcresult" \
+            -jobs 2 -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=NO \
+            test -only-testing:ClawketTests
+          xcrun xcresulttool get test-results summary \
+            --path "$RUNNER_TEMP/clawket-native-tests.xcresult" > "$RUNNER_TEMP/clawket-native-summary.json"
+          python3 apps/ios/scripts/validate_xctest_result.py "$RUNNER_TEMP/clawket-native-summary.json"
