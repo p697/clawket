@@ -60,7 +60,7 @@
     {
       "key": "Adaptive",
       "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:472"
+        "apps/ios/Clawket/NativeModelControls.swift:482"
       ],
       "mobileTerm": "chat.thinking_adaptive"
     },
@@ -958,7 +958,7 @@
     {
       "key": "Extra High",
       "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:469"
+        "apps/ios/Clawket/NativeModelControls.swift:479"
       ],
       "mobileTerm": "chat.thinking_xhigh"
     },
@@ -1011,7 +1011,7 @@
     {
       "key": "High",
       "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:468"
+        "apps/ios/Clawket/NativeModelControls.swift:478"
       ],
       "mobileTerm": "chat.thinking_high"
     },
@@ -1117,7 +1117,7 @@
     {
       "key": "Low",
       "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:466"
+        "apps/ios/Clawket/NativeModelControls.swift:476"
       ],
       "mobileTerm": "chat.thinking_low"
     },
@@ -1131,14 +1131,14 @@
     {
       "key": "Max",
       "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:470"
+        "apps/ios/Clawket/NativeModelControls.swift:480"
       ],
       "mobileTerm": null
     },
     {
       "key": "Medium",
       "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:467"
+        "apps/ios/Clawket/NativeModelControls.swift:477"
       ],
       "mobileTerm": "chat.thinking_medium"
     },
@@ -1176,7 +1176,7 @@
     {
       "key": "Minimal",
       "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:465"
+        "apps/ios/Clawket/NativeModelControls.swift:475"
       ],
       "mobileTerm": "chat.thinking_minimal"
     },
@@ -1198,7 +1198,8 @@
     {
       "key": "Model settings could not be loaded. Try again.",
       "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:331"
+        "apps/ios/Clawket/NativeModelControls.swift:310",
+        "apps/ios/Clawket/NativeModelControls.swift:335"
       ],
       "mobileTerm": null
     },
@@ -1341,7 +1342,7 @@
     {
       "key": "Off",
       "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:464",
+        "apps/ios/Clawket/NativeModelControls.swift:474",
         "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:141"
       ],
       "mobileTerm": "chat.thinking_off"
@@ -1449,7 +1450,7 @@
     {
       "key": "Permissions could not be prepared. Refresh settings and try again.",
       "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:189"
+        "apps/ios/Clawket/NativeModelControls.swift:190"
       ],
       "mobileTerm": null
     },
@@ -2007,8 +2008,8 @@
     {
       "key": "Setting confirmed. Refresh to see the latest state.",
       "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:270",
-        "apps/ios/Clawket/NativeModelControls.swift:330"
+        "apps/ios/Clawket/NativeModelControls.swift:271",
+        "apps/ios/Clawket/NativeModelControls.swift:334"
       ],
       "mobileTerm": null
     },
@@ -2147,7 +2148,7 @@
     {
       "key": "The confirmation expired. Review this request again.",
       "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:272",
+        "apps/ios/Clawket/NativeModelControls.swift:273",
         "apps/ios/Clawket/NativeTaskRequests.swift:380"
       ],
       "mobileTerm": null
@@ -2227,14 +2228,14 @@
     {
       "key": "The setting could not be changed. Refresh and try again.",
       "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:274"
+        "apps/ios/Clawket/NativeModelControls.swift:275"
       ],
       "mobileTerm": null
     },
     {
       "key": "The setting could not be confirmed. Refresh before trying again.",
       "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:273"
+        "apps/ios/Clawket/NativeModelControls.swift:274"
       ],
       "mobileTerm": null
     },
@@ -2262,11 +2263,11 @@
     {
       "key": "These settings cannot be changed right now.",
       "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:198",
-        "apps/ios/Clawket/NativeModelControls.swift:357",
-        "apps/ios/Clawket/NativeModelControls.swift:360",
+        "apps/ios/Clawket/NativeModelControls.swift:199",
+        "apps/ios/Clawket/NativeModelControls.swift:361",
         "apps/ios/Clawket/NativeModelControls.swift:364",
-        "apps/ios/Clawket/NativeModelControls.swift:371"
+        "apps/ios/Clawket/NativeModelControls.swift:368",
+        "apps/ios/Clawket/NativeModelControls.swift:375"
       ],
       "mobileTerm": null
     },
@@ -2281,7 +2282,7 @@
     {
       "key": "Thinking command added to queue.",
       "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:218"
+        "apps/ios/Clawket/NativeModelControls.swift:219"
       ],
       "mobileTerm": null
     },
@@ -2490,7 +2491,7 @@
     {
       "key": "Ultra",
       "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:471"
+        "apps/ios/Clawket/NativeModelControls.swift:481"
       ],
       "mobileTerm": "chat.thinking_ultra"
     },

@@ -136,7 +136,8 @@ final class NativeModelControls {
     }
     /// Legacy catalog events still need a fresh, scoped descriptor; they never call the old wire API.
     func chooseLegacy(_ route: ConversationID, modelID: String) {
-        guard ready, route == selectedRoute(), !hasOperation(route), confirmation == nil, legacyReads[route] == nil else { return }
+        guard ready, route == selectedRoute(), !hasOperation(route), confirmation == nil,
+              legacyReads[route] == nil, legacyReads.count < 8 else { return }
         if let current = authority, current.route == route, presentation.modelControls?.id == current.reviewID {
             choose(current.reviewID, choice: .model(modelID)); return
         }
@@ -305,6 +306,9 @@ final class NativeModelControls {
     }
     private func read(_ route: ConversationID, reviewID: UUID?, acknowledged: Bool = false) async {
         guard ready, route.connectionID == connectionID, route.isConcrete else { return }
+        guard reads.count < 32 else {
+            fail(reviewID, text: String(localized: "Model settings could not be loaded. Try again.")); return
+        }
         let id = UUID(), captured = epoch, host = context(), operationID = operationFor(route)?.id
         reads[route] = id
         defer { if reads[route] == id { reads.removeValue(forKey: route) } }
@@ -316,7 +320,7 @@ final class NativeModelControls {
             let value = try await runtime.modelControls(sessionKey: route.sessionID)
             guard isCurrent(captured, host), reads[route] == id, operationFor(route)?.id == operationID else { return }
             if recent[route.connectionID] == nil {
-                recent[route.connectionID] = (try? await preferences?.read(connectionID: route.connectionID)) ?? []
+                cacheRecent((try? await preferences?.read(connectionID: route.connectionID)) ?? [], connectionID: route.connectionID)
             }
             guard isCurrent(captured, host), reads[route] == id, operationFor(route)?.id == operationID else { return }
             try accept(value, route: route, reviewID: reviewID, captured: captured, host: host, confirmedAfterWrite: acknowledged)
@@ -424,8 +428,14 @@ final class NativeModelControls {
     }
     private func inputKey(_ route: ConversationID) -> InputKey { .init(connectionID: route.connectionID, sessionKey: route.sessionID) }
     private func recordRecent(_ modelID: String, connectionID: String) async {
-        if let stored = try? await preferences?.record(modelID, connectionID: connectionID) { recent[connectionID] = stored }
-        else { recent[connectionID] = Array(([modelID] + (recent[connectionID] ?? []).filter { $0 != modelID }).prefix(6)) }
+        if let stored = try? await preferences?.record(modelID, connectionID: connectionID) { cacheRecent(stored, connectionID: connectionID) }
+        else { cacheRecent([modelID] + (recent[connectionID] ?? []).filter { $0 != modelID }, connectionID: connectionID) }
+    }
+    private func cacheRecent(_ models: [String], connectionID: String) {
+        if recent[connectionID] == nil, recent.count >= 128, let old = recent.keys.first(where: { $0 != connectionID }) {
+            recent.removeValue(forKey: old)
+        }
+        recent[connectionID] = Array(models.prefix(6))
     }
 
     nonisolated static func modelKey(_ value: RuntimeModel) throws -> String {
