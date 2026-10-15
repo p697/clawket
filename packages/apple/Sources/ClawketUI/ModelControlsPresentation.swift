@@ -21,8 +21,15 @@ public struct ThinkingControlPresentation: Hashable, Sendable {
     public var current: String?
     public var levels: [ThinkingLevelPresentation]
     public var availability: ActionAvailability
-    public init(current: String? = nil, levels: [ThinkingLevelPresentation] = [], availability: ActionAvailability = .unsupported) {
+    public var currentTitle: String?
+    public init(current: String? = nil, levels: [ThinkingLevelPresentation] = [], availability: ActionAvailability = .unsupported,
+                currentTitle: String? = nil) {
         self.current = current; self.levels = levels; self.availability = availability
+        self.currentTitle = currentTitle
+    }
+    public var currentDisplayTitle: String? {
+        guard let current else { return nil }
+        return currentTitle ?? levels.first(where: { $0.id == current })?.title ?? current
     }
 }
 

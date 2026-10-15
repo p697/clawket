@@ -358,7 +358,8 @@ final class NativeModelControls {
         let writableThinking = choices.contains(.setThinkingLevel) || choices.contains(.prepareThinkingCommand)
         let thinking = value.thinking.map { raw in ThinkingControlPresentation(current: raw.current,
             levels: raw.levels.map { .init(id: $0, title: Self.thinkingTitle($0)) },
-            availability: writableThinking ? .available : .temporarilyUnavailable(String(localized: "These settings cannot be changed right now."))) }
+            availability: writableThinking ? .available : .temporarilyUnavailable(String(localized: "These settings cannot be changed right now.")),
+            currentTitle: raw.current.map(Self.thinkingTitle)) }
         let fast = value.fastMode.map { raw in FastModeControlPresentation(enabled: raw.enabled,
             availability: choices.contains(.setFastMode) ? .available : raw.available
                 ? .temporarilyUnavailable(String(localized: "These settings cannot be changed right now.")) : .unsupported) }

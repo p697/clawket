@@ -37,7 +37,7 @@ struct NativeModelControlsView: View {
                 if let thinking = review.thinking, thinking.availability.isVisible {
                     Section {
                         NavigationLink { thinkingChoices } label: {
-                            settingLabel("Thinking", symbol: "brain", value: review.thinkingLevels.first { $0.id == thinking.current }?.title,
+                            settingLabel("Thinking", symbol: "brain", value: thinking.currentDisplayTitle,
                                          pending: { if case .some(.thinking(_)) = review.submitting { true } else { false } }())
                         }
                         .disabled(review.thinkingLevels.isEmpty)

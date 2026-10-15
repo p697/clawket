@@ -38,6 +38,9 @@ struct ModelControlsPresentationTests {
         value.permissions?.availability = .unsupported
         #expect(!value.permits(.permissions(.workspace)))
         value.permissions?.availability = .available; value.isUncertain = false
+        value.thinking?.current = "high"; value.thinking?.currentTitle = "Known current level"
+        #expect(value.thinking?.currentDisplayTitle == "Known current level")
+        #expect(!value.permits(.thinking("high")))
         value.thinking?.levels = [.init(id: "low", title: "Low"), .init(id: "low", title: "Replacement"), .init(id: "", title: "Empty")]
         #expect(value.thinkingLevels.isEmpty)
         #expect(!value.permits(.thinking("low")))

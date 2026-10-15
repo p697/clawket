@@ -2410,7 +2410,7 @@
     {
       "key": "Adaptive",
       "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:482"
+        "apps/ios/Clawket/NativeModelControls.swift:483"
       ],
       "mobileTerm": "chat.thinking_adaptive"
     },
@@ -2454,7 +2454,7 @@
     {
       "key": "Extra High",
       "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:479"
+        "apps/ios/Clawket/NativeModelControls.swift:480"
       ],
       "mobileTerm": "chat.thinking_xhigh"
     },
@@ -2478,7 +2478,7 @@
     {
       "key": "High",
       "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:478"
+        "apps/ios/Clawket/NativeModelControls.swift:479"
       ],
       "mobileTerm": "chat.thinking_high"
     },
@@ -2493,28 +2493,28 @@
     {
       "key": "Low",
       "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:476"
+        "apps/ios/Clawket/NativeModelControls.swift:477"
       ],
       "mobileTerm": "chat.thinking_low"
     },
     {
       "key": "Max",
       "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:480"
+        "apps/ios/Clawket/NativeModelControls.swift:481"
       ],
       "mobileTerm": null
     },
     {
       "key": "Medium",
       "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:477"
+        "apps/ios/Clawket/NativeModelControls.swift:478"
       ],
       "mobileTerm": "chat.thinking_medium"
     },
     {
       "key": "Minimal",
       "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:475"
+        "apps/ios/Clawket/NativeModelControls.swift:476"
       ],
       "mobileTerm": "chat.thinking_minimal"
     },
@@ -2536,7 +2536,7 @@
     {
       "key": "Off",
       "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:474",
+        "apps/ios/Clawket/NativeModelControls.swift:475",
         "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:141"
       ],
       "mobileTerm": "chat.thinking_off"
@@ -2643,9 +2643,9 @@
       "sources": [
         "apps/ios/Clawket/NativeModelControls.swift:199",
         "apps/ios/Clawket/NativeModelControls.swift:361",
-        "apps/ios/Clawket/NativeModelControls.swift:364",
-        "apps/ios/Clawket/NativeModelControls.swift:368",
-        "apps/ios/Clawket/NativeModelControls.swift:375"
+        "apps/ios/Clawket/NativeModelControls.swift:365",
+        "apps/ios/Clawket/NativeModelControls.swift:369",
+        "apps/ios/Clawket/NativeModelControls.swift:376"
       ],
       "mobileTerm": null
     },
@@ -2674,7 +2674,7 @@
     {
       "key": "Ultra",
       "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:481"
+        "apps/ios/Clawket/NativeModelControls.swift:482"
       ],
       "mobileTerm": "chat.thinking_ultra"
     },
