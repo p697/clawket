@@ -7,8 +7,8 @@
 
 - 2026-10-16 Native iOS N2 集成进行中（未完成 App 验收）。
   - 新增维护式 `apps/ios/Clawket.xcodeproj`，SwiftUI host 直接绑定原生配对/后端/表示层，iOS16.4、iPhone/iPad、独立 `com.p697.clawket.nativeqa`；不含 RN/JS/WebView，不改商店 bundle、版本或现有 Mobile 实现。Keychain 凭据、只读缓存标记、草稿及有界队列分连接/Agent/会话存储；先验证写入再派发，进程中断将 sending 置为 uncertain、queued 置为 held，不自动重放。
-  - `ClawketPersistence` 在 heavy 租约、jobs=2 下逐文件通过 DocumentStoreTests 8 项与 FileValueStoreTests 2 项，覆盖回滚、损坏、读回失败、异步事务串行、旧范围碰撞、文件大小与符号链接。App 新增四项恢复/隔离/旧版本覆盖/重复ID测试及带损坏输入回归的 xcresult 非空检查，尚待完整 App 编译运行；独立原生 CI 将实际构建 host 并运行模拟器测试。
-  - Native host 本轮只接入已实现能力；目录优先、真实连接/历史/文本收发/模型/停止、原生扫码及缓存/队列正做联调。附件、审批/提问、创建会话/项目、完整管理、付费、语音、Node、分享/Widget、19语言与同 bundle 升级仍按 `docs/native-ios/PARITY.md` 保持待办，不把包编译/合成报文称为完整功能或真机推理证据。真实 UI、IME、VoiceOver、OpenClaw/Hermes 稳定性验收尚未完成；未制作分发包、覆盖商店 App、上传、提审或发布。
+  - `ClawketPersistence` 在 heavy 租约、jobs=2 下逐文件通过 DocumentStoreTests 8 项与 FileValueStoreTests 2 项，覆盖回滚、损坏、读回失败、异步事务串行、旧范围碰撞、文件大小与符号链接。完整 App 已在本机编译通过 Simulator 与独立手机 Debug 开发版；此前提交的 CI 实际构建 host 并通过四项恢复/隔离/旧版本覆盖/重复ID测试及全部仓库门禁。新增第五项真实开发 Keychain 读写删除测试，使用模拟器 ad-hoc 签名并以非空 xcresult 检查防止减少测试，等待本轮 CI。
+  - Native host 本轮只接入已实现能力；目录优先、真实连接/历史/文本收发/模型/停止、原生扫码及缓存/队列正做联调。已接入实际会话创建/项目选择及结果未知时的刷新门槛；附件、审批/提问、完整管理、付费、语音、Node、分享/Widget、19语言与同 bundle 升级仍按 `docs/native-ios/PARITY.md` 保持待办，不把包编译/合成报文称为完整功能或真机推理证据。首轮正确 USB 手机 WebDriver 已确认安装、启动、中文首页；点击连接入口发现 EnvironmentObject sheet 注入崩溃，读取该 QA App 崩溃栈定位后改为显式 ObservedObject，需复测。真实连接/IME/VoiceOver、OpenClaw/Hermes 稳定性验收尚未完成；未制作分发包、覆盖商店 App、上传、提审或发布。
 
 - 2026-10-16 Native iOS 后端运行时基础（负责人授权原生重构，iOS 优先）。
   - 新增 `ClawketRuntime`：六后端/传输/环境独立建模、注入凭据存储、单活动连接与事件读取者、Socket/认证/历史代际围栏、前后台真实探测及重连。OpenClaw 保留 v3 Ed25519、作用域设备令牌、一次失效修复与移动 setup 的 operator 交接；Hermes 验证实际 API 健康，四种 SDK 路径验证精确后端身份，原始 open 不进入 ready。
