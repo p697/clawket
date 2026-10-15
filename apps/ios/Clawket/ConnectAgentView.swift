@@ -25,7 +25,7 @@ struct ConnectAgentView: View {
             }
         }
     }
-    @EnvironmentObject private var client: NativeAppModel
+    @ObservedObject var client: NativeAppModel
     @Environment(\.dismiss) private var dismiss
     @State private var method = Method.code
     @State private var backend = PairingBackend.openclaw

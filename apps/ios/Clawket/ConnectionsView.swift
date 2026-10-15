@@ -2,7 +2,7 @@ import ClawketRuntime
 import SwiftUI
 
 struct ConnectionsView: View {
-    @EnvironmentObject private var client: NativeAppModel
+    @ObservedObject var client: NativeAppModel
     @Environment(\.dismiss) private var dismiss
     @State private var remove: BackendConnection?
 

@@ -1,0 +1,4 @@
+xcuserdata/
+*.xcuserstate
+__pycache__/
+Config/Local.xcconfig

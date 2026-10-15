@@ -9,11 +9,10 @@ struct ClawketApp: App {
     var body: some Scene {
         WindowGroup {
             NativeClientView(model: client.presentation, onIntent: client.handle)
-                .environmentObject(client)
                 .sheet(item: $client.destination) { destination in
                     switch destination {
-                    case .connect: ConnectAgentView()
-                    case .connections: ConnectionsView()
+                    case .connect: ConnectAgentView(client: client)
+                    case .connections: ConnectionsView(client: client)
                     }
                 }
                 .alert("Clawket", isPresented: Binding(get: { client.notice != nil }, set: { if !$0 { client.notice = nil } })) {
