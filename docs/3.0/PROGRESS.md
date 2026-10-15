@@ -1,5 +1,10 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-15 原生 iOS 安全配对兼容层（负责人授权，iOS 优先）。
+  - 新增 `ClawketPairing`：六后端 QR / 旧 `openclaw://connect`、六位 v2 Box/HMAC 交换、十二位 SecretBox 及邀请链接统一进入后端/环境验证和单次 claim；保留自建 Registry、local-model 与 Pi 的现有环境规则。swift-sodium 精确锁定 0.11.0，Gateway v3 签名支持旧 TweetNaCl 64 字节密钥导入，未更改服务端协议。
+  - HTTP 使用无凭据/缓存/重定向的可取消临时会话，完整响应十五秒/128 KiB；配对明文与加密字段有界，受限 Relay 交换十五秒绝对截止，所有结果关闭捕获 Socket，取消与未知结果不自动重试。凭据只在内存返回，持久化/激活由后续连接注册事务接入。
+  - `heavy` 租约下 jobs=2 逐文件串行通过四个 Swift 文件共 21 项，含真实 URLSession 测试边界、取消、超限、六后端 claim 与合成端到端交换；两项源提取回归、五组合成 TweetNaCl 向量一致，重基后 9 对指令/7 项文档检查通过。交叉验证两种 Ed25519 签名实现而不假定字节一致。完整仓库与原生门禁交 PR CI；尚未声明手机/真实 Relay/推理验收，未使用真实配对凭据、制作分发包或发布。
+
 - 2026-10-15 原生 iOS 连接基础（负责人授权原生重构，iOS 优先）。
   - 新增 Swift 6 `ClawketTransport` package，保留 iOS 16.4 / macOS 13：真实 URLSession WebSocket、可注入时钟/Socket、8 MiB 双向帧限制、64 层/250,000 token JSON 预算、128 个并行 RPC 和有界事件流。原始 Relay 控制与后端帧分流，只有适配器验证的后端证据可进入 ready、重置退避；实现旧版 tick/pong 与三间隔下限，能力只声明已实现的 `relay.client-pong.v1`。
   - Socket 代际、握手截止、RPC 取消/超时、迟到 Upgrade/响应和新 challenge 都有明确边界；退休先拒绝旧请求再关闭捕获 Socket，原生 send 挂起也保留取消所有权。发送结果区分本地未派发、未知与已收到响应；连接层不重放写入。屏幕及六后端适配器在后续里程碑接入，现有 Mobile/Bridge/服务实现保持。
