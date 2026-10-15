@@ -1,5 +1,10 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-16 Native OpenClaw connect 错误分类与凭据修复边界。
+  - 对照安装的 OpenClaw 2026.10.2 Gateway 源码，连接阶段精确读取 outer/details.code：INVALID_REQUEST 内的认证/设备证明失败不再误报 generic invalidResponse；NOT_PAIRED 区分真正配对、verified-user/identity policy，FORBIDDEN 保留 operator policy。普通 RPC 与其他后端错误解释保持原路径，不用 AUTH_* 前缀或错误文案猜测权限。
+  - 只允许当前 saved-device 身份在明确 device-token/scope mismatch 时，清理捕获的 operator 范围一次；共享 token、Node、其他连接、未知码、signature/nonce 与配对/policy 不触发清理。失败删除即停止；重现凭据也不能在未 ready 前循环修复。任何 details.code（含未知/损坏值）阻止 bootstrap schema 文案降级，原 outer schema、无 detail 的旧兼容仍保留。
+  - 空闲进程/内存39%预检、heavy/jobs2 下单文件串行通过新 OpenClawConnectErrorTests 8项/20参数输入（另含12种真实形状与9种畸形/错outer检查）、原 AuthenticationCompatibilityTests 8项/16输入，包含 Hermes direct/Relay 和旧 bootstrap。独立只读审查未发现权限边界阻挡，随后释放 heavy 给附件模块。文档13对/7回归、diff通过；TS/TSX统计167,902/132,119保持；重基表示层后文档180篇，本任务不新增文档，本轮 Swift 净增64源行、193测试行。完整门禁交PR CI；无真实凭据变更、版本/协议/服务/发布操作。
+
 - 2026-10-16 Native 审批/问题表示边界（负责人授权，真实 host 绑定另行推进）。
   - Always 菜单仅请求 host 准备确认；host 持有 runtime reference/token 后发布唯一不可变确认，匹配卡片内的独立原生 presenter 按冻结 confirmationID 确认/关闭，不读取后来替换的审批作为权限。审批默认无决定/不可操作；配对独立 approve/reject，plugin 保持只读，未知结果可禁用而不伪造提交动画。
   - 问题按 select/confirm/input/editor/form 保留原生单选、多选、自定义、说明、必填与无障碍；选择/输入仅发显式草稿事件，宿主同步状态后异步持久化，关闭/消失不回答、不取消。取消能力独立，原生 form 仍以 Stop task 明确显示；仅被点动作转圈。

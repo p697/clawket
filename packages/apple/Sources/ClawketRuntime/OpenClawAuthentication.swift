@@ -174,9 +174,10 @@ extension RuntimeCoordinator {
         let remoteError = (error as? RPCFailure)?.remoteError
         let remoteCode = remoteError?["code"]?.stringValue?.uppercased()
         let message = remoteError?["message"]?.stringValue?.lowercased() ?? ""
+        let rejection = OpenClawConnectRejection(error)
         // Older Gateways reject the additive bootstrapToken field before authentication.
         // Match Mobile's narrow schema classification; an auth rejection never authorizes a downgrade.
-        if activeAuthSource == .bootstrap, !bootstrapDisabled,
+        if activeAuthSource == .bootstrap, !bootstrapDisabled, !rejection.hasDetailCode,
            connection?.auth?.token?.isEmpty == false || connection?.auth?.password?.isEmpty == false,
            ["INVALID_REQUEST", "BAD_REQUEST"].contains(remoteCode ?? ""),
            message.contains("bootstraptoken"), message.contains("unexpected") || message.contains("invalid connect") {
@@ -184,7 +185,7 @@ extension RuntimeCoordinator {
             recycle(scope: scope)
             return
         }
-        if ["AUTH_TOKEN_MISMATCH", "AUTH_SCOPE_MISMATCH"].contains(remoteCode ?? ""), activeAuthSource == .deviceToken,
+        if rejection.permitsScopedRepair, activeAuthSource == .deviceToken,
            !deviceRepairAttempted, let identity {
             deviceRepairAttempted = true
             let key = tokenScope(identity: identity, role: "operator")
@@ -192,7 +193,8 @@ extension RuntimeCoordinator {
             catch { if isCurrent(scope) { attemptFailed(RuntimeFailure(.credentialStorage), epoch: scope.epoch, attempt: scope.attempt) } }
             return
         }
-        handshakeFailed(error, scope: scope)
+        if let failure = rejection.failure { handshakeFailed(failure, scope: scope) }
+        else { handshakeFailed(error, scope: scope) }
     }
 
     func recycle(scope: Scope) {
