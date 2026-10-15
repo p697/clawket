@@ -76,4 +76,13 @@ struct ModelControlsContractTests {
         document.removeValue(forKey: "thinkingLevel")
         #expect(try JSONDecoder().decode(RuntimeHistory.self, from: JSONSerialization.data(withJSONObject: document)).thinkingLevel == nil)
     }
+
+    @Test func aLaterMissingCapabilityCannotEraseAnExistingPermissionBarrier() throws {
+        var state = ModelControlsState()
+        let key = ModelControlKey(connectionID: "saved", scope: .session("owned"))
+        try state.requirePermissions(key)
+        _ = try state.begin(key: key, nativeBarrier: false)
+        #expect(state.holds[key]?.nativeBarrier == true)
+        #expect(state.holds[key]?.permissionsRequired == true)
+    }
 }

@@ -96,6 +96,7 @@ extension RuntimeCoordinator {
     func validateLegacyModelWrite(sessionKey: String?, scope: Scope, key: ModelControlKey) throws {
         try assertCurrent(scope)
         guard let connection else { throw RuntimeFailure(.superseded) }
+        if modelImagesInFlight(key) { throw RuntimeFailure(.requestBusy) }
         if let sessionKey, sessionManagementState.writes[sessionKey] != nil { throw RuntimeFailure(.requestBusy) }
         if connection.backendKind == .openclaw, sessionMethodsAdvertised {
             guard supportedMethods.contains(key.scope == .global ? "config.patch" : "sessions.patch") else { throw RuntimeFailure(.unsupported) }
@@ -135,7 +136,16 @@ extension RuntimeCoordinator {
         } else { try validateLegacyModelWrite(sessionKey: sessionKey, scope: scope, key: key) }
         guard !Task.isCancelled else { throw RuntimeFailure(.superseded) }
         let prior = modelControlsState.holds[key]
-        let id = try modelControlsState.begin(key: key, nativeBarrier: modelNativeBarrier)
+        let modelChange = change.action == .selectModel
+        let id = try modelControlsState.begin(key: key, nativeBarrier: modelNativeBarrier, changesModel: modelChange)
+        if modelChange {
+            let keys = backend == .openclaw && key.scope == .global
+                ? modelControlsState.contexts.keys.filter { $0.connectionID == key.connectionID } : [key]
+            for target in keys {
+                if target != key { modelControlsState.invalidate(target) }
+                modelControlsState.imageEvidence[target]?.stale = true
+            }
+        }
         let revision = modelControlsState.contexts[key]
         let reference = entry?.reference ?? RuntimeModelControlsReference(token: UUID())
         let identity = modelSessionIdentity(sessionKey)
@@ -174,8 +184,12 @@ extension RuntimeCoordinator {
             }
             guard modelControlsState.holds[key]?.id == id, modelControlsState.contexts[key] == revision else { throw RuntimeFailure(.superseded, delivery: .responseReceived) }
             modelControlsState.holds[key]?.phase = .uncertain
-            if let values { try modelControlsState.observeRead(values, key: key, permissionsSupported: modelPermissionsSupported) }
-            else if modelControlsState.holds[key]?.nativeBarrier != true, modelControlsState.holds[key]?.permissionsRequired != true {
+            if let values {
+                try modelControlsState.observeRead(values, key: key, permissionsSupported: modelPermissionsSupported)
+                observeModelImageEvidence(values, key: key, scope: scope, sessionKey: sessionKey)
+            }
+            else if modelControlsState.holds[key]?.nativeBarrier != true, modelControlsState.holds[key]?.permissionsRequired != true,
+                    modelControlsState.holds[key]?.changesModel != true {
                 modelControlsState.holds.removeValue(forKey: key)
             }
             modelControlsState.invalidate(key)

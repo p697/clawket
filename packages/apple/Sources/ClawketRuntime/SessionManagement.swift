@@ -134,7 +134,7 @@ extension RuntimeCoordinator {
         }
         sessionManagementState.invalidate(entry.session.key)
         sessionManagementState.writes[entry.session.key] = .pending(entry.reference.token)
-        retireModelControls(sessionKey: entry.session.key)
+        retireModelControls(sessionKey: entry.session.key, modelMayChange: action == .reset || action == .delete)
         // Retire older read completions before the first possible write dispatch.
         catalogTask?.cancel(); catalogTask = nil; catalogTaskID = UUID()
         if historyTasks[entry.session.key] != nil { historyRevisions[entry.session.key] = UUID() }
@@ -193,6 +193,7 @@ extension RuntimeCoordinator {
               token == entry.reference.token else { return failure }
         if failure.delivery == .notDispatched || failure.delivery == .rejectedBeforeDispatch {
             sessionManagementState.writes.removeValue(forKey: entry.session.key)
+            if let key = try? modelControlKey(entry.session.key) { modelControlsState.sessionModelChanges.remove(key) }
         } else { sessionManagementState.writes[entry.session.key] = .uncertain }
         return failure
     }

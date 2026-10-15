@@ -42,11 +42,21 @@ struct ModelControlsState: Sendable {
         var phase: Phase
         var nativeBarrier: Bool
         var permissionsRequired: Bool
+        var changesModel: Bool = false
     }
     struct Confirmation: Sendable {
         let value: RuntimeModelPermissionConfirmation
         let deadline: Duration
     }
+    struct ImageEvidence: Sendable {
+        let scope: RuntimeCoordinator.Scope
+        let session: ModelControlSessionIdentity?
+        let support: Bool?
+        var stale: Bool
+    }
+    var sessionModelChanges: Set<ModelControlKey> = []
+    var imageEvidence: [ModelControlKey: ImageEvidence] = [:]
+    var imageDispatches: [ModelControlKey: Set<UUID>] = [:]
     var confirmations: [UUID: Confirmation] = [:]
     var entries: [UUID: Entry] = [:]
     var entryOrder: [UUID] = []
@@ -61,8 +71,8 @@ struct ModelControlsState: Sendable {
     mutating func admit(_ key: ModelControlKey) throws -> UUID {
         if let revision = contexts[key] { return revision }
         if contexts.count >= 128 {
-            guard let oldest = contextOrder.first(where: { holds[$0] == nil && latestRead[$0] == nil }) else { throw RuntimeFailure(.capacity) }
-            invalidate(oldest); historyThinking.removeValue(forKey: oldest); contexts.removeValue(forKey: oldest); contextOrder.removeAll { $0 == oldest }
+            guard let oldest = contextOrder.first(where: { holds[$0] == nil && latestRead[$0] == nil && imageEvidence[$0]?.stale != true && imageDispatches[$0]?.isEmpty != false }) else { throw RuntimeFailure(.capacity) }
+            invalidate(oldest); imageEvidence.removeValue(forKey: oldest); historyThinking.removeValue(forKey: oldest); contexts.removeValue(forKey: oldest); contextOrder.removeAll { $0 == oldest }
         }
         let revision = UUID(); contexts[key] = revision; contextOrder.append(key)
         return revision
@@ -96,13 +106,16 @@ struct ModelControlsState: Sendable {
         return entry
     }
 
-    mutating func begin(key: ModelControlKey, nativeBarrier: Bool) throws -> UUID {
+    mutating func begin(key: ModelControlKey, nativeBarrier: Bool, changesModel: Bool = false) throws -> UUID {
         _ = try admit(key)
         if holds[key]?.phase == .pending { throw RuntimeFailure(.requestBusy) }
         guard holds.values.filter({ $0.phase == .pending }).count < 32 else { throw RuntimeFailure(.capacity) }
         let required = holds[key]?.permissionsRequired == true
+        let priorBarrier = holds[key]?.nativeBarrier == true
+        let model = changesModel || holds[key]?.changesModel == true
         let id = UUID(); invalidate(key)
-        holds[key] = Hold(id: id, phase: .pending, nativeBarrier: nativeBarrier, permissionsRequired: required)
+        holds[key] = Hold(id: id, phase: .pending, nativeBarrier: nativeBarrier || priorBarrier || required,
+                          permissionsRequired: required, changesModel: model)
         return id
     }
 
@@ -118,13 +131,19 @@ struct ModelControlsState: Sendable {
     }
 
     mutating func observeRead(_ values: ModelControlValues, key: ModelControlKey, permissionsSupported: Bool) throws {
-        if values.permissionConfirmation == true { try requirePermissions(key); return }
-        guard let hold = holds[key], hold.phase != .pending else { return }
+        if values.permissionConfirmation == true { try requirePermissions(key) }
+        guard var hold = holds[key], hold.phase != .pending else { return }
         let known = !hold.nativeBarrier || !permissionsSupported || values.permissions?.mode != nil
-        if known && (!hold.permissionsRequired || values.permissionConfirmation == false) { holds.removeValue(forKey: key) }
+        if known && (!hold.permissionsRequired || values.permissionConfirmation == false) {
+            hold.nativeBarrier = false; hold.permissionsRequired = false
+        }
+        if values.currentModel != nil { hold.changesModel = false }
+        if !hold.nativeBarrier && !hold.permissionsRequired && !hold.changesModel { holds.removeValue(forKey: key) }
+        else { holds[key] = hold }
     }
 
     mutating func retire() {
+        imageEvidence = [:]; imageDispatches = [:]; sessionModelChanges = []
         entries = [:]; entryOrder = []; confirmations = [:]; latestThinkingRead = [:]; historyThinking = [:]; reads = []; latestRead = [:]
         for (key, var hold) in holds where hold.phase == .pending {
             hold.phase = .uncertain; holds[key] = hold

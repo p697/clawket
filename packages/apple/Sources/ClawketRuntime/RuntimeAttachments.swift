@@ -153,6 +153,7 @@ extension RuntimeCoordinator {
               input.attachments.allSatisfy({ $0.content.count <= 5 * 1_024 * 1_024 && ($0.name?.utf8.count ?? 0) <= 1_024 }) else {
             throw RuntimeFailure(.capacity, delivery: .rejectedBeforeDispatch)
         }
+        if input.attachments.contains(where: { $0.type == .image }) { try validateModelImages(sessionKey: sessionKey, scope: scope()) }
         // A proven lower bound avoids allocating large base64/JSON intermediates;
         // the complete serializer below still decides the exact wire boundary.
         let encodedBytes = input.attachments.reduce(0) { $0 + 4 * (($1.content.count + 2) / 3) }

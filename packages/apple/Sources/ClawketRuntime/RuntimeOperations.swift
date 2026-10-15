@@ -188,6 +188,8 @@ extension RuntimeCoordinator {
         }
         let gateway = connection.backendKind == .openclaw || connection.backendKind == .hermes
         let params = try promptParameters(sessionKey: sessionKey, input: input)
+        let imageReservation = input.attachments.contains(where: { $0.type == .image }) ? try reserveModelImages(sessionKey: sessionKey, scope: scope) : nil
+        defer { releaseModelImages(imageReservation) }
         do {
             let result = try await rpc("chat.send", params: params, scope: scope)
             let runID = result["runId"]?.nonemptyString ?? (gateway ? input.idempotencyKey : nil)

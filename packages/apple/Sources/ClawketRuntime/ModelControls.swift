@@ -22,7 +22,7 @@ extension RuntimeCoordinator {
         }
         let latestSession = modelSessionIdentity(sessionKey)
         if latestSession != session, let latestSession {
-            // A newer model-only event must not discard independent effective speed/permissions.
+            // A newer model-only event must not discard independent effective permissions.
             values.currentModel = latestSession.model; values.currentProvider = latestSession.provider
             values.models = ModelControlsWire.selecting(values.models, current: latestSession.model, provider: latestSession.provider)
             // Speed availability depends on the particular native model/provider.
@@ -34,6 +34,7 @@ extension RuntimeCoordinator {
             }
         }
         try modelControlsState.observeRead(values, key: key, permissionsSupported: modelPermissionsSupported)
+        observeModelImageEvidence(values, key: key, scope: scope, sessionKey: sessionKey)
         let entry = try modelControlsState.issue(key: key, sessionKey: sessionKey, scope: scope, session: latestSession, values: values)
         return modelControlsSnapshot(entry)
     }
@@ -133,9 +134,14 @@ extension RuntimeCoordinator {
     }
 
     /// Retires display/reference authority for a changed physical route, never unresolved permission holds.
-    func retireModelControls(sessionKey: String) {
+    func retireModelControls(sessionKey: String, modelMayChange: Bool = false) {
         guard let key = try? modelControlKey(sessionKey) else { return }
         modelControlsState.invalidate(key)
+        if modelMayChange, case .session = key.scope {
+            // The lifecycle already bounds changed targets to 256 per authentication.
+            modelControlsState.sessionModelChanges.insert(key)
+            modelControlsState.imageEvidence[key]?.stale = true
+        }
         modelControlsState.historyThinking.removeValue(forKey: key)
     }
 
@@ -198,7 +204,7 @@ extension RuntimeCoordinator {
                 }
             }
         }
-        if writable, !entry.values.models.isEmpty,
+        if writable, !modelImagesInFlight(entry.key), !entry.values.models.isEmpty,
            backend != .openclaw || (entry.key.scope == .global ? methodsPermit("config.patch") && entry.values.configHash != nil : methodsPermit("sessions.patch")) {
             actions.insert(.selectModel)
         }
