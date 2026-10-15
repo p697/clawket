@@ -1,5 +1,9 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-16 Native consent 小数毫秒兼容。
+  - Hermes run-control 允许并转发有限的小数 expires_at_ms；原生整数解析会拒绝有效请求并中断连接。现在仅接受非负、有限、JS-safe 范围内的数值并向下取整，最多提前不足1毫秒，绝不延长审批权限；保留原 raw 字段、缺失/null 无到期时间和其他后端契约。负数、非有限、不安全范围及非数值继续拒绝。
+  - 空闲进程/内存46%预检、heavy/jobs2 下单文件 ConsentExpiryTests 3项通过，覆盖五种有效数值边界、十种无效输入及真实形状 Hermes 事件继续 ready、单调时钟过期退休与零 resolve 派发；20.72秒首次严格Swift6编译后立即释放租约。文档13对/7项、diff及metrics通过；TS/TSX 167,902/132,119、文档180保持，Swift源行净增0、测试增56行。完整门禁交PR CI，无API、服务/协议、实际凭据、版本或发布变更。
+
 - 2026-10-16 Native OpenClaw connect 错误分类与凭据修复边界。
   - 对照安装的 OpenClaw 2026.10.2 Gateway 源码，连接阶段精确读取 outer/details.code：INVALID_REQUEST 内的认证/设备证明失败不再误报 generic invalidResponse；NOT_PAIRED 区分真正配对、verified-user/identity policy，FORBIDDEN 保留 operator policy。普通 RPC 与其他后端错误解释保持原路径，不用 AUTH_* 前缀或错误文案猜测权限。
   - 只允许当前 saved-device 身份在明确 device-token/scope mismatch 时，清理捕获的 operator 范围一次；共享 token、Node、其他连接、未知码、signature/nonce 与配对/policy 不触发清理。失败删除即停止；重现凭据也不能在未 ready 前循环修复。任何 details.code（含未知/损坏值）阻止 bootstrap schema 文案降级，原 outer schema、无 detail 的旧兼容仍保留。

@@ -175,8 +175,8 @@ enum ConsentWire {
     }
     static func expiry(_ value: JSONValue?) throws -> Int64? {
         if value == nil || value == .null { return nil }
-        guard let time = value?.safeInteger else { throw RuntimeFailure(.invalidResponse) }
-        return time
+        guard let time = value?.numberValue, time.isFinite, time >= 0, time <= 9_007_199_254_740_991 else { throw RuntimeFailure(.invalidResponse) }
+        return Int64(time.rounded(.down))
     }
 
     static func draftKey(backend: String, connection: String, session: String, request: String) -> String {
