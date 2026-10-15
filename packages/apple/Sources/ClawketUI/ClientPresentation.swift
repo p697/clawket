@@ -16,11 +16,17 @@ public enum ActionAvailability: Hashable, Sendable {
     }
 }
 
-public struct ConversationID: Hashable, Sendable, Identifiable {
+public struct ConversationID: Hashable, Codable, Sendable, Identifiable {
     public var connectionID: String
     public var agentID: String
     public var sessionID: String
     public var id: Self { self }
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.connectionID.utf8.elementsEqual(rhs.connectionID.utf8) && lhs.agentID.utf8.elementsEqual(rhs.agentID.utf8) && lhs.sessionID.utf8.elementsEqual(rhs.sessionID.utf8)
+    }
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(Data(connectionID.utf8)); hasher.combine(Data(agentID.utf8)); hasher.combine(Data(sessionID.utf8))
+    }
     public var isConcrete: Bool { !connectionID.isEmpty && !agentID.isEmpty && !sessionID.isEmpty }
 
     public init(connectionID: String, agentID: String, sessionID: String) {
@@ -30,10 +36,16 @@ public struct ConversationID: Hashable, Sendable, Identifiable {
     }
 }
 
-public struct AgentCatalogID: Hashable, Sendable, Identifiable {
+public struct AgentCatalogID: Hashable, Codable, Sendable, Identifiable {
     public var connectionID: String
     public var agentID: String
     public var id: Self { self }
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.connectionID.utf8.elementsEqual(rhs.connectionID.utf8) && lhs.agentID.utf8.elementsEqual(rhs.agentID.utf8)
+    }
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(Data(connectionID.utf8)); hasher.combine(Data(agentID.utf8))
+    }
     public init(connectionID: String, agentID: String) {
         self.connectionID = connectionID; self.agentID = agentID
     }
@@ -131,7 +143,7 @@ public struct ConnectionPresentation: Hashable, Sendable {
 
 public struct AgentPresentation: Identifiable, Hashable, Sendable {
     public enum Kind: String, Hashable, Sendable { case agent, pinnedSession }
-    public enum Attention: String, Hashable, Sendable { case none, input, approval }
+    public enum Attention: String, Hashable, Sendable { case none, input, approval, error, scheduledFailure }
 
     public var id: String
     public var entryMode: AgentEntryMode
@@ -154,18 +166,22 @@ public struct AgentPresentation: Identifiable, Hashable, Sendable {
     public var isWorking: Bool
     public var cachedLabel: String?
     public var availability: ActionAvailability
+    public var isPinned: Bool
+    public var localActions: RosterActionsPresentation
 
     public init(id: String, entryMode: AgentEntryMode, kind: Kind = .agent, name: String,
                 subtitle: String = "", backendLabel: String? = nil, symbol: String? = nil,
                 initials: String = "", avatarData: Data? = nil, activityLabel: String? = nil,
                 timeLabel: String? = nil, unread: Bool = false, attention: Attention = .none,
                 isWorking: Bool = false, cachedLabel: String? = nil,
-                availability: ActionAvailability = .available) {
+                availability: ActionAvailability = .available, isPinned: Bool = false,
+                localActions: RosterActionsPresentation = .init()) {
         self.id = id; self.entryMode = entryMode; self.kind = kind; self.name = name
         self.subtitle = subtitle; self.backendLabel = backendLabel; self.symbol = symbol
         self.initials = initials; self.avatarData = avatarData; self.activityLabel = activityLabel
         self.timeLabel = timeLabel; self.unread = unread; self.attention = attention
         self.isWorking = isWorking; self.cachedLabel = cachedLabel; self.availability = availability
+        self.isPinned = isPinned; self.localActions = localActions
     }
 
     public init(id: String, route: ConversationID, kind: Kind = .agent, name: String,
@@ -173,11 +189,12 @@ public struct AgentPresentation: Identifiable, Hashable, Sendable {
                 initials: String = "", avatarData: Data? = nil, activityLabel: String? = nil,
                 timeLabel: String? = nil, unread: Bool = false, attention: Attention = .none,
                 isWorking: Bool = false, cachedLabel: String? = nil,
-                availability: ActionAvailability = .available) {
+                availability: ActionAvailability = .available, isPinned: Bool = false,
+                localActions: RosterActionsPresentation = .init()) {
         self.init(id: id, entryMode: .conversation(route), kind: kind, name: name, subtitle: subtitle,
                   backendLabel: backendLabel, symbol: symbol, initials: initials, avatarData: avatarData,
                   activityLabel: activityLabel, timeLabel: timeLabel, unread: unread, attention: attention,
-                  isWorking: isWorking, cachedLabel: cachedLabel, availability: availability)
+                  isWorking: isWorking, cachedLabel: cachedLabel, availability: availability, isPinned: isPinned, localActions: localActions)
     }
 }
 
@@ -192,14 +209,19 @@ public struct SessionPresentation: Identifiable, Hashable, Sendable {
     public var unread: Bool
     public var management: ActionAvailability
     public var isArchived: Bool
+    public var isOnHome: Bool
+    public var homeAction: ActionAvailability
+    public var markReadAction: ActionAvailability
 
     public init(id: String, route: ConversationID, title: String, subtitle: String? = nil,
                 symbol: String = "bubble.left", timeLabel: String? = nil,
                 isSelected: Bool = false, unread: Bool = false, management: ActionAvailability = .unsupported,
-                isArchived: Bool = false) {
+                isArchived: Bool = false, isOnHome: Bool = false, homeAction: ActionAvailability = .unsupported,
+                markReadAction: ActionAvailability = .unsupported) {
         self.id = id; self.route = route; self.title = title; self.subtitle = subtitle
         self.symbol = symbol; self.timeLabel = timeLabel; self.isSelected = isSelected; self.unread = unread
         self.management = management; self.isArchived = isArchived
+        self.isOnHome = isOnHome; self.homeAction = homeAction; self.markReadAction = markReadAction
     }
 }
 
@@ -642,6 +664,11 @@ public final class ClientPresentation: ObservableObject {
 public enum VoiceIntent: String, Sendable { case start, stop, finishAndSend, cancel, retry, showRecordings }
 
 public enum ClientIntent: Sendable {
+    case setAgentPinned(AgentCatalogID, pinned: Bool)
+    case setSessionOnHome(ConversationID, visible: Bool)
+    case markAgentRead(AgentCatalogID)
+    case markSessionRead(ConversationID)
+    case conversationReadingVisibilityChanged(ConversationID, scopeID: UUID, visible: Bool)
     case openAgentCatalog(AgentCatalogID)
     case selectCatalogProject(AgentCatalogID, projectID: String?)
     case createSession(AgentCatalogID, projectID: String?)

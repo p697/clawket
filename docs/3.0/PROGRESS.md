@@ -35,6 +35,11 @@
   - heavy/ios 下实际 iOS16.4双架构generic build-for-testing最终146 App方法编译成功，无本机Simulator启动/执行；19语393 UI+4用途共7,543精确编译值一致。35条history文案含26条复用Mobile/9条真译，源码6、资源4、报告3、文档15指令对/7回归与diff全部通过后释放租约。完整仓库/实际App门禁随后PR CI执行，未改服务/凭据/版本/发布；真实系统分享/大文本/physical rollover/同bundle旧Saved采用与Pro仍单独验收。实现边界见 `docs/native-ios/HISTORY.md`。
 
   - 最终重基设置/导航主线50d01ac7，保留真实Settings/Back/reading/44pt控件、所有已有译文；Save/System共用key沿主线值，语义并集实际412 UI+4权限/7,904源码语言单元，App真实发现161方法（127+34）、报告门槛和缩减反例同步。该组合head实际App执行和编译资源交完整CI，不把之前146本机构建扩称161已执行。
+- 2026-10-16 Native active Roster 本地状态（独立切片，跨连接权益/升级/设备验收另行进行）。
+  - 真实Mobile源核pin无独立收费/额度，仅继承actual Agent access；接入Agent置顶、合法会话Show/Hide on home、原生行菜单与现有Connections handler。新增RuntimeAgent可选isMain保留actual default/advertised证据，旧cache nil不猜名字；当前只freeConnection+actual主Agent或未来显式access输入开放本地操作，不伪Pro/grace，不新增其他缓存连接wire入口。
+  - human kinds活动排序排除cron/subagent，pins优先，其余按人工活跃；metadata/explicit null不造Now。首完整live roster建立baseline，主Agent unread只主会话、目录各自unread，attention独立且与unread可同时显示；缓存保留预览/时间/置顶但清live信号。自动已读需foreground/frontmost/current open+wire内成功head read、无navigation hold/sheet/expanded editor；A→B→A旧history成功不能提前已读重入的新head，older页不授新head阅读证据。
+  - 8MiB单文档/双代保护、512Agent偏好/每Agent128home/128baseline连接/16384route水位、JS-safe revision及字节/重复/时间校验，合并串行writer不取消原子替换、迟到旧snapshot忽略、unknown封闭至重开，不丢旧引用/水位。ConversationID/AgentCatalogID的Eq/Hash/Codable保留原UTF8，真实draft/catalog/conversation/reading字典与水位消费者覆盖NFC/NFD反例；显示文字不改，row IDs独立编码避免拼接碰撞。
+  - heavy/jobs2下21真UIKit源码strict Swift6/iOS16.4 typecheck、3UI consumer契约、1Runtime main证据、10host Roster方法串行通过；actual App137方法双架构generic build-for-testing成功，19语385UI+4权限/7391编译值精确匹配，6新增key中5复用Mobile、1真译。docs15指令对/7回归通过，无本机sim/phone/purchase/服务/分发/发布。之后补older head-read工厂的窄负例，由最终head CI复验；完整current-main CI仍继续。详见`docs/native-ios/ROSTER.md`。
 
 - 2026-10-16 Native Settings/免费外观与导航恢复（独立切片，完整外观/升级/真机验收另行进行）。
   - 原生Settings首页复用真实连接操作、系统App设置与安装包版本；实际Mobile外观均免费、仅AppIcon需Pro，因此接入system/light/dark、六真实双scheme accent、12…20字号+DynamicType、默认关闭Agent头像签名。主题验证保存后立即生效；聊天外观编辑隔离draft/Reset/Save，Back不提交；不伪造Pro、壁纸/图标资产或语言控件。作者归属/participant与Agent上下文badge不由偏好改变。

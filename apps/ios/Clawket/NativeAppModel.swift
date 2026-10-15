@@ -33,11 +33,17 @@ final class NativeAppModel: ObservableObject {
             }
         }
     }
+    let rosterState = NativeRosterState()
+    private var rosterReading = NativeRosterReadingVisibility()
+    private var rosterForeground = true
+    private var rosterHistoryReady: [ConversationID: NativeRosterHistoryRead] = [:]
+    /// A future verified entitlement provider may supply accessible Agent scopes. Empty grants nothing extra.
+    var rosterExplicitAccess: Set<AgentCatalogID> = [] { didSet { rebuildRoster() } }
     let preferences = NativePreferences()
     let presentation = ClientPresentation(title: String(localized: "Agents"),
         emptyTitle: String(localized: "Your agents, within reach"),
         emptyDetail: String(localized: "Connect an agent to continue conversations and keep work moving."))
-    @Published var destination: Destination?
+    @Published var destination: Destination? { didSet { markVisibleRosterRead() } }
     @Published var notice: String?
     @Published private(set) var deviceApproval: RuntimeDeviceApprovalContext?
     private var deviceApprovalNotice = false
@@ -120,6 +126,9 @@ final class NativeAppModel: ObservableObject {
             self?.objectWillChange.send(); self?.presentation.appearance = value
         }
         await preferences.load()
+        rosterState.onFailure = { [weak self] in self?.notice = String(localized: "Preferences are unavailable. Reopen Clawket before trying again.") }
+        rosterState.onChange = { [weak self] in Task { @MainActor [weak self] in self?.rebuildRoster() } }
+        await rosterState.load()
         do {
             let vault = try NativeVault()
             let runtime = try RuntimeCoordinator(credentials: vault,
@@ -199,6 +208,23 @@ final class NativeAppModel: ObservableObject {
 
     func handle(_ intent: ClientIntent) {
         switch intent {
+        case let .setAgentPinned(scope, pinned):
+            guard let agent = rosterAgent(scope), canUseRosterActions(agent) else { return }
+            rosterState.setAgentPinned(scope, pinned: pinned)
+        case let .setSessionOnHome(route, visible):
+            guard let session = rosterSession(route), session.archived != true, session.allowedActions?.pin == true,
+                  let agent = rosterAgent(.init(connectionID: route.connectionID, agentID: route.agentID)), canUseRosterActions(agent) else { return }
+            rosterState.setSessionOnHome(route, visible: visible)
+        case let .markAgentRead(scope):
+            guard let agent = rosterAgent(scope), canUseRosterActions(agent), rosterIsLive else { return }
+            rosterState.markRead(sessions.filter { scope == AgentCatalogID(connectionID: $0.connectionID, agentID: $0.agentID) })
+        case let .markSessionRead(route):
+            guard let session = rosterSession(route), let agent = rosterAgent(.init(connectionID: route.connectionID, agentID: route.agentID)),
+                  canUseRosterActions(agent), rosterIsLive else { return }
+            rosterState.markRead([session])
+        case let .conversationReadingVisibilityChanged(route, scope, visible):
+            guard presentation.acceptsReadingContext(for: route, scopeID: scope) else { return }
+            rosterReading.update(route, scope: scope, visible: visible); markVisibleRosterRead()
         case let .openDestination(destination, _):
             retireVoice()
             switch destination {
@@ -391,7 +417,9 @@ final class NativeAppModel: ObservableObject {
     }
 
     func setForeground(_ foreground: Bool) {
+        rosterForeground = foreground
         preferences.setForeground(foreground)
+        if foreground { markVisibleRosterRead() }
         if !foreground {
             for route in documents.keys { scheduleSave(route, immediate: true) }
         }
@@ -489,6 +517,7 @@ final class NativeAppModel: ObservableObject {
             showingCachedRoster = false
             sessionManager?.catalogChanged()
             agents = roster.agents; sessions = roster.sessions
+            if state.phase == .ready { rosterState.seedIfUnset(connectionID: roster.connectionID, sessions: roster.sessions) }
             rebuildRoster()
             catalogCacheRevision += 1
             let revision = catalogCacheRevision
@@ -524,31 +553,69 @@ final class NativeAppModel: ObservableObject {
         }
     }
 
+    private var rosterIsLive: Bool { !showingCachedRoster && state.phase == .ready }
+    private func rosterAgent(_ scope: AgentCatalogID) -> RuntimeAgent? {
+        guard scope.connectionID.utf8.elementsEqual((activeConnectionID ?? "").utf8) else { return nil }
+        return agents.first { NativeRosterProjection.scope($0) == scope }
+    }
+    private func rosterSession(_ route: ConversationID) -> RuntimeSession? {
+        guard route.connectionID.utf8.elementsEqual((activeConnectionID ?? "").utf8) else { return nil }
+        return sessions.first { NativeRosterProjection.route($0) == route }
+    }
+    private func canUseRosterActions(_ agent: RuntimeAgent) -> Bool {
+        rosterState.canSave && NativeRosterProjection.canUseLocalActions(agent, freeConnectionID: registry.freeConnectionID,
+            explicitAccess: rosterExplicitAccess)
+    }
+    private func markVisibleRosterRead() {
+        guard let route = presentation.selectedConversation,
+              rosterReading.permitsRead(route, scope: presentation.readingContexts[route]?.id, foreground: rosterForeground,
+                  live: rosterIsLive, historyReady: rosterHistoryReady[route]?.isCurrent(wire: wireRevision, readingScope: presentation.readingContexts[route]?.id) == true,
+                  obscured: destination != nil || mediaPicker != nil || mediaPreview != nil || voiceSheet != nil,
+                  held: navigationHeldRoutes.contains(.init(route))), let session = rosterSession(route) else { return }
+        rosterState.markRead([session])
+    }
     private func rebuildRoster() {
         presentation.isLoading = false
-        let activity: (RuntimeAgent) -> Int64 = { agent in
-            self.sessions.filter { $0.connectionID == agent.connectionID && $0.agentID == agent.agentID }
-                .compactMap(\.lastActivityAtMs).max() ?? 0
-        }
-        let ordered = agents.enumerated().sorted { lhs, rhs in
-            let first = activity(lhs.element), second = activity(rhs.element)
-            return first == second ? lhs.offset < rhs.offset : first > second
-        }.map(\.element)
-        presentation.agents = ordered.map { agent in
+        markVisibleRosterRead()
+        let snapshot = rosterState.document
+        let summaries = NativeRosterProjection.summaries(agents: agents, sessions: sessions, document: snapshot,
+            connectionID: activeConnectionID ?? "", live: rosterIsLive)
+        presentation.agents = summaries.flatMap { summary -> [AgentPresentation] in
+            let agent = summary.agent, scope = NativeRosterProjection.scope(agent)
             let mode: AgentEntryMode = agent.entryMode == .sessions || agent.mainSessionKey.isEmpty
-                ? .catalog(.init(connectionID: agent.connectionID, agentID: agent.agentID))
-                : .conversation(.init(connectionID: agent.connectionID, agentID: agent.agentID, sessionID: agent.mainSessionKey))
-            let last = sessions.filter { $0.agentID == agent.agentID }.max { ($0.lastActivityAtMs ?? 0) < ($1.lastActivityAtMs ?? 0) }
-            return AgentPresentation(id: agent.agentID, entryMode: mode, name: agent.name,
-                subtitle: last?.preview ?? "", backendLabel: connections.first { $0.id == agent.connectionID }?.backendKind.title,
-                initials: String(agent.name.prefix(1)), attention: taskRequests?.attention(connectionID: agent.connectionID,
-                    sessionKeys: Set(sessions.filter { $0.connectionID == agent.connectionID && $0.agentID == agent.agentID }.map(\.key))
-                        .union(agent.mainSessionKey.isEmpty ? [] : [agent.mainSessionKey])) ?? .none, isWorking: showingCachedRoster ? false : last?.hasActiveRun ?? false,
-                cachedLabel: showingCachedRoster ? String(localized: "Saved on this device") : nil)
+                ? .catalog(scope) : .conversation(.init(connectionID: agent.connectionID, agentID: agent.agentID, sessionID: agent.mainSessionKey))
+            let backend = connections.first { $0.id.utf8.elementsEqual(agent.connectionID.utf8) }?.backendKind.title
+            let localAccess = canUseRosterActions(agent)
+            let pending = rosterIsLive ? taskRequests?.attention(connectionID: agent.connectionID,
+                sessionKeys: Set(summary.sessions.map(\.key)).union(agent.mainSessionKey.isEmpty ? [] : [agent.mainSessionKey])) ?? .none : .none
+            let attention = NativeRosterProjection.stronger(summary.attention, pending)
+            let preview = summary.recent?.preview ?? (agent.entryMode == .sessions ? summary.recent.map { displayTitle(for: $0) } : nil) ?? ""
+            var rows = [AgentPresentation(id: NativeRosterProjection.renderID(scope), entryMode: mode, name: agent.name,
+                subtitle: preview, backendLabel: backend, initials: String(agent.name.prefix(1)),
+                timeLabel: rosterTime(summary.lastActivityAtMs), unread: summary.unread, attention: attention,
+                isWorking: rosterIsLive && summary.sessions.contains(where: \.hasActiveRun),
+                cachedLabel: rosterIsLive ? nil : String(localized: "Saved on this device"), isPinned: summary.pinned,
+                localActions: .init(pin: localAccess ? .available : .unsupported,
+                    markRead: localAccess && rosterIsLive && summary.sessions.contains(where: { NativeRosterProjection.unread($0, document: snapshot, live: true) }) ? .available : .unsupported,
+                    connectionSettings: .available))]
+            rows += summary.home.map { session in
+                AgentPresentation(id: NativeRosterProjection.renderID(scope, sessionID: session.key), route: NativeRosterProjection.route(session),
+                    kind: .pinnedSession, name: displayTitle(for: session), subtitle: session.preview ?? "", backendLabel: backend,
+                    symbol: "bubble.left", initials: String(agent.name.prefix(1)), timeLabel: rosterTime(NativeRosterProjection.activity(session)),
+                    attention: rosterIsLive ? NativeRosterProjection.attention(session) : .none,
+                    isWorking: rosterIsLive && session.hasActiveRun, cachedLabel: rosterIsLive ? nil : String(localized: "Saved on this device"),
+                    localActions: .init(pin: localAccess ? .available : .unsupported,
+                        markRead: localAccess && NativeRosterProjection.unread(session, document: snapshot, live: rosterIsLive) ? .available : .unsupported))
+            }
+            return rows
         }
         for key in presentation.catalogs.keys { updateCatalog(key) }
         restoreNavigationIfAvailable()
         for key in presentation.conversations.keys { updatePresentation(key) }
+    }
+    private func rosterTime(_ time: Int64?) -> String? {
+        guard let time else { return nil }
+        return Date(timeIntervalSince1970: Double(time) / 1_000).formatted(.relative(presentation: .named))
     }
 
     private func restoreNavigationIfAvailable() {
@@ -667,7 +734,15 @@ final class NativeAppModel: ObservableObject {
                   title: displayTitle(for: session), subtitle: session.preview,
                   symbol: session.hasActiveRun ? "ellipsis.bubble" : "bubble.left",
                   isSelected: presentation.selectedConversation == .init(connectionID: connectionID, agentID: agentID, sessionID: session.key),
-                  management: managementAvailability, isArchived: session.archived == true)
+                  unread: NativeRosterProjection.unread(session, document: rosterState.document, live: rosterIsLive),
+                  management: managementAvailability, isArchived: session.archived == true,
+                  isOnHome: rosterState.document.preference(.init(connectionID: connectionID, agentID: agentID)).homeSessions.contains { $0.utf8.elementsEqual(session.key.utf8) },
+                  homeAction: rosterAgent(.init(connectionID: connectionID, agentID: agentID)).map {
+                      canUseRosterActions($0) && session.archived != true && session.allowedActions?.pin == true ? .available : .unsupported
+                  } ?? .unsupported,
+                  markReadAction: rosterAgent(.init(connectionID: connectionID, agentID: agentID)).map {
+                      canUseRosterActions($0) && NativeRosterProjection.unread(session, document: rosterState.document, live: rosterIsLive) ? .available : .unsupported
+                  } ?? .unsupported)
         }
     }
 
@@ -680,6 +755,7 @@ final class NativeAppModel: ObservableObject {
     private func open(_ route: ConversationID) {
         guard route.isConcrete, route.connectionID == activeConnectionID, let cache else { return }
         retireMediaSelection(); mediaVisibleRoute = route
+        rosterHistoryReady.removeValue(forKey: route)
         presentation.requestedCatalog = nil
         preferences.opened(.init(route))
         // Only the mounted route owns an ephemeral scope; saved contexts remain bounded in preferences.
@@ -710,6 +786,7 @@ final class NativeAppModel: ObservableObject {
         let activation = activationRevision, wire = wireRevision
         let liveRevision = liveRevisions[route, default: 0]
         let readSnapshot = Dictionary(uniqueKeysWithValues: document.messages.map { ($0.id, $0) })
+        let readingScope = presentation.readingContexts[route]?.id
         presentation.conversations[route]?.isLoadingHistory = true
         do {
             let history = try await runtime.loadSession(key: route.sessionID, limit: document.historyLimit,
@@ -718,6 +795,11 @@ final class NativeAppModel: ObservableObject {
             try await mergeHistory(history, route: route, earlier: earlier, liveRevision: liveRevision,
                 readSnapshot: readSnapshot, revision: revision, activation: activation, wire: wire)
             guard activation == activationRevision, wire == wireRevision, historyRevisions[route] == revision else { return }
+            if let evidence = NativeRosterHistoryRead.accepted(wire: wire, readingScope: readingScope, earlier: earlier),
+               presentation.readingContexts[route]?.id == evidence.readingScope {
+                rosterHistoryReady = [route: evidence]
+                markVisibleRosterRead()
+            }
             presentation.conversations[route]?.isLoadingHistory = false
         } catch {
             guard activation == activationRevision, wire == wireRevision, historyRevisions[route] == revision else { return }

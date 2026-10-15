@@ -199,6 +199,19 @@ struct ClientSheetView: View {
                     .accessibilityLabel("Conversation actions").accessibilityValue(Text(verbatim: session.title))
             }
         }
+        .contextMenu {
+            if session.homeAction.isVisible {
+                Button { onIntent(.setSessionOnHome(session.route, visible: !session.isOnHome)) } label: {
+                    if session.isOnHome { Label("Hide from home", systemImage: "house") }
+                    else { Label("Show on home", systemImage: "house") }
+                }.disabled(!session.homeAction.isEnabled)
+            }
+            if session.markReadAction.isVisible {
+                Button { onIntent(.markSessionRead(session.route)) }
+                    label: { Label("Mark as read", systemImage: "checkmark.bubble") }
+                    .disabled(!session.markReadAction.isEnabled)
+            }
+        }
     }
 
     private func models(_ route: ConversationID) -> some View {

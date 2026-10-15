@@ -158,10 +158,12 @@ public struct RuntimeAgent: Codable, Sendable, Equatable, Identifiable {
     public let avatarURL: URL?
     public let mainSessionKey: String
     public let entryMode: EntryMode
+    /// Actual adapter/default-agent evidence; nil on legacy caches is not false or true.
+    public let isMain: Bool?
     public init(agentID: String, connectionID: String, name: String, emoji: String? = nil, avatarURL: URL? = nil,
-                mainSessionKey: String, entryMode: EntryMode = .main) {
+                mainSessionKey: String, entryMode: EntryMode = .main, isMain: Bool? = nil) {
         self.agentID = agentID; self.connectionID = connectionID; self.name = name
-        self.emoji = emoji; self.avatarURL = avatarURL; self.mainSessionKey = mainSessionKey; self.entryMode = entryMode
+        self.emoji = emoji; self.avatarURL = avatarURL; self.mainSessionKey = mainSessionKey; self.entryMode = entryMode; self.isMain = isMain
     }
 }
 

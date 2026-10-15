@@ -4,7 +4,7 @@ from pathlib import Path
 import sys
 
 
-def validate_summary(value, minimum_tests=193):
+def validate_summary(value, minimum_tests=203):
     if not isinstance(value, dict):
         raise ValueError("Native test summary must be an object")
     fields = ("totalTestCount", "passedTests", "failedTests", "skippedTests", "expectedFailures")

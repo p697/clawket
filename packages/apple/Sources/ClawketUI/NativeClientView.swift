@@ -23,7 +23,7 @@ public struct NativeClientView: View {
             if let route = model.selectedConversation {
                 if let conversation = model.conversations[route] {
                     NativeConversationView(model: model, conversation: conversation,
-                                           draft: model.draft(for: route), onIntent: onIntent,
+                                           draft: model.draft(for: route), obscured: sheet != nil, onIntent: onIntent,
                                            showSheet: { sheet = $0 })
                         .id(route)
                 } else {
@@ -134,6 +134,7 @@ public struct NativeClientView: View {
                                 .buttonStyle(.plain)
                         }
                     }
+                    .contextMenu { rosterActions(agent) }
                     .disabled(!agent.availability.isEnabled)
                     .accessibilityIdentifier("agent-\(agent.id)")
                     .listRowSeparator(.hidden)
@@ -218,6 +219,36 @@ public struct NativeClientView: View {
         }
     }
 
+    @ViewBuilder
+    private func rosterActions(_ agent: AgentPresentation) -> some View {
+        let scope: AgentCatalogID = switch agent.entryMode {
+        case let .catalog(id): id
+        case let .conversation(route): .init(connectionID: route.connectionID, agentID: route.agentID)
+        }
+        if agent.localActions.pin.isVisible {
+            Button {
+                if agent.kind == .agent { onIntent(.setAgentPinned(scope, pinned: !agent.isPinned)) }
+                else if let route = agent.route { onIntent(.setSessionOnHome(route, visible: false)) }
+            } label: {
+                if agent.kind == .pinnedSession { Label("Hide from home", systemImage: "house") }
+                else if agent.isPinned { Label("Unpin Agent", systemImage: "pin.slash") }
+                else { Label("Pin Agent", systemImage: "pin") }
+            }.disabled(!agent.localActions.pin.isEnabled)
+        }
+        if agent.localActions.markRead.isVisible {
+            Button {
+                if agent.kind == .agent { onIntent(.markAgentRead(scope)) }
+                else if let route = agent.route { onIntent(.markSessionRead(route)) }
+            } label: { Label("Mark as read", systemImage: "checkmark.bubble") }
+                .disabled(!agent.localActions.markRead.isEnabled)
+        }
+        if agent.localActions.connectionSettings.isVisible {
+            Button { onIntent(.openDestination(.connectionSettings, conversation: agent.route)) }
+                label: { Label("Connections", systemImage: "link") }
+                .disabled(!agent.localActions.connectionSettings.isEnabled)
+        }
+    }
+
     private var rosterSelectionBinding: Binding<ConversationID?> {
         Binding(get: { rosterSelection }, set: { proposed in
             let previous = rosterSelection
@@ -243,6 +274,7 @@ private struct AgentRow: View {
                     Text(agent.name).font(.body.weight(.semibold)).foregroundStyle(.primary)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                     Spacer(minLength: 0)
+                    if agent.isPinned && agent.kind == .agent { Image(systemName: "pin.fill").font(.caption2).foregroundStyle(.secondary).accessibilityLabel("Pinned") }
                     if !dynamicTypeSize.isAccessibilitySize, let time = agent.timeLabel {
                         Text(time).font(.caption).foregroundStyle(.tertiary).lineLimit(1)
                     }
@@ -259,9 +291,10 @@ private struct AgentRow: View {
                 }
             }
             if agent.attention != .none {
-                Image(systemName: agent.attention == .approval ? "hand.raised.fill" : "text.bubble.fill")
+                Image(systemName: agent.attention == .approval ? "hand.raised.fill" : agent.attention == .input ? "text.bubble.fill" : "exclamationmark.circle.fill")
                     .font(.caption).foregroundStyle(.orange).padding(.top, 4)
-            } else if agent.unread {
+            }
+            if agent.unread {
                 Circle().fill(Color.accentColor).frame(width: 8, height: 8).padding(.top, 7)
             }
         }
@@ -269,7 +302,8 @@ private struct AgentRow: View {
         .accessibilityElement(children: .combine)
         .accessibilityValue([agent.backendLabel, agent.timeLabel, agent.unread ? String(localized: "Unread messages") : nil,
                              agent.attention == .approval ? String(localized: "Approval needed") : nil,
-                             agent.attention == .input ? String(localized: "Input needed") : nil].compactMap { $0 }.joined(separator: ", "))
+                             agent.attention == .input ? String(localized: "Input needed") : nil,
+                             [.error, .scheduledFailure].contains(agent.attention) ? String(localized: "Needs attention") : nil].compactMap { $0 }.joined(separator: ", "))
     }
 
     private var avatar: some View {
@@ -371,12 +405,20 @@ private struct NativeConversationView: View {
     @ObservedObject var model: ClientPresentation
     let conversation: ConversationPresentation
     @ObservedObject var draft: ComposerDraft
+    let obscured: Bool
     let onIntent: @MainActor (ClientIntent) -> Void
     let showSheet: (ClientSheet) -> Void
     @State private var expanded = false
     @State private var following = true
     @State private var scrollRequest = 0
     @State private var visibilityID = UUID()
+    @Environment(\.scenePhase) private var scenePhase
+
+    private func reportReadingVisibility(_ visible: Bool) {
+        guard let scope = model.readingContexts[conversation.id]?.id else { return }
+        onIntent(.conversationReadingVisibilityChanged(conversation.id, scopeID: scope, visible: visible))
+    }
+    private var canRead: Bool { !obscured && !expanded && scenePhase == .active }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -429,8 +471,16 @@ private struct NativeConversationView: View {
                            }, showModels: { showSheet(.models(conversation.id)) })
         }
         .background(Color(uiColor: .systemBackground))
-        .onAppear { onIntent(.conversationVisibilityChanged(conversation.id, viewID: visibilityID, visible: true)) }
-        .onDisappear { onIntent(.conversationVisibilityChanged(conversation.id, viewID: visibilityID, visible: false)) }
+        .onAppear {
+            onIntent(.conversationVisibilityChanged(conversation.id, viewID: visibilityID, visible: true))
+            reportReadingVisibility(canRead)
+        }
+        .onDisappear {
+            onIntent(.conversationVisibilityChanged(conversation.id, viewID: visibilityID, visible: false))
+            reportReadingVisibility(false)
+        }
+        .onChange(of: canRead) { reportReadingVisibility($0) }
+        .onChange(of: model.readingContexts[conversation.id]?.id) { _ in reportReadingVisibility(canRead) }
         .navigationTitle(conversation.agentName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

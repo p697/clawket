@@ -5,7 +5,7 @@ enum WireModels {
     static func agents(_ payload: JSONValue, connection: BackendConnection) throws -> [RuntimeAgent] {
         if connection.backendKind == .hermes || connection.backendKind == .localModel {
             let id = connection.backendKind == .hermes ? "hermes" : "main"
-            return [.init(agentID: id, connectionID: connection.id, name: connection.label, mainSessionKey: "main")]
+            return [.init(agentID: id, connectionID: connection.id, name: connection.label, mainSessionKey: "main", isMain: true)]
         }
         let openclaw = connection.backendKind == .openclaw
         guard var values = openclaw ? payload["agents"]?.array : payload.array, values.count <= 1_000 else {
@@ -30,7 +30,8 @@ enum WireModels {
             return RuntimeAgent(agentID: id, connectionID: connection.id, name: name,
                                 emoji: identity?["emoji"]?.stringValue ?? value["emoji"]?.stringValue,
                                 avatarURL: avatar(identity?["avatarUrl"] ?? identity?["avatar"] ?? value["avatarUrl"], base: connection.url),
-                                mainSessionKey: mainKey, entryMode: sessionsFirst ? .sessions : .main)
+                                mainSessionKey: mainKey, entryMode: sessionsFirst ? .sessions : .main,
+                                isMain: openclaw ? id.utf8.elementsEqual(defaultID.utf8) : value["isMain"]?.boolValue)
         }
     }
 

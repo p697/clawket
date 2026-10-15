@@ -1,0 +1,23 @@
+# Native roster display state
+
+This slice covers the active connection and its paused/offline saved roster. It does not aggregate other connections into new wire entry points. Complete multi-connection access, verified RevenueCat/grace/free-slot switching, same-bundle legacy preferences and device acceptance remain pending.
+
+## Product and source contract
+
+Mobile `connection/registry/unread-watermarks.ts`, `roster-cache.ts`, `screens/Roster/model.ts`, `SessionPanel/model.ts` and `services/session-preferences.ts` are the current behavior oracle. Pins have no separate price or quota: they inherit actual Agent access. The current native host grants these new local actions only for a known registry free connection with actual `isMain` descriptor evidence, or an explicit accessible scope supplied by a future verified entitlement provider. Names, session keys, QA mode and cached purchases never invent Pro or grace. Legacy caches missing `isMain` remain unknown.
+
+Agent pins sort first; remaining Agents sort by latest human activity, then byte-exact IDs. Human kinds are main/channel/direct/group/other. Cron and sub-agent work do not move the roster. Runtime normalization already preserves the explicit-null versus legacy activity distinction; this projection never falls back from a missing normalized activity clock to `updatedAt` or Now. Attention and unread do not reorder rows. Attention remains independent of marking a conversation read, and the row can show both signals. Offline/cached rows retain previews, pins and activity times while suppressing live unread, attention and working claims.
+
+The Agent unread dot counts its actual main conversation only. Session pickers show each ordinary session's own unread state. The first complete live roster creates the read baseline; old conversations do not all light up on a newly tracked device. Subsequent opens and explicit Mark as read advance monotonically through actual human-activity clocks. Null clocks never manufacture an activity or watermark. Automatic reading requires the foreground, unobscured current transcript scope, an accepted history read in that exact scope and wire, and no restored-navigation hold. A persisted selection, Settings, client sheet, expanded editor, background or stale A → B → A callback cannot mark a new opening read.
+
+Show on home/Hide from home is a local display preference, not a remote default-session change. Only an existing nonarchived exact catalog member advertising `allowedActions.pin` appears as a child row. Its explicit newest-first home order stays with its Agent. Main sessions follow the same actual permission evidence; sessions-first empty main keys never become fake conversations. Missing or newly disallowed references remain stored but do not authorize a route. Context menus invoke real host operations; connection settings reuse the existing live handler.
+
+## Persistence and identities
+
+`NativeRosterStore` retains one protected versioned document through the existing verified current/rollback `DocumentStore`. Each generation is limited to 8 MiB; aggregate state allows 512 Agent preferences, 128 home references per Agent, 128 tracked connections and 16,384 exact read-watermark routes. JS-safe revisions, identifiers, duplicate scopes, timestamps and counts are validated. Capacity/corruption fails visibly without dropping old preferences or manufacturing a successful empty baseline. A serialized/coalesced writer never cancels an atomic replacement, ignores older snapshots, and stops on an unknown result until reopening.
+
+`ConversationID` and `AgentCatalogID` compare and hash their original UTF-8 components. Their actual draft, conversation, catalog and reading dictionaries therefore distinguish canonically equivalent display strings. Display names and messages are unchanged. Length-independent encoded row IDs avoid delimiter and canonical-equivalence collisions; these product values are never diagnostics. Persisted data contains no Runtime reference, socket/run authority, credentials or permission to send.
+
+## Verification
+
+Focused checks cover real presentation dictionary consumers, descriptor evidence and host persistence/projection/read-scope boundaries. Actual App compilation, compiled translations and the complete current-main CI gate are recorded in the shared progress log when complete. No local simulator, phone operation, purchase, service change or release is part of this slice.

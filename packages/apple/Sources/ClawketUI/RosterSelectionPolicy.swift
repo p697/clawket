@@ -9,7 +9,7 @@ enum RosterSelectionPolicy {
             return (agent.kind, route)
         }
         if routes.contains(where: { $0.1 == selected }) { return selected }
-        let scope = routes.filter { $0.1.connectionID == selected.connectionID && $0.1.agentID == selected.agentID }
+        let scope = routes.filter { AgentCatalogID(connectionID: $0.1.connectionID, agentID: $0.1.agentID) == AgentCatalogID(connectionID: selected.connectionID, agentID: selected.agentID) }
         if let main = scope.first(where: { $0.0 == .agent })?.1 { return main }
         if let row = scope.first?.1 { return row }
         // Catalog-only/temporarily missing rows must never destroy a concrete detail route.
