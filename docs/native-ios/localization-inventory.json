@@ -390,6 +390,13 @@
       "mobileTerm": null
     },
     {
+      "key": "Conversations could not be refreshed. Check your connection and try again.",
+      "sources": [
+        "apps/ios/Clawket/NativeAppModel.swift:359"
+      ],
+      "mobileTerm": null
+    },
+    {
       "key": "Copy",
       "sources": [
         "packages/apple/Sources/ClawketUI/MessageContentView.swift:84",
@@ -415,6 +422,20 @@
       "key": "Could not use this pairing code or link. Check it or generate a new invitation.",
       "sources": [
         "apps/ios/Clawket/NativeAppModel.swift:689"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Creating conversation…",
+      "sources": [
+        "apps/ios/Clawket/NativeAppModel.swift:376"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Creation could not be confirmed. Refresh conversations before trying again.",
+      "sources": [
+        "apps/ios/Clawket/NativeAppModel.swift:402"
       ],
       "mobileTerm": null
     },
@@ -818,9 +839,23 @@
       "mobileTerm": null
     },
     {
+      "key": "Reconnect or refresh conversations before creating another.",
+      "sources": [
+        "apps/ios/Clawket/NativeAppModel.swift:636"
+      ],
+      "mobileTerm": null
+    },
+    {
       "key": "Reconnect to change models.",
       "sources": [
         "apps/ios/Clawket/NativeAppModel.swift:568"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Reconnect to create a conversation.",
+      "sources": [
+        "apps/ios/Clawket/NativeAppModel.swift:376"
       ],
       "mobileTerm": null
     },
@@ -863,6 +898,13 @@
       "key": "Recovered your saved connections from the last verified copy.",
       "sources": [
         "apps/ios/Clawket/NativeAppModel.swift:64"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Refresh conversations before creating another.",
+      "sources": [
+        "apps/ios/Clawket/NativeAppModel.swift:377"
       ],
       "mobileTerm": null
     },
@@ -1253,6 +1295,13 @@
       "key": "This permission applies beyond this single request.",
       "sources": [
         "packages/apple/Sources/ClawketUI/MessageContentView.swift:242"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "This project is unavailable.",
+      "sources": [
+        "apps/ios/Clawket/NativeAppModel.swift:376"
       ],
       "mobileTerm": null
     },

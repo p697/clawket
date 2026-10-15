@@ -3301,6 +3301,36 @@
       },
       "comment": "Native UI / accessibility."
     },
+    "Conversations could not be refreshed. Check your connection and try again.": {
+      "extractionState": "manual",
+      "comment": "Native catalog creation/recovery state. Unknown creation is not permission to replay it.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conversations could not be refreshed. Check your connection and try again."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法刷新会话。请检查连接后重试。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法重新整理對話。請檢查連線後再試一次。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "チャットを更新できませんでした。接続を確認して、もう一度お試しください。"
+          }
+        }
+      }
+    },
     "Copy": {
       "extractionState": "manual",
       "localizations": {
@@ -3510,6 +3540,66 @@
         }
       },
       "comment": "Native UI / accessibility."
+    },
+    "Creating conversation…": {
+      "extractionState": "manual",
+      "comment": "Native catalog creation/recovery state. Unknown creation is not permission to replay it.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Creating conversation…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在创建会话…"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在建立對話…"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "チャットを作成中…"
+          }
+        }
+      }
+    },
+    "Creation could not be confirmed. Refresh conversations before trying again.": {
+      "extractionState": "manual",
+      "comment": "Native catalog creation/recovery state. Unknown creation is not permission to replay it.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Creation could not be confirmed. Refresh conversations before trying again."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法确认是否已创建。请先刷新会话列表，再决定是否重试。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法確認是否已建立。請先重新整理對話列表，再決定是否重試。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "作成を確認できませんでした。再試行する前にチャット一覧を更新してください。"
+          }
+        }
+      }
     },
     "Delivered": {
       "extractionState": "manual",
@@ -7081,6 +7171,36 @@
       },
       "comment": "Native UI / accessibility."
     },
+    "Reconnect or refresh conversations before creating another.": {
+      "extractionState": "manual",
+      "comment": "Native catalog creation/recovery state. Unknown creation is not permission to replay it.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconnect or refresh conversations before creating another."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "创建新会话前，请先重新连接或刷新会话列表。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "建立新對話前，請先重新連線或重新整理對話列表。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新しいチャットを作成する前に、再接続するかチャット一覧を更新してください。"
+          }
+        }
+      }
+    },
     "Reconnect to change models.": {
       "extractionState": "manual",
       "localizations": {
@@ -7110,6 +7230,36 @@
         }
       },
       "comment": "Native UI / accessibility."
+    },
+    "Reconnect to create a conversation.": {
+      "extractionState": "manual",
+      "comment": "Native catalog creation/recovery state. Unknown creation is not permission to replay it.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconnect to create a conversation."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新连接后可创建会话。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新連線後即可建立對話。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "チャットを作成するには再接続してください。"
+          }
+        }
+      }
     },
     "Reconnect to load earlier messages.": {
       "extractionState": "manual",
@@ -7380,6 +7530,36 @@
         }
       },
       "comment": "Native UI / accessibility."
+    },
+    "Refresh conversations before creating another.": {
+      "extractionState": "manual",
+      "comment": "Native catalog creation/recovery state. Unknown creation is not permission to replay it.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refresh conversations before creating another."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "创建新会话前，请先刷新会话列表。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "建立新對話前，請先重新整理對話列表。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新しいチャットを作成する前に、チャット一覧を更新してください。"
+          }
+        }
+      }
     },
     "Reject": {
       "extractionState": "manual",
@@ -10470,6 +10650,36 @@
         }
       },
       "comment": "Native UI / accessibility."
+    },
+    "This project is unavailable.": {
+      "extractionState": "manual",
+      "comment": "Native catalog creation/recovery state. Unknown creation is not permission to replay it.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This project is unavailable."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此项目不可用。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此專案無法使用。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このプロジェクトは利用できません。"
+          }
+        }
+      }
     },
     "Token (if required)": {
       "extractionState": "manual",

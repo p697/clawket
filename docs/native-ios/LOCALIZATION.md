@@ -2,14 +2,14 @@
 
 The app owns `apps/ios/Clawket/Localizable.xcstrings` in its main bundle. The 19 locale codes match `apps/mobile/src/i18n/supported-locales.js`; backend identity, transport identity and app language remain separate. Product names, user messages, agent/session/project names, model/provider names, filenames, commands and tool output stay verbatim.
 
-The initial source inventory contains 188 user-facing and accessibility keys from the eight `ClawketUI` sources and the real native host. `localization-inventory.json` records their locations and any reused Mobile term. Catalog entries are manual because most presentation strings originate in a Swift Package while the resource belongs to the app. Do not remove them merely because the app target's extractor does not see a package source.
+The initial source inventory contains 195 user-facing and accessibility keys from the eight `ClawketUI` sources and the real native host. `localization-inventory.json` records their locations and any reused Mobile term. Catalog entries are manual because most presentation strings originate in a Swift Package while the resource belongs to the app. Do not remove them merely because the app target's extractor does not see a package source.
 
 Current source coverage:
 
 | Locales | Actual translations |
 | --- | --- |
-| English, Simplified Chinese, Traditional Chinese, Japanese | 188/188 each |
-| Korean, German, French, Spanish, Latin American Spanish, Italian, Brazilian Portuguese, European Portuguese, Russian, Ukrainian, Turkish, Vietnamese, Thai, Hindi, Arabic | 64/188 each; 124 new native strings still pending |
+| English, Simplified Chinese, Traditional Chinese, Japanese | 195/195 each |
+| Korean, German, French, Spanish, Latin American Spanish, Italian, Brazilian Portuguese, European Portuguese, Russian, Ukrainian, Turkish, Vietnamese, Thai, Hindi, Arabic | 64/195 each; 131 new native strings still pending |
 
 The 64 reused terms come from the existing locale files, with their origin recorded per key. New translations are written for the actual native flows. Missing translations are omitted, never represented by copied English with a completed state. This is initial QA coverage, not completion of the final 19-language parity gate. Resource compilation, language selection, device rendering and linguistic acceptance remain separate checks.
 
