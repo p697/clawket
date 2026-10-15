@@ -24,6 +24,7 @@ extension RuntimeCoordinator {
         guard nonce != lastNonce, handshakeTask == nil, let transport else { return }
         let capturedEpoch = epoch, capturedAttempt = attempt
         authentication = UUID(); lastNonce = nonce; sessionEvents = SessionEvents()
+        signedConnectIdentity = nil; deviceApproval = nil
         resetConsents()
         clearArtifacts()
         sessionManagementState = SessionManagementState()
@@ -71,6 +72,7 @@ extension RuntimeCoordinator {
                                "signature": .string(PairingCryptography.encodeBase64URL(signature)),
                                "signedAt": .number(Double(signedAt)), "nonce": .string(nonce)]), "auth": plan.auth,
         ])
+        signedConnectIdentity = SignedConnectIdentity(scope: scope, connectionID: connection.id, identity: identity)
         let response = try await transport.requestEnvelope(method: "connect", params: params, timeout: .seconds(8), generation: scope.generation)
         try assertCurrent(scope)
         guard response.payload.object != nil, response.payload["server"]?.object != nil else { throw RuntimeFailure(.invalidResponse) }
@@ -181,6 +183,7 @@ extension RuntimeCoordinator {
         let remoteCode = remoteError?["code"]?.stringValue?.uppercased()
         let message = remoteError?["message"]?.stringValue?.lowercased() ?? ""
         let rejection = OpenClawConnectRejection(error)
+        captureDeviceApproval(error, scope: scope)
         // Older Gateways reject the additive bootstrapToken field before authentication.
         // Match Mobile's narrow schema classification; an auth rejection never authorizes a downgrade.
         if activeAuthSource == .bootstrap, !bootstrapDisabled, !rejection.hasDetailCode,

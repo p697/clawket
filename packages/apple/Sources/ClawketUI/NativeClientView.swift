@@ -200,7 +200,7 @@ public struct NativeClientView: View {
             }
             ToolbarItem(placement: .bottomBar) {
                 ConnectionStatusView(status: model.connection) {
-                    onIntent(.reconnect(connectionID: model.connection.connectionID))
+                    if let intent = model.connection.primaryIntent { onIntent(intent) }
                 }
             }
         }
@@ -316,7 +316,7 @@ struct ConnectionStatusView: View {
             Group {
                 if status.action.isVisible {
                     Button(action: reconnect) { label }
-                        .disabled(!status.action.isEnabled)
+                        .disabled(!status.action.isEnabled || status.primaryIntent == nil)
                 } else { label }
             }
             .accessibilityElement(children: .combine)
@@ -329,7 +329,7 @@ struct ConnectionStatusView: View {
             if status.phase == .connecting || status.phase == .reconnecting {
                 ProgressView().controlSize(.small)
             } else {
-                Image(systemName: status.phase == .ready ? "checkmark.circle" : "wifi.slash")
+                Image(systemName: status.phase == .ready ? "checkmark.circle" : status.phase == .approvalRequired ? "hand.raised" : "wifi.slash")
             }
             Text(status.label).lineLimit(2)
         }
@@ -454,7 +454,7 @@ private struct NativeConversationView: View {
         .overlay(alignment: .top) {
             if !expanded && conversation.connection.phase != .ready && !conversation.connection.label.isEmpty {
                 ConnectionStatusView(status: conversation.connection) {
-                    onIntent(.reconnect(connectionID: conversation.id.connectionID))
+                    if let intent = conversation.connection.primaryIntent { onIntent(intent) }
                 }
                 .padding(.horizontal, 12)
                 .background(.regularMaterial, in: Capsule())

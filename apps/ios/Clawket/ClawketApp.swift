@@ -13,6 +13,7 @@ struct ClawketApp: App {
                     switch destination {
                     case .connect: ConnectAgentView(client: client)
                     case .connections: ConnectionsView(client: client)
+                    case let .deviceApproval(connectionID): DeviceApprovalView(client: client, connectionID: connectionID)
                     case let .editPending(route, edit, activation):
                         PendingMessageEditor(client: client, route: route, edit: edit, activation: activation)
                     }

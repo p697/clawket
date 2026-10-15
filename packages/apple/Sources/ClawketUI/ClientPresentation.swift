@@ -90,7 +90,7 @@ public enum AttachmentSource: String, Hashable, Sendable {
 }
 
 public enum ConnectionPhase: String, Hashable, Sendable {
-    case disconnected, connecting, ready, reconnecting, unavailable, authenticationRequired
+    case disconnected, connecting, ready, reconnecting, unavailable, authenticationRequired, approvalRequired
 }
 
 public struct ConnectionPresentation: Hashable, Sendable {
@@ -99,14 +99,25 @@ public struct ConnectionPresentation: Hashable, Sendable {
     public var detail: String?
     public var connectionID: String?
     public var action: ActionAvailability
+    public var approvalReviewID: UUID?
 
     public init(phase: ConnectionPhase = .disconnected, label: String = "", detail: String? = nil,
-                connectionID: String? = nil, action: ActionAvailability = .unsupported) {
+                connectionID: String? = nil, action: ActionAvailability = .unsupported, approvalReviewID: UUID? = nil) {
         self.phase = phase
         self.label = label
         self.detail = detail
         self.connectionID = connectionID
         self.action = action
+        self.approvalReviewID = approvalReviewID
+    }
+
+    var primaryIntent: ClientIntent? {
+        guard action.isEnabled else { return nil }
+        if phase == .approvalRequired {
+            guard let connectionID, !connectionID.isEmpty, let approvalReviewID else { return nil }
+            return .reviewDeviceApproval(connectionID: connectionID, contextID: approvalReviewID)
+        }
+        return .reconnect(connectionID: connectionID)
     }
 }
 
@@ -575,6 +586,8 @@ public enum ClientIntent: Sendable {
     case openDestination(ClientDestination, conversation: ConversationID?)
     case refresh
     case reconnect(connectionID: String?)
+    /// Opens a host-owned, read-only review of this exact pending device connection.
+    case reviewDeviceApproval(connectionID: String, contextID: UUID)
     case draftChanged(ConversationID, text: String)
     case send(ConversationID)
     case stop(ConversationID)

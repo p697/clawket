@@ -16,10 +16,12 @@ enum AddConnectionRequest {
 final class NativeAppModel: ObservableObject {
     enum Destination: Identifiable {
         case connect, connections, editPending(ConversationID, NativePendingEdit, activation: UUID)
+        case deviceApproval(connectionID: String)
         var id: String {
             switch self {
             case .connect: "connect"
             case .connections: "connections"
+            case let .deviceApproval(id): "device-approval-\(id)"
             case let .editPending(_, edit, _): edit.id.uuidString
             }
         }
@@ -29,6 +31,8 @@ final class NativeAppModel: ObservableObject {
         emptyDetail: String(localized: "Connect an agent to continue conversations and keep work moving."))
     @Published var destination: Destination?
     @Published var notice: String?
+    @Published private(set) var deviceApproval: RuntimeDeviceApprovalContext?
+    private var deviceApprovalNotice = false
     @Published private(set) var connections: [BackendConnection] = []
     @Published private(set) var activeConnectionID: String?
     @Published private(set) var changingConnections = false
@@ -129,6 +133,10 @@ final class NativeAppModel: ObservableObject {
             default: break // These features remain unsupported in the presentation capability map.
             }
         case let .reconnect(id): activate(id ?? activeConnectionID ?? "")
+        case let .reviewDeviceApproval(connectionID, contextID):
+            guard NativeDeviceApprovalPolicy.matches(deviceApproval, connectionID: connectionID,
+                contextID: contextID, activeConnectionID: activeConnectionID) else { return }
+            destination = .deviceApproval(connectionID: connectionID)
         case .refresh: refresh()
         case let .openConversation(route): open(route)
         case .closeConversation: selectionRevision = UUID()
@@ -233,7 +241,7 @@ final class NativeAppModel: ObservableObject {
         changingConnections = true
         activationTask?.cancel()
         selectionRevision = UUID(); activationRevision = UUID(); wireRevision = UUID()
-        taskRequests?.invalidate()
+        taskRequests?.invalidate(); deviceApproval = nil
         unconfirmedCreations.formUnion(creatingCatalogs); creatingCatalogs = []
         Task {
             defer { changingConnections = false }
@@ -295,7 +303,7 @@ final class NativeAppModel: ObservableObject {
     private func connectSaved(_ id: String) {
         guard let connection = connections.first(where: { $0.id == id }), let runtime else { return }
         activationTask?.cancel(); selectionRevision = UUID(); activationRevision = UUID(); wireRevision = UUID()
-        taskRequests?.invalidate()
+        taskRequests?.invalidate(); deviceApproval = nil
         unconfirmedCreations.formUnion(creatingCatalogs); creatingCatalogs = []
         let activation = activationRevision
         let alreadyReady = state.phase == .ready && state.connectionID == id
@@ -343,6 +351,8 @@ final class NativeAppModel: ObservableObject {
             }
             self.state = state
             presentation.connection = connectionPresentation(state)
+            deviceApproval = state.deviceApproval
+            if deviceApproval != nil, deviceApprovalNotice { notice = nil; deviceApprovalNotice = false }
             taskRequests?.update(state)
             presentation.isLoading = [.connecting, .handshaking].contains(state.phase) && agents.isEmpty
             presentation.features[.refresh] = state.phase == .ready ? .available : .unsupported
@@ -868,7 +878,22 @@ final class NativeAppModel: ObservableObject {
         try await cache.write(document, connectionID: route.connectionID, agentID: route.agentID, sessionID: route.sessionID)
     }
 
+    func checkDeviceApproval(connectionID: String, contextID: UUID) {
+        guard !changingConnections, runtime != nil, vault != nil,
+              NativeDeviceApprovalPolicy.matches(deviceApproval, connectionID: connectionID,
+                  contextID: contextID, activeConnectionID: activeConnectionID) else { return }
+        activate(connectionID)
+    }
+
+    func isCheckingDeviceApproval(connectionID: String) -> Bool {
+        activeConnectionID == connectionID && (changingConnections || [.connecting, .handshaking, .reconnecting].contains(state.phase))
+    }
+
     private func connectionPresentation(_ state: RuntimeConnectionState) -> ConnectionPresentation {
+        if let approval = state.deviceApproval, approval.connectionID == state.connectionID {
+            return .init(phase: .approvalRequired, label: String(localized: "Device approval required"),
+                connectionID: approval.connectionID, action: .available, approvalReviewID: approval.id)
+        }
         let phase: ConnectionPhase = switch state.phase {
         case .idle: .disconnected
         case .connecting, .handshaking: .connecting
@@ -891,10 +916,17 @@ final class NativeAppModel: ObservableObject {
     }
 
     private func showFailure(_ error: Error) {
+        deviceApprovalNotice = false
         if error is StoreFailure { notice = String(localized: "Your data could not be saved safely. Keep Clawket open and try again."); return }
         guard let failure = error as? RuntimeFailure else { notice = String(localized: "The operation could not be completed. Please try again."); return }
         switch failure.code {
-        case .authenticationRequired, .pairingRequired: notice = String(localized: "Your agent needs to be paired again. Add its current pairing code in Settings.")
+        case .authenticationRequired:
+            notice = String(localized: "Authentication required. Check this connection’s credentials.")
+        case .pairingRequired:
+            if deviceApproval == nil {
+                deviceApprovalNotice = true
+                notice = String(localized: "Approve this device in OpenClaw on your computer, then connect again.")
+            }
         case .permissionsRequired: notice = String(localized: "This connection does not have permission for that action.")
         case .superseded: break
         case .timeout, .network, .notConnected:

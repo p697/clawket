@@ -6,6 +6,9 @@
   - 保存惰性授权/问题复核与精确收据，不存Runtime action ref/选项权限/Always token。冷开值不可操作，新真实请求才接authority；后台立即flush。仅成功本机answer/confirm RPC确认才标accepted，支持先到resolution后到ACK，外部解决、预占但未派发、取消及未知结果保留draft。phone观察时长与backend时钟分离；恢复非terminal为unknown，不重启任务或计时。
   - heavy/jobs2串行WorkHistory6项通过，首次actual generic Simulator App与44测试方法源码编译通过，未启动本机sim；随后独立审查追加上述overflow/归属/分页/ACK回归与一份纯排序源码，最终编译/实际44项运行交CI。App新增12journal+4request回归，非空门槛44；全19语239UI/2权限保持4,579条，不新增或覆盖译文。完整assistant segment/CLI rollup/reset reconciliation、真实后端工具与USB/iPad/VoiceOver仍pending，不把cache称完整功能或发布。详见 `docs/native-ios/WORK-JOURNAL.md`。
 
+- 2026-10-16 Native 设备批准等待界面（负责人授权独立切片，真实批准/手机验收另行执行）。
+  - 只读核对本机 OpenClaw2026.10.2 及当前Mobile：真实NOT_PAIRED/details.PAIRING_REQUIRED与凭据/设备证明失败分开。Runtime在实际签名params旁捕获同Scope公钥身份，只输出重新SHA256校验的deviceID指纹与有界请求元数据，不从Vault另读、不接受peer替换、不暴露secret/token或作为diagnostic稳定ID；新尝试/ready/disconnect/auth失败退休，旧A→B→A上下文拒绝。
+  - Native status/Settings可打开当前只读原生sheet，完整选择/复制公开deviceID并引导在电脑核对批准，Check again仅对当前连接/上下文显式重连，真实握手才算ready；没有自批、审批RPC、自动轮询或修改服务。关闭无任务/连接副作用，旧配对错误不再误说重新配对。新增12条19语（1条复用Mobile），删除已替换的合并错误文案；当前250 UI/2权限共4,788语言单元源码检查通过。8项协议/身份生命周期和3项状态意图回归源码已补；本机编译待共享heavy空闲，真实App/编译资源/完整CI及USB批准仍未宣称通过。详见 `docs/native-ios/DEVICE-APPROVAL.md`。
 
 - 2026-10-16 Native 会话生命周期运行时（host 菜单与设备验收待接入）。
   - 增加当前目录/认证代际的不可持久化 action reference、逐行操作元数据和 rename/reset/delete、Codex archive/archived/restore、Codex/Claude/Pi 只读原生会话复制。保留 OpenClaw key/label/reason、Hermes key/title 与 SDK sessionKey/title 差异、真实 active-run/ownership 限制、继承项目及主/渠道禁止删除；archive 不冒充 delete，可复制/可续聊不授予重置或删除原会话。已知 native 输入必须有当前目录和精确 canContinue:true，未知/新 owned 键保留后端最终检查。

@@ -12,6 +12,7 @@
 		10CEF133A2AFC5BFCE9B1E31 /* NativeConversationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B9A7097C7DD4ABA36FBB7A1 /* NativeConversationStore.swift */; };
 		120EF71EFB3EA1E9173A565B /* ConnectAgentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A8D8F99FE6BF72DD9B9F8AF /* ConnectAgentView.swift */; };
 		2247135D3C8C70511420729B /* PairingScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D291C423374289C8E540A39 /* PairingScanner.swift */; };
+		2EFA14A6E0BD75518CA9B696 /* DeviceApprovalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97DA58B8030AC479B4610849 /* DeviceApprovalView.swift */; };
 		2F91D2478DFB46E4FE62AC72 /* NativeTaskPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D1DA96C0D5461424FA70517 /* NativeTaskPresentation.swift */; };
 		3CC3E055379A87DCF34B5A9D /* NativeCatalogStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E47B4B0906605C4BAE48CF90 /* NativeCatalogStore.swift */; };
 		4111A823020D58A2C9AE3CED /* ClawketTransport in Frameworks */ = {isa = PBXBuildFile; productRef = FB889001F1244000EC725E25 /* ClawketTransport */; };
@@ -71,6 +72,7 @@
 		6D291C423374289C8E540A39 /* PairingScanner.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PairingScanner.swift; sourceTree = "<group>"; };
 		83E37C1EE73DD7335ED11156 /* NativeTaskRequestsTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeTaskRequestsTests.swift; sourceTree = "<group>"; };
 		8EA8C05BF26248B8F8DA8395 /* NativeQuestionDraftStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeQuestionDraftStoreTests.swift; sourceTree = "<group>"; };
+		97DA58B8030AC479B4610849 /* DeviceApprovalView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DeviceApprovalView.swift; sourceTree = "<group>"; };
 		A0F468FDE5E27A277EF1DC29 /* NativeAppModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeAppModel.swift; sourceTree = "<group>"; };
 		B14E842129D8941746AC76AC /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		D2163EB819C0F5C468B4F05B /* ClawketTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ClawketTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -159,6 +161,7 @@
 				24942D0AF478121B1C8DF3CA /* NativeJournalProjection.swift */,
 				94642FE9C8E94C3F5D72A242 /* NativeJournalStore.swift */,
 				D198A09D2950CA7425089621 /* NativeJournalModels.swift */,
+				97DA58B8030AC479B4610849 /* DeviceApprovalView.swift */,
 			);
 			name = Clawket;
 			path = Clawket;
@@ -349,6 +352,7 @@
 				DAD5D64F94346CB04F039B82 /* NativeJournalProjection.swift in Sources */,
 				EF52CE302BC9C5549A5FFC53 /* NativeJournalStore.swift in Sources */,
 				A927BE30932FFD57F745B1FF /* NativeJournalModels.swift in Sources */,
+				2EFA14A6E0BD75518CA9B696 /* DeviceApprovalView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

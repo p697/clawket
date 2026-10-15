@@ -122,10 +122,13 @@ public struct RuntimeConnectionState: Codable, Sendable, Equatable {
     public let backendKind: BackendKind?
     public let bridgeVersion: String?
     public let nextRetryAt: Int64?
+    public let deviceApproval: RuntimeDeviceApprovalContext?
     public init(connectionID: String? = nil, phase: Phase = .idle, capabilities: RuntimeCapabilities = .init(),
-                backendKind: BackendKind? = nil, bridgeVersion: String? = nil, nextRetryAt: Int64? = nil) {
+                backendKind: BackendKind? = nil, bridgeVersion: String? = nil, nextRetryAt: Int64? = nil,
+                deviceApproval: RuntimeDeviceApprovalContext? = nil) {
         self.connectionID = connectionID; self.phase = phase; self.capabilities = capabilities
         self.backendKind = backendKind; self.bridgeVersion = bridgeVersion; self.nextRetryAt = nextRetryAt
+        self.deviceApproval = deviceApproval
     }
 }
 

@@ -9,6 +9,13 @@ struct ConnectionsView: View {
     var body: some View {
         NavigationStack {
             List {
+                if let approval = client.deviceApproval, approval.connectionID == client.activeConnectionID {
+                    Section {
+                        Button { client.handle(.reviewDeviceApproval(connectionID: approval.connectionID, contextID: approval.id)) }
+                            label: { Label("Device approval required", systemImage: "hand.raised") }
+                            .accessibilityIdentifier("review-device-approval")
+                    }
+                }
                 Section("Connections") {
                     if client.connections.isEmpty {
                         Text("Connect an agent to get started.").foregroundStyle(.secondary)

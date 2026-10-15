@@ -31,6 +31,8 @@ public actor RuntimeCoordinator {
     var stopped = false
     var lastNonce: String?
     var identity: RuntimeDeviceIdentity?
+    var signedConnectIdentity: SignedConnectIdentity?
+    var deviceApproval: RuntimeDeviceApprovalContext?
     var deviceRepairAttempted = false
     var bootstrapDisabled = false
     var activeAuthSource: AuthSource?
@@ -140,6 +142,7 @@ public actor RuntimeCoordinator {
     func startAttempt() {
         guard !stopped, streamAvailable, let connection, transport == nil else { return }
         attempt = UUID(); authentication = UUID(); generation = nil; lastNonce = nil
+        signedConnectIdentity = nil; deviceApproval = nil
         bridgeCapabilities = []; supportedMethods = []; sessionMethodsAdvertised = true; backendHealth = .null; sessionEvents = SessionEvents()
         let capturedEpoch = epoch, capturedAttempt = attempt
         do {
@@ -268,6 +271,7 @@ public actor RuntimeCoordinator {
         if connection?.backendKind == .hermes && !bridgeCapabilities.contains("hermes.run-approval.v1") { consents.evidence.remove("execution") }
         updateConsentCapabilities()
         reconnect.confirmedBackendReady(); previouslyReady = true; unavailableAttempts = 0; deviceRepairAttempted = false
+        signedConnectIdentity = nil; deviceApproval = nil
         publishState(.ready)
         let pending = waiters; waiters.removeAll()
         for waiter in pending.values { waiter.resume() }
@@ -329,6 +333,7 @@ public actor RuntimeCoordinator {
 
     func attemptFailed(_ failure: RuntimeFailure, epoch: UUID, attempt: UUID, unavailable: Bool = false) {
         guard self.epoch == epoch, self.attempt == attempt, !stopped else { return }
+        if failure.code != .pairingRequired { deviceApproval = nil }
         let old = retireAttempt()
         emit(.failure(connectionID: connection?.id, failure))
         if !failure.retryable || !streamAvailable {
@@ -372,7 +377,7 @@ public actor RuntimeCoordinator {
     func assertCurrent(_ scope: Scope) throws { if !isCurrent(scope) { throw RuntimeFailure(.superseded) } }
 
     func retireAttempt() -> RPCConnection? {
-        attempt = UUID(); authentication = UUID()
+        attempt = UUID(); authentication = UUID(); signedConnectIdentity = nil
         resetConsents()
         clearArtifacts()
         sessionManagementState = SessionManagementState()
@@ -389,7 +394,7 @@ public actor RuntimeCoordinator {
         return old
     }
     func retire() -> RPCConnection? {
-        epoch = UUID()
+        epoch = UUID(); deviceApproval = nil
         let old = retireAttempt()
         let pending = waiters; waiters.removeAll()
         for waiter in pending.values { waiter.resume(throwing: RuntimeFailure(.superseded)) }
@@ -416,7 +421,7 @@ public actor RuntimeCoordinator {
         if !capabilities.artifacts { clearArtifacts() }
         state = RuntimeConnectionState(connectionID: connection?.id, phase: phase, capabilities: capabilities,
                                        backendKind: connection?.backendKind, bridgeVersion: backendHealth["bridgeVersion"]?.stringValue,
-                                       nextRetryAt: nextRetryAt)
+                                       nextRetryAt: nextRetryAt, deviceApproval: deviceApproval)
         emit(.state(state))
     }
 
