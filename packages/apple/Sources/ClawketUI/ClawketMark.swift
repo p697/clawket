@@ -3,11 +3,12 @@ import SwiftUI
 
 /// The approved companion geometry from apps/mobile/src/brand/companion.json.
 /// Elliptical SVG quarter-arcs are represented with their cubic Bézier equivalent.
-struct ClawketMark: View {
-    var body: some View {
+public struct ClawketMark: View {
+    public init() {}
+    public var body: some View {
         GeometryReader { geometry in
             ZStack(alignment: .topLeading) {
-                CompanionSilhouette().fill(.primary)
+                CompanionSilhouette().fill(.foreground)
                 eye(x: 24.44, in: geometry.size)
                 eye(x: 57.8288, in: geometry.size)
             }

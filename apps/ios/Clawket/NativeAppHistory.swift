@@ -14,7 +14,12 @@ extension NativeAppModel {
                         context.selection == self.selectionRevision &&
                         historySame(context.route.connectionID, self.activeConnectionID) && self.state.phase == .ready &&
                         context.epoch == self.documents[context.route]?.historyEpoch
+                }, access: { [weak self] in
+                    guard let self else { return .init() }
+                    return .init(search: pro.access.feature(.messageHistory, at: pro.now) == .allowed,
+                                 bulkExport: pro.access.feature(.archiveTools, at: pro.now) == .allowed)
                 })
+            historyController?.upgrade = { [weak self] id in self?.showPro(.archiveTools, presenterID: id) }
             presentation.features[.savedHistory] = .available
         } catch { notice = NativeHistoryController.failureText(error) }
     }

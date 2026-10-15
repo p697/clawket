@@ -1,6 +1,7 @@
 import ClawketRuntime
 import ClawketUI
 import Foundation
+import Combine
 
 struct NativeHistoryAccess: Sendable {
     var search = false
@@ -26,7 +27,10 @@ struct NativeHistoryExportRequest: Identifiable, Sendable {
 }
 
 @MainActor
-final class NativeHistoryController {
+final class NativeHistoryController: ObservableObject {
+    @Published private(set) var accessRevision = UUID()
+    var upgrade: (UUID) -> Void = { _ in }
+    func accessChanged() { accessRevision = UUID() }
     let saved: NativeSavedConversations
     let conversations: NativeConversationStore
     let media: NativeMediaController?
@@ -81,7 +85,11 @@ final class NativeHistoryController {
         try Task.checkCancellation()
         guard access().bulkExport else { throw NativeHistoryFailure.unavailable }
         let file = try await exports.prepareBulk(values)
-        return .init(url: file.url, shareLease: file.lease)
+        let share = NativeMediaShare(url: file.url, shareLease: file.lease)
+        guard !Task.isCancelled, access().bulkExport else {
+            await share.releaseIfUnpresented(); throw NativeHistoryFailure.unavailable
+        }
+        return share
     }
 
     func cachedPreview(_ reference: NativeMediaReference, scope: NativeHistoryScope, historyEpoch: UUID? = nil) async throws -> NativeMediaPreview {

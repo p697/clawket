@@ -6,12 +6,13 @@ struct ConnectionsView: View {
     var embedded = false
     @Environment(\.dismiss) private var dismiss
     @State private var remove: BackendConnection?
+    @State private var proPresenterID = UUID()
 
     var body: some View {
         Group {
             if embedded { content }
             else { NavigationStack { content } }
-        }
+        }.nativePro(controller: client.pro, presenterID: proPresenterID)
     }
     private var content: some View {
             List {
@@ -27,7 +28,7 @@ struct ConnectionsView: View {
                         Text("Connect an agent to get started.").foregroundStyle(.secondary)
                     }
                     ForEach(client.connections) { connection in
-                        Button { client.activate(connection.id) } label: {
+                        Button { client.activate(connection.id, presenterID: proPresenterID) } label: {
                             HStack(spacing: 12) {
                                 Image(systemName: "link.circle.fill").font(.title2).foregroundStyle(.secondary)
                                 VStack(alignment: .leading, spacing: 4) {
@@ -43,7 +44,10 @@ struct ConnectionsView: View {
                         .accessibilityIdentifier("saved-connection-\(connection.id)")
                         .swipeActions { Button("Remove", role: .destructive) { remove = connection } }
                     }
-                    Button { dismiss(); client.showConnectAfterDismissal() } label: { Label("Add connection", systemImage: "plus") }
+                    Button {
+                        if client.proCanAddConnection { dismiss(); client.showConnectAfterDismissal() }
+                        else { client.showPro(.gatewayConnections, presenterID: proPresenterID, continuing: .addConnection) }
+                    } label: { Label("Add connection", systemImage: "plus") }
                     if client.activeConnectionID != nil {
                         Button("Disconnect") { client.disconnect() }
                     }
@@ -55,7 +59,7 @@ struct ConnectionsView: View {
                         .font(.footnote).foregroundStyle(.secondary)
                 }
             }
-            .disabled(client.changingConnections)
+            .disabled(client.changingConnections || client.proSwitching)
             .navigationTitle("Connections").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { if !embedded { Button("Done") { dismiss() } } } }
             .confirmationDialog("Remove this connection?", isPresented: Binding(get: { remove != nil }, set: { if !$0 { remove = nil } }), titleVisibility: .visible) {

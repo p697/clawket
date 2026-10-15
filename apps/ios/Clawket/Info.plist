@@ -12,6 +12,12 @@
     <key>CFBundleShortVersionString</key><string>$(MARKETING_VERSION)</string>
     <key>CFBundleVersion</key><string>$(CURRENT_PROJECT_VERSION)</string>
     <key>LSRequiresIPhoneOS</key><true/>
+    <key>ClawketRevenueCatKey</key><string>$(CLAWKET_REVENUECAT_IOS_API_KEY)</string>
+    <key>ClawketRevenueCatEntitlement</key><string>$(CLAWKET_REVENUECAT_ENTITLEMENT_ID)</string>
+    <key>ClawketRevenueCatOffering</key><string>$(CLAWKET_REVENUECAT_OFFERING_ID)</string>
+    <key>ClawketRevenueCatPackage</key><string>$(CLAWKET_REVENUECAT_PACKAGE_ID)</string>
+    <key>ClawketPrivacyPolicyURL</key><string>$(CLAWKET_PRIVACY_POLICY_URL)</string>
+    <key>ClawketTermsOfUseURL</key><string>$(CLAWKET_TERMS_OF_USE_URL)</string>
     <key>ClawketSpeechURL</key><string>$(CLAWKET_SPEECH_URL)</string>
     <key>NSMicrophoneUsageDescription</key><string>Allow Clawket to use your microphone for voice input. Audio is sent to Alibaba Cloud for transcription.</string>
     <key>NSCameraUsageDescription</key><string>Scan a pairing QR code or take a photo to attach.</string>

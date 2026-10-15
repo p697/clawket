@@ -459,6 +459,21 @@ private struct NativeConversationView: View {
             .opacity(expanded ? 0 : 1)
             .accessibilityHidden(expanded)
 
+            if conversation.availability(.pro).isVisible {
+                Button {
+                    onIntent(.openDestination(.pro, conversation: conversation.id))
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "lock.open")
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("View the full conversation").font(.callout.weight(.semibold))
+                            Text("Latest messages · read-only preview").font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.caption.weight(.semibold))
+                    }.frame(minHeight: 44).padding(.horizontal, 20).padding(.vertical, 8)
+                }.buttonStyle(.plain).accessibilityIdentifier("conversation-upgrade")
+            }
             if let work = conversation.work, work.inspect.isVisible, !work.id.isEmpty {
                 NativeWorkDock(work: work) {
                     guard let intent = work.openIntent(conversationID: conversation.id) else { return }

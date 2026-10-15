@@ -5,9 +5,16 @@ struct NativeSettingsView: View {
     @ObservedObject var client: NativeAppModel
     @ObservedObject var preferences: NativePreferences
     @Environment(\.dismiss) private var dismiss
+    @State private var proPresenterID = UUID()
     var body: some View {
         NavigationStack {
             List {
+                Section {
+                    NativeProSettingsCard(client: client, presenterID: proPresenterID)
+                    if client.pro.mode == .store, !client.pro.paid, client.connections.count > 1 {
+                        NavigationLink { NativeFreeConnectionView(client: client) } label: { Label("Choose free connection", systemImage: "link.badge.plus") }
+                    }
+                }
                 Section {
                     NavigationLink { ConnectionsView(client: client, embedded: true) } label: {
                         Label("Connections", systemImage: "link")
@@ -45,6 +52,7 @@ struct NativeSettingsView: View {
             .navigationTitle("Settings").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
         }
+        .nativePro(controller: client.pro, presenterID: proPresenterID)
         .tint(preferences.appearance.accentColor)
         .preferredColorScheme(preferences.appearance.colorScheme)
     }

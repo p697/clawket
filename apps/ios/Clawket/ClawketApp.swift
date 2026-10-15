@@ -18,7 +18,7 @@ struct ClawketApp: App {
                     case .settings: NativeSettingsView(client: client, preferences: client.preferences)
                     case let .deviceApproval(connectionID): DeviceApprovalView(client: client, connectionID: connectionID)
                     case let .savedHistory(id):
-                        if let history = client.historyController { NativeSavedHistoryView(controller: history).id(id) }
+                        if let history = client.historyController { NativeSavedHistoryView(controller: history, client: client).id(id) }
                     case let .previousTranscripts(scope, id):
                         if let history = client.historyController { NativePreviousTranscriptsView(controller: history, scope: scope).id(id) }
                     case let .exportConversation(request):
@@ -31,6 +31,7 @@ struct ClawketApp: App {
                 .sheet(item: $client.voiceSheet) { request in
                     if let voice = client.voice { NativeVoiceSheet(client: client, voice: voice, request: request) }
                 }
+                .nativePro(controller: client.pro, presenterID: client.proRootPresenterID)
                 .fullScreenCover(item: $client.mediaPreview) { preview in NativeMediaViewer(preview: preview) }
                 .alert("Clawket", isPresented: Binding(get: { client.notice != nil }, set: { if !$0 { client.notice = nil } })) {
                     Button("OK", role: .cancel) { client.notice = nil }

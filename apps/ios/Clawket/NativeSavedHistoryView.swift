@@ -2,7 +2,9 @@ import ClawketUI
 import SwiftUI
 
 struct NativeSavedHistoryView: View {
-    let controller: NativeHistoryController
+    @ObservedObject var controller: NativeHistoryController
+    var client: NativeAppModel? = nil
+    @State private var proPresenterID = UUID()
     @Environment(\.dismiss) private var dismiss
     @State private var entries: [NativeSavedMetadata] = []
     @State private var query = ""
@@ -50,6 +52,16 @@ struct NativeSavedHistoryView: View {
                         Button("Export all") { exportAll() }.disabled(sharing || entries.isEmpty || loading)
                     }
                 }
+                ToolbarItem(placement: .primaryAction) {
+                    if !controller.access().search || !controller.access().bulkExport {
+                        Button("Search and bulk export") { controller.upgrade(proPresenterID) }.frame(minHeight: 44)
+                    }
+                }
+            }
+            .onChange(of: controller.accessRevision) { _ in
+                if !controller.access().search { query = "" }
+                if !controller.access().bulkExport { operationState.retire() }
+                refresh = UUID()
             }
             .task(id: NativeSavedQuery(query: query, filter: filter, refresh: refresh)) { await load() }
             .sheet(item: $share) { NativeActivityView(share: $0) }
@@ -59,7 +71,7 @@ struct NativeSavedHistoryView: View {
                 let abandoned = share
                 Task { await abandoned?.releaseIfUnpresented() }
             }
-        }
+        }.nativePro(controller: client?.pro, presenterID: proPresenterID)
     }
     private func load() async {
         loading = true
@@ -68,6 +80,7 @@ struct NativeSavedHistoryView: View {
             let needle = controller.access().search ? query : ""
             let values = try await controller.saved.search(needle, filter: filter)
             try Task.checkCancellation()
+            guard needle.isEmpty || controller.access().search else { return }
             entries = values; notice = listing.recoveredFromRollback ? String(localized: "Saved conversations were recovered from the last verified copy.") : nil
         } catch { if !Task.isCancelled { notice = NativeHistoryController.failureText(error) } }
         if !Task.isCancelled { loading = false }
