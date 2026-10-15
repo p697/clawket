@@ -738,8 +738,11 @@ final class NativeAppModel: ObservableObject {
         }
         if document.hasMore { features[.loadEarlier] = connected ? .available : .temporarilyUnavailable(String(localized: "Reconnect to load earlier messages.")) }
         let previous = presentation.conversations[route]
+        let transcript: [MessagePresentation] = document.messages.map { present($0, agentName: name) }
+        let requests: [MessagePresentation] = taskRequests?.messages(for: route) ?? []
+        let messages: [MessagePresentation] = transcript + requests
         presentation.conversations[route] = .init(id: route, agentName: name, sessionTitle: session?.title ?? name,
-            messages: document.messages.map { present($0, agentName: name) } + (taskRequests?.messages(for: route) ?? []),
+            messages: messages,
             connection: presentation.connection,
             sessions: sessionPresentations(connectionID: route.connectionID, agentID: route.agentID),
             models: previous?.models ?? [], modelTitle: previous?.modelTitle,
