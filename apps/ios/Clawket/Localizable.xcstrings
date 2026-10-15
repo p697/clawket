@@ -99,6 +99,24 @@
             "state": "translated",
             "value": "%@ · Bản phát triển ứng dụng gốc"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · รุ่นพัฒนาเนทีฟ"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · नेटिव डेवलपमेंट"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · إصدار تطوير أصلي"
+          }
         }
       },
       "comment": "Native UI / accessibility. Preserve each interpolated value; do not translate names or filenames."
@@ -201,6 +219,24 @@
             "state": "translated",
             "value": "%@, %@, cuộc trò chuyện"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, %@, การสนทนา"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, %@, बातचीत"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "المحادثات: %@، %@"
+          }
         }
       },
       "comment": "Native UI / accessibility. Preserve each interpolated value; do not translate names or filenames."
@@ -302,6 +338,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Một lần ghép nối đang diễn ra."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "กำลังจับคู่อยู่แล้ว"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "पेयरिंग की एक कोशिश पहले से जारी है।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تجري محاولة اقتران بالفعل."
           }
         }
       },
@@ -645,6 +699,24 @@
             "state": "translated",
             "value": "Thêm tệp đính kèm hoặc hành động"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "เพิ่มไฟล์แนบหรือการดำเนินการ"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "अटैचमेंट या कार्रवाई जोड़ें"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "إضافة مرفق أو إجراء"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -867,6 +939,24 @@
             "state": "translated",
             "value": "Thêm vào hàng đợi"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "เพิ่มลงในคิว"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "कतार में जोड़ें"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "إضافة إلى قائمة الانتظار"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -968,6 +1058,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Địa chỉ"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ที่อยู่"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "पता"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "العنوان"
           }
         }
       },
@@ -1671,6 +1779,24 @@
             "state": "translated",
             "value": "Cho phép một lần"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "อนุญาตครั้งเดียว"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "एक बार अनुमति दें"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "السماح لمرة واحدة"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -1893,6 +2019,24 @@
             "state": "translated",
             "value": "Luôn cho phép"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "อนุญาตเสมอ"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "हमेशा अनुमति दें"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "السماح دائمًا"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -1994,6 +2138,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Luôn cho phép hành động này?"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "อนุญาตการดำเนินการนี้เสมอหรือไม่"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "इस कार्रवाई की हमेशा अनुमति दें?"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "السماح بهذا الإجراء دائمًا؟"
           }
         }
       },
@@ -2097,6 +2259,24 @@
             "state": "translated",
             "value": "Luôn cho phép…"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "อนุญาตเสมอ…"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "हमेशा अनुमति दें…"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "السماح دائمًا…"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -2198,6 +2378,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Áp dụng cho mọi cuộc trò chuyện"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ใช้กับทุกการสนทนา"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "सभी बातचीत पर लागू होता है"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ينطبق على جميع المحادثات"
           }
         }
       },
@@ -2301,6 +2499,24 @@
             "state": "translated",
             "value": "Cần phê duyệt"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ต้องได้รับการอนุมัติ"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "मंज़ूरी चाहिए"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "الموافقة مطلوبة"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -2402,6 +2618,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Không thể chuẩn bị tệp đính kèm"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "เตรียมไฟล์แนบไม่สำเร็จ"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "अटैचमेंट तैयार नहीं हो सका"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تعذّر تجهيز المرفق"
           }
         }
       },
@@ -2625,6 +2859,24 @@
             "state": "translated",
             "value": "Không thể truy cập camera. Bạn có thể dùng mã ghép nối."
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ไม่สามารถเข้าถึงกล้องได้ คุณสามารถใช้รหัสจับคู่แทนได้"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "कैमरे का ऐक्सेस उपलब्ध नहीं है। इसके बजाय पेयरिंग कोड इस्तेमाल कर सकते हैं।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "لا يمكن الوصول إلى الكاميرا. يمكنك استخدام رمز الاقتران بدلًا من ذلك."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -2727,6 +2979,24 @@
             "state": "translated",
             "value": "Quá trình quét bằng camera đã dừng. Bạn có thể nhập mã ghép nối."
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "การสแกนด้วยกล้องหยุดแล้ว คุณสามารถป้อนรหัสจับคู่แทนได้"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "कैमरे से स्कैन रुक गया है। इसके बजाय पेयरिंग कोड डाल सकते हैं।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "توقف المسح بالكاميرا. يمكنك إدخال رمز الاقتران بدلًا من ذلك."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -2828,6 +3098,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Không thể quét bằng camera"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ไม่สามารถสแกนด้วยกล้องได้"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "कैमरे से स्कैन नहीं किया जा सकता"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "المسح بالكاميرا غير متاح"
           }
         }
       },
@@ -3051,6 +3339,24 @@
             "state": "translated",
             "value": "Hủy ghi âm"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ยกเลิกการบันทึกเสียง"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "रिकॉर्डिंग रद्द करें"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "إلغاء التسجيل"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -3152,6 +3458,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Đang kiểm tra Agent của bạn…"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "กำลังตรวจสอบ Agent ของคุณ…"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "आपके Agent की जाँच हो रही है…"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "جارٍ التحقق من وكيلك…"
           }
         }
       },
@@ -3255,6 +3579,24 @@
             "state": "translated",
             "value": "Chọn một Agent để tiếp tục cuộc trò chuyện."
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "เลือก Agent เพื่อสนทนาต่อ"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "बातचीत जारी रखने के लिए कोई Agent चुनें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "اختر وكيلًا لمتابعة المحادثة."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -3357,6 +3699,24 @@
             "state": "translated",
             "value": "Chọn mô hình"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "เลือกโมเดล"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "मॉडल चुनें"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "اختيار نموذج"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -3458,6 +3818,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mã"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "โค้ด"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "कोड"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "الشفرة"
           }
         }
       },
@@ -4041,6 +4419,24 @@
             "state": "translated",
             "value": "Kết nối một Agent để tiếp tục trò chuyện và công việc."
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "เชื่อมต่อ Agent เพื่อสนทนาและทำงานต่อ"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "बातचीत और काम जारी रखने के लिए किसी Agent से कनेक्ट करें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "اتصل بوكيل لمتابعة المحادثات ومواصلة العمل."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -4143,6 +4539,24 @@
             "state": "translated",
             "value": "Kết nối một Agent để bắt đầu."
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "เชื่อมต่อ Agent เพื่อเริ่มต้น"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "शुरू करने के लिए किसी Agent से कनेक्ट करें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "اتصل بوكيل للبدء."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -4244,6 +4658,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cách kết nối"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "วิธีเชื่อมต่อ"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "कनेक्शन का तरीका"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "طريقة الاتصال"
           }
         }
       },
@@ -4707,6 +5139,24 @@
             "state": "translated",
             "value": "Phê duyệt kết nối"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "การอนุมัติการเชื่อมต่อ"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "कनेक्शन की मंज़ूरी"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "الموافقة على الاتصال"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -4809,6 +5259,24 @@
             "state": "translated",
             "value": "Kết nối cần được phê duyệt"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "การเชื่อมต่อต้องได้รับการอนุมัติ"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "कनेक्शन के लिए मंज़ूरी चाहिए"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "يتطلب الاتصال موافقة"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -4910,6 +5378,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kết nối cần được kiểm tra"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ต้องตรวจสอบการเชื่อมต่อ"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "कनेक्शन की जाँच ज़रूरी है"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "الاتصال يحتاج إلى مراجعة"
           }
         }
       },
@@ -5253,6 +5739,24 @@
             "state": "translated",
             "value": "Thao tác cuộc trò chuyện"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "การดำเนินการในการสนทนา"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "बातचीत की कार्रवाइयाँ"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "إجراءات المحادثة"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -5354,6 +5858,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tệp cuộc trò chuyện"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ไฟล์การสนทนา"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "बातचीत की फ़ाइलें"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ملفات المحادثة"
           }
         }
       },
@@ -5457,6 +5979,24 @@
             "state": "translated",
             "value": "Cuộc trò chuyện"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "การสนทนา"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "बातचीत"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "المحادثات"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -5559,6 +6099,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Không thể làm mới cuộc trò chuyện. Kiểm tra kết nối rồi thử lại."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "รีเฟรชการสนทนาไม่สำเร็จ ตรวจสอบการเชื่อมต่อแล้วลองอีกครั้ง"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "बातचीत रीफ़्रेश नहीं हो सकीं। कनेक्शन जाँचें और फिर से कोशिश करें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تعذّر تحديث المحادثات. تحقّق من الاتصال وحاول مرة أخرى."
           }
         }
       }
@@ -5781,6 +6339,24 @@
             "state": "translated",
             "value": "Sao chép mã"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "คัดลอกโค้ด"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "कोड कॉपी करें"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "نسخ الشفرة"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -5883,6 +6459,24 @@
             "state": "translated",
             "value": "Không thể hoàn tất ghép nối. Kiểm tra thông tin rồi thử lại."
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "จับคู่ไม่สำเร็จ ตรวจสอบข้อมูลแล้วลองอีกครั้ง"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "पेयरिंग पूरी नहीं हो सकी। जानकारी जाँचें और फिर से कोशिश करें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تعذّر إكمال الاقتران. تحقّق من التفاصيل وحاول مرة أخرى."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -5984,6 +6578,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Không thể dùng mã hoặc liên kết ghép nối này. Kiểm tra lại hoặc tạo lời mời mới."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ใช้รหัสหรือลิงก์จับคู่นี้ไม่ได้ ตรวจสอบอีกครั้งหรือสร้างคำเชิญใหม่"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "यह पेयरिंग कोड या लिंक इस्तेमाल नहीं हो सका। इसे जाँचें या नया आमंत्रण बनाएँ।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تعذّر استخدام رمز الاقتران أو رابطه. تحقّق منه أو أنشئ دعوة جديدة."
           }
         }
       },
@@ -6088,6 +6700,24 @@
             "state": "translated",
             "value": "Đang tạo cuộc trò chuyện…"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "กำลังสร้างการสนทนา…"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "बातचीत बनाई जा रही है…"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "جارٍ إنشاء المحادثة…"
+          }
         }
       }
     },
@@ -6189,6 +6819,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Không thể xác nhận việc tạo cuộc trò chuyện. Làm mới danh sách trước khi thử lại."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ยังยืนยันการสร้างไม่ได้ รีเฟรชการสนทนาก่อนลองอีกครั้ง"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "बातचीत बनने की पुष्टि नहीं हो सकी। फिर से कोशिश करने से पहले बातचीत रीफ़्रेश करें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تعذّر تأكيد الإنشاء. حدّث المحادثات قبل المحاولة مجددًا."
           }
         }
       }
@@ -6411,6 +7059,24 @@
             "state": "translated",
             "value": "Không thể xác nhận việc chuyển tin. Hãy kiểm tra cuộc trò chuyện trước khi gửi lại."
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ยังยืนยันการส่งถึงไม่ได้ ตรวจสอบการสนทนาก่อนส่งอีกครั้ง"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "डिलीवरी की पुष्टि नहीं हो सकी। फिर से भेजने से पहले बातचीत जाँचें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تعذّر تأكيد التسليم. تحقّق من المحادثة قبل الإرسال مجددًا."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -6512,6 +7178,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Không thể xác nhận việc chuyển tin. Tin nhắn gốc đã được lưu. Hãy kiểm tra cuộc trò chuyện trước khi gửi lại."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ยังยืนยันการส่งถึงไม่ได้ บันทึกข้อความต้นฉบับแล้ว ตรวจสอบการสนทนาก่อนส่งอีกครั้ง"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "डिलीवरी की पुष्टि नहीं हो सकी। आपका मूल संदेश सेव है। फिर से भेजने से पहले बातचीत जाँचें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تعذّر تأكيد التسليم. رسالتك الأصلية محفوظة. تحقّق من المحادثة قبل الإرسال مجددًا."
           }
         }
       },
@@ -6735,6 +7419,24 @@
             "state": "translated",
             "value": "Trực tiếp"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "โดยตรง"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "सीधा कनेक्शन"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "مباشر"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -6836,6 +7538,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ngắt kết nối"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ตัดการเชื่อมต่อ"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "डिस्कनेक्ट करें"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "قطع الاتصال"
           }
         }
       },
@@ -6939,6 +7659,24 @@
             "state": "translated",
             "value": "Đã ngắt kết nối"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ตัดการเชื่อมต่อแล้ว"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "डिस्कनेक्ट हो गया"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "غير متصل"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -7040,6 +7778,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Đã ngắt kết nối. Không thể lưu tùy chọn này."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ตัดการเชื่อมต่อแล้ว แต่บันทึกการตั้งค่านี้ไม่สำเร็จ"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "डिस्कनेक्ट कर दिया गया है। यह सेटिंग सेव नहीं हो सकी।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تم قطع الاتصال. تعذّر حفظ هذا التفضيل."
           }
         }
       },
@@ -7263,6 +8019,24 @@
             "state": "translated",
             "value": "Tin nhắn trước đó"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ข้อความก่อนหน้า"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "पुराने संदेश"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "الرسائل السابقة"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -7484,6 +8258,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nhập mã Clawket hiển thị trên máy tính. Giữ cửa sổ đó mở trong khi ghép nối."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ป้อนรหัสที่ Clawket แสดงบนคอมพิวเตอร์ เปิดหน้าต่างนั้นค้างไว้ระหว่างจับคู่"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "कंप्यूटर पर Clawket में दिख रहा कोड डालें। पेयरिंग के दौरान वह विंडो खुली रखें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "أدخل الرمز الذي يعرضه Clawket على الكمبيوتر. أبقِ تلك النافذة مفتوحة أثناء الاقتران."
           }
         }
       },
@@ -8067,6 +8859,24 @@
             "state": "translated",
             "value": "Cần câu trả lời của bạn"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ต้องการคำตอบจากคุณ"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "आपके जवाब की ज़रूरत है"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "إجابتك مطلوبة"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -8168,6 +8978,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tin nhắn mới nhất"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ข้อความล่าสุด"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "नए संदेश"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "أحدث الرسائل"
           }
         }
       },
@@ -8391,6 +9219,24 @@
             "state": "translated",
             "value": "Đang tải Agent…"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "กำลังโหลด Agent…"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent लोड हो रहे हैं…"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "جارٍ تحميل الوكلاء…"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -8492,6 +9338,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Đang tải cuộc trò chuyện…"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "กำลังโหลดการสนทนา…"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "बातचीत लोड हो रही हैं…"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "جارٍ تحميل المحادثات…"
           }
         }
       },
@@ -8595,6 +9459,24 @@
             "state": "translated",
             "value": "Đang tải cuộc trò chuyện…"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "กำลังโหลดการสนทนา…"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "बातचीत लोड हो रही है…"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "جارٍ تحميل المحادثة…"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -8696,6 +9578,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Đang tải tin nhắn trước đó…"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "กำลังโหลดข้อความก่อนหน้า…"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "पुराने संदेश लोड हो रहे हैं…"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "جارٍ تحميل الرسائل السابقة…"
           }
         }
       },
@@ -9159,6 +10059,24 @@
             "state": "translated",
             "value": "Nhắn tin cho %@"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ส่งข้อความถึง %@"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ को संदेश भेजें"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "إرسال رسالة إلى %@"
+          }
         }
       },
       "comment": "Native UI / accessibility. Preserve each interpolated value; do not translate names or filenames."
@@ -9381,6 +10299,24 @@
             "state": "translated",
             "value": "Mô hình: %@"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "โมเดล: %@"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "मॉडल: %@"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "النموذج: %@"
+          }
         }
       },
       "comment": "Native UI / accessibility. Preserve each interpolated value; do not translate names or filenames."
@@ -9483,6 +10419,24 @@
             "state": "translated",
             "value": "Tùy chọn quyền khác"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ตัวเลือกสิทธิ์เพิ่มเติม"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "अनुमति के अन्य विकल्प"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "خيارات أذونات إضافية"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -9584,6 +10538,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tên (không bắt buộc)"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ชื่อ (ไม่บังคับ)"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "नाम (वैकल्पिक)"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "الاسم (اختياري)"
           }
         }
       },
@@ -9927,6 +10899,24 @@
             "state": "translated",
             "value": "Cuộc trò chuyện mới"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "การสนทนาใหม่"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "नई बातचीत"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "محادثة جديدة"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -10028,6 +11018,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Không có mô hình khả dụng"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ไม่มีโมเดลที่พร้อมใช้งาน"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "कोई मॉडल उपलब्ध नहीं है"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "لا توجد نماذج متاحة"
           }
         }
       },
@@ -10131,6 +11139,24 @@
             "state": "translated",
             "value": "Chưa có cuộc trò chuyện nào"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ยังไม่มีการสนทนา"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "अभी कोई बातचीत नहीं है"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "لا توجد محادثات بعد"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -10232,6 +11258,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Không có Agent hoặc cuộc trò chuyện phù hợp"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ไม่พบ Agent หรือการสนทนาที่ตรงกัน"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "कोई मेल खाता Agent या बातचीत नहीं मिली"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "لا يوجد وكلاء أو محادثات مطابقة"
           }
         }
       },
@@ -10335,6 +11379,24 @@
             "state": "translated",
             "value": "Không có cuộc trò chuyện phù hợp"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ไม่พบการสนทนาที่ตรงกัน"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "कोई मेल खाती बातचीत नहीं मिली"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "لا توجد محادثات مطابقة"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -10436,6 +11498,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Chưa gửi. Tin nhắn của bạn đã được lưu."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ยังไม่ได้ส่ง บันทึกข้อความของคุณแล้ว"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "नहीं भेजा गया। आपका संदेश सेव है।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "لم تُرسل. رسالتك محفوظة."
           }
         }
       },
@@ -10659,6 +11739,24 @@
             "state": "translated",
             "value": "Đang mở cuộc trò chuyện…"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "กำลังเปิดการสนทนา…"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "बातचीत खोली जा रही है…"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "جارٍ فتح المحادثة…"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -10760,6 +11858,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ghép nối Agent"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "จับคู่ Agent ของคุณ"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "अपने Agent को पेयर करें"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "إقران وكيلك"
           }
         }
       },
@@ -10983,6 +12099,24 @@
             "state": "translated",
             "value": "Không thể lưu dữ liệu ghép nối. Nhấn Kết nối lần nữa để lưu kết quả đã có."
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "บันทึกข้อมูลการจับคู่ไม่สำเร็จ แตะเชื่อมต่ออีกครั้งเพื่อบันทึกผลลัพธ์ที่มีอยู่"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "पेयरिंग का डेटा सेव नहीं हो सका। मौजूदा नतीजा सेव करने के लिए फिर से “कनेक्ट करें” पर टैप करें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تعذّر حفظ بيانات الاقتران. اضغط «اتصال» مجددًا لحفظ النتيجة الموجودة."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -11085,6 +12219,24 @@
             "state": "translated",
             "value": "Người tham gia"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ผู้เข้าร่วม"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "प्रतिभागी"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "مشارك"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -11186,6 +12338,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mật khẩu (nếu cần)"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "รหัสผ่าน (หากจำเป็น)"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "पासवर्ड (अगर ज़रूरी हो)"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "كلمة المرور (عند الحاجة)"
           }
         }
       },
@@ -11409,6 +12579,24 @@
             "state": "translated",
             "value": "Dán nội dung QR hoặc liên kết ghép nối"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "วางเนื้อหา QR หรือลิงก์จับคู่"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "पेयरिंग QR का टेक्स्ट या लिंक पेस्ट करें"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "لصق محتوى رمز QR أو رابط الاقتران"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -11631,6 +12819,24 @@
             "state": "translated",
             "value": "Đang chuẩn bị %@"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "กำลังเตรียม %@"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ तैयार हो रहा है"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "جارٍ تجهيز %@"
+          }
         }
       },
       "comment": "Native UI / accessibility. Preserve each interpolated value; do not translate names or filenames."
@@ -11732,6 +12938,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Xem trước %@"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "แสดงตัวอย่าง %@"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ का प्रीव्यू"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "معاينة %@"
           }
         }
       },
@@ -11955,6 +13179,24 @@
             "state": "translated",
             "value": "QR hoặc liên kết"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "QR หรือลิงก์"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "QR या लिंक"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "رمز QR أو رابط"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -12177,6 +13419,24 @@
             "state": "translated",
             "value": "Chờ xem xét"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "รอการตรวจสอบ"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "समीक्षा के लिए तैयार"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "بانتظار المراجعة"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -12278,6 +13538,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Đang chờ bạn xác nhận. Gửi tin nhắn này khi có kết nối."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "รอการยืนยันจากคุณ ส่งข้อความนี้เมื่อเชื่อมต่อได้"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "आपकी पुष्टि का इंतज़ार है। कनेक्शन उपलब्ध होने पर यह संदेश भेजें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "بانتظار تأكيدك. أرسل هذه الرسالة عندما يصبح الاتصال متاحًا."
           }
         }
       },
@@ -12382,6 +13660,24 @@
             "state": "translated",
             "value": "Kết nối lại hoặc làm mới danh sách cuộc trò chuyện trước khi tạo thêm."
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "เชื่อมต่ออีกครั้งหรือรีเฟรชการสนทนาก่อนสร้างใหม่"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "नई बातचीत बनाने से पहले फिर से कनेक्ट करें या बातचीत रीफ़्रेश करें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "أعد الاتصال أو حدّث المحادثات قبل إنشاء أخرى."
+          }
         }
       }
     },
@@ -12482,6 +13778,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kết nối lại để đổi mô hình."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "เชื่อมต่ออีกครั้งเพื่อเปลี่ยนโมเดล"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "मॉडल बदलने के लिए फिर से कनेक्ट करें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "أعد الاتصال لتغيير النماذج."
           }
         }
       },
@@ -12586,6 +13900,24 @@
             "state": "translated",
             "value": "Kết nối lại để tạo cuộc trò chuyện."
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "เชื่อมต่ออีกครั้งเพื่อสร้างการสนทนา"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "बातचीत बनाने के लिए फिर से कनेक्ट करें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "أعد الاتصال لإنشاء محادثة."
+          }
         }
       }
     },
@@ -12686,6 +14018,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kết nối lại để tải tin nhắn trước đó."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "เชื่อมต่ออีกครั้งเพื่อโหลดข้อความก่อนหน้า"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "पुराने संदेश लोड करने के लिए फिर से कनेक्ट करें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "أعد الاتصال لتحميل الرسائل السابقة."
           }
         }
       },
@@ -12789,6 +14139,24 @@
             "state": "translated",
             "value": "Kết nối lại để làm mới cuộc trò chuyện."
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "เชื่อมต่ออีกครั้งเพื่อรีเฟรชการสนทนา"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "बातचीत रीफ़्रेश करने के लिए फिर से कनेक्ट करें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "أعد الاتصال لتحديث المحادثات."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -12891,6 +14259,24 @@
             "state": "translated",
             "value": "Kết nối lại để gửi. Bản nháp của bạn đã được lưu."
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "เชื่อมต่ออีกครั้งเพื่อส่งข้อความ บันทึกฉบับร่างของคุณแล้ว"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "भेजने के लिए फिर से कनेक्ट करें। आपका ड्राफ़्ट सेव है।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "أعد الاتصال للإرسال. مسودتك محفوظة."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -12992,6 +14378,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kết nối lại để dừng lượt chạy này."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "เชื่อมต่ออีกครั้งเพื่อหยุดการทำงานนี้"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "इस रन को रोकने के लिए फिर से कनेक्ट करें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "أعد الاتصال لإيقاف هذا التشغيل."
           }
         }
       },
@@ -13215,6 +14619,24 @@
             "state": "translated",
             "value": "Đã khôi phục các kết nối đã lưu từ bản sao được xác minh gần nhất."
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "กู้คืนการเชื่อมต่อที่บันทึกไว้จากสำเนาล่าสุดที่ตรวจสอบแล้ว"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "आखिरी जाँची हुई कॉपी से आपके सेव किए गए कनेक्शन बहाल कर दिए गए हैं।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تمت استعادة اتصالاتك المحفوظة من آخر نسخة تم التحقق منها."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -13317,6 +14739,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Làm mới danh sách cuộc trò chuyện trước khi tạo thêm."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "รีเฟรชการสนทนาก่อนสร้างการสนทนาใหม่"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "नई बातचीत बनाने से पहले बातचीत रीफ़्रेश करें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "حدّث المحادثات قبل إنشاء أخرى."
           }
         }
       }
@@ -13659,6 +15099,24 @@
             "state": "translated",
             "value": "Xóa %@"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "นำ %@ ออก"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ हटाएँ"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "إزالة %@"
+          }
         }
       },
       "comment": "Native UI / accessibility. Preserve each interpolated value; do not translate names or filenames."
@@ -13881,6 +15339,24 @@
             "state": "translated",
             "value": "Xóa kết nối này?"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "นำการเชื่อมต่อนี้ออกหรือไม่"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "यह कनेक्शन हटाएँ?"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "إزالة هذا الاتصال؟"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -13983,6 +15459,24 @@
             "state": "translated",
             "value": "Trả lời trong cuộc trò chuyện mới"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ตอบกลับในการสนทนาใหม่"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "नई बातचीत में जवाब दें"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "الرد في محادثة جديدة"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -14084,6 +15578,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Đang phản hồi…"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "กำลังตอบกลับ…"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "जवाब दिया जा रहा है…"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "جارٍ الرد…"
           }
         }
       },
@@ -14307,6 +15819,24 @@
             "state": "translated",
             "value": "Lưu kết nối"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "บันทึกการเชื่อมต่อ"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "कनेक्शन सेव करें"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "حفظ الاتصال"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -14409,6 +15939,24 @@
             "state": "translated",
             "value": "Các cuộc trò chuyện đã lưu vẫn nằm trên thiết bị này. Bạn có thể ghép nối lại Agent sau."
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "การสนทนาที่บันทึกไว้จะยังอยู่บนอุปกรณ์นี้ คุณสามารถจับคู่ Agent ใหม่ได้ภายหลัง"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "सेव की गई बातचीत इस डिवाइस पर बनी रहेंगी। आप बाद में Agent को फिर से पेयर कर सकते हैं।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تبقى المحادثات المحفوظة على هذا الجهاز. يمكنك إقران الوكيل مجددًا لاحقًا."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -14510,6 +16058,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Không thể đọc dữ liệu đã lưu một cách an toàn. Hãy mở khóa thiết bị này rồi mở lại Clawket."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ไม่สามารถอ่านข้อมูลที่บันทึกไว้ได้อย่างปลอดภัย ปลดล็อกอุปกรณ์นี้แล้วเปิด Clawket อีกครั้ง"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "सेव किए गए डेटा को सुरक्षित ढंग से नहीं पढ़ा जा सका। इस डिवाइस को अनलॉक करके Clawket फिर से खोलें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تعذّرت قراءة البيانات المحفوظة بأمان. افتح قفل هذا الجهاز ثم أعد فتح Clawket."
           }
         }
       },
@@ -14733,6 +16299,24 @@
             "state": "translated",
             "value": "Quét mã QR"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "สแกนโค้ด QR"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "QR कोड स्कैन करें"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "مسح رمز QR"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -14835,6 +16419,24 @@
             "state": "translated",
             "value": "Quét QR ghép nối"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "สแกน QR จับคู่"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "पेयरिंग QR स्कैन करें"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "مسح رمز QR للاقتران"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -14936,6 +16538,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Quét mã QR Clawket hiển thị trên máy tính hoặc dán liên kết ghép nối."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "สแกน QR ที่ Clawket แสดงบนคอมพิวเตอร์ หรือวางลิงก์จับคู่"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "कंप्यूटर पर Clawket में दिख रहा QR कोड स्कैन करें या उसका पेयरिंग लिंक पेस्ट करें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "امسح رمز QR الذي يعرضه Clawket على الكمبيوتر أو الصق رابط الاقتران."
           }
         }
       },
@@ -15279,6 +16899,24 @@
             "state": "translated",
             "value": "Tìm Agent và cuộc trò chuyện"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ค้นหา Agent และการสนทนา"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent और बातचीत खोजें"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "البحث عن الوكلاء والمحادثات"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -15380,6 +17018,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tìm cuộc trò chuyện"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ค้นหาการสนทนา"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "बातचीत खोजें"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "البحث في المحادثات"
           }
         }
       },
@@ -15483,6 +17139,24 @@
             "state": "translated",
             "value": "Tìm mô hình"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ค้นหาโมเดล"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "मॉडल खोजें"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "البحث عن نماذج"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -15584,6 +17258,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Không thể truy cập bộ nhớ bảo mật."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ไม่สามารถใช้พื้นที่จัดเก็บข้อมูลที่ปลอดภัยได้"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "सुरक्षित स्टोरेज उपलब्ध नहीं है।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "التخزين الآمن غير متاح."
           }
         }
       },
@@ -15807,6 +17499,24 @@
             "state": "translated",
             "value": "Gửi câu trả lời"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ส่งคำตอบ"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "जवाब भेजें"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "إرسال الإجابة"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -16028,6 +17738,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Chưa xác nhận trạng thái gửi"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ยังยืนยันสถานะการส่งไม่ได้"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "भेजने की स्थिति की पुष्टि नहीं हुई"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "حالة الإرسال غير مؤكدة"
           }
         }
       },
@@ -16611,6 +18339,24 @@
             "state": "translated",
             "value": "Hiện toàn bộ lệnh"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "แสดงคำสั่งทั้งหมด"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "पूरी कमांड दिखाएँ"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "عرض الأمر كاملًا"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -16833,6 +18579,24 @@
             "state": "translated",
             "value": "Bắt đầu cuộc trò chuyện"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "เริ่มการสนทนา"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "बातचीत शुरू करें"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "بدء محادثة"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -16934,6 +18698,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bắt đầu nhập bằng giọng nói"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "เริ่มป้อนข้อมูลด้วยเสียง"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "वॉइस इनपुट शुरू करें"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "بدء الإدخال الصوتي"
           }
         }
       },
@@ -17157,6 +18939,24 @@
             "state": "translated",
             "value": "Dừng ghi âm"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "หยุดบันทึกเสียง"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "रिकॉर्डिंग रोकें"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "إيقاف التسجيل"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -17379,6 +19179,24 @@
             "state": "translated",
             "value": "Đang dừng tác vụ"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "กำลังหยุดงาน"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "टास्क रोका जा रहा है"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "جارٍ إيقاف المهمة"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -17480,6 +19298,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Không thể truy cập bộ nhớ"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ไม่สามารถใช้พื้นที่จัดเก็บข้อมูลได้"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "स्टोरेज उपलब्ध नहीं है"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "التخزين غير متاح"
           }
         }
       },
@@ -17583,6 +19419,24 @@
             "state": "translated",
             "value": "Chạm để ghi âm. Nhấn giữ rồi thả để gửi. Vuốt lên để hủy."
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "แตะเพื่อบันทึกเสียง กดค้างแล้วปล่อยเพื่อส่ง ปัดขึ้นเพื่อยกเลิก"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "रिकॉर्ड करने के लिए टैप करें। दबाकर रखें और भेजने के लिए छोड़ दें। रद्द करने के लिए ऊपर स्लाइड करें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "اضغط لبدء التسجيل. اضغط مطولًا ثم أفلت للإرسال. اسحب لأعلى للإلغاء."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -17684,6 +19538,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Không thể xóa kết nối. Dữ liệu đã lưu không thay đổi."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "นำการเชื่อมต่อออกไม่สำเร็จ ข้อมูลที่บันทึกไว้ไม่ได้เปลี่ยนแปลง"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "कनेक्शन नहीं हटाया जा सका। आपका सेव किया गया डेटा नहीं बदला है।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تعذّرت إزالة الاتصال. لم تتغير بياناتك المحفوظة."
           }
         }
       },
@@ -17787,6 +19659,24 @@
             "state": "translated",
             "value": "Không thể lưu kết nối đã chọn. Vui lòng thử lại."
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "บันทึกการเชื่อมต่อที่เลือกไม่สำเร็จ โปรดลองอีกครั้ง"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "चुने गए कनेक्शन को सेव नहीं किया जा सका। फिर से कोशिश करें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تعذّر حفظ الاتصال المحدد. حاول مرة أخرى."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -17888,6 +19778,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Không thể hoàn tất thao tác. Kiểm tra kết nối rồi thử lại."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ดำเนินการไม่สำเร็จ ตรวจสอบการเชื่อมต่อแล้วลองอีกครั้ง"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "कार्रवाई पूरी नहीं हो सकी। कनेक्शन जाँचें और फिर से कोशिश करें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تعذّر إكمال العملية. تحقّق من الاتصال وحاول مرة أخرى."
           }
         }
       },
@@ -17991,6 +19899,24 @@
             "state": "translated",
             "value": "Không thể hoàn tất thao tác. Vui lòng thử lại."
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ดำเนินการไม่สำเร็จ โปรดลองอีกครั้ง"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "कार्रवाई पूरी नहीं हो सकी। फिर से कोशिश करें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تعذّر إكمال العملية. حاول مرة أخرى."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -18092,6 +20018,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Không thể kết nối tới dịch vụ ghép nối. Kiểm tra máy tính trước khi thử lại lời mời này."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ไม่สามารถติดต่อบริการจับคู่ได้ ตรวจสอบคอมพิวเตอร์ก่อนลองคำเชิญนี้อีกครั้ง"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "पेयरिंग सर्विस से कनेक्ट नहीं हो सका। यह आमंत्रण फिर से इस्तेमाल करने से पहले अपना कंप्यूटर जाँचें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تعذّر الوصول إلى خدمة الاقتران. تحقّق من الكمبيوتر قبل تجربة هذه الدعوة مجددًا."
           }
         }
       },
@@ -18195,6 +20139,24 @@
             "state": "translated",
             "value": "Có 32 tin nhắn đang chờ. Hãy hoàn tất hoặc xóa một tin nhắn trước khi thêm tin khác."
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "มีข้อความรอดำเนินการ 32 ข้อความ โปรดดำเนินการให้เสร็จหรือนำออกหนึ่งข้อความก่อนเพิ่มข้อความใหม่"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "32 संदेश लंबित हैं। नया संदेश जोड़ने से पहले एक को पूरा करें या हटा दें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "هناك 32 رسالة قيد الانتظار. أكمل إحداها أو أزلها قبل إضافة أخرى."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -18296,6 +20258,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hành động này không khả dụng cho kết nối này."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "การดำเนินการนี้ไม่พร้อมใช้กับการเชื่อมต่อนี้"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "यह कार्रवाई इस कनेक्शन के लिए उपलब्ध नहीं है।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "هذا الإجراء غير متاح لهذا الاتصال."
           }
         }
       },
@@ -18399,6 +20379,24 @@
             "state": "translated",
             "value": "Mã này thuộc về một Agent khác. Chọn Agent phù hợp rồi thử lại."
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "รหัสนี้เป็นของ Agent อื่น เลือก Agent ที่ตรงกันแล้วลองอีกครั้ง"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "यह कोड किसी दूसरे Agent का है। सही Agent चुनें और फिर से कोशिश करें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "هذا الرمز يخص وكيلًا آخر. اختر الوكيل المطابق وحاول مرة أخرى."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -18500,6 +20498,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kết nối này không có quyền thực hiện hành động đó."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "การเชื่อมต่อนี้ไม่มีสิทธิ์ดำเนินการดังกล่าว"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "इस कनेक्शन को उस कार्रवाई की अनुमति नहीं है।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "لا يملك هذا الاتصال إذنًا لتنفيذ ذلك الإجراء."
           }
         }
       },
@@ -18603,6 +20619,24 @@
             "state": "translated",
             "value": "Cuộc trò chuyện này"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "การสนทนานี้"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "यह बातचीत"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "هذه المحادثة"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -18704,6 +20738,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bạn chỉ có thể đọc cuộc trò chuyện này tại đây."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "การสนทนานี้อ่านได้อย่างเดียวที่นี่"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "यहाँ यह बातचीत केवल पढ़ी जा सकती है।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "هذه المحادثة للقراءة فقط هنا."
           }
         }
       },
@@ -18807,6 +20859,24 @@
             "state": "translated",
             "value": "Ứng dụng phát triển này dùng kết nối và bộ nhớ riêng."
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "แอปรุ่นพัฒนานี้ใช้การเชื่อมต่อและพื้นที่จัดเก็บข้อมูลแยกต่างหาก"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "यह डेवलपमेंट ऐप अपने अलग कनेक्शन और स्टोरेज इस्तेमाल करता है।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "يستخدم تطبيق التطوير هذا اتصالات وتخزينًا مستقلين."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -18908,6 +20978,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Không thể lưu bản nháp này. Giữ Clawket mở rồi thử lại."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "บันทึกฉบับร่างนี้ไม่สำเร็จ เปิด Clawket ค้างไว้แล้วลองอีกครั้ง"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "यह ड्राफ़्ट सेव नहीं हो सका। Clawket खुला रखें और फिर से कोशिश करें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تعذّر حفظ هذه المسودة. أبقِ Clawket مفتوحًا وحاول مرة أخرى."
           }
         }
       },
@@ -19011,6 +21099,24 @@
             "state": "translated",
             "value": "Lời mời này đã hết hạn hoặc đã được dùng. Lấy mã mới trên máy tính."
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "คำเชิญนี้หมดอายุหรือถูกใช้แล้ว รับรหัสใหม่จากคอมพิวเตอร์ของคุณ"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "इस आमंत्रण की समय-सीमा खत्म हो गई है या इसे इस्तेमाल किया जा चुका है। कंप्यूटर से नया कोड लें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "انتهت صلاحية هذه الدعوة أو استُخدمت من قبل. احصل على رمز جديد من الكمبيوتر."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -19113,6 +21219,24 @@
             "state": "translated",
             "value": "Lời mời này sử dụng một môi trường dịch vụ khác."
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "คำเชิญนี้ใช้สภาพแวดล้อมบริการอื่น"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "यह आमंत्रण किसी दूसरे सर्विस एनवायरनमेंट का है।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تستخدم هذه الدعوة بيئة خدمة مختلفة."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -19214,6 +21338,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Quyền này cũng áp dụng cho các yêu cầu trong tương lai."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "สิทธิ์นี้จะใช้กับคำขอในอนาคตด้วย"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "यह अनुमति आगे के अनुरोधों पर भी लागू होगी।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ينطبق هذا الإذن على الطلبات المستقبلية أيضًا."
           }
         }
       },
@@ -19318,6 +21460,24 @@
             "state": "translated",
             "value": "Dự án này không khả dụng."
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "โปรเจ็กต์นี้ไม่พร้อมใช้งาน"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "यह प्रोजेक्ट उपलब्ध नहीं है।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "هذا المشروع غير متاح."
+          }
         }
       }
     },
@@ -19418,6 +21578,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Token (nếu cần)"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "โทเค็น (หากจำเป็น)"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "टोकन (अगर ज़रूरी हो)"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "رمز المصادقة (عند الحاجة)"
           }
         }
       },
@@ -19521,6 +21699,24 @@
             "state": "translated",
             "value": "Đã thử quá nhiều lần. Chờ một chút trước khi thử lại."
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ลองหลายครั้งเกินไป โปรดรอสักครู่ก่อนลองอีกครั้ง"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "बहुत ज़्यादा कोशिशें हुई हैं। फिर से कोशिश करने से पहले थोड़ा इंतज़ार करें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "محاولات كثيرة جدًا. انتظر قليلًا قبل المحاولة مجددًا."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -19622,6 +21818,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Đầu ra công cụ"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ผลลัพธ์จากเครื่องมือ"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "टूल का आउटपुट"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "مخرجات الأداة"
           }
         }
       },
@@ -19965,6 +22179,24 @@
             "state": "translated",
             "value": "Mở khóa thiết bị này rồi mở lại Clawket để truy cập các kết nối đã lưu."
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ปลดล็อกอุปกรณ์นี้แล้วเปิด Clawket อีกครั้งเพื่อเข้าถึงการเชื่อมต่อที่บันทึกไว้"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "सेव किए गए कनेक्शन देखने के लिए इस डिवाइस को अनलॉक करके Clawket फिर से खोलें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "افتح قفل هذا الجهاز ثم أعد فتح Clawket للوصول إلى اتصالاتك المحفوظة."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -20187,6 +22419,24 @@
             "state": "translated",
             "value": "Dùng một kỹ năng"
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ใช้สกิล"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "स्किल इस्तेमाल करें"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "استخدام مهارة"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -20288,6 +22538,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Dùng địa chỉ WebSocket do Agent cung cấp. Thông tin xác thực được lưu an toàn trên thiết bị này."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ใช้ที่อยู่ WebSocket ที่ Agent ให้มา ข้อมูลรับรองจะบันทึกอย่างปลอดภัยบนอุปกรณ์นี้"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "अपने Agent का दिया हुआ WebSocket पता इस्तेमाल करें। क्रेडेंशियल इस डिवाइस पर सुरक्षित रूप से सेव होते हैं।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "استخدم عنوان WebSocket الذي يوفره وكيلك. تُحفظ بيانات الاعتماد بأمان على هذا الجهاز."
           }
         }
       },
@@ -20511,6 +22779,24 @@
             "state": "translated",
             "value": "Bạn có thể dán nội dung mã QR hoặc nhập mã ghép nối. Nếu cần, hãy kiểm tra quyền truy cập camera trong Cài đặt."
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "คุณสามารถวางเนื้อหา QR หรือป้อนรหัสจับคู่แทนได้ หากจำเป็น ให้ตรวจสอบสิทธิ์การใช้กล้องในการตั้งค่า"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "इसके बजाय QR का टेक्स्ट पेस्ट करें या पेयरिंग कोड डालें। ज़रूरत हो तो सेटिंग में कैमरे की अनुमति जाँचें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "يمكنك لصق محتوى رمز QR أو إدخال رمز الاقتران بدلًا من ذلك. تحقّق من إذن الكاميرا في الإعدادات عند الحاجة."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -20612,6 +22898,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Không thể kết nối tới Agent. Bản nháp của bạn đã được lưu."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ไม่สามารถติดต่อ Agent ได้ บันทึกฉบับร่างของคุณแล้ว"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "आपके Agent से कनेक्ट नहीं हो सका। आपका ड्राफ़्ट सेव है।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تعذّر الوصول إلى وكيلك. مسودتك محفوظة."
           }
         }
       },
@@ -20715,6 +23019,24 @@
             "state": "translated",
             "value": "Agent của bạn cần được ghép nối lại. Thêm mã ghép nối hiện tại trong Cài đặt."
           }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent ของคุณต้องจับคู่ใหม่ เพิ่มรหัสจับคู่ปัจจุบันในการตั้งค่า"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "आपके Agent को फिर से पेयर करना होगा। सेटिंग में उसका मौजूदा पेयरिंग कोड जोड़ें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "يحتاج وكيلك إلى الاقتران مجددًا. أضف رمز الاقتران الحالي في الإعدادات."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -20816,6 +23138,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Các Agent luôn trong tầm tay"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent ของคุณ ใกล้แค่เอื้อม"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "आपके Agent, हमेशा आपके पास"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "وكلاؤك في متناول يدك"
           }
         }
       },
@@ -21038,6 +23378,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Không thể lưu dữ liệu một cách an toàn. Giữ Clawket mở rồi thử lại."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "บันทึกข้อมูลอย่างปลอดภัยไม่สำเร็จ เปิด Clawket ค้างไว้แล้วลองอีกครั้ง"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "आपका डेटा सुरक्षित ढंग से सेव नहीं हो सका। Clawket खुला रखें और फिर से कोशिश करें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تعذّر حفظ بياناتك بأمان. أبقِ Clawket مفتوحًا وحاول مرة أخرى."
           }
         }
       },

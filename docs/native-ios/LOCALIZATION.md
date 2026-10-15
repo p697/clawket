@@ -4,14 +4,9 @@ The app owns `apps/ios/Clawket/Localizable.xcstrings` in its main bundle. The 19
 
 The initial source inventory contains 195 user-facing and accessibility keys from the eight `ClawketUI` sources and the real native host. `localization-inventory.json` records their locations and any reused Mobile term. Catalog entries are manual because most presentation strings originate in a Swift Package while the resource belongs to the app. Do not remove them merely because the app target's extractor does not see a package source.
 
-Current source coverage:
+Current source coverage: all 19 supported locales contain 195/195 actual translations (3,705 string units, including the English source). The catalog reuses 64 existing Mobile terms; the other 131 native strings were translated for each locale. Regional Spanish and Portuguese retain their existing terminology, including Settings, pairing and connection labels.
 
-| Locales | Actual translations |
-| --- | --- |
-| English, Simplified Chinese, Traditional Chinese, Japanese, German, French, Italian, Spanish, Latin American Spanish, Brazilian Portuguese, European Portuguese, Korean, Russian, Ukrainian, Turkish, Vietnamese | 195/195 each |
-| Thai, Hindi, Arabic | 64/195 each; 131 new native strings still pending |
-
-The 64 reused terms come from the existing locale files, with their origin recorded per key. New translations are written for the actual native flows. Missing translations are omitted, never represented by copied English with a completed state. This is initial QA coverage, not completion of the final 19-language parity gate. Resource compilation, language selection, device rendering and linguistic acceptance remain separate checks.
+No missing translation was filled with English and marked complete. Completing this source catalog does not complete the native language parity gate: resource integration, language selection, device rendering and linguistic acceptance remain separate checks. New source strings must still add real translations before the all-19 validation passes.
 
 ## Binding text to the catalog
 
@@ -66,4 +61,4 @@ node scripts/native-ios/localization.mjs --initial-qa
 node scripts/native-ios/localization.mjs
 ```
 
-The first command checks real initial-QA coverage plus corrupted/missing text, empty input, mismatched/reordered placeholders and incomplete Arabic plurals. The second explicitly requires the four initial-QA locales and prints coverage for all 19. The final command requires all 19 and must remain red while translations are pending. None substitutes for compiling the catalog in the real app and testing English, Chinese IME, Japanese, long German text, Arabic/RTL, Dynamic Type and VoiceOver on the simulator/device.
+The first command checks real initial-QA coverage plus corrupted/missing text, empty input, mismatched/reordered placeholders and incomplete Arabic plurals. The second explicitly requires the four initial-QA locales and prints coverage for all 19. The final command requires all 19 and currently passes for all 195 inventoried keys; any missing translation fails it. None substitutes for compiling the catalog in the real app and testing English, Chinese IME, Japanese, long German text, Arabic/RTL, Dynamic Type and VoiceOver on the simulator/device.

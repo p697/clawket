@@ -1,13 +1,13 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-16 原生 iOS 本地化源码（负责人授权，完整设备语言验收仍为最终迁移门槛）。
+  - 按真实 `ClawketUI` 八份源码与 native host 清点 195 条界面/无障碍文案（含新增会话/未知创建恢复提示），新增主 App bundle 字符串目录及逐项来源清单。64 条术语复用现有 Mobile 19 语言译文，其余 131 条逐语言翻译；当前全部 19 语言各 195/195，共 3,705 条语言单元，无英文占位填充的伪完成。西班牙/拉美、巴西/葡萄牙保留区域术语差异。
+  - `docs/native-ios/LOCALIZATION.md` 记录 host 动态状态、默认文案、条件标题及 UI helper 的本地化调用点；用户/后端文本、名称、模型、路径、代码与命令保持原文。host 文案生产者与资源工程配置由对应 owner 接入；此分支仅补齐 UI 固定默认值、私有标签 helper 与无障碍插值，不改变公开 API。catalog 使用手工维护项，避免 Swift Package 源文案未被 App 提取时误删。
+  - 单文件 Node 验证 5 项通过，覆盖实际 QA 范围、缺失/空输入与译文、占位符类型/重排及阿拉伯语六种复数类别；允许复数语法以单数/双数文字表达而省略已消费的数字。默认全 19 语言覆盖与格式检查通过，QA 模式仍明确打印所有语言覆盖。UI consumer 编译、完整资源/语言切换/RTL/长文案、VoiceOver 及设备验收另行验证，不把翻译清单当成设备语言验收，无分发或发布。
+
 - 2026-10-16 Native 后端认证兼容（OpenClaw bootstrap 与 Hermes direct）。
   - 对齐当前 Mobile：仅 bootstrap 身份的 INVALID_REQUEST/BAD_REQUEST、明确 bootstrapToken 与 unexpected/invalid connect schema 错误、且保留旧 token/password 时，禁用本次连接 bootstrap 并回收一次；本地与 Relay 路径一致，不把认证失败降级为旧身份。等待者与代际围栏保持，第二次错误不循环。
   - heavy 租约、Swift6/jobs2 逐文件通过 BootstrapCompatibilityTests 5 项/9 组输入，含两种拒绝码、Relay 密码、无旧凭据、重复拒绝及认证/无关 schema 拒绝。Hermes direct 将独立 token 只拼入临时 Upgrade URL，保留旧含token QR与Relay独立凭据，其他后端不加query；增量8测试/16组输入通过，文档10对/7项通过。完整 CI 另行记录；未改现有 Mobile、服务协议、生产、版本或发布。
-
-- 2026-10-16 原生 iOS 本地化首批源码（负责人授权，完整 19 语言仍为最终迁移门槛）。
-  - 按真实 `ClawketUI` 八份源码与 native host 清点 195 条界面/无障碍文案（含新增会话/未知创建恢复提示），新增主 App bundle 字符串目录及逐项来源清单。64 条术语复用现有 Mobile 19 语言译文；英文、简中、繁中、日文、德文、法文、意大利文、西班牙文（西班牙/拉美）、葡萄牙文（巴西/葡萄牙）、韩文、俄文、乌克兰文、土耳其文、越南文共 16 语言当前各 195/195，其余 3 语言各 64/195，未翻译的 131 条明确缺省，不复制英文伪造完成。
-  - `docs/native-ios/LOCALIZATION.md` 记录 host 动态状态、默认文案、条件标题及 UI helper 的本地化调用点；用户/后端文本、名称、模型、路径、代码与命令保持原文。host 文案生产者与资源工程配置由对应 owner 接入；此分支仅补齐 UI 表示层固定默认值、私有标签 helper 与无障碍插值的本地化边界，不改变用户/后端数据或公开 API。catalog 使用手工维护项，避免 Swift Package 源文案未被 App 提取时误删。
-  - 单文件 Node 验证 5 项通过，覆盖实际四语言 QA 范围、缺失/空输入与译文、占位符类型/重排及阿拉伯语六种复数类别；明确 QA 模式列出全部 19 语言覆盖率，最终默认模式在缺少 3 语言时保持失败。实际 App 资源编译、语言切换/RTL/长文案、VoiceOver 及设备验收未完成，不声称 19 语言本地化已完成，无分发或发布。
 
 - 2026-10-16 Native iOS N2 集成进行中（未完成 App 验收）。
   - 新增维护式 `apps/ios/Clawket.xcodeproj`，SwiftUI host 直接绑定原生配对/后端/表示层，iOS16.4、iPhone/iPad、独立 `com.p697.clawket.nativeqa`；不含 RN/JS/WebView，不改商店 bundle、版本或现有 Mobile 实现。Keychain 凭据、只读缓存标记、草稿及有界队列分连接/Agent/会话存储；先验证写入再派发，进程中断将 sending 置为 uncertain、queued 置为 held，不自动重放。
