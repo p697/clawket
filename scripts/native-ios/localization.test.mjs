@@ -52,8 +52,11 @@ test('Arabic plural variants must cover zero, one, two, few, many and other with
   const key = '%lld messages';
   const catalog = { sourceLanguage: 'en', version: '1.0', strings: {
     [key]: { extractionState: 'manual', localizations: {
-      en: { variations: { plural: { one: unit('%lld message'), other: unit('%lld messages') } } },
-      ar: { variations: { plural: Object.fromEntries(['zero', 'one', 'two', 'few', 'many', 'other'].map((category) => [category, unit('%lld رسالة')])) } },
+      en: { variations: { plural: { one: unit('One message'), other: unit('%lld messages') } } },
+      ar: { variations: { plural: {
+        zero: unit('لا رسائل'), one: unit('رسالة واحدة'), two: unit('رسالتان'),
+        few: unit('%lld رسائل'), many: unit('%lld رسالة'), other: unit('%lld رسالة'),
+      } } },
     } },
   } };
   const pluralInventory = { ...inventory, strings: [{ key }] };

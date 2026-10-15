@@ -38,7 +38,7 @@ function units(localization, locale, where, issues) {
     if (own(localization, 'variations') || own(localization, 'substitutions')) {
       issues.push(`${where}: ambiguous string unit and variants`);
     }
-    return [localization.stringUnit];
+    return [{ unit: localization.stringUnit, plural: false }];
   }
   const plural = localization.variations?.plural;
   if (!object(plural) || Object.keys(localization.variations).length !== 1 || own(localization, 'substitutions')) {
@@ -56,7 +56,7 @@ function units(localization, locale, where, issues) {
       issues.push(`${where}/${category}: missing string unit`);
       return [];
     }
-    return [variant.stringUnit];
+    return [{ unit: variant.stringUnit, plural: true }];
   });
 }
 
@@ -103,14 +103,24 @@ export function inspectCatalog(catalog, inventory, { requiredLocales } = {}) {
       const before = issues.length;
       const values = units(localization, locale, `${key}/${locale}`, issues);
       if (values.length === 0) missing[locale].push(key);
-      for (const unit of values) {
+      for (const { unit, plural } of values) {
         if (!object(unit) || unit.state !== 'translated' || typeof unit.value !== 'string' || !unit.value.trim()) {
           issues.push(`${key}/${locale}: missing actual translated text`);
           continue;
         }
         if (/\{\{[^}]+\}\}/.test(unit.value)) issues.push(`${key}/${locale}: unconverted Mobile interpolation`);
         try {
-          if (JSON.stringify(formatArguments(unit.value)) !== JSON.stringify(sourceArguments)) {
+          const actualArguments = formatArguments(unit.value);
+          const numericArguments = sourceArguments.filter((argument) => /[dDuUxXoO]$/.test(argument));
+          // A plural rule consumes the count even when a language writes "one message"
+          // or "no messages" without displaying the numeric argument.
+          const withoutCount = plural && numericArguments.length === 1
+            ? sourceArguments.filter((argument) => argument !== numericArguments[0]) : undefined;
+          if (plural && numericArguments.length !== 1) {
+            issues.push(`${key}/${locale}: plural requires one unambiguous integer argument`);
+          }
+          if (JSON.stringify(actualArguments) !== JSON.stringify(sourceArguments)
+              && JSON.stringify(actualArguments) !== JSON.stringify(withoutCount)) {
             issues.push(`${key}/${locale}: format arguments differ from source`);
           }
         } catch (error) { issues.push(`${key}/${locale}: ${error.message}`); }
