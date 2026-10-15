@@ -107,17 +107,23 @@ private actor URLSessionSocket: WebSocketConnection {
     }
 
     func open() async throws {
-        guard !closed else { throw WebSocketFailure.closed }
+        guard !closed, !Task.isCancelled else { throw WebSocketFailure.closed }
         guard !started else { throw WebSocketFailure.failed }
         started = true
-        try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { continuation in
-                delegate.wait(continuation)
-                task.resume()
+        do {
+            try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation { continuation in
+                    delegate.wait(continuation)
+                    task.resume()
+                }
+            } onCancel: {
+                // Native completion can run synchronously with cancel. Publish cancellation first.
+                self.delegate.finish(.failure(.closed))
+                self.task.cancel(with: .goingAway, reason: nil)
             }
-        } onCancel: {
-            self.task.cancel(with: .goingAway, reason: nil)
-            self.delegate.finish(.failure(.closed))
+        } catch {
+            if Task.isCancelled { throw WebSocketFailure.closed }
+            throw error
         }
         guard !closed, !Task.isCancelled else { throw WebSocketFailure.closed }
     }
