@@ -74,7 +74,7 @@ final class PairingHTTPClientTests: XCTestCase, @unchecked Sendable {
     }
 
     func testDeclaredOversizedBodyIsRejectedBeforeWaitingForBody() async throws {
-        // Drive the header callback directly: URLProtocol can defer held-header callbacks until completion.
+        // Drive the header callback directly, independent of URLProtocol timing for an unfinished body.
         let session = URLSession(configuration: .ephemeral)
         defer { session.invalidateAndCancel() }
         let url = URL(string: "https://pairing-tests.invalid/")!
