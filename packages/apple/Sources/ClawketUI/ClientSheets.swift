@@ -27,6 +27,10 @@ struct ClientSheetView: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+        .onChange(of: model.selectedConversation) { route in
+            if case let .catalog(id) = item, let route, route.isConcrete,
+               route.connectionID == id.connectionID, route.agentID == id.agentID { dismiss() }
+        }
     }
 
     private func sessions(_ route: ConversationID) -> some View {

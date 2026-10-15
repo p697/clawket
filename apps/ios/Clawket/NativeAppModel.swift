@@ -37,6 +37,9 @@ final class NativeAppModel: ObservableObject {
     private var state = RuntimeConnectionState()
     private var agents: [RuntimeAgent] = []
     private var sessions: [RuntimeSession] = []
+    private var projects: [String: [RuntimeProject]] = [:]
+    private var creatingCatalogs: Set<AgentCatalogID> = []
+    private var unconfirmedCreations: Set<AgentCatalogID> = []
     private var documents: [ConversationID: NativeConversation] = [:]
     private var modelChoices: [ConversationID: [String: RuntimeModel]] = [:]
     private let networkMonitor = NWPathMonitor()
@@ -91,6 +94,10 @@ final class NativeAppModel: ObservableObject {
             switch destination {
             case .addConnection: self.destination = .connect
             case .account, .connectionSettings: self.destination = .connections
+            case .newSession:
+                if case let .openDestination(_, route?) = intent {
+                    createSession(.init(connectionID: route.connectionID, agentID: route.agentID), projectID: nil)
+                }
             default: break // These features remain unsupported in the presentation capability map.
             }
         case let .reconnect(id): activate(id ?? activeConnectionID ?? "")
@@ -98,7 +105,10 @@ final class NativeAppModel: ObservableObject {
         case let .openConversation(route): open(route)
         case .closeConversation: selectionRevision = UUID()
         case let .openAgentCatalog(id), let .refreshCatalog(id): showCatalog(id)
-        case .selectCatalogProject, .createSession: break
+        case let .selectCatalogProject(id, projectID):
+            guard id.connectionID == activeConnectionID else { return }
+            presentation.catalogs[id]?.selectedProjectID = projectID; updateCatalog(id)
+        case let .createSession(id, projectID): createSession(id, projectID: projectID)
         case let .draftChanged(route, text):
             guard documents[route] != nil else { return }
             documents[route]?.draft = text; changed(route); scheduleSave(route)
@@ -326,16 +336,72 @@ final class NativeAppModel: ObservableObject {
     }
 
     private func showCatalog(_ id: AgentCatalogID) {
-        guard id.connectionID == activeConnectionID else { return }
+        guard id.connectionID == activeConnectionID, let runtime else { return }
         updateCatalog(id)
-        refresh()
+        presentation.catalogs[id]?.error = nil
+        presentation.catalogs[id]?.isLoading = true
+        Task {
+            do {
+                if state.phase == .ready {
+                    if state.capabilities.projects {
+                        let values = try await runtime.projects()
+                        guard id.connectionID == activeConnectionID else { return }
+                        projects[id.connectionID] = values
+                    }
+                    _ = try await runtime.refreshRoster()
+                    unconfirmedCreations.remove(id)
+                }
+                guard id.connectionID == activeConnectionID else { return }
+                updateCatalog(id); presentation.catalogs[id]?.isLoading = false
+            } catch {
+                guard id.connectionID == activeConnectionID else { return }
+                presentation.catalogs[id]?.isLoading = false
+                presentation.catalogs[id]?.error = "Conversations could not be refreshed. Check your connection and try again."
+            }
+        }
     }
 
     private func updateCatalog(_ id: AgentCatalogID) {
         guard let agent = agents.first(where: { $0.agentID == id.agentID && $0.connectionID == id.connectionID }) else { return }
+        let previous = presentation.catalogs[id]
+        let projectID = previous?.selectedProjectID
+        let rows = sessionPresentations(connectionID: id.connectionID, agentID: id.agentID).filter { row in
+            projectID == nil || sessions.first(where: { $0.connectionID == id.connectionID && $0.key == row.route.sessionID })?.project?.id == projectID
+        }
+        let creating = creatingCatalogs.contains(id)
+        let unavailableProject = projectID.map { selected in projects[id.connectionID]?.first(where: { $0.id == selected })?.available != true } ?? false
+        var create: ActionAvailability = .unsupported
+        if state.capabilities.sessionCreate {
+            create = state.phase == .ready && !creating && !unavailableProject && !unconfirmedCreations.contains(id) ? .available
+                : .temporarilyUnavailable(creating ? "Creating conversation…" : unavailableProject ? "This project is unavailable." : "Reconnect to create a conversation.")
+            if unconfirmedCreations.contains(id) { create = .temporarilyUnavailable("Refresh conversations before creating another.") }
+        }
         presentation.catalogs[id] = .init(id: id, title: agent.name,
-            sessions: sessionPresentations(connectionID: id.connectionID, agentID: id.agentID),
+            sessions: rows, projects: (projects[id.connectionID] ?? []).map { .init(id: $0.id, title: $0.name) },
+            selectedProjectID: projectID, isLoading: previous?.isLoading ?? false, error: previous?.error,
+            createSession: create,
             refresh: state.phase == .ready ? .available : .temporarilyUnavailable("Reconnect to refresh conversations."))
+    }
+
+    private func createSession(_ id: AgentCatalogID, projectID: String?) {
+        guard id.connectionID == activeConnectionID, state.phase == .ready, state.capabilities.sessionCreate,
+              !creatingCatalogs.contains(id), !unconfirmedCreations.contains(id), let runtime else { return }
+        if let projectID, projects[id.connectionID]?.first(where: { $0.id == projectID })?.available != true { return }
+        creatingCatalogs.insert(id); updateCatalog(id)
+        Task {
+            defer { creatingCatalogs.remove(id); updateCatalog(id) }
+            do {
+                let session = try await runtime.createSession(agentID: id.agentID, projectID: projectID)
+                guard id.connectionID == activeConnectionID else { return }
+                sessions.removeAll { $0.connectionID == id.connectionID && $0.key == session.key }; sessions.append(session)
+                presentation.selectedConversation = .init(connectionID: id.connectionID, agentID: id.agentID, sessionID: session.key)
+                rebuildRoster()
+            } catch {
+                guard id.connectionID == activeConnectionID else { return }
+                unconfirmedCreations.insert(id)
+                presentation.catalogs[id]?.error = "Creation could not be confirmed. Refresh conversations before trying again."
+            }
+        }
     }
 
     private func sessionPresentations(connectionID: String, agentID: String) -> [SessionPresentation] {
@@ -564,6 +630,11 @@ final class NativeAppModel: ObservableObject {
         }
         if state.capabilities.abort && running[route] != nil && session?.canContinue != false { features[.stop] = connected ? .available : .temporarilyUnavailable("Reconnect to stop this run.") }
         if state.capabilities.sessions { features[.sessions] = .available }
+        if state.capabilities.sessionCreate {
+            let catalogID = AgentCatalogID(connectionID: route.connectionID, agentID: route.agentID)
+            features[.newSession] = connected && !creatingCatalogs.contains(catalogID) && !unconfirmedCreations.contains(catalogID) ? .available
+                : .temporarilyUnavailable("Reconnect or refresh conversations before creating another.")
+        }
         if state.capabilities.models {
             features[.models] = connected ? .available : .temporarilyUnavailable("Reconnect to change models.")
             if state.capabilities.modelPerSession && session?.canContinue == false { features[.models] = .temporarilyUnavailable("This conversation is read-only here.") }
