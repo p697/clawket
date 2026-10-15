@@ -39,6 +39,26 @@ jobs:
         run: |
           xcodebuild -version
           swift --version
+      - name: Typecheck native UIKit and SwiftUI against iOS 16.4
+        run: |
+          python3 - <<'PY'
+          import glob
+          import subprocess
+          import sys
+
+          sources = sorted(glob.glob("Sources/ClawketUI/*.swift"))
+          if not sources:
+              sys.exit("ClawketUI source discovery is empty")
+          sdk = subprocess.check_output(
+              ["xcrun", "--sdk", "iphonesimulator", "--show-sdk-path"], text=True
+          ).strip()
+          print(f"Typechecking {len(sources)} native UI sources for iOS 16.4", flush=True)
+          subprocess.run([
+              "xcrun", "swiftc", "-swift-version", "6", "-typecheck",
+              "-target", "arm64-apple-ios16.4-simulator", "-sdk", sdk,
+              "-module-name", "ClawketUI", *sources
+          ], check=True)
+          PY
       - name: Discover native tests
         shell: bash
         run: |
