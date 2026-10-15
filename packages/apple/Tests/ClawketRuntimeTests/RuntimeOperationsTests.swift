@@ -45,7 +45,8 @@ struct RuntimeOperationsTests {
         await runtime.disconnect(); reader.cancel()
     }
 
-    @Test func malformedFrozenCatalogNeverReturnsPartialRoster() async throws {
+    @Test(arguments: [false, true])
+    func malformedFrozenCatalogNeverReturnsPartialRoster(_ oversized: Bool) async throws {
         let socket = ScriptSocket { request, socket in
             let payload: JSONValue = switch request["method"]?.stringValue {
             case "connect": .object(["backend": .string("codex"), "sessionCatalogSync": .number(1)])
@@ -53,12 +54,23 @@ struct RuntimeOperationsTests {
             default: .object(["kind": .string("full"), "epoch": .string(String(repeating: "a", count: 32)), "revision": .string(String(repeating: "b", count: 32)),
                               "offset": .number(0), "total": .number(2), "sessions": .array([session("only-one")]), "nextOffset": .null])
             }
-            try await socket.reply(request, payload: payload)
+            if oversized, request["method"]?.stringValue == "sessions.sync" {
+                let page = await socket.requests("sessions.sync").count
+                if page == 2 {
+                    try await socket.reply(request, payload: .object(["kind": .string("expired"), "epoch": .string(String(repeating: "a", count: 32)),
+                                                                       "padding": .string(String(repeating: "x", count: 65_536))]))
+                } else {
+                    try await socket.reply(request, payload: .object(["kind": .string("full"), "epoch": .string(String(repeating: "a", count: 32)),
+                        "revision": .string(String(repeating: "b", count: 32)), "offset": .number(0), "total": .number(page == 1 ? 2 : 0),
+                        "sessions": .array(page == 1 ? [session("one")] : []), "nextOffset": page == 1 ? .number(1) : .null]))
+                }
+            } else { try await socket.reply(request, payload: payload) }
         }
         let runtime = try RuntimeCoordinator(credentials: Credentials(), socketFactory: ScriptFactory(socket))
         let reader = read(runtime, into: Events())
         try await runtime.activate(connection(.codex))
         await #expect(throws: RuntimeFailure.self) { try await runtime.refreshRoster() }
+        if oversized { #expect(await socket.requests("sessions.sync").count == 2) }
         await runtime.disconnect(); reader.cancel()
     }
 

@@ -111,7 +111,9 @@ extension RuntimeCoordinator {
     private func catalogPage(params: JSONValue = .object([:]), scope: Scope, deadline: Duration) async throws -> JSONValue {
         let remaining = deadline - clock.now()
         guard remaining > .zero else { throw RuntimeFailure(.timeout, retryable: true) }
-        return try await rpc("sessions.sync", params: params, timeout: min(.seconds(20), remaining), scope: scope)
+        let response = try await rpc("sessions.sync", params: params, timeout: min(.seconds(20), remaining), scope: scope)
+        guard (try FrameCodec.encode(response)).utf8.count <= 64 * 1_024 else { throw RuntimeFailure(.invalidResponse) }
+        return response
     }
 
     public func loadSession(key: String, limit: Int = 50, cursor: String? = nil) async throws -> RuntimeHistory {
