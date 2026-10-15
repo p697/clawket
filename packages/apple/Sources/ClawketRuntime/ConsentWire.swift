@@ -7,6 +7,13 @@ struct ConsentKey: Hashable, Sendable {
     let kind: Kind
     let wireID: String
     let sessionKey: String?
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.kind == rhs.kind && lhs.wireID.utf8.elementsEqual(rhs.wireID.utf8) &&
+            lhs.sessionKey.map { Data($0.utf8) } == rhs.sessionKey.map { Data($0.utf8) }
+    }
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(kind); hasher.combine(Data(wireID.utf8)); hasher.combine(sessionKey.map { Data($0.utf8) })
+    }
 }
 
 enum ConsentValue: Sendable {

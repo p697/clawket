@@ -15,15 +15,17 @@ extension RuntimeCoordinator {
         let scope = try scope()
         guard let connection else { throw RuntimeFailure(.notConnected) }
         _ = try ConsentWire.optionalSession(sessionKey)
+        let sessionRevision = try sessionKey.map { try consentSessionRevision($0) }
         guard consents.listCount < 2 else { throw RuntimeFailure(.capacity) }
         consents.listCount += 1
         defer { if isCurrent(scope) { consents.listCount -= 1 } }
-        if let sessionKey {
+        if let sessionKey, let sessionRevision, consentSessionCurrent(sessionKey, revision: sessionRevision) {
             let params: JSONValue = .object(["sessionKey": .string(sessionKey)])
             if [.codex, .claudeCode, .pi].contains(connection.backendKind) {
                 try await refreshConsentList("questions.list", params: params, kind: .question, sessionKey: sessionKey, scope: scope)
             }
-            if [.codex, .claudeCode].contains(connection.backendKind) ||
+            if consentSessionCurrent(sessionKey, revision: sessionRevision),
+               [.codex, .claudeCode].contains(connection.backendKind) ||
                 (connection.backendKind == .hermes && consents.evidence.contains("execution")) {
                 try await refreshConsentList(connection.backendKind == .hermes ? "exec.approval.list" : "approvals.list",
                     params: params, kind: .execution, sessionKey: sessionKey, scope: scope)
@@ -91,13 +93,25 @@ extension RuntimeCoordinator {
         let reference = record.value.reference
         // No await between validation, locking and the sole dispatch. Later events can settle it.
         _ = try checkedConsent(reference)
+        let sessionRevision = try reference.sessionKey.map { try consentSessionRevision($0) }
         consents.revision += 1
         let dispatchRevision = consents.revision
         consents.records[reference.id]?.value.state = .submitting
         consents.records[reference.id]?.revision = dispatchRevision
         publishPending()
+        let dispatch = Task { [weak self] in
+            guard !Task.isCancelled else { throw RuntimeFailure(.superseded) }
+            guard let self else { throw RuntimeFailure(.superseded) }
+            return try await self.rpc(method, params: params, timeout: .seconds(20), scope: record.scope)
+        }
+        consents.records[reference.id]?.dispatch = dispatch
+        defer { consents.records[reference.id]?.dispatch = nil }
         do {
-            let result = try await rpc(method, params: params, timeout: .seconds(20), scope: record.scope)
+            let result = try await withTaskCancellationHandler { try await dispatch.value } onCancel: { dispatch.cancel() }
+            if let session = reference.sessionKey, let sessionRevision,
+               !consentSessionCurrent(session, revision: sessionRevision) {
+                throw RuntimeFailure(.superseded, delivery: .responseReceived)
+            }
             // Gateway exec resolution uses {ok:true}; device/node approval may return its record.
             guard !verifyOK || result["ok"]?.boolValue == true else { throw RuntimeFailure(.invalidResponse, delivery: .responseReceived) }
             if consents.records[reference.id] != nil {
@@ -111,6 +125,10 @@ extension RuntimeCoordinator {
             }
         } catch {
             var failure = runtimeFailure(error)
+            if let session = reference.sessionKey, let sessionRevision,
+               !consentSessionCurrent(session, revision: sessionRevision) {
+                failure = RuntimeFailure(.superseded, delivery: failure.delivery)
+            }
             if isCurrent(record.scope), consents.records[reference.id] != nil {
                 // Only a local failure before dispatch is safe to offer again. A peer error can follow
                 // an accepted native write, so even a malformed or rejected response stays held.
@@ -128,6 +146,8 @@ extension RuntimeCoordinator {
                             sessionKey: String? = nil, scope: Scope) async throws {
         guard !consents.unavailableReads.contains(method), let connection, let transport else { return }
         try assertCurrent(scope)
+        let sessionRevision = try sessionKey.map { try consentSessionRevision($0) }
+        if let sessionKey, let sessionRevision, !consentSessionCurrent(sessionKey, revision: sessionRevision) { return }
         let listKey = ConsentRegistry.ListKey(method: method, sessionKey: sessionKey)
         let listID = UUID()
         consents.listReads[listKey] = listID
@@ -138,9 +158,11 @@ extension RuntimeCoordinator {
             payload = try await transport.request(method: method, params: params, timeout: .seconds(8), generation: scope.generation)
             try assertCurrent(scope)
             guard consents.listReads[listKey] == listID else { return }
+            if let sessionKey, let sessionRevision, !consentSessionCurrent(sessionKey, revision: sessionRevision) { return }
         } catch {
             try assertCurrent(scope)
             guard consents.listReads[listKey] == listID else { return }
+            if let sessionKey, let sessionRevision, !consentSessionCurrent(sessionKey, revision: sessionRevision) { return }
             if let error = error as? RPCFailure, error.code == .remoteRejection, unsupportedConsentRead(error, method: method) {
                 // Optional discovery is read-only. A rejected route is not evidence of support.
                 consents.unavailableReads.insert(method); return
@@ -168,7 +190,8 @@ extension RuntimeCoordinator {
             } else if kind == .execution {
                 let approval = raw["approval"] ?? raw
                 let actualSession = raw["approval"] == nil ? sessionKey : raw["sessionKey"]?.stringValue
-                guard actualSession == sessionKey, approval["kind"]?.stringValue == "exec" else { throw RuntimeFailure(.invalidResponse) }
+                guard actualSession.map({ Data($0.utf8) }) == sessionKey.map({ Data($0.utf8) }),
+                      approval["kind"]?.stringValue == "exec" else { throw RuntimeFailure(.invalidResponse) }
                 item = try ConsentWire.approval(approval, sessionKey: actualSession, connection: connection)
             } else {
                 var value = raw.object ?? [:]
@@ -183,13 +206,15 @@ extension RuntimeCoordinator {
         var prospective = Dictionary(uniqueKeysWithValues: consents.records.values.map { ($0.key, $0.bytes) })
         var settling = Set<ConsentKey>()
         for record in consents.records.values where record.key.kind == kind && record.revision <= revision &&
-            (kind != .execution && kind != .question || record.value.reference.sessionKey == sessionKey) && !seen.contains(record.key) {
+            (kind != .execution && kind != .question || record.value.reference.sessionKey.map { Data($0.utf8) } == sessionKey.map { Data($0.utf8) }) && !seen.contains(record.key) {
             prospective.removeValue(forKey: record.key); settling.insert(record.key)
         }
         for (key, value) in parsed where consents.tombstones[key] == nil {
             if let id = consents.keys[key], let old = consents.records[id] {
                 if old.revision > revision { continue }
-                guard old.value.reference.sessionKey == value.reference.sessionKey else { throw RuntimeFailure(.invalidResponse) }
+                guard old.value.reference.sessionKey.map({ Data($0.utf8) }) == value.reference.sessionKey.map({ Data($0.utf8) }) else {
+                    throw RuntimeFailure(.invalidResponse)
+                }
             }
             prospective[key] = try FrameCodec.encode(value.raw).utf8.count
             if let expiry = value.expiresAtMs, Self.wallMilliseconds() >= expiry { settling.insert(key) }
@@ -197,7 +222,7 @@ extension RuntimeCoordinator {
         guard prospective.count <= 256, prospective.values.reduce(0, +) <= 8 * 1_024 * 1_024,
               Set(consents.tombstones.keys).union(settling).count <= 1_024 else { throw RuntimeFailure(.capacity) }
         for record in consents.records.values where record.key.kind == kind &&
-            (kind != .execution && kind != .question || record.value.reference.sessionKey == sessionKey) && !seen.contains(record.key) {
+            (kind != .execution && kind != .question || record.value.reference.sessionKey.map { Data($0.utf8) } == sessionKey.map { Data($0.utf8) }) && !seen.contains(record.key) {
             try settleConsent(record.key, resolution: .resolved, listRevision: revision)
         }
         for (key, value) in parsed { try applyConsent(key, value: value, scope: scope, listRevision: revision) }

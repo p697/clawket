@@ -124,6 +124,7 @@ extension RuntimeCoordinator {
         let scope = try scope()
         guard !key.isEmpty, key.utf8.count <= 1_024, (1...1_000).contains(limit), cursor?.utf8.count ?? 0 <= 4_096,
               historyPending < 128, historyTasks.count < 32 || historyTasks[key] != nil else { throw RuntimeFailure(.capacity) }
+        let consentHeadRead = cursor == nil ? try beginConsentHistoryRead(key) : nil
         let modelKey = try? modelControlKey(key)
         let modelRevision = modelKey.flatMap { try? modelControlsState.admit($0) }
         let thinkingReadID = UUID()
@@ -149,6 +150,7 @@ extension RuntimeCoordinator {
         do {
             let result = try await task.value; try assertCurrent(scope)
             guard historyRevisions[key] == revision else { throw RuntimeFailure(.superseded, delivery: .responseReceived) }
+            if let consentHeadRead { try acceptConsentHistory(result, headRead: consentHeadRead, scope: scope) }
             if cursor == nil, let level = result.thinkingLevel, let modelKey,
                modelControlsState.contexts[modelKey] == modelRevision, modelControlsState.latestThinkingRead[modelKey] == thinkingReadID,
                modelControlsState.holds[modelKey]?.phase != .pending {

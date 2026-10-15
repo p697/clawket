@@ -132,6 +132,9 @@ extension RuntimeCoordinator {
               sessionManagementState.writes.values.filter({ if case .pending = $0 { true } else { false } }).count < 32 else {
             throw RuntimeFailure(.capacity)
         }
+        if action == .reset || action == .delete {
+            try retireSessionConsents(entry.session.key, writeToken: entry.reference.token)
+        }
         sessionManagementState.invalidate(entry.session.key)
         sessionManagementState.writes[entry.session.key] = .pending(entry.reference.token)
         retireModelControls(sessionKey: entry.session.key, modelMayChange: action == .reset || action == .delete)
@@ -179,6 +182,7 @@ extension RuntimeCoordinator {
             throw RuntimeFailure(.superseded, delivery: .responseReceived)
         }
         sessionManagementState.writes.removeValue(forKey: entry.session.key)
+        finishSessionConsentRetirement(entry.session.key, token: entry.reference.token, notDispatched: false)
         sessionManagementState.invalidateRows()
         // A catalog read started while the write was pending may still contain its old row.
         // The host's post-ACK refresh must start a new RPC, never join that earlier task.
@@ -193,6 +197,7 @@ extension RuntimeCoordinator {
               token == entry.reference.token else { return failure }
         if failure.delivery == .notDispatched || failure.delivery == .rejectedBeforeDispatch {
             sessionManagementState.writes.removeValue(forKey: entry.session.key)
+            finishSessionConsentRetirement(entry.session.key, token: entry.reference.token, notDispatched: true)
             if let key = try? modelControlKey(entry.session.key) { modelControlsState.sessionModelChanges.remove(key) }
         } else { sessionManagementState.writes[entry.session.key] = .uncertain }
         return failure

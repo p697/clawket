@@ -2,7 +2,24 @@ import Foundation
 import ClawketTransport
 
 struct ConsentRegistry: Sendable {
-    struct ListKey: Hashable, Sendable { let method: String; let sessionKey: String? }
+    struct ListKey: Hashable, Sendable {
+        let method: String
+        let sessionKey: String?
+        static func == (lhs: Self, rhs: Self) -> Bool {
+            lhs.method == rhs.method && lhs.sessionKey.map { Data($0.utf8) } == rhs.sessionKey.map { Data($0.utf8) }
+        }
+        func hash(into hasher: inout Hasher) { hasher.combine(method); hasher.combine(sessionKey.map { Data($0.utf8) }) }
+    }
+    struct SessionContext: Sendable {
+        var revision = UUID()
+        var physicalID: Data?
+        var headRead: UUID?
+    }
+    struct SessionRetirement: Sendable {
+        let token: UUID
+        // Only formerly pending reviews may be observed anew after a proven local non-dispatch.
+        let recoverable: [ConsentKey: UInt64]
+    }
     struct Record: Sendable {
         let key: ConsentKey
         var value: ConsentValue
@@ -10,6 +27,7 @@ struct ConsentRegistry: Sendable {
         var revision: UInt64
         let deadline: Duration?
         let bytes: Int
+        var dispatch: Task<JSONValue, any Error>? = nil
     }
     struct Confirmation: Sendable {
         let reference: RuntimeRequestReference
@@ -24,11 +42,14 @@ struct ConsentRegistry: Sendable {
     var revision: UInt64 = 0
     var listCount = 0
     var listReads: [ListKey: UUID] = [:]
+    var sessions: [Data: SessionContext] = [:]
+    var sessionRetirements: [Data: SessionRetirement] = [:]
 }
 
 extension RuntimeCoordinator {
     func resetConsents() {
         consentExpiryTask?.cancel(); consentExpiryTask = nil
+        for record in consents.records.values { record.dispatch?.cancel() }
         if let connection, !consents.records.isEmpty {
             emit(.pendingRequests(.init(connectionID: connection.id, approvals: [], questions: [])))
         }
@@ -50,6 +71,7 @@ extension RuntimeCoordinator {
 
     func applyConsent(_ key: ConsentKey, value: ConsentValue, scope: Scope, listRevision: UInt64? = nil) throws {
         try assertCurrent(scope)
+        if let session = value.reference.sessionKey, consentSessionHeld(session) { return }
         if let removed = consents.tombstones[key] {
             if listRevision == nil || removed > listRevision! { return }
             // A settled ID cannot become a fresh actionable request on the same authentication.
@@ -57,7 +79,9 @@ extension RuntimeCoordinator {
         }
         if let id = consents.keys[key], let old = consents.records[id] {
             if let listRevision, old.revision > listRevision { return }
-            guard old.value.reference.sessionKey == value.reference.sessionKey else { throw RuntimeFailure(.invalidResponse) }
+            guard old.value.reference.sessionKey.map({ Data($0.utf8) }) == value.reference.sessionKey.map({ Data($0.utf8) }) else {
+                throw RuntimeFailure(.invalidResponse)
+            }
             // Rewording or list metadata cannot turn an in-flight/unknown write into another action.
             guard old.value.state == .pending else { return }
             if old.value.raw == value.raw { return }
@@ -103,6 +127,7 @@ extension RuntimeCoordinator {
     func checkedConsent(_ reference: RuntimeRequestReference) throws -> ConsentRegistry.Record {
         guard let record = consents.records[reference.id], record.value.reference == reference,
               reference.connectionID == connection?.id, isCurrent(record.scope) else { throw RuntimeFailure(.requestUnavailable) }
+        if let session = reference.sessionKey, consentSessionHeld(session) { throw RuntimeFailure(.requestUnavailable) }
         if expired(record) {
             try settleConsent(record.key, resolution: .expired); publishPending()
             throw RuntimeFailure(.requestExpired)

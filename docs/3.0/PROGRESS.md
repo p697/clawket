@@ -1,5 +1,12 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-16 Native 会话 consent 权限退休（协议窄测通过，设备与 physical host 整合另验）。
+  - reset/delete 在完整本地校验后、唯一管理 RPC 前，同步退休原 UTF8 session 的问题/批准引用、30秒 Always token、在途请求等待与两阶段旧列表。rename/copy/archive 不假定 physical reset；保留其他 route、缺 session 的执行请求与连接级 device/node。只发 pending 状态移除，不伪称 backend resolved；迟 ACK 不作用新卡，也不重放旧写。
+  - 只有 current auth/history revision 下最新 loadSession head 的真实已知→已知 sessionId 更换触发同样退休；nil/首次已知、cursor、catalog 推断与 export 纯读不改变权限。wire key/route/physical ID 均按原 UTF8，至多1024个 context 不驱逐旧权限；已观测 physical 更换若不能有界退休则关闭该认证。严格本地 notDispatched/rejectedBeforeDispatch 后，仅新实际 review 可为原 pending 请求发新 UUID，旧引用/确认永不复活；原 submitting/unknown consent 不复活，未知 reset/delete 保持该 route 锁，不由 list/history/metadata 解开。
+  - memory45%/无 compiler 预检、heavy/jobs2 下严格 Swift6 首编34.47秒，两个新增文件 SessionConsent6函数/18参数输入与 PhysicalHistory5/9全绿；逐文件既有 ConsentLifecycle8/8、SessionManagementRecovery7/11全绿，共26函数/46输入。覆盖五个可管理后端 reset/delete、真实128 RPC容量导致未派发、旧 Always、新旧列表/ACK并发、nil/全局请求保留、non-older实际历史、export隔离及NFC/NFD。首轮 Claude fixture 误用不支持的 input，改成真实 form oracle 后通过，不改生产能力/断言；在途取消另有完成先于迟ACK的明确检查。15指令对/7docs、diff与metrics通过后已释放heavy；不跑完整本机suite或模拟器。Swift净增148源行/370测试行，原TS/TSX167,902/132,119及617测试文件、194文档保持；current-main全门禁交PR，手机/Relay/physical host验收未冒称完成。
+  - 前一参与者/provenance #251 已全13绿/current-main合并 c00bb1cd 并finish：exact1b768379 package389（59+330）、actual App112（5.713秒）、19语6878精确编译值，Windows首轮通过。本轮不改Mobile/Bridge/Worker/协议、Host/UI、凭据/版本或发布；来源与限制见现有 `docs/native-ios/RUNTIME.md`。
+  - 869278ee/设置主线50d的完整package403（59 XCTest+344 SwiftTesting）及其余旧门禁通过，实际127 App仅ReadingRestoration固定offset 1032≠-30失败，保留原红证据且不盲重跑。独立#254修复真实观察/估算行高链路并全13绿后，才一次重基主线5c9f9fb7；完整保留Saved/导出与193 App回归、412 UI+4权限/19语7,904值，Runtime-only本轮不改App测试门槛。组合head实际执行仍交本轮完整CI，不用主线通过代替新head验证。
+
 - 2026-10-16 Native transcript 阅读恢复实际模拟器修复（#254切片继续）。
   - 新真实window回归只改published reading scope/font、不替换hosting root；旧实现在该case出现六处断言失败，负向进程在teardown期间被中止，因此仅记录case失败证据。修复后第一轮仍暴露首可见行与指定恢复行不同，后两轮暴露estimated row geometry过早被保存，全部保留原位置断言继续修复，未把原红灯当flaky盲重跑。
   - NativeTranscript现在直接观察model，字体变化的同步willSet先捕获实际首可见行；首次恢复仍保留requested row直到行高落定，不在一般capture中采用瞬时估算首行。离屏目标先materialize，再有界两轮layout/offset校正及0.5pt no-op保护。独立源审确认无订阅retain cycle、异步actor跳转或无限scroll。
@@ -37,6 +44,7 @@
   - 全19语379UI+4权限/7,277编译值精确匹配，21新key中18复用Mobile，目录6/编译资源4/报告3/14指令对与7docs回归通过。完整current-main CI/USB导航冷恢复与44pt复验继续；壁纸/气泡/图标/语言选择、同bundle偏好/权益迁移与其余parity未宣布完成，无商店替换/版本/服务/分发/发布。详见`docs/native-ios/SETTINGS-NAVIGATION.md`。
 
   - 首轮current-head远端package392（59 XCTest+333 SwiftTesting）和全部旧TS/双桌面绿，但实际127 App回归揭示真实self-sizing初始锚点偏移130≠8与旧pure权限准备退休使新review read永久loading。现保留准确row anchor并在后续geometry稳定重定位，新scope即使消息未变也应用恢复；pure prepare完成只对精确仍loading新review发fresh read，绝不放宽原write/read fence，并确定性覆盖held-read/ready/new-write三排序。SwiftUI虚拟AX树无法在unit宿主枚举，因此五个voice文字动作改真正UIKit UIButton，新增第20个真实UI源码；验证直接核实际control命中区/AX metadata/target-action，而非伪称外层SwiftUI frame为可点证明。首轮v1另因旧wrangler端口bind os98失败，最终代码新head须重走完整门禁，不绕红或放宽断言。修复后heavy/jobs2下20真实UI源码typecheck、该model单方法三种确定排序（0.053秒）通过，actual App/127方法双架构generic增量再次成功，立即释放ios/heavy给负责人；原生表格阅读/UIButton真实执行及完整current-main门禁交新head CI，无本机sim启动。
+
 
 - 2026-10-16 Native 参与者与消息来源契约（协议验证通过，host整合继续）。
   - RuntimeMessage区分真实providedID与provided/synthetic/ambiguousProvided来源，重复真实ID保留全部消息并使用独立显示fallback；旧cache缺字段保持nil，不靠前缀、正文hash、page index、时钟或角色猜真实身份。RuntimeHistory仅保留真实top-level sessionId及既有thinkingLevel；OpenClaw exact transcriptPosition(source/rawSeq)与system reset/compaction kind独立typed保存，不改wire顺序/时钟，不凭“Reset”正文断定变更。
