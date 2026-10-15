@@ -412,11 +412,13 @@ private struct NativeConversationView: View {
     @State private var following = true
     @State private var scrollRequest = 0
     @State private var visibilityID = UUID()
+    @State private var ownedReadingScope: UUID?
     @Environment(\.scenePhase) private var scenePhase
 
     private func reportReadingVisibility(_ visible: Bool) {
-        guard let scope = model.readingContexts[conversation.id]?.id else { return }
-        onIntent(.conversationReadingVisibilityChanged(conversation.id, scopeID: scope, visible: visible))
+        if visible { ownedReadingScope = model.readingContexts[conversation.id]?.id }
+        guard let scope = ownedReadingScope else { return }
+        onIntent(.conversationReadingVisibilityChanged(conversation.id, viewID: visibilityID, scopeID: scope, visible: visible))
     }
     private var canRead: Bool { !obscured && !expanded && scenePhase == .active }
 

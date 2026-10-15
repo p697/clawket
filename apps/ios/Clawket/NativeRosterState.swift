@@ -6,7 +6,9 @@ import Foundation
 @MainActor
 final class NativeRosterState {
     private(set) var document = NativeRosterDocument()
+    private(set) var index = NativeRosterIndex()
     private var desired = NativeRosterDocument()
+    private var desiredIndex = NativeRosterIndex()
     private(set) var canSave = false
     private var store: NativeRosterStore?
     private var pending: NativeRosterDocument?
@@ -17,7 +19,7 @@ final class NativeRosterState {
     func load() async {
         do {
             let store = try store ?? NativeRosterStore(); self.store = store
-            document = try await store.read(); desired = document; canSave = true
+            document = try await store.read(); desired = document; index = .init(document); desiredIndex = index; canSave = true
         } catch { canSave = false; onFailure?() }
     }
     func setAgentPinned(_ scope: AgentCatalogID, pinned: Bool) {
@@ -39,9 +41,11 @@ final class NativeRosterState {
         guard canSave, !desired.hasBaseline(connectionID) else { return }
         mutate { value in
             value.baselines.append(connectionID)
-            for session in sessions where session.connectionID.utf8.elementsEqual(connectionID.utf8) {
-                if let time = NativeRosterProjection.activity(session) { value.mark(NativeRosterProjection.route(session), through: time) }
+            let entries = sessions.filter { $0.connectionID.utf8.elementsEqual(connectionID.utf8) }.compactMap { session -> NativeRosterWatermark? in
+                guard let time = NativeRosterProjection.activity(session) else { return nil }
+                return .init(route: NativeRosterProjection.route(session), activityAtMs: time)
             }
+            value.markMany(entries)
         }
     }
     /// Uses only actual human-activity clocks. A missing/null clock never manufactures Now.
@@ -49,17 +53,17 @@ final class NativeRosterState {
         let entries = sessions.compactMap { session -> (ConversationID, Int64)? in
             guard let time = NativeRosterProjection.activity(session) else { return nil }
             let route = NativeRosterProjection.route(session)
-            return time > desired.watermark(route) ? (route, time) : nil
+            return time > desiredIndex.watermarks[route, default: 0] ? (route, time) : nil
         }
         guard !entries.isEmpty else { return }
-        mutate { value in for (route, time) in entries { value.mark(route, through: time) } }
+        mutate { value in value.markMany(entries.map { .init(route: $0.0, activityAtMs: $0.1) }) }
     }
     func flush() async { if let saveTask { await saveTask.value } }
     private func mutate(_ change: (inout NativeRosterDocument) -> Void) {
         guard canSave else { return }
         do {
             var next = desired; change(&next); try next.advance(); try next.validate()
-            desired = next; pending = next; startSaving()
+            desired = next; desiredIndex = .init(next); pending = next; startSaving()
         } catch { canSave = false; onFailure?(); onChange?() }
     }
     private func startSaving() {
@@ -69,7 +73,7 @@ final class NativeRosterState {
             defer { self.saveTask = nil }
             while let value = self.pending {
                 self.pending = nil
-                do { try await store.write(value); self.document = value; self.onChange?() }
+                do { try await store.write(value); self.document = value; self.index = .init(value); self.onChange?() }
                 catch { self.pending = nil; self.canSave = false; self.onFailure?(); self.onChange?(); return }
             }
         }
@@ -78,10 +82,12 @@ final class NativeRosterState {
 
 /// Presence is separate from a persisted selection and fenced by the current transcript open.
 struct NativeRosterReadingVisibility {
-    private var visible: (route: ConversationID, scope: UUID)?
-    mutating func update(_ route: ConversationID, scope: UUID, visible: Bool) {
-        if visible { self.visible = (route, scope) }
-        else if self.visible?.route == route && self.visible?.scope == scope { self.visible = nil }
+    private var visible: (route: ConversationID, viewID: UUID, scope: UUID)?
+    mutating func update(_ route: ConversationID, viewID: UUID, scope: UUID, visible: Bool, currentView: Bool) {
+        if visible {
+            guard currentView else { return }
+            self.visible = (route, viewID, scope)
+        } else if self.visible?.route == route && self.visible?.scope == scope && self.visible?.viewID == viewID { self.visible = nil }
     }
     func contains(_ route: ConversationID, scope: UUID?) -> Bool { visible?.route == route && visible?.scope == scope }
     func permitsRead(_ route: ConversationID, scope: UUID?, foreground: Bool, live: Bool,

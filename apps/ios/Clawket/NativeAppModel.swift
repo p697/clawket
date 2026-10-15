@@ -222,9 +222,10 @@ final class NativeAppModel: ObservableObject {
             guard let session = rosterSession(route), let agent = rosterAgent(.init(connectionID: route.connectionID, agentID: route.agentID)),
                   canUseRosterActions(agent), rosterIsLive else { return }
             rosterState.markRead([session])
-        case let .conversationReadingVisibilityChanged(route, scope, visible):
+        case let .conversationReadingVisibilityChanged(route, viewID, scope, visible):
             guard presentation.acceptsReadingContext(for: route, scopeID: scope) else { return }
-            rosterReading.update(route, scope: scope, visible: visible); markVisibleRosterRead()
+            rosterReading.update(route, viewID: viewID, scope: scope, visible: visible,
+                currentView: conversationVisibility.isShowing(route, viewID: viewID)); markVisibleRosterRead()
         case let .openDestination(destination, _):
             retireVoice()
             switch destination {
@@ -578,6 +579,7 @@ final class NativeAppModel: ObservableObject {
         presentation.isLoading = false
         markVisibleRosterRead()
         let snapshot = rosterState.document
+        let index = rosterState.index
         let summaries = NativeRosterProjection.summaries(agents: agents, sessions: sessions, document: snapshot,
             connectionID: activeConnectionID ?? "", live: rosterIsLive)
         presentation.agents = summaries.flatMap { summary -> [AgentPresentation] in
@@ -596,16 +598,16 @@ final class NativeAppModel: ObservableObject {
                 isWorking: rosterIsLive && summary.sessions.contains(where: \.hasActiveRun),
                 cachedLabel: rosterIsLive ? nil : String(localized: "Saved on this device"), isPinned: summary.pinned,
                 localActions: .init(pin: localAccess ? .available : .unsupported,
-                    markRead: localAccess && rosterIsLive && summary.sessions.contains(where: { NativeRosterProjection.unread($0, document: snapshot, live: true) }) ? .available : .unsupported,
+                    markRead: localAccess && rosterIsLive && summary.sessions.contains(where: { NativeRosterProjection.unread($0, index: index, live: true) }) ? .available : .unsupported,
                     connectionSettings: .available))]
             rows += summary.home.map { session in
                 AgentPresentation(id: NativeRosterProjection.renderID(scope, sessionID: session.key), route: NativeRosterProjection.route(session),
                     kind: .pinnedSession, name: displayTitle(for: session), subtitle: session.preview ?? "", backendLabel: backend,
                     symbol: "bubble.left", initials: String(agent.name.prefix(1)), timeLabel: rosterTime(NativeRosterProjection.activity(session)),
-                    attention: rosterIsLive ? NativeRosterProjection.attention(session) : .none,
+                    unread: NativeRosterProjection.unread(session, index: index, live: rosterIsLive), attention: rosterIsLive ? NativeRosterProjection.attention(session) : .none,
                     isWorking: rosterIsLive && session.hasActiveRun, cachedLabel: rosterIsLive ? nil : String(localized: "Saved on this device"),
                     localActions: .init(pin: localAccess ? .available : .unsupported,
-                        markRead: localAccess && NativeRosterProjection.unread(session, document: snapshot, live: rosterIsLive) ? .available : .unsupported))
+                        markRead: localAccess && NativeRosterProjection.unread(session, index: index, live: rosterIsLive) ? .available : .unsupported))
             }
             return rows
         }
@@ -734,14 +736,14 @@ final class NativeAppModel: ObservableObject {
                   title: displayTitle(for: session), subtitle: session.preview,
                   symbol: session.hasActiveRun ? "ellipsis.bubble" : "bubble.left",
                   isSelected: presentation.selectedConversation == .init(connectionID: connectionID, agentID: agentID, sessionID: session.key),
-                  unread: NativeRosterProjection.unread(session, document: rosterState.document, live: rosterIsLive),
+                  unread: NativeRosterProjection.unread(session, index: rosterState.index, live: rosterIsLive),
                   management: managementAvailability, isArchived: session.archived == true,
-                  isOnHome: rosterState.document.preference(.init(connectionID: connectionID, agentID: agentID)).homeSessions.contains { $0.utf8.elementsEqual(session.key.utf8) },
+                  isOnHome: rosterState.index.preference(.init(connectionID: connectionID, agentID: agentID)).homeSessions.contains { $0.utf8.elementsEqual(session.key.utf8) },
                   homeAction: rosterAgent(.init(connectionID: connectionID, agentID: agentID)).map {
                       canUseRosterActions($0) && session.archived != true && session.allowedActions?.pin == true ? .available : .unsupported
                   } ?? .unsupported,
                   markReadAction: rosterAgent(.init(connectionID: connectionID, agentID: agentID)).map {
-                      canUseRosterActions($0) && NativeRosterProjection.unread(session, document: rosterState.document, live: rosterIsLive) ? .available : .unsupported
+                      canUseRosterActions($0) && NativeRosterProjection.unread(session, index: rosterState.index, live: rosterIsLive) ? .available : .unsupported
                   } ?? .unsupported)
         }
     }

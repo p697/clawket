@@ -148,6 +148,7 @@ enum NativeNavigationRestoration {
 /// A stale hidden callback cannot stop a newer visible A after A → B → A.
 struct NativeConversationVisibility {
     private var visible: (route: NativeStoredRoute, id: UUID)?
+    func isShowing(_ route: ConversationID, viewID: UUID) -> Bool { visible?.route == NativeStoredRoute(route) && visible?.id == viewID }
     mutating func update(_ route: ConversationID, viewID: UUID, isVisible: Bool) -> Bool {
         guard route.isConcrete else { return false }
         let key = NativeStoredRoute(route)

@@ -38,12 +38,33 @@ struct NativeRosterDocument: Codable, Sendable {
     }
     func watermark(_ route: ConversationID) -> Int64 { watermarks.first { $0.route == route }?.activityAtMs ?? 0 }
     func hasBaseline(_ connectionID: String) -> Bool { baselines.contains { $0.utf8.elementsEqual(connectionID.utf8) } }
-    mutating func mark(_ route: ConversationID, through timestamp: Int64) {
-        guard timestamp >= 0, timestamp <= 9_007_199_254_740_991 else { return }
-        if let index = watermarks.firstIndex(where: { $0.route == route }) {
-            watermarks[index].activityAtMs = max(watermarks[index].activityAtMs, timestamp)
-        } else { watermarks.append(.init(route: route, activityAtMs: timestamp)) }
+    mutating func mark(_ route: ConversationID, through timestamp: Int64) { markMany([.init(route: route, activityAtMs: timestamp)]) }
+    mutating func markMany(_ entries: [NativeRosterWatermark]) {
+        var positions: [ConversationID: Int] = [:]
+        for (index, value) in watermarks.enumerated() { positions[value.route] = index }
+        for entry in entries where (0...9_007_199_254_740_991).contains(entry.activityAtMs) {
+            if let index = positions[entry.route] { watermarks[index].activityAtMs = max(watermarks[index].activityAtMs, entry.activityAtMs) }
+            else { positions[entry.route] = watermarks.count; watermarks.append(entry) }
+        }
     }
+
+}
+
+/// Built once per verified/desired revision; 10,000-session rosters never scan all watermarks per row.
+struct NativeRosterIndex {
+    var isValid = false
+    var preferences: [AgentCatalogID: NativeRosterPreference] = [:]
+    var baselines: Set<Data> = []
+    var watermarks: [ConversationID: Int64] = [:]
+    init(_ document: NativeRosterDocument = .init()) {
+        guard (try? document.validate()) != nil else { return }
+        isValid = true
+        preferences = Dictionary(uniqueKeysWithValues: document.preferences.map { ($0.scope, $0) })
+        baselines = Set(document.baselines.map { Data($0.utf8) })
+        watermarks = Dictionary(uniqueKeysWithValues: document.watermarks.map { ($0.route, $0.activityAtMs) })
+    }
+    func preference(_ scope: AgentCatalogID) -> NativeRosterPreference { preferences[scope] ?? .init(scope: scope) }
+    func hasBaseline(_ connectionID: String) -> Bool { baselines.contains(Data(connectionID.utf8)) }
 }
 
 /// One bounded protected display document. Unknown replacement never permits a retry from memory.

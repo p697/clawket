@@ -45,6 +45,13 @@ final class NativeRosterTests: XCTestCase, @unchecked Sendable {
         XCTAssertFalse(try XCTUnwrap(summary.first).unread); XCTAssertEqual(summary.first?.attention, .approval)
         let reopened = NativeRosterState(store: try NativeRosterStore(values: values)); await reopened.load()
         XCTAssertEqual(reopened.document.watermark(NativeRosterProjection.route(old)), 200)
+        let large = try (0..<10_000).map { try rosterSession("catalog-\($0)", kind: "other", time: Int64($0 + 1)) }
+        state.seedIfUnset(connectionID: "new", sessions: [])
+        // A real maximum-size catalog is merged once; an already tracked connection never reseeds.
+        let freshState = NativeRosterState(store: try NativeRosterStore(values: RosterValues())); await freshState.load()
+        freshState.seedIfUnset(connectionID: "c", sessions: large); await freshState.flush()
+        XCTAssertEqual(freshState.index.watermarks.count, 10_000)
+        XCTAssertFalse(NativeRosterProjection.unread(large[9_999], index: freshState.index, live: true))
     }
     @MainActor func testExplicitUnknownActivityAndBackgroundKindsNeverBecomeNowOrMetadataUnread() async throws {
         let state = NativeRosterState(store: try NativeRosterStore(values: RosterValues())); await state.load()
@@ -109,16 +116,22 @@ final class NativeRosterTests: XCTestCase, @unchecked Sendable {
     func testReadPolicyRequiresVisibleCurrentScopeAndHistoryNotMerelyPersistedSelectedRoute() {
         let route = ConversationID(connectionID: "c", agentID: "a", sessionID: "s"), first = UUID(), reopened = UUID()
         var visibility = NativeRosterReadingVisibility()
+        let firstView = UUID(), newView = UUID()
         func permitted(_ state: NativeRosterReadingVisibility, _ scope: UUID, foreground: Bool = true, live: Bool = true,
                        history: Bool = true, obscured: Bool = false, held: Bool = false) -> Bool {
             state.permitsRead(route, scope: scope, foreground: foreground, live: live, historyReady: history, obscured: obscured, held: held)
         }
-        XCTAssertFalse(permitted(visibility, first)); visibility.update(route, scope: first, visible: true)
+        XCTAssertFalse(permitted(visibility, first)); visibility.update(route, viewID: firstView, scope: first, visible: true, currentView: true)
         XCTAssertTrue(permitted(visibility, first)); XCTAssertFalse(permitted(visibility, first, foreground: false))
         XCTAssertFalse(permitted(visibility, first, live: false)); XCTAssertFalse(permitted(visibility, first, history: false))
         XCTAssertFalse(permitted(visibility, first, obscured: true)); XCTAssertFalse(permitted(visibility, first, held: true))
-        visibility.update(route, scope: reopened, visible: true); visibility.update(route, scope: first, visible: false)
+        visibility.update(route, viewID: newView, scope: reopened, visible: true, currentView: true); visibility.update(route, viewID: firstView, scope: first, visible: false, currentView: false)
         XCTAssertTrue(permitted(visibility, reopened)); XCTAssertFalse(permitted(visibility, first))
+        // The actual old view may accidentally observe the new global scope; its frozen view ID still cannot retire or impersonate A2.
+        visibility.update(route, viewID: firstView, scope: reopened, visible: false, currentView: false)
+        XCTAssertTrue(permitted(visibility, reopened))
+        visibility.update(route, viewID: firstView, scope: first, visible: true, currentView: false)
+        XCTAssertTrue(permitted(visibility, reopened))
         let wire = UUID(), oldSuccessfulRead = NativeRosterHistoryRead(wire: wire, readingScope: first)
         XCTAssertTrue(oldSuccessfulRead.isCurrent(wire: wire, readingScope: first))
         // A's former success cannot mark a newly visible A read while its new head is held or fails.
@@ -128,13 +141,13 @@ final class NativeRosterTests: XCTestCase, @unchecked Sendable {
         XCTAssertNil(NativeRosterHistoryRead.accepted(wire: wire, readingScope: reopened, earlier: true))
         XCTAssertNil(NativeRosterHistoryRead.accepted(wire: wire, readingScope: nil, earlier: false))
         XCTAssertEqual(NativeRosterHistoryRead.accepted(wire: wire, readingScope: reopened, earlier: false)?.readingScope, reopened)
-        visibility.update(route, scope: reopened, visible: false); XCTAssertFalse(permitted(visibility, reopened))
+        visibility.update(route, viewID: newView, scope: reopened, visible: false, currentView: false); XCTAssertFalse(permitted(visibility, reopened))
     }
     @MainActor func testOpaqueUnicodeWatermarksPinsAndRenderKeysRemainByteDistinct() async throws {
         let state = NativeRosterState(store: try NativeRosterStore(values: RosterValues())); await state.load()
         let first = try rosterSession("\u{00e9}", time: 100), second = try rosterSession("e\u{0301}", time: 200)
         state.seedIfUnset(connectionID: "c", sessions: [first, second]); state.markRead([first]); await state.flush()
-        XCTAssertEqual(state.document.watermarks.count, 2)
+        XCTAssertEqual(state.document.watermarks.count, 2); XCTAssertEqual(state.index.watermarks.count, 2)
         XCTAssertEqual(state.document.watermark(NativeRosterProjection.route(first)), 100)
         XCTAssertEqual(state.document.watermark(NativeRosterProjection.route(second)), 200)
         let a = AgentCatalogID(connectionID: "c", agentID: "\u{00e9}"), b = AgentCatalogID(connectionID: "c", agentID: "e\u{0301}")

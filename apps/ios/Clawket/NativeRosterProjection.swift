@@ -25,8 +25,11 @@ enum NativeRosterProjection {
         return value
     }
     static func unread(_ session: RuntimeSession, document: NativeRosterDocument, live: Bool) -> Bool {
-        guard live, document.hasBaseline(session.connectionID), let time = activity(session) else { return false }
-        return time > document.watermark(route(session))
+        unread(session, index: .init(document), live: live)
+    }
+    static func unread(_ session: RuntimeSession, index: NativeRosterIndex, live: Bool) -> Bool {
+        guard live, index.isValid, index.hasBaseline(session.connectionID), let time = activity(session) else { return false }
+        return time > index.watermarks[route(session), default: 0]
     }
     static func attention(_ session: RuntimeSession) -> AgentPresentation.Attention {
         switch session.raw["attention"]?.stringValue {
@@ -45,11 +48,15 @@ enum NativeRosterProjection {
     }
     static func summaries(agents: [RuntimeAgent], sessions: [RuntimeSession], document: NativeRosterDocument,
                           connectionID: String, live: Bool) -> [Summary] {
+        let index = NativeRosterIndex(document)
+        guard index.isValid else { return [] }
+        let sessionsByScope = Dictionary(grouping: sessions.filter { $0.connectionID.utf8.elementsEqual(connectionID.utf8) },
+            by: { AgentCatalogID(connectionID: $0.connectionID, agentID: $0.agentID) })
         let matching = agents.filter { $0.connectionID.utf8.elementsEqual(connectionID.utf8) }
         let counts = Dictionary(grouping: matching, by: { scope($0) }).mapValues(\.count)
         return matching.filter { counts[scope($0)] == 1 }.map { agent in
-            let scope = scope(agent), preference = document.preference(scope)
-            let owned = sessions.filter { scope == AgentCatalogID(connectionID: $0.connectionID, agentID: $0.agentID) }
+            let scope = scope(agent), preference = index.preference(scope)
+            let owned = sessionsByScope[scope] ?? []
             let recent = owned.filter { activity($0) != nil }.sorted {
                 if activity($0) != activity($1) { return (activity($0) ?? -1) > (activity($1) ?? -1) }
                 let firstMain = $0.key.utf8.elementsEqual(agent.mainSessionKey.utf8)
@@ -63,7 +70,7 @@ enum NativeRosterProjection {
                       session.archived != true, session.allowedActions?.pin == true else { return nil }
                 return session
             }
-            let unread = owned.contains { $0.key.utf8.elementsEqual(agent.mainSessionKey.utf8) && Self.unread($0, document: document, live: live) }
+            let unread = owned.contains { $0.key.utf8.elementsEqual(agent.mainSessionKey.utf8) && Self.unread($0, index: index, live: live) }
             let attention = live ? owned.reduce(AgentPresentation.Attention.none) { stronger($0, Self.attention($1)) } : .none
             return Summary(agent: agent, sessions: owned, home: home, recent: recent,
                 lastActivityAtMs: recent.flatMap(activity), unread: unread, attention: attention, pinned: preference.pinned)

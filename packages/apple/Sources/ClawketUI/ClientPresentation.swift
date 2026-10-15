@@ -668,7 +668,7 @@ public enum ClientIntent: Sendable {
     case setSessionOnHome(ConversationID, visible: Bool)
     case markAgentRead(AgentCatalogID)
     case markSessionRead(ConversationID)
-    case conversationReadingVisibilityChanged(ConversationID, scopeID: UUID, visible: Bool)
+    case conversationReadingVisibilityChanged(ConversationID, viewID: UUID, scopeID: UUID, visible: Bool)
     case openAgentCatalog(AgentCatalogID)
     case selectCatalogProject(AgentCatalogID, projectID: String?)
     case createSession(AgentCatalogID, projectID: String?)
