@@ -1,5 +1,11 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-16 Native 长文本宽度修复与 USB 工具链验收（负责人授权，完整 parity 继续）。
+  - 主线9aebc8d0在唯一USB测试机经WebDriver验证真实Hermes QA会话冷恢复及20/30秒后台返回；内容、composer与路由保持，第三次20秒返回初次AX采样后0.811秒稳定，不把过渡动画中的缺header当持续故障。发现实际420pt窗口内长消息宽650/750pt、input宽420pt且send位于x749越屏，工具测试仍是未派发草稿；精确清除该测试草稿，未把WDA click成功误报为真实发送。
+  - TextKit读取和同实例composer编辑器仅采用父级有限width proposal，不将单行intrinsic宽作为聊天最小宽；气泡/输入列可在compact宽度收缩。保留文本选择、原生换行与StateObject编辑器。新增三项实际UIHostingController/window、UITableView diffable-cell几何回归，覆盖320/420/768pt长正文、原生可选文、输入控件为动作留空间、展开同TextView/选区，不使用另外的渲染fixture。媒体c912b27b重基后两架构generic Simulator实际App及全部63测试方法开发编译成功；测试实际执行交PR CI，不启动本机模拟器。报告validator三项（拒绝62及以下）、14指令对/7docs回归、19语272UI/3权限源码检查与diff通过；Swift源净增18行/测试123行，既有TS/TSX167,902/132,119及617测试文件保持；c912验证基线187文档，本轮不增文档。
+  - 4d8adf0a+layout开发版在同一USB QA bundle实际安装复查：用户气泡x56/宽344、Agent正文x20/宽380、input x12/宽344、send x364/44×44，文字换行且发送控件完整可见。精确一次发出无文件读写的printf测试；真实Agent回复native-tool-ok、独立work sheet恰一条工具、命令预览和原始输出匹配。仅重启QA App后，原会话/回复/dock及这一条工具的原始输出仍可读取；没有重发或重启服务。原先未派发的测试不计入这次真实执行。
+  - journal主线#242最终实际CI为44 App、243 package；设备批准#241最终为47 App、254 package，均全部13门禁绿后合并，不能用编译替代设备/后端证据。当前仍待完整历史/参与者归属、OpenClaw实机批准与推理、Relay/媒体/语音及其余parity；原始UUID标题另行修复。未改商店安装、版本、分发/归档、线上服务或发布。
+
 - 2026-10-16 Native Relay 保活与大帧保护（真实手机/Relay恢复验收仍待后续）。
   - Full client 在已实现/验证后新增 client-ping 与 transfer-hint 广告，仅当前 Relay ready 协商、实际 backend ready、前台后启用5秒 nonce/5秒回声。保留独立旧 tick/pong 三间隔下限，回声只证实同 Socket Relay 返回路径，不建立 backend ready/重置退避；普通流量/重复ready/失败发送不推迟原保活截止，旧代际与已取消 timer 不能影响继任者。
   - 原生 async 大帧在真实派发前有界预占，实际128 KiB–8 MiB、并发双向共用绝对90秒预算；全体覆盖 upload 完成、input完整交付及最新代际 fresh nonce 才能解锁。完整下载只清该方向，response 先到不丢 send 所有权，失败 reservation 不留下 grace；后台/sleep/同 Socket challenge 保留预算与过期 latch，新hint不能续租。RPC/握手/真实health probe保留普通截止、max(普通,90s)绝对上限及一次有界响应窗口；190秒模型超时保持，Upgrade/12秒bootstrap control/15秒restricted pairing不借用transfer延时，不重放未知写。精简来源/顺序边界见 `docs/native-ios/LIVENESS.md`。

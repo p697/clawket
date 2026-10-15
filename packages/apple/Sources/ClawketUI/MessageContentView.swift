@@ -33,11 +33,11 @@ struct NativeMessageRow: View {
                         .fill(Color(uiColor: .secondarySystemBackground))
                 }
             }
-            .frame(maxWidth: message.author.isLocal ? 650 : .infinity, alignment: .leading)
+            .frame(minWidth: 0, maxWidth: message.author.isLocal ? 650 : .infinity, alignment: .leading)
             if !message.author.isLocal { Spacer(minLength: 0) }
         }
-        .frame(maxWidth: 760)
-        .frame(maxWidth: .infinity)
+        .frame(minWidth: 0, maxWidth: 760)
+        .frame(minWidth: 0, maxWidth: .infinity)
         .contextMenu {
             ForEach(message.actions, id: \.self) { action in
                 Button(role: action == .remove ? .destructive : nil) {

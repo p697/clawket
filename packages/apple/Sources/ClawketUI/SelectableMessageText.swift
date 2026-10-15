@@ -25,6 +25,7 @@ struct SelectableMessageText: UIViewRepresentable {
         view.delegate = context.coordinator
         view.linkTextAttributes = [.foregroundColor: UIColor.systemBlue]
         view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        view.setContentHuggingPriority(.defaultLow, for: .horizontal)
         updateUIView(view, context: context)
         return view
     }
@@ -47,7 +48,9 @@ struct SelectableMessageText: UIViewRepresentable {
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context: Context) -> CGSize? {
-        guard let width = proposal.width, width > 0 else { return nil }
+        // An unspecified proposal asks for an ideal width. A text view's natural
+        // single-line width must not become the minimum width of a chat bubble.
+        guard let width = proposal.width, width.isFinite, width > 0 else { return .zero }
         let size = uiView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
         return CGSize(width: width, height: ceil(size.height))
     }
@@ -73,6 +76,9 @@ struct SelectableMessageText: UIViewRepresentable {
 @MainActor
 private final class ReadingTextView: UITextView {
     var onReadingInteraction: (() -> Void)?
+    override var intrinsicContentSize: CGSize {
+        CGSize(width: UIView.noIntrinsicMetric, height: super.intrinsicContentSize.height)
+    }
     override func accessibilityElementDidBecomeFocused() {
         super.accessibilityElementDidBecomeFocused()
         onReadingInteraction?()

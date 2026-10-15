@@ -37,6 +37,7 @@ struct NativeComposer: View {
                             draft.text = text
                             onIntent(.draftChanged(conversation.id, text: text))
                         }
+                        .frame(minWidth: 0, maxWidth: .infinity)
                         .frame(height: expanded ? nil : input.height)
                         .frame(maxHeight: expanded ? .infinity : nil)
                         .accessibilityIdentifier("message-input")
@@ -75,6 +76,7 @@ struct NativeComposer: View {
                     .frame(minHeight: hasBottomControls ? 36 : 0)
                     .opacity(hasBottomControls ? 1 : 0)
                 }
+                .frame(minWidth: 0, maxWidth: .infinity)
                 .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 25, style: .continuous))
                 primaryAction
             }
@@ -307,6 +309,8 @@ private final class NativeInputController: NSObject, ObservableObject, UITextVie
         view.textContainer.lineFragmentPadding = 0
         view.delegate = self
         view.isScrollEnabled = false
+        view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        view.setContentHuggingPriority(.defaultLow, for: .horizontal)
         view.keyboardDismissMode = .interactive
         view.accessibilityLabel = String(localized: "Message")
         view.onLayout = { [weak self] in self?.measure() }
@@ -360,6 +364,9 @@ private final class NativeInputController: NSObject, ObservableObject, UITextVie
 @MainActor
 private final class GrowingTextView: UITextView {
     var onLayout: (() -> Void)?
+    override var intrinsicContentSize: CGSize {
+        CGSize(width: UIView.noIntrinsicMetric, height: super.intrinsicContentSize.height)
+    }
     override func layoutSubviews() { super.layoutSubviews(); onLayout?() }
 }
 
@@ -377,6 +384,11 @@ private struct PersistentTextInput: UIViewRepresentable {
     func updateUIView(_ uiView: GrowingTextView, context: Context) {
         controller.onChange = onChange
         controller.sync(text: text, expanded: expanded)
+    }
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: GrowingTextView, context: Context) -> CGSize? {
+        let width = proposal.width.flatMap { $0.isFinite && $0 > 0 ? $0 : nil } ?? 0
+        let height = expanded ? proposal.height.flatMap { $0.isFinite && $0 > 0 ? $0 : nil } ?? controller.height : controller.height
+        return CGSize(width: width, height: height)
     }
 }
 

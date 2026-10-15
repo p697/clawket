@@ -52,6 +52,7 @@
 		6AB1932CB11F21EA620C8A3B /* NativeTaskJournalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76EE3BA27F5BF88C7BEFC5EB /* NativeTaskJournalTests.swift */; };
 		833AE1263A156C861B39C08A /* NativeHistoryWorkOrder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0454238B468906AC9C04FD5A /* NativeHistoryWorkOrder.swift */; };
 		FFEC089FBF61EAE1AFED818F /* NativeMediaController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A163A3B7B0C823A72CF0F2E /* NativeMediaController.swift */; };
+		5F2C8DDAC43C4565C5E3908B /* NativeReadingLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6770270E9471E68223BA352C /* NativeReadingLayoutTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -102,6 +103,7 @@
 		64C289B16E5D001DC8770A47 /* NativeTaskJournal.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeTaskJournal.swift; sourceTree = "<group>"; };
 		76EE3BA27F5BF88C7BEFC5EB /* NativeTaskJournalTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeTaskJournalTests.swift; sourceTree = "<group>"; };
 		0454238B468906AC9C04FD5A /* NativeHistoryWorkOrder.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeHistoryWorkOrder.swift; sourceTree = "<group>"; };
+		6770270E9471E68223BA352C /* NativeReadingLayoutTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeReadingLayoutTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -214,6 +216,7 @@
 				76EE3BA27F5BF88C7BEFC5EB /* NativeTaskJournalTests.swift */,
 				1EE8DA28492E208D65D074FC /* NativeDeviceApprovalPolicyTests.swift */,
 				F4EC25AD0042FDF3973AE588 /* NativeMediaHostTests.swift */,
+				6770270E9471E68223BA352C /* NativeReadingLayoutTests.swift */,
 			);
 			name = ClawketTests;
 			path = ClawketTests;
@@ -353,6 +356,7 @@
 				6AB1932CB11F21EA620C8A3B /* NativeTaskJournalTests.swift in Sources */,
 				71FE8BB4E98A63D874F1F9CD /* NativeDeviceApprovalPolicyTests.swift in Sources */,
 				3A4DC2B5F3F1F5EAABF4FA29 /* NativeMediaHostTests.swift in Sources */,
+				5F2C8DDAC43C4565C5E3908B /* NativeReadingLayoutTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
