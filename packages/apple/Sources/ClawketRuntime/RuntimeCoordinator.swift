@@ -45,6 +45,7 @@ public actor RuntimeCoordinator {
     var historyTaskIDs: [String: UUID] = [:]
     var historyPending = 0
     var controlWaiter: ControlWaiter?
+    var controlDispatches: [String: Task<Void, Never>] = [:]
     var eventWeights: [Int] = []
     var streamAvailable = true
     public private(set) var state = RuntimeConnectionState()
@@ -60,6 +61,7 @@ public actor RuntimeCoordinator {
         let scope: Scope
         let continuation: CheckedContinuation<RelayControl, any Error>
         let timeout: Task<Void, Never>
+        let deadline: Duration
     }
 
     public init(credentials: any DeviceCredentialProvider,
@@ -159,10 +161,11 @@ public actor RuntimeCoordinator {
         } catch { attemptFailed(runtimeFailure(error), epoch: capturedEpoch, attempt: capturedAttempt) }
     }
 
-    func prepareOpen(identity: RuntimeDeviceIdentity?, epoch: UUID, attempt: UUID) -> Bool {
+    func prepareOpen(identity: RuntimeDeviceIdentity?, epoch: UUID, attempt: UUID) async -> Bool {
         guard self.epoch == epoch, self.attempt == attempt, !stopped else { return false }
         self.identity = identity
-        return true
+        await transport?.setForeground(foreground)
+        return self.epoch == epoch && self.attempt == attempt && !stopped
     }
 
     func opened(_ generation: ConnectionGeneration, epoch: UUID, attempt: UUID) {
@@ -197,7 +200,7 @@ public actor RuntimeCoordinator {
             } else if connection.backendKind == .hermes, frame["event"]?.stringValue == "health" {
                 do {
                     try validateHealth(frame["payload"] ?? .null)
-                    if state.phase != .ready { await markReady(health: frame["payload"] ?? .null, scope: try scope(requireReady: false)) }
+                    await markReady(health: frame["payload"] ?? .null, scope: try scope(requireReady: false))
                 } catch { attemptFailed(runtimeFailure(error), epoch: epoch, attempt: attempt, unavailable: true) }
             } else if state.phase == .ready {
                 do {
@@ -275,10 +278,8 @@ public actor RuntimeCoordinator {
         guard isCurrent(scope), state.phase == .ready else { return false }
         do {
             try validateHealth(health)
-            backendHealth = health
-            guard let transport, await transport.confirmBackendReady(generation: scope.generation), isCurrent(scope) else { return false }
-            reconnect.confirmedBackendReady(); unavailableAttempts = 0
-            return true
+            await markReady(health: health, scope: scope)
+            return isCurrent(scope) && state.phase == .ready
         } catch { probeFailed(error, scope: scope); return false }
     }
 
@@ -364,6 +365,7 @@ public actor RuntimeCoordinator {
         for task in historyTasks.values { task.cancel() }
         historyTasks = [:]; historyTaskIDs = [:]; historyPending = 0
         controlWaiter?.timeout.cancel(); controlWaiter?.continuation.resume(throwing: RuntimeFailure(.superseded)); controlWaiter = nil
+        for task in controlDispatches.values { task.cancel() }; controlDispatches.removeAll()
         let old = transport; transport = nil; generation = nil; activeAuthSource = nil
         return old
     }
@@ -381,6 +383,8 @@ public actor RuntimeCoordinator {
         if phase == .ready, let connection {
             capabilities.chat = true; capabilities.abort = true; capabilities.history = true; capabilities.models = true
             capabilities.sessions = connection.backendKind != .localModel && (connection.backendKind != .hermes || bridgeCapabilities.contains("hermes.multi-session.v2"))
+            capabilities.sessionCreate = capabilities.sessions
+            capabilities.projects = [.codex, .claudeCode].contains(connection.backendKind) && backendHealth["projects"]?.boolValue == true
             capabilities.modelPerSession = BackendProfile.profile(for: connection.backendKind).modelsPerSession
         }
         state = RuntimeConnectionState(connectionID: connection?.id, phase: phase, capabilities: capabilities,
@@ -407,6 +411,7 @@ public actor RuntimeCoordinator {
     deinit {
         readerTask?.cancel(); openTask?.cancel(); handshakeTask?.cancel(); retryTask?.cancel()
         periodicProbeTask?.cancel(); probeTask?.cancel(); catalogTask?.cancel(); controlWaiter?.timeout.cancel()
+        for task in controlDispatches.values { task.cancel() }
         controlWaiter?.continuation.resume(throwing: RuntimeFailure(.superseded))
         for waiter in waiters.values { waiter.resume(throwing: RuntimeFailure(.superseded)) }
         let transport = transport; Task { await transport?.disconnect() }

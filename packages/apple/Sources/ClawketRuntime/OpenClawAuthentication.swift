@@ -25,6 +25,8 @@ extension RuntimeCoordinator {
         authentication = UUID(); lastNonce = nonce; sessionEvents = SessionEvents()
         if state.phase == .ready {
             catalogTask?.cancel(); catalogTask = nil; probeTask?.cancel(); probeTask = nil
+            for task in historyTasks.values { task.cancel() }
+            historyTasks = [:]; historyTaskIDs = [:]; historyPending = 0
             periodicProbeTask?.cancel(); periodicProbeTask = nil
             guard let generation, await transport.beginBackendHandshake(generation: generation),
                   epoch == capturedEpoch, attempt == capturedAttempt else { return }
@@ -188,21 +190,22 @@ extension RuntimeCoordinator {
 
     func requestBootstrap(publicKey: String, identity: RuntimeDeviceIdentity, scope: Scope) async throws -> RelayControl {
         guard controlWaiter == nil, let transport else { throw RuntimeFailure(.capacity) }
-        let id = UUID().uuidString.lowercased(), clock = clock
+        let id = UUID().uuidString.lowercased(), clock = clock, deadline = clock.now() + .seconds(12)
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 let timer = Task { [weak self] in
-                    do { try await clock.sleep(for: .seconds(12)) } catch { return }
+                    do { try await clock.sleep(for: max(.zero, deadline - clock.now())) } catch { return }
                     await self?.cancelControl(id, failure: RuntimeFailure(.timeout, retryable: true))
                 }
-                controlWaiter = ControlWaiter(id: id, scope: scope, continuation: continuation, timeout: timer)
-                Task { [weak self] in
+                controlWaiter = ControlWaiter(id: id, scope: scope, continuation: continuation, timeout: timer, deadline: deadline)
+                controlDispatches[id] = Task { [weak self] in
                     do {
                         try await transport.sendRelayControl(event: "bootstrap.request", requestID: id,
                             payload: .object(["deviceId": .string(identity.deviceID), "publicKey": .string(publicKey),
                                               "role": .string("operator"), "scopes": .array(Self.defaultScopes.map(JSONValue.string)),
                                               "capabilities": .array([.string("openclaw.bootstrap.mobile-setup.v1")])]), generation: scope.generation)
                     } catch { await self?.cancelControl(id, failure: runtimeFailure(error)) }
+                    await self?.controlSendFinished(id)
                 }
             }
         } onCancel: { Task { await self.cancelControl(id, failure: RuntimeFailure(.superseded)) } }
@@ -216,6 +219,7 @@ extension RuntimeCoordinator {
         guard let waiter = controlWaiter, isCurrent(waiter.scope),
               control.requestID == nil || control.requestID == waiter.id,
               ["bootstrap.issued", "bootstrap.error"].contains(control.event) else { return }
+        guard clock.now() < waiter.deadline else { cancelControl(waiter.id, failure: RuntimeFailure(.timeout, retryable: true)); return }
         controlWaiter = nil; waiter.timeout.cancel()
         if control.event == "bootstrap.issued" { waiter.continuation.resume(returning: control) }
         else { waiter.continuation.resume(throwing: RuntimeFailure(.authenticationRequired)) }
@@ -223,5 +227,7 @@ extension RuntimeCoordinator {
     func cancelControl(_ id: String, failure: RuntimeFailure) {
         guard controlWaiter?.id == id else { return }
         let waiter = controlWaiter; controlWaiter = nil; waiter?.timeout.cancel(); waiter?.continuation.resume(throwing: failure)
+        controlDispatches.removeValue(forKey: id)?.cancel()
     }
+    func controlSendFinished(_ id: String) { controlDispatches.removeValue(forKey: id) }
 }

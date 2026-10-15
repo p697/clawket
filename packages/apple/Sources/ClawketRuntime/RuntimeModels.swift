@@ -98,6 +98,8 @@ public struct RuntimeCapabilities: Codable, Sendable, Equatable {
     public var abort = false
     public var history = false
     public var sessions = false
+    public var sessionCreate = false
+    public var projects = false
     public var models = false
     public var modelPerSession = false
     public init() {}

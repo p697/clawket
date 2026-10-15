@@ -68,15 +68,15 @@ func protocolText(_ value: JSONValue?) -> String {
     if let text = value.stringValue { return text }
     if let values = value.array {
         return values.compactMap { block in
-            guard ["text", "output_text", "input_text"].contains(block["type"]?.stringValue ?? "") else { return nil }
-            return block["text"]?.stringValue
+            guard ["text", "content", "output_text", "input_text"].contains(block["type"]?.stringValue ?? "") else { return nil }
+            return block["artifactDisplayText"]?.stringValue ?? block["text"]?.stringValue
         }.joined()
     }
     return ""
 }
 
 func timestamp(_ value: JSONValue?) -> Int64? {
-    if let number = value?.safeInteger { return number }
+    if let number = value?.numberValue, number.isFinite, number >= 0, number <= 9_007_199_254_740_991 { return Int64(number) }
     if let text = value?.stringValue {
         if let number = Double(text), number.isFinite, number >= 0, number <= 9_007_199_254_740_991 { return Int64(number) }
         let formatter = ISO8601DateFormatter()

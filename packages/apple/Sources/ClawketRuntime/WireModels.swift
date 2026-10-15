@@ -52,6 +52,17 @@ enum WireModels {
             throw RuntimeFailure(.invalidResponse)
         }
         let gateway = connection.backendKind == .openclaw || connection.backendKind == .hermes
+        if !gateway && connection.backendKind != .localModel {
+            let kinds = ["main", "channel", "direct", "group", "subagent", "cron", "other"]
+            guard value["agentId"]?.nonemptyString != nil, value["title"]?.stringValue != nil,
+                  kinds.contains(value["kind"]?.stringValue ?? ""),
+                  value["updatedAt"] == .null || timestamp(value["updatedAt"]) != nil,
+                  value["hasActiveRun"]?.boolValue != nil,
+                  let actions = value["allowedActions"]?.object,
+                  ["rename", "reset", "delete", "pin"].allSatisfy({ actions[$0]?.boolValue != nil }) else {
+                throw RuntimeFailure(.invalidResponse)
+            }
+        }
         let pieces = key.split(separator: ":")
         let agentID = connection.backendKind == .hermes ? "hermes" : value["agentId"]?.nonemptyString
             ?? (pieces.first == "agent" && pieces.count > 1 ? String(pieces[1]) : "main")
@@ -88,11 +99,14 @@ enum WireModels {
             throw RuntimeFailure(.invalidResponse)
         }
         var syntheticCounts: [String: Int] = [:]
-        let messages = try values.map { value -> RuntimeMessage in
-            guard value.object != nil, let role = RuntimeMessage.Role(rawValue: value["role"]?.stringValue ?? "") else {
+        let gateway = backend == .openclaw || backend == .hermes
+        let messages = try values.compactMap { value -> RuntimeMessage? in
+            if value.object == nil && gateway { return nil }
+            let rawRole = value["role"]?.stringValue
+            guard value.object != nil, let role = RuntimeMessage.Role(rawValue: rawRole == "toolResult" ? "tool" : rawRole ?? "") ?? (gateway ? .system : nil) else {
                 throw RuntimeFailure(.invalidResponse)
             }
-            let suppliedID = value["id"]?.nonemptyString ?? value["messageId"]?.nonemptyString
+            let suppliedID = value["id"]?.nonemptyString ?? value["messageId"]?.nonemptyString ?? value["__openclaw"]?["id"]?.nonemptyString
             let id: String
             if let suppliedID { id = suppliedID }
             else {
@@ -102,10 +116,13 @@ enum WireModels {
                 let count = syntheticCounts[digest, default: 0]; syntheticCounts[digest] = count + 1
                 id = "native-history:\(digest):\(count)"
             }
+            var clock = timestamp(value["timestampMs"] ?? value["timestamp"] ?? value["ts"] ?? value["createdAt"])
+            if gateway, let number = clock, number > 0, number < 10_000_000_000 { clock = number * 1_000 }
             return RuntimeMessage(id: id, role: role, text: value["text"]?.stringValue ?? protocolText(value["content"]),
-                                  timestampMs: timestamp(value["timestampMs"] ?? value["timestamp"] ?? value["createdAt"]),
+                                  timestampMs: clock,
                                   runID: value["runId"]?.stringValue, turnID: value["turnId"]?.stringValue,
-                                  idempotencyKey: value["idempotencyKey"]?.stringValue, sentLocally: false, raw: value)
+                                  idempotencyKey: value["idempotencyKey"]?.stringValue ?? value["__openclaw"]?["idempotencyKey"]?.stringValue,
+                                  sentLocally: false, raw: value)
         }
         let profile = BackendProfile.profile(for: backend)
         var nextCursor = payload["nextCursor"]?.nonemptyString

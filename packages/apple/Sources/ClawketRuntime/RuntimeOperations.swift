@@ -3,17 +3,20 @@ import ClawketTransport
 
 extension RuntimeCoordinator {
     public func refreshRoster() async throws -> RuntimeRoster {
-        if let catalogTask { return try await catalogTask.value }
-        let scope = try scope(), id = UUID()
-        catalogTaskID = id
-        let task = Task { [weak self] in
-            guard let self else { throw RuntimeFailure(.superseded) }
-            return try await self.readRoster(scope: scope)
+        let scope = try scope(), id: UUID, task: Task<RuntimeRoster, any Error>
+        if let pending = catalogTask { id = catalogTaskID; task = pending }
+        else {
+            id = UUID(); catalogTaskID = id
+            task = Task { [weak self] in
+                guard let self else { throw RuntimeFailure(.superseded) }
+                return try await self.readRoster(scope: scope)
+            }
+            catalogTask = task
         }
-        catalogTask = task
         do {
             let value = try await task.value
             try assertCurrent(scope)
+            guard catalogTaskID == id else { throw RuntimeFailure(.superseded) }
             if catalogTaskID == id { catalogTask = nil }
             catalog = value.sessions
             emit(.roster(value), weight: value.sessions.reduce(128) { $0 + ((try? FrameCodec.encode($1.raw).utf8.count) ?? 128) })
@@ -61,7 +64,9 @@ extension RuntimeCoordinator {
     /// A complete frozen snapshot, without advertising delta/page-index optimizations we do not implement.
     func readFrozenCatalog(scope: Scope) async throws -> [RuntimeSession] {
         guard let connection else { throw RuntimeFailure(.superseded) }
-        var response = try await rpc("sessions.sync", scope: scope)
+        let deadline = clock.now() + .seconds(90)
+        var pages = 1
+        var response = try await catalogPage(scope: scope, deadline: deadline)
         var restart = 0
         while true {
             guard response["kind"]?.stringValue == "full", response["offset"]?.safeInteger == 0,
@@ -89,14 +94,24 @@ extension RuntimeCoordinator {
                 }
                 guard !page.isEmpty, let offset = response["nextOffset"]?.safeInteger,
                       offset == Int64(sessions.count), offset < total else { throw RuntimeFailure(.invalidResponse) }
-                response = try await rpc("sessions.sync", params: .object(["page": .object(["epoch": .string(epoch), "revision": .string(revision), "offset": .number(Double(offset))])]), scope: scope)
+                pages += 1
+                guard pages <= 512 else { throw RuntimeFailure(.capacity) }
+                response = try await catalogPage(params: .object(["page": .object(["epoch": .string(epoch), "revision": .string(revision), "offset": .number(Double(offset))])]), scope: scope, deadline: deadline)
                 if response["kind"]?.stringValue == "expired" {
                     guard restart == 0, let expiredEpoch = response["epoch"]?.stringValue, validRevision(expiredEpoch) else { throw RuntimeFailure(.invalidResponse) }
-                    restart += 1; response = try await rpc("sessions.sync", scope: scope)
+                    restart += 1; pages += 1
+                    guard pages <= 512 else { throw RuntimeFailure(.capacity) }
+                    response = try await catalogPage(scope: scope, deadline: deadline)
                     break
                 }
             }
         }
+    }
+
+    private func catalogPage(params: JSONValue = .object([:]), scope: Scope, deadline: Duration) async throws -> JSONValue {
+        let remaining = deadline - clock.now()
+        guard remaining > .zero else { throw RuntimeFailure(.timeout, retryable: true) }
+        return try await rpc("sessions.sync", params: params, timeout: min(.seconds(20), remaining), scope: scope)
     }
 
     public func loadSession(key: String, limit: Int = 50, cursor: String? = nil) async throws -> RuntimeHistory {
@@ -151,7 +166,8 @@ extension RuntimeCoordinator {
         var params: [String: JSONValue] = ["sessionKey": .string(sessionKey), "idempotencyKey": .string(input.idempotencyKey),
                                            gateway ? "message" : "text": .string(input.text)]
         if connection.backendKind == .openclaw { params["deliver"] = .bool(false) }
-        if let thinking = input.thinkingLevel, !(thinking == "off" && [.codex, .claudeCode].contains(connection.backendKind)) {
+        if connection.backendKind != .hermes, let thinking = input.thinkingLevel,
+           !(thinking == "off" && [.codex, .claudeCode].contains(connection.backendKind)) {
             params[connection.backendKind == .openclaw ? "thinking" : "thinkingLevel"] = .string(thinking)
         }
         if let skill = input.skillID { params["skillId"] = .string(skill) }
@@ -173,6 +189,42 @@ extension RuntimeCoordinator {
         if let runID { params["runId"] = .string(runID) }
         _ = try await rpc("chat.abort", params: .object(params), scope: scope)
         // ACK never manufactures run completion; authoritative events/history own it.
+    }
+
+    public func projects() async throws -> [RuntimeProject] {
+        let scope = try scope()
+        guard state.capabilities.projects else { throw RuntimeFailure(.unsupported) }
+        let payload = try await rpc("projects.list", scope: scope)
+        guard let values = payload.array, values.count <= 1_000 else { throw RuntimeFailure(.invalidResponse) }
+        var ids = Set<String>()
+        return try values.map { value in
+            guard let id = value["id"]?.nonemptyString, ids.insert(id).inserted,
+                  let name = value["name"]?.stringValue, let path = value["path"]?.stringValue,
+                  let available = value["available"]?.boolValue else { throw RuntimeFailure(.invalidResponse) }
+            return RuntimeProject(id: id, name: name, path: path, available: available)
+        }
+    }
+
+    public func createSession(agentID: String, title: String? = nil, projectID: String? = nil) async throws -> RuntimeSession {
+        let scope = try scope()
+        guard let connection, state.capabilities.sessionCreate else { throw RuntimeFailure(.unsupported) }
+        guard !agentID.isEmpty, agentID.utf8.count <= 256, title?.utf8.count ?? 0 <= 2_048,
+              projectID?.utf8.count ?? 0 <= 1_024 else { throw RuntimeFailure(.invalidConnection) }
+        if projectID != nil && !state.capabilities.projects { throw RuntimeFailure(.unsupported) }
+        var params: [String: JSONValue] = [:]
+        if connection.backendKind == .openclaw { params["agentId"] = .string(agentID) }
+        if let title { params["title"] = .string(title) }
+        if let projectID { params["projectId"] = .string(projectID) }
+        let payload = try await rpc("sessions.create", params: .object(params), scope: scope)
+        var raw = (payload["session"] ?? payload).object
+        guard raw?["key"]?.nonemptyString != nil else { throw RuntimeFailure(.invalidResponse, delivery: .responseReceived) }
+        if raw?["agentId"] == nil { raw?["agentId"] = .string(agentID) }
+        if raw?["title"] == nil, let title { raw?["title"] = .string(title) }
+        let session = try WireModels.session(.object(raw!), connection: connection, legacyActivity: !hasHumanActivityClock)
+        catalogTask?.cancel(); catalogTask = nil; catalogTaskID = UUID()
+        catalog.removeAll { $0.key == session.key }; catalog.insert(session, at: 0)
+        emit(.update(connectionID: connection.id, .sessionMetadata(session)))
+        return session
     }
 
     public func models(sessionKey: String? = nil) async throws -> [RuntimeModel] {

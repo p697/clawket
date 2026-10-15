@@ -78,6 +78,20 @@ struct RuntimeContractTests {
         #expect(runtimeFailure(RPCFailure(.timeout, delivery: .uncertain), sending: true).delivery == .uncertain)
     }
 
+    @Test func gatewayHistoryPreservesToolAndUnknownSystemRows() throws {
+        let payload: JSONValue = .object(["messages": .array([
+            .null,
+            .object(["role": .string("toolResult"), "timestamp": .number(1_700_000_000), "content": .string("tool output")]),
+            .object(["role": .string("future-role"), "content": .array([.object(["type": .string("content"), "artifactDisplayText": .string("visible result")])]),
+                     "__openclaw": .object(["id": .string("native-id"), "idempotencyKey": .string("exact-send")])])
+        ])])
+        let history = try WireModels.history(payload, key: "s", backend: .openclaw)
+        #expect(history.messages.count == 2); #expect(history.messages[0].role == .tool)
+        #expect(history.messages[0].timestampMs == 1_700_000_000_000)
+        #expect(history.messages[1].role == .system); #expect(history.messages[1].text == "visible result")
+        #expect(history.messages[1].id == "native-id"); #expect(history.messages[1].idempotencyKey == "exact-send")
+    }
+
     @Test(arguments: ["relay-openclaw/openclaw-v1.json", "relay-hermes/hermes-v1.json"])
     func realHistoricalContractFramesDecode(_ path: String) throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()

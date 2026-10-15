@@ -42,7 +42,8 @@ struct SessionEvents: Sendable {
 
     private mutating func canonical(_ payload: JSONValue, connection: BackendConnection) throws -> [RuntimeSessionUpdate] {
         guard let type = payload["type"]?.stringValue else { throw RuntimeFailure(.invalidResponse) }
-        if type == "session_info_update", let session = payload["session"], session["agentId"] != nil {
+        if type == "session_info_update", let session = payload["session"], session["agentId"] != nil,
+           session["title"]?.stringValue != nil, session["allowedActions"]?.object != nil {
             return [.sessionMetadata(try WireModels.session(session, connection: connection, legacyActivity: true))]
         }
         guard let runID = payload["runId"]?.nonemptyString,
@@ -110,6 +111,7 @@ struct SessionEvents: Sendable {
         guard var run = runs[runID], !run.terminal else { return }
         // Unidentified tool updates are preserved, but cannot safely invent repeated boundaries.
         guard let toolID, !run.toolIDs.contains(toolID) else { return }
+        guard toolID.utf8.count <= 512 else { throw RuntimeFailure(.capacity) }
         guard run.toolIDs.count < 128 else { throw RuntimeFailure(.capacity) }
         run.toolIDs.insert(toolID)
         if run.hasText { run.segment += 1; run.hasText = false }
