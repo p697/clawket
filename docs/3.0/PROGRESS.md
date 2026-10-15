@@ -9,6 +9,11 @@
   - 对齐当前 Mobile：仅 bootstrap 身份的 INVALID_REQUEST/BAD_REQUEST、明确 bootstrapToken 与 unexpected/invalid connect schema 错误、且保留旧 token/password 时，禁用本次连接 bootstrap 并回收一次；本地与 Relay 路径一致，不把认证失败降级为旧身份。等待者与代际围栏保持，第二次错误不循环。
   - heavy 租约、Swift6/jobs2 逐文件通过 BootstrapCompatibilityTests 5 项/9 组输入，含两种拒绝码、Relay 密码、无旧凭据、重复拒绝及认证/无关 schema 拒绝。Hermes direct 将独立 token 只拼入临时 Upgrade URL，保留旧含token QR与Relay独立凭据，其他后端不加query；增量8测试/16组输入通过，文档10对/7项通过。完整 CI 另行记录；未改现有 Mobile、服务协议、生产、版本或发布。
 
+- 2026-10-16 原生 iOS 旧安装保全边界（同 bundle 实际升级尚未验收）。
+  - 新增 `ClawketUpgrade`：限定本 App sandbox 的只读 Expo Keychain / AsyncStorage / RevenueCat defaults 来源，保留原设备身份、六后端注册表/回滚/时间、原 URL 作用域设备令牌、偏好/草稿/聊天等原始字节和语音/分享资源。秘密与普通值分离，128 KiB 内容寻址块逐次读回，所有验证后才提交有界 manifest；源损坏/取消/写入失败不变成空安装，不删除旧数据。
+  - 大资源复制后独立于原文件生命周期，19.2 MB 未发送录音不塞进 8 MiB 单值；已提交启动不重开旧文件，资源块按需校验。令牌哈希保留原 HTTP/Registry 字符串，与规范化 Socket 地址分开；仅已导入 OpenClaw/原身份可取设备令牌，legacy operator 不授予 Node 或其他后端。新装保留原身份和一次性权益宽限，不复活 Keychain 残留连接/偏好。
+  - heavy 下 jobs=2 逐文件串行通过 source 6、validation 7、importer 12 项（25 项），含实际 inline/MD5/旧目录与 19,200,000 字节 PCM、失败/取消/重复尝试、原文件消费后重启、角色/后端/原 URL 作用域；文档与完整门禁继续交 PR CI。详见 `docs/native-ios/UPGRADE.md`；host 激活、各数据消费者及签名同 bundle 升级/权益连续性仍待后续，不将模块测试称为升级完成。未覆盖商店 App、制作分发包、改服务或发布。
+
 - 2026-10-16 Native iOS N2 集成进行中（未完成 App 验收）。
   - 新增维护式 `apps/ios/Clawket.xcodeproj`，SwiftUI host 直接绑定原生配对/后端/表示层，iOS16.4、iPhone/iPad、独立 `com.p697.clawket.nativeqa`；不含 RN/JS/WebView，不改商店 bundle、版本或现有 Mobile 实现。Keychain 凭据、只读缓存标记、草稿及有界队列分连接/Agent/会话存储；先验证写入再派发，进程中断将 sending 置为 uncertain、queued 置为 held，不自动重放。
   - `ClawketPersistence` 在 heavy 租约、jobs=2 下逐文件通过 DocumentStoreTests 8 项与 FileValueStoreTests 2 项，覆盖回滚、损坏、读回失败、异步事务串行、旧范围碰撞、文件大小与符号链接。完整 App 已在本机编译通过 Simulator 与独立手机 Debug 开发版；此前提交的 CI 实际构建 host 并通过四项恢复/隔离/旧版本覆盖/重复ID测试及全部仓库门禁。新增第五项真实开发 Keychain 读写删除测试，使用模拟器 ad-hoc 签名并以非空 xcresult 检查防止减少测试，等待本轮 CI。
@@ -2128,6 +2133,7 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 
 | 编号 | 事项 | 怎么做 | 验证方法 | 状态 |
 |---|---|---|---|---|
+| HT-NATIVE-UPGRADE-1016 | Native iOS 同 bundle 原安装升级验收与发布授权 | 所有原生数据消费者接入后，由负责人选择原签名/entitlement 的升级测试路径及发布阶段；独立 QA App 不覆盖商店 App。 | 保留原设备身份/六后端连接/作用域令牌/购买身份与一次性权益、草稿/缓存/未发送资源；失败可重试且原数据未删，实际升级后两后端重连与基础功能通过。 | ClawketUpgrade 只读来源/事务保全模块25项通过；host 激活与签名同 bundle 连续性待后续，未制作分发包或发布。 |
 | HT-DUO-INPUT-1013 | Duo 真实交互验收的备用自动化授权 | 回答已发送的异步问题，明确允许使用苹果 XCTest/XCUITest 在专用本地模拟器输入、长按、滚动与断言。CUA 坐标/拖动持续 noWindowsAvailable，键盘未生效；工具规则要求用户明确指定其他 UI 自动化后才能使用。 | 真实选图完成隔离配对，再验证中文草稿、长按、分屏、折叠/旋转和恢复；结果不能由单元测试替代。 | 已解决：负责人明确允许XCTest/XCUITest；原生交互证据已完成，session06/08正常退出。最终主分支交付与负责人验收见PR #220及本机acceptance.html。 |
 | HT-DUO-TOOLCHAIN-1013 | Duo 工具链的本机认证与系统重启 | 已授权下载 macOS26.7.1、同意 Xcode27.1/SDK 许可；负责人完成本机管理员认证，并确认安装/重启时机。无需在聊天提供密码。 | 升级后 macOS≥26.6，Xcode27.1 初始化成功，可安装官方 Duo runtime 并继续分支原生验收。 | 已完成：负责人授权重启后macOS26.7.1、Xcode27.1初始化与Duo runtime安装成功，首个Debug包已运行；原生体验验收继续。 |
 | HT-IOS-REVIEW-1013 | iOS 原生评分验收与增长效果 | 后续授权 App 构建/发布时验证手动商店链接、原生邀请与升级冷却；发布前留存商店评分基线，发布后按周对比新增评分/活跃iOS设备及新评分分布。 | TestFlight 不验证真实评分弹窗；不把 API 成功当成展示/提交或均分提升。 | 代码验证随本 PR；未构建、上传、提交或发布。 |
