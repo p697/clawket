@@ -8,8 +8,8 @@ Current source coverage:
 
 | Locales | Actual translations |
 | --- | --- |
-| English, Simplified Chinese, Traditional Chinese, Japanese | 195/195 each |
-| Korean, German, French, Spanish, Latin American Spanish, Italian, Brazilian Portuguese, European Portuguese, Russian, Ukrainian, Turkish, Vietnamese, Thai, Hindi, Arabic | 64/195 each; 131 new native strings still pending |
+| English, Simplified Chinese, Traditional Chinese, Japanese, German, French, Italian | 195/195 each |
+| Korean, Spanish, Latin American Spanish, Brazilian Portuguese, European Portuguese, Russian, Ukrainian, Turkish, Vietnamese, Thai, Hindi, Arabic | 64/195 each; 131 new native strings still pending |
 
 The 64 reused terms come from the existing locale files, with their origin recorded per key. New translations are written for the actual native flows. Missing translations are omitted, never represented by copied English with a completed state. This is initial QA coverage, not completion of the final 19-language parity gate. Resource compilation, language selection, device rendering and linguistic acceptance remain separate checks.
 

@@ -27,6 +27,24 @@
             "state": "translated",
             "value": "%@ · ネイティブ開発版"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · Native Entwicklung"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · Développement natif"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · Sviluppo nativo"
+          }
         }
       },
       "comment": "Native UI / accessibility. Preserve each interpolated value; do not translate names or filenames."
@@ -57,6 +75,24 @@
             "state": "translated",
             "value": "%@、%@、チャット"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, %@, Chats"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, %@, conversations"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, %@, conversazioni"
+          }
         }
       },
       "comment": "Native UI / accessibility. Preserve each interpolated value; do not translate names or filenames."
@@ -86,6 +122,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "ペアリングはすでに進行中です。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Es läuft bereits ein Kopplungsversuch."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Une tentative de jumelage est déjà en cours."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "È già in corso un tentativo di abbinamento."
           }
         }
       },
@@ -357,6 +411,24 @@
             "state": "translated",
             "value": "添付ファイルや操作を追加"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anhang oder Aktion hinzufügen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter une pièce jointe ou une action"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aggiungi allegato o azione"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -507,6 +579,24 @@
             "state": "translated",
             "value": "キューに追加"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zur Warteschlange hinzufügen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter à la file d’attente"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aggiungi alla coda"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -536,6 +626,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "アドレス"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adresse"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adresse"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Indirizzo"
           }
         }
       },
@@ -1167,6 +1275,24 @@
             "state": "translated",
             "value": "今回のみ許可"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einmal erlauben"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autoriser une fois"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Consenti una volta"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -1317,6 +1443,24 @@
             "state": "translated",
             "value": "常に許可"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Immer erlauben"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toujours autoriser"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Consenti sempre"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -1346,6 +1490,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "この操作を常に許可しますか？"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Aktion immer erlauben?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toujours autoriser cette action ?"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Consentire sempre questa azione?"
           }
         }
       },
@@ -1377,6 +1539,24 @@
             "state": "translated",
             "value": "常に許可…"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Immer erlauben…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toujours autoriser…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Consenti sempre…"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -1406,6 +1586,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "すべてのチャットに適用"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gilt für alle Chats"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "S’applique à toutes les conversations"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Si applica a tutte le conversazioni"
           }
         }
       },
@@ -1437,6 +1635,24 @@
             "state": "translated",
             "value": "承認が必要です"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Genehmigung erforderlich"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autorisation requise"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autorizzazione necessaria"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -1466,6 +1682,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "添付ファイルの準備に失敗しました"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anhang konnte nicht vorbereitet werden"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Échec de la préparation de la pièce jointe"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparazione dell’allegato non riuscita"
           }
         }
       },
@@ -1617,6 +1851,24 @@
             "state": "translated",
             "value": "カメラにアクセスできません。ペアリングコードを使用できます。"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein Kamerazugriff möglich. Du kannst stattdessen einen Kopplungscode verwenden."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L’accès à l’appareil photo est indisponible. Vous pouvez utiliser un code de jumelage."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossibile accedere alla fotocamera. Puoi usare un codice di abbinamento."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -1647,6 +1899,24 @@
             "state": "translated",
             "value": "カメラのスキャンが停止しました。ペアリングコードを入力できます。"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Kamera-Scan wurde gestoppt. Du kannst stattdessen den Kopplungscode eingeben."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le scan avec l’appareil photo s’est arrêté. Vous pouvez saisir le code de jumelage."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La scansione con la fotocamera si è interrotta. Puoi inserire il codice di abbinamento."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -1676,6 +1946,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "カメラでスキャンできません"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kamera-Scan nicht verfügbar"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le scan avec l’appareil photo est indisponible"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scansione con fotocamera non disponibile"
           }
         }
       },
@@ -1827,6 +2115,24 @@
             "state": "translated",
             "value": "録音をキャンセル"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aufnahme abbrechen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Annuler l’enregistrement"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Annulla registrazione"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -1856,6 +2162,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "エージェントを確認中…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dein Agent wird geprüft…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vérification de votre Agent…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verifica del tuo Agent…"
           }
         }
       },
@@ -1887,6 +2211,24 @@
             "state": "translated",
             "value": "エージェントを選んでチャットを続けましょう。"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wähle einen Agenten, um einen Chat fortzusetzen."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choisissez un Agent pour poursuivre une conversation."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scegli un Agent per continuare una conversazione."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -1917,6 +2259,24 @@
             "state": "translated",
             "value": "モデルを選択"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modell auswählen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choisir un modèle"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scegli modello"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -1946,6 +2306,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "コード"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Code"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Code"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codice"
           }
         }
       },
@@ -2457,6 +2835,24 @@
             "state": "translated",
             "value": "エージェントを接続して、チャットと作業を続けましょう。"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbinde einen Agenten, um Chats fortzusetzen und an deinen Aufgaben weiterzuarbeiten."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connectez un Agent pour poursuivre vos conversations et avancer dans votre travail."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Collega un Agent per continuare le conversazioni e portare avanti il lavoro."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -2487,6 +2883,24 @@
             "state": "translated",
             "value": "エージェントを接続して始めましょう。"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbinde einen Agenten, um loszulegen."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connectez un Agent pour commencer."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Collega un Agent per iniziare."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -2516,6 +2930,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "接続方法"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbindungsart"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mode de connexion"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Metodo di connessione"
           }
         }
       },
@@ -2907,6 +3339,24 @@
             "state": "translated",
             "value": "接続の承認"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbindung genehmigen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autorisation de connexion"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autorizzazione della connessione"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -2937,6 +3387,24 @@
             "state": "translated",
             "value": "接続の承認が必要です"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbindung muss genehmigt werden"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La connexion nécessite une autorisation"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La connessione richiede un’autorizzazione"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -2966,6 +3434,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "接続の確認が必要です"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbindung muss geprüft werden"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La connexion nécessite votre attention"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La connessione richiede attenzione"
           }
         }
       },
@@ -3237,6 +3723,24 @@
             "state": "translated",
             "value": "チャットの操作"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat-Aktionen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actions de la conversation"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Azioni della conversazione"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -3266,6 +3770,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "チャットのファイル"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat-Dateien"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fichiers de la conversation"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "File della conversazione"
           }
         }
       },
@@ -3297,6 +3819,24 @@
             "state": "translated",
             "value": "チャット"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chats"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conversations"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conversazioni"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -3327,6 +3867,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "チャットを更新できませんでした。接続を確認して、もう一度お試しください。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chats konnten nicht aktualisiert werden. Prüfe deine Verbindung und versuche es erneut."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les conversations n’ont pas pu être actualisées. Vérifiez votre connexion et réessayez."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossibile aggiornare le conversazioni. Controlla la connessione e riprova."
           }
         }
       }
@@ -3477,6 +4035,24 @@
             "state": "translated",
             "value": "コードをコピー"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Code kopieren"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copier le code"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copia codice"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -3507,6 +4083,24 @@
             "state": "translated",
             "value": "ペアリングを完了できませんでした。入力内容を確認して、もう一度お試しください。"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Kopplung konnte nicht abgeschlossen werden. Prüfe die Angaben und versuche es erneut."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le jumelage n’a pas pu être effectué. Vérifiez les informations et réessayez."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossibile completare l’abbinamento. Controlla i dettagli e riprova."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -3536,6 +4130,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "このペアリングコードまたはリンクを使用できませんでした。内容を確認するか、新しい招待を作成してください。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieser Kopplungscode oder Link konnte nicht verwendet werden. Prüfe ihn oder erstelle eine neue Einladung."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce code ou lien de jumelage n’a pas pu être utilisé. Vérifiez-le ou générez une nouvelle invitation."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossibile usare questo codice o link di abbinamento. Controllalo o genera un nuovo invito."
           }
         }
       },
@@ -3568,6 +4180,24 @@
             "state": "translated",
             "value": "チャットを作成中…"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat wird erstellt…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Création de la conversation…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Creazione della conversazione…"
+          }
         }
       }
     },
@@ -3597,6 +4227,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "作成を確認できませんでした。再試行する前にチャット一覧を更新してください。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Erstellung konnte nicht bestätigt werden. Aktualisiere die Chats, bevor du es erneut versuchst."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La création n’a pas pu être confirmée. Actualisez les conversations avant de réessayer."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossibile confermare la creazione. Aggiorna le conversazioni prima di riprovare."
           }
         }
       }
@@ -3747,6 +4395,24 @@
             "state": "translated",
             "value": "配信を確認できませんでした。再送する前にチャットを確認してください。"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Zustellung konnte nicht bestätigt werden. Prüfe den Chat, bevor du erneut sendest."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La réception n’a pas pu être confirmée. Vérifiez la conversation avant d’envoyer à nouveau."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossibile confermare la consegna. Controlla la conversazione prima di inviare di nuovo."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -3776,6 +4442,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "配信を確認できませんでした。元のメッセージは保存されています。再送する前にチャットを確認してください。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Zustellung konnte nicht bestätigt werden. Deine ursprüngliche Nachricht ist gespeichert. Prüfe den Chat, bevor du erneut sendest."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La réception n’a pas pu être confirmée. Votre message d’origine est enregistré. Vérifiez la conversation avant d’envoyer à nouveau."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossibile confermare la consegna. Il messaggio originale è salvato. Controlla la conversazione prima di inviare di nuovo."
           }
         }
       },
@@ -3927,6 +4611,24 @@
             "state": "translated",
             "value": "直接接続"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Direkt"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Directe"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diretta"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -3956,6 +4658,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "接続を解除"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trennen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Déconnecter"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disconnetti"
           }
         }
       },
@@ -3987,6 +4707,24 @@
             "state": "translated",
             "value": "未接続"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Getrennt"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Déconnecté"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disconnesso"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -4016,6 +4754,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "接続を解除しましたが、この設定は保存できませんでした。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbindung getrennt. Diese Einstellung konnte nicht gespeichert werden."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connexion interrompue. Cette préférence n’a pas pu être enregistrée."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connessione interrotta. Impossibile salvare questa preferenza."
           }
         }
       },
@@ -4167,6 +4923,24 @@
             "state": "translated",
             "value": "以前のメッセージ"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ältere Nachrichten"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Messages précédents"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Messaggi precedenti"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -4316,6 +5090,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "コンピュータのClawketに表示されたコードを入力してください。ペアリング中は、そのウインドウを開いたままにしてください。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gib den Code ein, den Clawket auf deinem Computer anzeigt. Lass dieses Fenster während der Kopplung geöffnet."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saisissez le code affiché par Clawket sur votre ordinateur. Gardez cette fenêtre ouverte pendant le jumelage."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inserisci il codice mostrato da Clawket sul computer. Tieni aperta quella finestra durante l’abbinamento."
           }
         }
       },
@@ -4827,6 +5619,24 @@
             "state": "translated",
             "value": "入力が必要です"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eingabe erforderlich"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Votre réponse est attendue"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "È richiesta una risposta"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -4856,6 +5666,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "最新のメッセージ"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neueste Nachrichten"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Derniers messages"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ultimi messaggi"
           }
         }
       },
@@ -5007,6 +5835,24 @@
             "state": "translated",
             "value": "エージェントを読み込み中…"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agenten werden geladen…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chargement des Agents…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Caricamento degli Agent…"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -5036,6 +5882,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "チャットを読み込み中…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chats werden geladen…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chargement des conversations…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Caricamento delle conversazioni…"
           }
         }
       },
@@ -5067,6 +5931,24 @@
             "state": "translated",
             "value": "チャットを読み込み中…"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat wird geladen…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chargement de la conversation…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Caricamento della conversazione…"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -5096,6 +5978,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "以前のメッセージを読み込み中…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ältere Nachrichten werden geladen…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chargement des messages précédents…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Caricamento dei messaggi precedenti…"
           }
         }
       },
@@ -5487,6 +6387,24 @@
             "state": "translated",
             "value": "%@ にメッセージ"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nachricht an %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envoyer un message à %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Messaggio a %@"
+          }
         }
       },
       "comment": "Native UI / accessibility. Preserve each interpolated value; do not translate names or filenames."
@@ -5637,6 +6555,24 @@
             "state": "translated",
             "value": "モデル：%@"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modell: %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modèle : %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modello: %@"
+          }
         }
       },
       "comment": "Native UI / accessibility. Preserve each interpolated value; do not translate names or filenames."
@@ -5667,6 +6603,24 @@
             "state": "translated",
             "value": "その他の権限オプション"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Weitere Berechtigungsoptionen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autres options d’autorisation"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Altre opzioni di autorizzazione"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -5696,6 +6650,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "名前（任意）"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name (optional)"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nom (facultatif)"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nome (facoltativo)"
           }
         }
       },
@@ -5967,6 +6939,24 @@
             "state": "translated",
             "value": "新しいチャット"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neuer Chat"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nouvelle conversation"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nuova conversazione"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -5996,6 +6986,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "利用できるモデルがありません"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Modelle verfügbar"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun modèle disponible"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessun modello disponibile"
           }
         }
       },
@@ -6027,6 +7035,24 @@
             "state": "translated",
             "value": "チャットはまだありません"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch keine Chats"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucune conversation pour le moment"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Non ci sono ancora conversazioni"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -6056,6 +7082,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "一致するエージェントやチャットがありません"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine passenden Agenten oder Chats"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun Agent ni conversation correspondants"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessun Agent o conversazione corrispondente"
           }
         }
       },
@@ -6087,6 +7131,24 @@
             "state": "translated",
             "value": "一致するチャットがありません"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine passenden Chats"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucune conversation correspondante"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessuna conversazione corrispondente"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -6116,6 +7178,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "未送信です。メッセージは保存されています。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht gesendet. Deine Nachricht ist gespeichert."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Non envoyé. Votre message est enregistré."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Non inviato. Il messaggio è salvato."
           }
         }
       },
@@ -6267,6 +7347,24 @@
             "state": "translated",
             "value": "チャットを開いています…"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat wird geöffnet…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouverture de la conversation…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apertura della conversazione…"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -6296,6 +7394,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "エージェントをペアリング"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deinen Agenten koppeln"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jumeler votre Agent"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abbina il tuo Agent"
           }
         }
       },
@@ -6447,6 +7563,24 @@
             "state": "translated",
             "value": "ペアリング情報を保存できませんでした。「接続」をもう一度押して、取得済みの結果を保存してください。"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Kopplungsdaten konnten nicht gespeichert werden. Tippe erneut auf „Verbinden“, um das vorhandene Ergebnis zu speichern."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les données de jumelage n’ont pas pu être enregistrées. Touchez à nouveau « Connecter » pour enregistrer le résultat existant."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossibile salvare i dati di abbinamento. Tocca di nuovo “Connetti” per salvare il risultato già ottenuto."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -6477,6 +7611,24 @@
             "state": "translated",
             "value": "参加者"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Teilnehmer"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Participant"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partecipante"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -6506,6 +7658,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "パスワード（必要な場合）"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Passwort (falls erforderlich)"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mot de passe (si nécessaire)"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Password (se richiesta)"
           }
         }
       },
@@ -6657,6 +7827,24 @@
             "state": "translated",
             "value": "ペアリング用QRコードの内容またはリンクを貼り付け"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kopplungs-QR-Text oder Link einfügen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Coller le contenu du code QR ou le lien de jumelage"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Incolla contenuto QR o link di abbinamento"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -6807,6 +7995,24 @@
             "state": "translated",
             "value": "%@ を準備中"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ wird vorbereitet"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Préparation de %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparazione di %@"
+          }
         }
       },
       "comment": "Native UI / accessibility. Preserve each interpolated value; do not translate names or filenames."
@@ -6836,6 +8042,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ をプレビュー"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vorschau von %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aperçu de %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anteprima di %@"
           }
         }
       },
@@ -6987,6 +8211,24 @@
             "state": "translated",
             "value": "QR・リンク"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "QR oder Link"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "QR ou lien"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "QR o link"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -7137,6 +8379,24 @@
             "state": "translated",
             "value": "確認待ち"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zur Prüfung bereit"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En attente de vérification"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In attesa di verifica"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -7166,6 +8426,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "確認待ちです。接続が利用可能になったら、このメッセージを送信できます。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wartet auf deine Bestätigung. Sende diese Nachricht, sobald die Verbindung verfügbar ist."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En attente de votre confirmation. Envoyez ce message lorsque la connexion sera disponible."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In attesa della tua conferma. Invia questo messaggio quando la connessione sarà disponibile."
           }
         }
       },
@@ -7198,6 +8476,24 @@
             "state": "translated",
             "value": "新しいチャットを作成する前に、再接続するかチャット一覧を更新してください。"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbinde dich erneut oder aktualisiere die Chats, bevor du einen weiteren erstellst."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconnectez-vous ou actualisez les conversations avant d’en créer une autre."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Riconnettiti o aggiorna le conversazioni prima di crearne un’altra."
+          }
         }
       }
     },
@@ -7226,6 +8522,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "モデルを変更するには再接続してください。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbinde dich erneut, um das Modell zu wechseln."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconnectez-vous pour changer de modèle."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Riconnettiti per cambiare modello."
           }
         }
       },
@@ -7258,6 +8572,24 @@
             "state": "translated",
             "value": "チャットを作成するには再接続してください。"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbinde dich erneut, um einen Chat zu erstellen."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconnectez-vous pour créer une conversation."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Riconnettiti per creare una conversazione."
+          }
         }
       }
     },
@@ -7286,6 +8618,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "以前のメッセージを読み込むには再接続してください。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbinde dich erneut, um ältere Nachrichten zu laden."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconnectez-vous pour charger les messages précédents."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Riconnettiti per caricare i messaggi precedenti."
           }
         }
       },
@@ -7317,6 +8667,24 @@
             "state": "translated",
             "value": "チャットを更新するには再接続してください。"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbinde dich erneut, um Chats zu aktualisieren."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconnectez-vous pour actualiser les conversations."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Riconnettiti per aggiornare le conversazioni."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -7347,6 +8715,24 @@
             "state": "translated",
             "value": "送信するには再接続してください。下書きは保存されています。"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbinde dich zum Senden erneut. Dein Entwurf ist gespeichert."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconnectez-vous pour envoyer. Votre brouillon est enregistré."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Riconnettiti per inviare. La bozza è salvata."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -7376,6 +8762,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "この実行を停止するには再接続してください。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbinde dich erneut, um diesen Lauf zu stoppen."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconnectez-vous pour arrêter cette exécution."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Riconnettiti per interrompere questa esecuzione."
           }
         }
       },
@@ -7527,6 +8931,24 @@
             "state": "translated",
             "value": "前回検証済みのコピーから、保存された接続を復元しました。"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deine gespeicherten Verbindungen wurden aus der letzten geprüften Kopie wiederhergestellt."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vos connexions enregistrées ont été récupérées depuis la dernière copie vérifiée."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le connessioni salvate sono state recuperate dall’ultima copia verificata."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -7557,6 +8979,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "新しいチャットを作成する前に、チャット一覧を更新してください。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktualisiere die Chats, bevor du einen weiteren erstellst."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actualisez les conversations avant d’en créer une autre."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aggiorna le conversazioni prima di crearne un’altra."
           }
         }
       }
@@ -7827,6 +9267,24 @@
             "state": "translated",
             "value": "%@ を削除"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ entfernen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supprimer %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rimuovi %@"
+          }
         }
       },
       "comment": "Native UI / accessibility. Preserve each interpolated value; do not translate names or filenames."
@@ -7977,6 +9435,24 @@
             "state": "translated",
             "value": "この接続を削除しますか？"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Verbindung entfernen?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supprimer cette connexion ?"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rimuovere questa connessione?"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -8007,6 +9483,24 @@
             "state": "translated",
             "value": "新しいチャットで返信"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In neuem Chat antworten"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Répondre dans une nouvelle conversation"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rispondi in una nuova conversazione"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -8036,6 +9530,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "応答中…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Antwort wird erstellt…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réponse en cours…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Risposta in corso…"
           }
         }
       },
@@ -8187,6 +9699,24 @@
             "state": "translated",
             "value": "接続を保存"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbindung speichern"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enregistrer la connexion"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Salva connessione"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -8217,6 +9747,24 @@
             "state": "translated",
             "value": "保存されたチャットはこのデバイスに残ります。エージェントは後から再ペアリングできます。"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gespeicherte Chats bleiben auf diesem Gerät. Du kannst den Agenten später erneut koppeln."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les conversations enregistrées restent sur cet appareil. Vous pourrez jumeler l’Agent à nouveau plus tard."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le conversazioni salvate restano su questo dispositivo. Potrai abbinare di nuovo l’Agent in seguito."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -8246,6 +9794,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "保存されたデータを安全に読み込めませんでした。デバイスのロックを解除してClawketを開き直してください。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gespeicherte Daten konnten nicht sicher gelesen werden. Entsperre dieses Gerät und öffne Clawket erneut."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les données enregistrées n’ont pas pu être lues en toute sécurité. Déverrouillez cet appareil, puis rouvrez Clawket."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossibile leggere in sicurezza i dati salvati. Sblocca questo dispositivo e riapri Clawket."
           }
         }
       },
@@ -8397,6 +9963,24 @@
             "state": "translated",
             "value": "QRコードをスキャン"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "QR-Code scannen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scanner le code QR"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scansiona codice QR"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -8427,6 +10011,24 @@
             "state": "translated",
             "value": "ペアリング用QRコードをスキャン"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kopplungs-QR-Code scannen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scanner le code QR de jumelage"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scansiona QR di abbinamento"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -8456,6 +10058,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "コンピュータのClawketに表示されたQRコードをスキャンするか、ペアリングリンクを貼り付けてください。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scanne den QR-Code, den Clawket auf deinem Computer anzeigt, oder füge den Kopplungslink ein."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scannez le code QR affiché par Clawket sur votre ordinateur ou collez son lien de jumelage."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scansiona il codice QR mostrato da Clawket sul computer oppure incolla il link di abbinamento."
           }
         }
       },
@@ -8727,6 +10347,24 @@
             "state": "translated",
             "value": "エージェントとチャットを検索"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agenten und Chats suchen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechercher des Agents et des conversations"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cerca Agent e conversazioni"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -8756,6 +10394,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "チャットを検索"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chats suchen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechercher des conversations"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cerca conversazioni"
           }
         }
       },
@@ -8787,6 +10443,24 @@
             "state": "translated",
             "value": "モデルを検索"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelle suchen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechercher des modèles"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cerca modelli"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -8816,6 +10490,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "セキュアストレージを利用できません。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der sichere Speicher ist nicht verfügbar."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le stockage sécurisé est indisponible."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L’archiviazione sicura non è disponibile."
           }
         }
       },
@@ -8967,6 +10659,24 @@
             "state": "translated",
             "value": "回答を送信"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Antwort senden"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envoyer la réponse"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invia risposta"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -9116,6 +10826,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "送信状況を確認できません"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sendestatus unbestätigt"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Statut d’envoi non confirmé"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stato di invio non confermato"
           }
         }
       },
@@ -9627,6 +11355,24 @@
             "state": "translated",
             "value": "コマンド全体を表示"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vollständigen Befehl anzeigen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Afficher la commande complète"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostra comando completo"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -9777,6 +11523,24 @@
             "state": "translated",
             "value": "チャットを始める"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat beginnen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Démarrer une conversation"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inizia una conversazione"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -9806,6 +11570,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "音声入力を開始"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spracheingabe starten"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Démarrer la saisie vocale"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avvia input vocale"
           }
         }
       },
@@ -9957,6 +11739,24 @@
             "state": "translated",
             "value": "録音を停止"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aufnahme stoppen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arrêter l’enregistrement"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interrompi registrazione"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -10107,6 +11907,24 @@
             "state": "translated",
             "value": "タスクを停止中"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aufgabe wird gestoppt"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arrêt de la tâche"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arresto dell’attività"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -10136,6 +11954,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "ストレージを利用できません"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speicher nicht verfügbar"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stockage indisponible"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spazio di archiviazione non disponibile"
           }
         }
       },
@@ -10167,6 +12003,24 @@
             "state": "translated",
             "value": "タップで録音を開始します。長押しして離すと送信、上にスライドするとキャンセルします。"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zum Aufnehmen tippen. Zum Senden gedrückt halten und loslassen. Zum Abbrechen nach oben schieben."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Touchez pour enregistrer. Maintenez puis relâchez pour envoyer. Glissez vers le haut pour annuler."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tocca per registrare. Tieni premuto e rilascia per inviare. Scorri verso l’alto per annullare."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -10196,6 +12050,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "接続を削除できませんでした。保存されたデータは変更されていません。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Verbindung konnte nicht entfernt werden. Deine gespeicherten Daten sind unverändert."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La connexion n’a pas pu être supprimée. Vos données enregistrées n’ont pas été modifiées."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossibile rimuovere la connessione. I dati salvati non sono stati modificati."
           }
         }
       },
@@ -10227,6 +12099,24 @@
             "state": "translated",
             "value": "選択した接続を保存できませんでした。もう一度お試しください。"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die ausgewählte Verbindung konnte nicht gespeichert werden. Versuche es erneut."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le choix de connexion n’a pas pu être enregistré. Réessayez."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossibile salvare la connessione selezionata. Riprova."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -10256,6 +12146,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "操作を完了できませんでした。接続を確認して、もう一度お試しください。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Aktion konnte nicht abgeschlossen werden. Prüfe deine Verbindung und versuche es erneut."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L’opération n’a pas pu être effectuée. Vérifiez votre connexion et réessayez."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossibile completare l’operazione. Controlla la connessione e riprova."
           }
         }
       },
@@ -10287,6 +12195,24 @@
             "state": "translated",
             "value": "操作を完了できませんでした。もう一度お試しください。"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Aktion konnte nicht abgeschlossen werden. Versuche es erneut."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L’opération n’a pas pu être effectuée. Réessayez."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossibile completare l’operazione. Riprova."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -10316,6 +12242,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "ペアリングサービスに接続できませんでした。この招待を再試行する前に、コンピュータを確認してください。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Kopplungsdienst konnte nicht erreicht werden. Prüfe deinen Computer, bevor du diese Einladung erneut versuchst."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le service de jumelage est injoignable. Vérifiez votre ordinateur avant de réessayer cette invitation."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossibile raggiungere il servizio di abbinamento. Controlla il computer prima di riprovare questo invito."
           }
         }
       },
@@ -10347,6 +12291,24 @@
             "state": "translated",
             "value": "保留中のメッセージが32件あります。追加するには、いずれかを完了または削除してください。"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Es gibt 32 ausstehende Nachrichten. Schließe eine ab oder entferne sie, bevor du eine weitere hinzufügst."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il y a 32 messages en attente. Terminez-en un ou supprimez-en un avant d’en ajouter un autre."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ci sono 32 messaggi in sospeso. Completane o rimuovine uno prima di aggiungerne un altro."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -10376,6 +12338,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "この接続では、この操作を利用できません。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Aktion ist für diese Verbindung nicht verfügbar."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette action n’est pas disponible pour cette connexion."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Questa azione non è disponibile per questa connessione."
           }
         }
       },
@@ -10407,6 +12387,24 @@
             "state": "translated",
             "value": "このコードは別のエージェントのものです。対応するエージェントを選んで、もう一度お試しください。"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieser Code gehört zu einem anderen Agenten. Wähle den passenden Agenten und versuche es erneut."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce code appartient à un autre Agent. Choisissez l’Agent correspondant et réessayez."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Questo codice appartiene a un altro Agent. Scegli l’Agent corrispondente e riprova."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -10436,6 +12434,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "この接続には、その操作を行う権限がありません。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Verbindung hat keine Berechtigung für diese Aktion."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette connexion n’a pas l’autorisation d’effectuer cette action."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Questa connessione non dispone dell’autorizzazione per questa azione."
           }
         }
       },
@@ -10467,6 +12483,24 @@
             "state": "translated",
             "value": "このチャット"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieser Chat"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette conversation"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Questa conversazione"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -10496,6 +12530,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "このチャットはここでは閲覧のみ可能です。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieser Chat kann hier nur gelesen werden."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette conversation est en lecture seule ici."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Questa conversazione è in sola lettura qui."
           }
         }
       },
@@ -10527,6 +12579,24 @@
             "state": "translated",
             "value": "この開発用アプリは、専用の接続とストレージを使用します。"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Entwicklungs-App verwendet eigene Verbindungen und einen eigenen Speicher."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette app de développement utilise ses propres connexions et son propre stockage."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Questa app di sviluppo usa connessioni e archiviazione dedicate."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -10556,6 +12626,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "下書きを保存できませんでした。Clawketを開いたまま、もう一度お試しください。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieser Entwurf konnte nicht gespeichert werden. Lass Clawket geöffnet und versuche es erneut."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce brouillon n’a pas pu être enregistré. Gardez Clawket ouvert et réessayez."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossibile salvare questa bozza. Tieni Clawket aperto e riprova."
           }
         }
       },
@@ -10587,6 +12675,24 @@
             "state": "translated",
             "value": "この招待は期限切れか使用済みです。コンピュータで新しいコードを取得してください。"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Einladung ist abgelaufen oder wurde bereits verwendet. Hole dir einen neuen Code auf deinem Computer."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette invitation a expiré ou a déjà été utilisée. Obtenez un nouveau code sur votre ordinateur."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Questo invito è scaduto o è già stato usato. Ottieni un nuovo codice dal computer."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -10617,6 +12723,24 @@
             "state": "translated",
             "value": "この招待は異なるサービス環境を使用しています。"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Einladung verwendet eine andere Dienstumgebung."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette invitation utilise un autre environnement de service."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Questo invito usa un ambiente di servizio diverso."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -10646,6 +12770,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "この権限は、今回以降のリクエストにも適用されます。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Berechtigung gilt auch für künftige Anfragen."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette autorisation s’applique également aux prochaines demandes."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Questa autorizzazione si applica anche alle richieste future."
           }
         }
       },
@@ -10678,6 +12820,24 @@
             "state": "translated",
             "value": "このプロジェクトは利用できません。"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses Projekt ist nicht verfügbar."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce projet est indisponible."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Questo progetto non è disponibile."
+          }
         }
       }
     },
@@ -10706,6 +12866,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "トークン（必要な場合）"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token (falls erforderlich)"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jeton (si nécessaire)"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token (se richiesto)"
           }
         }
       },
@@ -10737,6 +12915,24 @@
             "state": "translated",
             "value": "試行回数が多すぎます。しばらく待ってからお試しください。"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zu viele Versuche. Warte etwas, bevor du es erneut versuchst."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trop de tentatives. Patientez un peu avant de réessayer."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Troppi tentativi. Attendi un po’ prima di riprovare."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -10766,6 +12962,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "ツールの出力"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Werkzeugausgabe"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Résultat de l’outil"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Output dello strumento"
           }
         }
       },
@@ -11037,6 +13251,24 @@
             "state": "translated",
             "value": "保存された接続にアクセスするには、デバイスのロックを解除してClawketを開き直してください。"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entsperre dieses Gerät und öffne Clawket erneut, um auf deine gespeicherten Verbindungen zuzugreifen."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Déverrouillez cet appareil et rouvrez Clawket pour accéder à vos connexions enregistrées."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sblocca questo dispositivo e riapri Clawket per accedere alle connessioni salvate."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -11187,6 +13419,24 @@
             "state": "translated",
             "value": "スキルを使う"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skill verwenden"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utiliser un Skill"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usa uno Skill"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -11216,6 +13466,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "エージェントが提供するWebSocketアドレスを使用してください。認証情報はこのデバイスに安全に保存されます。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verwende die WebSocket-Adresse deines Agenten. Zugangsdaten werden sicher auf diesem Gerät gespeichert."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utilisez l’adresse WebSocket fournie par votre Agent. Les identifiants sont enregistrés en toute sécurité sur cet appareil."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usa l’indirizzo WebSocket fornito dal tuo Agent. Le credenziali vengono salvate in modo sicuro su questo dispositivo."
           }
         }
       },
@@ -11367,6 +13635,24 @@
             "state": "translated",
             "value": "QRコードの内容を貼り付けるか、ペアリングコードを入力できます。必要に応じて「設定」でカメラへのアクセスを確認してください。"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du kannst stattdessen den QR-Text einfügen oder den Kopplungscode eingeben. Prüfe bei Bedarf den Kamerazugriff in den Einstellungen."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vous pouvez coller le contenu du code QR ou saisir le code de jumelage. Si nécessaire, vérifiez l’accès à l’appareil photo dans Réglages."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Puoi incollare il contenuto del codice QR o inserire il codice di abbinamento. Se necessario, verifica l’accesso alla fotocamera in Impostazioni."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -11396,6 +13682,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "エージェントに接続できませんでした。下書きは保存されています。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dein Agent konnte nicht erreicht werden. Dein Entwurf ist gespeichert."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Votre Agent est injoignable. Votre brouillon est enregistré."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossibile raggiungere il tuo Agent. La bozza è salvata."
           }
         }
       },
@@ -11427,6 +13731,24 @@
             "state": "translated",
             "value": "エージェントの再ペアリングが必要です。「設定」で現在のペアリングコードを追加してください。"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dein Agent muss erneut gekoppelt werden. Füge seinen aktuellen Kopplungscode in den Einstellungen hinzu."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Votre Agent doit être jumelé à nouveau. Ajoutez son code de jumelage actuel dans Réglages."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il tuo Agent deve essere abbinato di nuovo. Aggiungi il suo codice di abbinamento attuale in Impostazioni."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -11456,6 +13778,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "あなたのエージェントを、いつでも身近に"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deine Agenten, immer dabei"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vos Agents, à portée de main"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I tuoi Agent, sempre a portata di mano"
           }
         }
       },
@@ -11606,6 +13946,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "データを安全に保存できませんでした。Clawketを開いたまま、もう一度お試しください。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deine Daten konnten nicht sicher gespeichert werden. Lass Clawket geöffnet und versuche es erneut."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vos données n’ont pas pu être enregistrées en toute sécurité. Gardez Clawket ouvert et réessayez."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossibile salvare i dati in sicurezza. Tieni Clawket aperto e riprova."
           }
         }
       },
