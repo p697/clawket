@@ -131,7 +131,7 @@ extension RuntimeCoordinator {
                 if connection.auth?.token?.isEmpty == false || connection.auth?.password?.isEmpty == false { bootstrapDisabled = true }
                 else { throw error }
             }
-        } else if connection.transportKind != .relay, let configured = connection.bootstrap,
+        } else if connection.transportKind != .relay, !bootstrapDisabled, let configured = connection.bootstrap,
                   configured.expiresAtMs.map({ $0 > Int64(Date().timeIntervalSince1970 * 1_000) }) ?? true {
             bootstrap = configured
         }
@@ -170,7 +170,19 @@ extension RuntimeCoordinator {
 
     func authenticationFailed(_ error: any Error, scope: Scope) async {
         guard isCurrent(scope) else { return }
-        let remoteCode = (error as? RPCFailure)?.remoteError?["code"]?.stringValue?.uppercased()
+        let remoteError = (error as? RPCFailure)?.remoteError
+        let remoteCode = remoteError?["code"]?.stringValue?.uppercased()
+        let message = remoteError?["message"]?.stringValue?.lowercased() ?? ""
+        // Older Gateways reject the additive bootstrapToken field before authentication.
+        // Match Mobile's narrow schema classification; an auth rejection never authorizes a downgrade.
+        if activeAuthSource == .bootstrap, !bootstrapDisabled,
+           connection?.auth?.token?.isEmpty == false || connection?.auth?.password?.isEmpty == false,
+           ["INVALID_REQUEST", "BAD_REQUEST"].contains(remoteCode ?? ""),
+           message.contains("bootstraptoken"), message.contains("unexpected") || message.contains("invalid connect") {
+            bootstrapDisabled = true; activeAuthSource = nil
+            recycle(scope: scope)
+            return
+        }
         if ["AUTH_TOKEN_MISMATCH", "AUTH_SCOPE_MISMATCH"].contains(remoteCode ?? ""), activeAuthSource == .deviceToken,
            !deviceRepairAttempted, let identity {
             deviceRepairAttempted = true
