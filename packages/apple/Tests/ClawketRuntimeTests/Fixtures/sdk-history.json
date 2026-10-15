@@ -1,0 +1,189 @@
+{
+  "version": 1,
+  "synthetic": true,
+  "sourceDigests": {
+    "codex/history.ts": "02bb32c5b39fc7445e2343b8aa896a816a6fcae24779ca318b0e60095c8c3128",
+    "pi/history.ts": "a3fa4ab2cc49e14e2547d59f6988a6154410e87061504cfb4f59d8cfebfcc582",
+    "claude-code/history.ts": "a1884af125018ba242618fe3d9f04de91e29b3d9229bc707474680daafce6a7f",
+    "claude-code/models.ts": "669d11e25032a3df4af946abe0206cea9cf96e6899752261e987503973975506"
+  },
+  "cases": [
+    {
+      "backend": "codex",
+      "messages": [
+        {
+          "id": "vector-human",
+          "timestampMs": 1767225600000,
+          "turnId": "vector-turn",
+          "role": "user",
+          "text": "Synthetic native history",
+          "idempotencyKey": "vector-send-key"
+        },
+        {
+          "id": "toolcall_vector-command-0",
+          "timestampMs": 1767225600000,
+          "turnId": "vector-turn",
+          "role": "tool",
+          "text": "",
+          "tool": {
+            "callId": "vector-command-0",
+            "name": "exec",
+            "statusReported": true,
+            "status": "success",
+            "input": {
+              "command": "printf native-sdk-vector"
+            },
+            "output": "native-sdk-vector",
+            "durationMs": 15
+          }
+        },
+        {
+          "id": "toolcall_vector-command-1",
+          "timestampMs": 1767225600000,
+          "turnId": "vector-turn",
+          "role": "tool",
+          "text": "",
+          "tool": {
+            "callId": "vector-command-1",
+            "name": "exec",
+            "statusReported": true,
+            "status": "error",
+            "input": {
+              "command": "printf native-sdk-vector"
+            },
+            "output": "native-sdk-vector",
+            "durationMs": 15
+          }
+        },
+        {
+          "id": "toolcall_vector-command-2",
+          "timestampMs": 1767225600000,
+          "turnId": "vector-turn",
+          "role": "tool",
+          "text": "",
+          "tool": {
+            "callId": "vector-command-2",
+            "name": "exec",
+            "statusReported": true,
+            "status": "running",
+            "input": {
+              "command": "printf native-sdk-vector"
+            },
+            "output": "native-sdk-vector"
+          }
+        },
+        {
+          "id": "toolcall_vector-command-3",
+          "timestampMs": 1767225600000,
+          "turnId": "vector-turn",
+          "role": "tool",
+          "text": "",
+          "tool": {
+            "callId": "vector-command-3",
+            "name": "exec",
+            "statusReported": true,
+            "status": "unknown",
+            "input": {
+              "command": "printf native-sdk-vector"
+            },
+            "output": "native-sdk-vector"
+          }
+        },
+        {
+          "id": "vector-assistant",
+          "timestampMs": 1767225610000,
+          "turnId": "vector-turn",
+          "role": "assistant",
+          "text": "Synthetic completion"
+        }
+      ]
+    },
+    {
+      "backend": "pi",
+      "messages": [
+        {
+          "id": "pi-human",
+          "role": "user",
+          "text": "Synthetic Pi history",
+          "timestampMs": 1767225600000
+        },
+        {
+          "id": "pi-assistant",
+          "role": "assistant",
+          "text": "Synthetic commentary",
+          "timestampMs": 1767225600000
+        },
+        {
+          "id": "pi-call",
+          "role": "tool",
+          "text": "",
+          "timestampMs": 1767225600000,
+          "tool": {
+            "name": "exec",
+            "callId": "pi-call",
+            "input": {
+              "command": "printf native-sdk-pi"
+            },
+            "status": "success",
+            "output": "native-sdk-pi"
+          }
+        },
+        {
+          "id": "pi-unsettled",
+          "role": "tool",
+          "text": "",
+          "timestampMs": 1767225600000,
+          "tool": {
+            "name": "read",
+            "callId": "pi-unsettled",
+            "input": {
+              "path": "synthetic-fixture"
+            },
+            "status": "unknown"
+          }
+        }
+      ]
+    },
+    {
+      "backend": "claude-code",
+      "messages": [
+        {
+          "id": "claude-assistant:text:0",
+          "role": "assistant",
+          "text": "Synthetic commentary",
+          "timestampMs": 1767225600000,
+          "model": "synthetic-model"
+        },
+        {
+          "id": "toolcall_claude-call",
+          "role": "tool",
+          "text": "",
+          "timestampMs": 1767225600000,
+          "tool": {
+            "name": "Bash",
+            "callId": "claude-call",
+            "status": "success",
+            "input": {
+              "command": "printf native-sdk-claude"
+            },
+            "output": "native-sdk-claude"
+          }
+        },
+        {
+          "id": "toolcall_claude-unsettled",
+          "role": "tool",
+          "text": "",
+          "timestampMs": 1767225600000,
+          "tool": {
+            "name": "Read",
+            "callId": "claude-unsettled",
+            "status": "unknown",
+            "input": {
+              "file_path": "synthetic-fixture"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

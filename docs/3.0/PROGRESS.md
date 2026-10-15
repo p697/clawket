@@ -1,5 +1,11 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-16 Native SDK 工具历史协议补齐（完整 transcript/设备验收继续）。
+  - 发现共享SDK ChatMessage.role=tool的name/callId/status/input/output/clocks嵌在tool对象，旧Swift按顶层字段将该对象当名称后丢弃可选work。现在精确读嵌套元数据及summary，保持Gateway顶层toolResult/tool字符串兼容；缺status不因output/finishedAt推定成功，不制造run/input归属或完整性。
+  - 新增当前Codex/Claude Code/Pi实际Bridge纯history producer生成的合成向量（三后端八工具），Swift测试直接消费同一资源；Node22.18+内置类型剥离执行生产函数，严格仅允许已审纯模块的依赖。SHA/序列化输出漂移、空/损坏/重复/减少样本及异常import均失败，三项Node测试接入CI-safe required rest，无新增依赖/外部服务或用户会话读取。
+  - 无compiler/测试竞争、memory44%、heavy/jobs2下实际Swift6单WorkHistory文件九项串行通过；新producer回归在未修旧源码明确失败（首项工具投影为空），修复恢复后九项再通过，未改断言。Node三项、producer check（三后端/八工具）、14指令对/7docs及diff通过后释放heavy；Swift源净增6行/测试63行，向量189行、检查脚本111行/Node测试33行。既有TS/TSX167,902/132,119与617测试文件、188文档保持，App源码/19语文案不变。
+  - 前一主线#245最终bca7be18/db63实际CI63 App/287 package、19语5,225编译值与全部13门禁绿，合为775b4edc并finish；新增三个真实UIWindow/UIKit布局回归实际3.227秒通过。当前SDK修复还需本PR完整current-main门禁与实际SDK手机history验收；不混称Hermes已有printf手机证据。物理reset/参与者/稳定消息行ID、语义标题与其余parity继续，不发布。
+
 - 2026-10-16 Native 长文本宽度修复与 USB 工具链验收（负责人授权，完整 parity 继续）。
   - 主线9aebc8d0在唯一USB测试机经WebDriver验证真实Hermes QA会话冷恢复及20/30秒后台返回；内容、composer与路由保持，第三次20秒返回初次AX采样后0.811秒稳定，不把过渡动画中的缺header当持续故障。发现实际420pt窗口内长消息宽650/750pt、input宽420pt且send位于x749越屏，工具测试仍是未派发草稿；精确清除该测试草稿，未把WDA click成功误报为真实发送。
   - TextKit读取和同实例composer编辑器仅采用父级有限width proposal，不将单行intrinsic宽作为聊天最小宽；气泡/输入列可在compact宽度收缩。保留文本选择、原生换行与StateObject编辑器。新增三项实际UIHostingController/window、UITableView diffable-cell几何回归，覆盖320/420/768pt长正文、原生可选文、输入控件为动作留空间、展开同TextView/选区，不使用另外的渲染fixture。媒体c912b27b重基后两架构generic Simulator实际App及全部63测试方法开发编译成功；测试实际执行交PR CI，不启动本机模拟器。报告validator三项（拒绝62及以下）、14指令对/7docs回归、19语272UI/3权限源码检查与diff通过；Swift源净增18行/测试123行，既有TS/TSX167,902/132,119及617测试文件保持；c912验证基线187文档，本轮不增文档。

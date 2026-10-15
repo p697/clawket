@@ -29,7 +29,7 @@ let package = Package(
         .target(name: "ClawketUpgrade", dependencies: ["ClawketPairing", "ClawketPersistence"], exclude: ["AGENTS.md", "CLAUDE.md"]),
         .testTarget(name: "ClawketUpgradeTests", dependencies: ["ClawketUpgrade", "ClawketPairing", "ClawketPersistence"]),
         .testTarget(name: "ClawketTransportTests", dependencies: ["ClawketTransport"]),
-        .testTarget(name: "ClawketRuntimeTests", dependencies: ["ClawketRuntime", "ClawketTransport", "ClawketPairing"]),
+        .testTarget(name: "ClawketRuntimeTests", dependencies: ["ClawketRuntime", "ClawketTransport", "ClawketPairing"], resources: [.copy("Fixtures")]),
         .testTarget(name: "ClawketPairingTests", dependencies: ["ClawketPairing", "ClawketTransport", .product(name: "Sodium", package: "swift-sodium")], resources: [.copy("Fixtures")]),
     ]
 )
