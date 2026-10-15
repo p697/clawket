@@ -67,4 +67,4 @@ Screen acceptance includes a small phone, regular phone, landscape/resizable iPa
 
 ## Status
 
-N0 source research, architecture audit and the current feature checklist are complete; three-app USB WebDriver input/attachment observations are recorded separately in RESEARCH. Independent N1 transport/pairing and native UI presentation implementations are underway in separate task worktrees. No native app acceptance, same-bundle upgrade, release package, upload, production deployment or public release is claimed.
+N0 source research, architecture audit and the current feature checklist are complete; three-app USB WebDriver input/attachment observations are recorded separately in RESEARCH. N1 transport/pairing and the initial backend/UI packages are merged with protocol and compile evidence. N2 now has a maintained development app with scoped persistence, real adapter bindings and simulator CI; the first wired-device pass has begun. Complete two-backend connection/inference/recovery acceptance and the later parity gates remain pending. No same-bundle upgrade, distribution package, upload, production deployment or public release is claimed.
