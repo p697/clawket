@@ -38,3 +38,11 @@ targetRules = ["generic-api-key"]
 regexTarget = "secret"
 paths = ['''^packages/apple/Sources/ClawketMedia/MediaLibrary\.swift$''']
 regexes = ['''^key\.artifactID\.utf8\.count$''']
+
+[[allowlists]]
+description = "Reviewed Swift public question draft key length expression, not a credential value"
+condition = "AND"
+targetRules = ["generic-api-key"]
+regexTarget = "secret"
+paths = ['''^apps/ios/Clawket/NativeQuestionDraftStore\.swift$''']
+regexes = ['''^key\.utf16\.count$''']

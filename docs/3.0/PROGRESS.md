@@ -5,7 +5,7 @@
   - Runtime 增加六后端类型化输入、按现有协商降级的图片/文件/文档能力与五后端输出 artifact handles；local-model 不虚报输出。预检与派发共用完整8 MiB UTF-8 RPC serializer，保留原草稿及未知写入不重放；JSON slash 与 JS 一致，名义5 MiB 图片不会因转义翻倍。稳定引用、inline 显式有界解码和 image-only finals 保留，Pi 仅协商后请求 artifacts history；模型输入 metadata 保留为当前会话的三态图片 gate。
   - 输出句柄捕获认证/Socket 代际、两分钟失效、能力丢失即回收，严格128 KiB/10 MiB分块验证。OpenClaw direct ticket 45秒绝对预算、同源路径 allowlist、无凭据/cookie/cache/redirect、未知长度也逐块限流；Relay 无 HTTP fallback。仅增加 App package product 编译引用，不改 NativeAppModel/Vault、原 Mobile、服务或协议。
   - `heavy` 下 Swift6/jobs2 六文件逐一通过：MediaLibrary9函数/11输入、Images3/4、Attachment7/17、Artifact7/22、HTTP3与实际loopbackHTTP2，共31函数/59输入，覆盖实际临时文件删除与重开、三种 atomic 后故障、取消/坏块/旧代际、完整8 MiB/+1、5 MiB slash-heavy、超限GIF对与未知发送不重放。首次修正测试 fixture/类型可见性和真实 Darwin 既存目录 alias 重开后复验；`check:docs`7回归与 diff 通过并释放租约。完整原生/App/旧客户端门禁交 PR CI；系统 picker/混合粘贴/真实媒体收发与预览分享仍待 host/设备验收，未将模块测试称为完整媒体功能，无版本或发布。
-  - 首轮 CI 原有 TS/Mobile/v1/双桌面门禁通过；Xcode16.4 Swift6.1 对单个内联字节总量表达式推断超时，拆为显式 Int 局部变量，容量语义不变。Gitleaks8.30.1 将公开源码 `key.artifactID.utf8.count` 误判两次；独立审查后仅对该完整表达式、该文件、该规则加 AND 例外，合成 Git 三例确认精确值通过、改一字符或换文件仍拒绝，未重写历史。修正交完整 CI 重验。
+  - 首轮 CI 原有 TS/Mobile/v1/双桌面门禁通过；Xcode16.4 Swift6.1 对单个内联字节总量表达式推断超时，拆为显式 Int 局部变量，容量语义不变。Gitleaks8.30.1 将公开源码 `key.artifactID.utf8.count` 误判两次；独立审查后仅对该完整表达式、该文件、该规则加 AND 例外，合成 Git 三例确认精确值通过、改一字符或换文件仍拒绝，未重写历史。全 refs 扫描随后发现并行 host 提交的另一公开表达式 `key.utf16.count`，程序严格比对公开源码确认后同样只加精确文件/值/规则 AND 例外并复验三种边界。修正交完整 CI 重验。
 
 - 2026-10-16 Native consent 小数毫秒兼容。
   - Hermes run-control 允许并转发有限的小数 expires_at_ms；原生整数解析会拒绝有效请求并中断连接。现在仅接受非负、有限、JS-safe 范围内的数值并向下取整，最多提前不足1毫秒，绝不延长审批权限；保留原 raw 字段、缺失/null 无到期时间和其他后端契约。负数、非有限、不安全范围及非数值继续拒绝。
