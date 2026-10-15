@@ -127,8 +127,8 @@
     {
       "key": "All projects",
       "sources": [
-        "packages/apple/Sources/ClawketUI/ClientSheets.swift:94",
-        "packages/apple/Sources/ClawketUI/ClientSheets.swift:105"
+        "packages/apple/Sources/ClawketUI/ClientSheets.swift:100",
+        "packages/apple/Sources/ClawketUI/ClientSheets.swift:111"
       ],
       "mobileTerm": "common.All projects"
     },
@@ -380,7 +380,7 @@
     {
       "key": "Connection approval",
       "sources": [
-        "packages/apple/Sources/ClawketUI/ClientSheets.swift:220"
+        "packages/apple/Sources/ClawketUI/ClientSheets.swift:226"
       ],
       "mobileTerm": null
     },
@@ -437,9 +437,9 @@
     {
       "key": "Conversations",
       "sources": [
-        "packages/apple/Sources/ClawketUI/ClientSheets.swift:80",
-        "packages/apple/Sources/ClawketUI/ClientSheets.swift:118",
-        "packages/apple/Sources/ClawketUI/ClientSheets.swift:151"
+        "packages/apple/Sources/ClawketUI/ClientSheets.swift:86",
+        "packages/apple/Sources/ClawketUI/ClientSheets.swift:124",
+        "packages/apple/Sources/ClawketUI/ClientSheets.swift:157"
       ],
       "mobileTerm": null
     },
@@ -695,7 +695,7 @@
     {
       "key": "Loading conversations…",
       "sources": [
-        "packages/apple/Sources/ClawketUI/ClientSheets.swift:136"
+        "packages/apple/Sources/ClawketUI/ClientSheets.swift:142"
       ],
       "mobileTerm": null
     },
@@ -754,7 +754,7 @@
     {
       "key": "Model",
       "sources": [
-        "packages/apple/Sources/ClawketUI/ClientSheets.swift:204"
+        "packages/apple/Sources/ClawketUI/ClientSheets.swift:210"
       ],
       "mobileTerm": "chat.Model"
     },
@@ -796,8 +796,8 @@
     {
       "key": "New conversation",
       "sources": [
-        "packages/apple/Sources/ClawketUI/ClientSheets.swift:48",
-        "packages/apple/Sources/ClawketUI/ClientSheets.swift:115"
+        "packages/apple/Sources/ClawketUI/ClientSheets.swift:54",
+        "packages/apple/Sources/ClawketUI/ClientSheets.swift:121"
       ],
       "mobileTerm": null
     },
@@ -811,7 +811,7 @@
     {
       "key": "No available models",
       "sources": [
-        "packages/apple/Sources/ClawketUI/ClientSheets.swift:201"
+        "packages/apple/Sources/ClawketUI/ClientSheets.swift:207"
       ],
       "mobileTerm": null
     },
@@ -825,8 +825,8 @@
     {
       "key": "No conversations yet",
       "sources": [
-        "packages/apple/Sources/ClawketUI/ClientSheets.swift:75",
-        "packages/apple/Sources/ClawketUI/ClientSheets.swift:146"
+        "packages/apple/Sources/ClawketUI/ClientSheets.swift:81",
+        "packages/apple/Sources/ClawketUI/ClientSheets.swift:152"
       ],
       "mobileTerm": null
     },
@@ -840,8 +840,8 @@
     {
       "key": "No matching conversations",
       "sources": [
-        "packages/apple/Sources/ClawketUI/ClientSheets.swift:75",
-        "packages/apple/Sources/ClawketUI/ClientSheets.swift:146"
+        "packages/apple/Sources/ClawketUI/ClientSheets.swift:81",
+        "packages/apple/Sources/ClawketUI/ClientSheets.swift:152"
       ],
       "mobileTerm": null
     },
@@ -962,7 +962,7 @@
     {
       "key": "Project",
       "sources": [
-        "packages/apple/Sources/ClawketUI/ClientSheets.swift:92"
+        "packages/apple/Sources/ClawketUI/ClientSheets.swift:98"
       ],
       "mobileTerm": "chat.Project"
     },
@@ -1230,15 +1230,15 @@
     {
       "key": "Search conversations",
       "sources": [
-        "packages/apple/Sources/ClawketUI/ClientSheets.swift:82",
-        "packages/apple/Sources/ClawketUI/ClientSheets.swift:153"
+        "packages/apple/Sources/ClawketUI/ClientSheets.swift:88",
+        "packages/apple/Sources/ClawketUI/ClientSheets.swift:159"
       ],
       "mobileTerm": null
     },
     {
       "key": "Search models",
       "sources": [
-        "packages/apple/Sources/ClawketUI/ClientSheets.swift:206"
+        "packages/apple/Sources/ClawketUI/ClientSheets.swift:212"
       ],
       "mobileTerm": null
     },
@@ -1600,7 +1600,7 @@
     {
       "key": "Try again",
       "sources": [
-        "packages/apple/Sources/ClawketUI/ClientSheets.swift:141"
+        "packages/apple/Sources/ClawketUI/ClientSheets.swift:147"
       ],
       "mobileTerm": "common.Try Again"
     },

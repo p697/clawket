@@ -22,7 +22,7 @@ struct ClientSheetView: View {
                 }
             }
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
+                ToolbarItem(placement: dismissalPlacement) {
                     Button("Done") { dismiss() }
                 }
             }
@@ -33,6 +33,12 @@ struct ClientSheetView: View {
             if case let .catalog(id) = item, let route, route.isConcrete,
                route.connectionID == id.connectionID, route.agentID == id.agentID { dismiss() }
         }
+    }
+
+    private var dismissalPlacement: ToolbarItemPlacement {
+        // Work details push into this stack; keep Done opposite the native Back button.
+        if case .work = item { return .confirmationAction }
+        return .cancellationAction
     }
 
     private func sessions(_ route: ConversationID) -> some View {

@@ -12,7 +12,7 @@ struct NativeWorkDock: View {
             HStack(spacing: 10) {
                 WorkStatusGlyph(status: work.status)
                     .frame(width: 20).accessibilityHidden(true)
-                Text(work.title).font(.subheadline.weight(.medium)).foregroundStyle(.primary)
+                Text(work.inspect.explanation ?? work.title).font(.subheadline.weight(.medium)).foregroundStyle(.primary)
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if let duration = work.clock.durationLabel {
