@@ -87,6 +87,18 @@
             "state": "translated",
             "value": "%@ · Нативна версія для розробки"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · Yerel uygulama geliştirme sürümü"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · Bản phát triển ứng dụng gốc"
+          }
         }
       },
       "comment": "Native UI / accessibility. Preserve each interpolated value; do not translate names or filenames."
@@ -177,6 +189,18 @@
             "state": "translated",
             "value": "%@, %@, чати"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, %@, sohbetler"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, %@, cuộc trò chuyện"
+          }
         }
       },
       "comment": "Native UI / accessibility. Preserve each interpolated value; do not translate names or filenames."
@@ -266,6 +290,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "З’єднання вже виконується."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bir eşleştirme denemesi zaten sürüyor."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Một lần ghép nối đang diễn ra."
           }
         }
       },
@@ -597,6 +633,18 @@
             "state": "translated",
             "value": "Додати вкладення або дію"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ek veya işlem ekle"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thêm tệp đính kèm hoặc hành động"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -807,6 +855,18 @@
             "state": "translated",
             "value": "Додати до черги"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kuyruğa ekle"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thêm vào hàng đợi"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -896,6 +956,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Адреса"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adres"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Địa chỉ"
           }
         }
       },
@@ -1587,6 +1659,18 @@
             "state": "translated",
             "value": "Дозволити один раз"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bir kez izin ver"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cho phép một lần"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -1797,6 +1881,18 @@
             "state": "translated",
             "value": "Завжди дозволяти"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Her zaman izin ver"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Luôn cho phép"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -1886,6 +1982,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Завжди дозволяти цю дію?"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu işleme her zaman izin verilsin mi?"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Luôn cho phép hành động này?"
           }
         }
       },
@@ -1977,6 +2085,18 @@
             "state": "translated",
             "value": "Завжди дозволяти…"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Her zaman izin ver…"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Luôn cho phép…"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -2066,6 +2186,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Застосовується до всіх чатів"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tüm sohbetler için geçerlidir"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Áp dụng cho mọi cuộc trò chuyện"
           }
         }
       },
@@ -2157,6 +2289,18 @@
             "state": "translated",
             "value": "Потрібен дозвіл"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Onay gerekiyor"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cần phê duyệt"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -2246,6 +2390,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Не вдалося підготувати вкладення"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ek hazırlanamadı"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Không thể chuẩn bị tệp đính kèm"
           }
         }
       },
@@ -2457,6 +2613,18 @@
             "state": "translated",
             "value": "Немає доступу до камери. Можна скористатися кодом з’єднання."
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kamera erişimi kullanılamıyor. Bunun yerine eşleştirme kodu kullanabilirsiniz."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Không thể truy cập camera. Bạn có thể dùng mã ghép nối."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -2547,6 +2715,18 @@
             "state": "translated",
             "value": "Сканування камерою зупинено. Можна ввести код з’єднання."
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kamerayla tarama durdu. Bunun yerine eşleştirme kodunu girebilirsiniz."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quá trình quét bằng camera đã dừng. Bạn có thể nhập mã ghép nối."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -2636,6 +2816,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Сканування камерою недоступне"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kamerayla tarama kullanılamıyor"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Không thể quét bằng camera"
           }
         }
       },
@@ -2847,6 +3039,18 @@
             "state": "translated",
             "value": "Скасувати запис"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kaydı iptal et"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hủy ghi âm"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -2936,6 +3140,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Перевірка агента…"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent’ınız kontrol ediliyor…"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Đang kiểm tra Agent của bạn…"
           }
         }
       },
@@ -3027,6 +3243,18 @@
             "state": "translated",
             "value": "Виберіть агента, щоб продовжити чат."
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bir sohbete devam etmek için bir Agent seçin."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chọn một Agent để tiếp tục cuộc trò chuyện."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -3117,6 +3345,18 @@
             "state": "translated",
             "value": "Вибрати модель"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Model seç"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chọn mô hình"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -3206,6 +3446,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Код"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kod"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mã"
           }
         }
       },
@@ -3777,6 +4029,18 @@
             "state": "translated",
             "value": "Підключіть агента, щоб продовжити чати й роботу."
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sohbetlere ve çalışmaya devam etmek için bir Agent bağlayın."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kết nối một Agent để tiếp tục trò chuyện và công việc."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -3867,6 +4131,18 @@
             "state": "translated",
             "value": "Підключіть агента, щоб почати."
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Başlamak için bir Agent bağlayın."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kết nối một Agent để bắt đầu."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -3956,6 +4232,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Спосіб підключення"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bağlantı yöntemi"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cách kết nối"
           }
         }
       },
@@ -4407,6 +4695,18 @@
             "state": "translated",
             "value": "Дозвіл на підключення"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bağlantı onayı"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Phê duyệt kết nối"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -4497,6 +4797,18 @@
             "state": "translated",
             "value": "Для підключення потрібен дозвіл"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bağlantı için onay gerekiyor"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kết nối cần được phê duyệt"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -4586,6 +4898,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Потрібно перевірити підключення"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bağlantının kontrol edilmesi gerekiyor"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kết nối cần được kiểm tra"
           }
         }
       },
@@ -4917,6 +5241,18 @@
             "state": "translated",
             "value": "Дії з чатом"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sohbet işlemleri"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thao tác cuộc trò chuyện"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -5006,6 +5342,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Файли чату"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sohbet dosyaları"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tệp cuộc trò chuyện"
           }
         }
       },
@@ -5097,6 +5445,18 @@
             "state": "translated",
             "value": "Чати"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sohbetler"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cuộc trò chuyện"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -5187,6 +5547,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Не вдалося оновити чати. Перевірте підключення й спробуйте ще раз."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sohbetler yenilenemedi. Bağlantınızı kontrol edip yeniden deneyin."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Không thể làm mới cuộc trò chuyện. Kiểm tra kết nối rồi thử lại."
           }
         }
       }
@@ -5397,6 +5769,18 @@
             "state": "translated",
             "value": "Скопіювати код"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kodu kopyala"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sao chép mã"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -5487,6 +5871,18 @@
             "state": "translated",
             "value": "Не вдалося завершити з’єднання. Перевірте дані й спробуйте ще раз."
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eşleştirme tamamlanamadı. Bilgileri kontrol edip yeniden deneyin."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Không thể hoàn tất ghép nối. Kiểm tra thông tin rồi thử lại."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -5576,6 +5972,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Не вдалося скористатися цим кодом або посиланням з’єднання. Перевірте їх або створіть нове запрошення."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu eşleştirme kodu veya bağlantısı kullanılamadı. Kontrol edin veya yeni bir davet oluşturun."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Không thể dùng mã hoặc liên kết ghép nối này. Kiểm tra lại hoặc tạo lời mời mới."
           }
         }
       },
@@ -5668,6 +6076,18 @@
             "state": "translated",
             "value": "Створення чату…"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sohbet oluşturuluyor…"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Đang tạo cuộc trò chuyện…"
+          }
         }
       }
     },
@@ -5757,6 +6177,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Не вдалося підтвердити створення. Оновіть чати, перш ніж повторювати спробу."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oluşturma işlemi doğrulanamadı. Yeniden denemeden önce sohbetleri yenileyin."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Không thể xác nhận việc tạo cuộc trò chuyện. Làm mới danh sách trước khi thử lại."
           }
         }
       }
@@ -5967,6 +6399,18 @@
             "state": "translated",
             "value": "Не вдалося підтвердити доставку. Перевірте чат перед повторним надсиланням."
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Teslimat doğrulanamadı. Yeniden göndermeden önce sohbeti kontrol edin."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Không thể xác nhận việc chuyển tin. Hãy kiểm tra cuộc trò chuyện trước khi gửi lại."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -6056,6 +6500,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Не вдалося підтвердити доставку. Початкове повідомлення збережено. Перевірте чат перед повторним надсиланням."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Teslimat doğrulanamadı. Özgün mesajınız kaydedildi. Yeniden göndermeden önce sohbeti kontrol edin."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Không thể xác nhận việc chuyển tin. Tin nhắn gốc đã được lưu. Hãy kiểm tra cuộc trò chuyện trước khi gửi lại."
           }
         }
       },
@@ -6267,6 +6723,18 @@
             "state": "translated",
             "value": "Напряму"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Doğrudan"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trực tiếp"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -6356,6 +6824,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Відключити"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bağlantıyı kes"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ngắt kết nối"
           }
         }
       },
@@ -6447,6 +6927,18 @@
             "state": "translated",
             "value": "Відключено"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bağlantı kesildi"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Đã ngắt kết nối"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -6536,6 +7028,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Підключення розірвано. Не вдалося зберегти цей параметр."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bağlantı kesildi. Bu tercih kaydedilemedi."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Đã ngắt kết nối. Không thể lưu tùy chọn này."
           }
         }
       },
@@ -6747,6 +7251,18 @@
             "state": "translated",
             "value": "Попередні повідомлення"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Önceki mesajlar"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tin nhắn trước đó"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -6956,6 +7472,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Введіть код, який Clawket показує на комп’ютері. Не закривайте це вікно під час з’єднання."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bilgisayarınızdaki Clawket’te gösterilen kodu girin. Eşleştirme sırasında o pencereyi açık tutun."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nhập mã Clawket hiển thị trên máy tính. Giữ cửa sổ đó mở trong khi ghép nối."
           }
         }
       },
@@ -7527,6 +8055,18 @@
             "state": "translated",
             "value": "Потрібна ваша відповідь"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yanıtınız gerekiyor"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cần câu trả lời của bạn"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -7616,6 +8156,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Останні повідомлення"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Son mesajlar"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tin nhắn mới nhất"
           }
         }
       },
@@ -7827,6 +8379,18 @@
             "state": "translated",
             "value": "Завантаження агентів…"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent’lar yükleniyor…"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Đang tải Agent…"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -7916,6 +8480,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Завантаження чатів…"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sohbetler yükleniyor…"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Đang tải cuộc trò chuyện…"
           }
         }
       },
@@ -8007,6 +8583,18 @@
             "state": "translated",
             "value": "Завантаження чату…"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sohbet yükleniyor…"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Đang tải cuộc trò chuyện…"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -8096,6 +8684,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Завантаження попередніх повідомлень…"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Önceki mesajlar yükleniyor…"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Đang tải tin nhắn trước đó…"
           }
         }
       },
@@ -8547,6 +9147,18 @@
             "state": "translated",
             "value": "Повідомлення для %@"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ için mesaj"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nhắn tin cho %@"
+          }
         }
       },
       "comment": "Native UI / accessibility. Preserve each interpolated value; do not translate names or filenames."
@@ -8757,6 +9369,18 @@
             "state": "translated",
             "value": "Модель: %@"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Model: %@"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mô hình: %@"
+          }
         }
       },
       "comment": "Native UI / accessibility. Preserve each interpolated value; do not translate names or filenames."
@@ -8847,6 +9471,18 @@
             "state": "translated",
             "value": "Інші варіанти дозволу"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diğer izin seçenekleri"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tùy chọn quyền khác"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -8936,6 +9572,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Назва (необов’язково)"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ad (isteğe bağlı)"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tên (không bắt buộc)"
           }
         }
       },
@@ -9267,6 +9915,18 @@
             "state": "translated",
             "value": "Новий чат"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yeni sohbet"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cuộc trò chuyện mới"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -9356,6 +10016,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Немає доступних моделей"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kullanılabilir model yok"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Không có mô hình khả dụng"
           }
         }
       },
@@ -9447,6 +10119,18 @@
             "state": "translated",
             "value": "Чатів поки немає"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Henüz sohbet yok"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chưa có cuộc trò chuyện nào"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -9536,6 +10220,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Відповідних агентів або чатів немає"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eşleşen Agent veya sohbet yok"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Không có Agent hoặc cuộc trò chuyện phù hợp"
           }
         }
       },
@@ -9627,6 +10323,18 @@
             "state": "translated",
             "value": "Відповідних чатів немає"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eşleşen sohbet yok"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Không có cuộc trò chuyện phù hợp"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -9716,6 +10424,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Не надіслано. Повідомлення збережено."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gönderilmedi. Mesajınız kaydedildi."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chưa gửi. Tin nhắn của bạn đã được lưu."
           }
         }
       },
@@ -9927,6 +10647,18 @@
             "state": "translated",
             "value": "Відкриття чату…"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sohbet açılıyor…"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Đang mở cuộc trò chuyện…"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -10016,6 +10748,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "З’єднати агента"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent’ınızı eşleştirin"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ghép nối Agent"
           }
         }
       },
@@ -10227,6 +10971,18 @@
             "state": "translated",
             "value": "Не вдалося зберегти дані з’єднання. Знову натисніть «Підключити», щоб зберегти вже отриманий результат."
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eşleştirme verileri kaydedilemedi. Mevcut sonucu kaydetmek için yeniden Bağlan’a dokunun."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Không thể lưu dữ liệu ghép nối. Nhấn Kết nối lần nữa để lưu kết quả đã có."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -10317,6 +11073,18 @@
             "state": "translated",
             "value": "Учасник"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Katılımcı"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Người tham gia"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -10406,6 +11174,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Пароль (якщо потрібен)"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parola (gerekiyorsa)"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mật khẩu (nếu cần)"
           }
         }
       },
@@ -10617,6 +11397,18 @@
             "state": "translated",
             "value": "Вставте вміст QR-коду або посилання з’єднання"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eşleştirme QR içeriğini veya bağlantısını yapıştırın"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dán nội dung QR hoặc liên kết ghép nối"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -10827,6 +11619,18 @@
             "state": "translated",
             "value": "Підготовка %@"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ hazırlanıyor"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Đang chuẩn bị %@"
+          }
         }
       },
       "comment": "Native UI / accessibility. Preserve each interpolated value; do not translate names or filenames."
@@ -10916,6 +11720,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Попередній перегляд %@"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ önizlemesi"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xem trước %@"
           }
         }
       },
@@ -11127,6 +11943,18 @@
             "state": "translated",
             "value": "QR або посилання"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "QR veya bağlantı"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "QR hoặc liên kết"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -11337,6 +12165,18 @@
             "state": "translated",
             "value": "Очікує на перевірку"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "İnceleme bekliyor"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chờ xem xét"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -11426,6 +12266,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Очікує на ваше підтвердження. Надішліть це повідомлення, коли підключення стане доступним."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Onayınızı bekliyor. Bağlantı kullanılabilir olduğunda bu mesajı gönderin."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Đang chờ bạn xác nhận. Gửi tin nhắn này khi có kết nối."
           }
         }
       },
@@ -11518,6 +12370,18 @@
             "state": "translated",
             "value": "Підключіться знову або оновіть чати, перш ніж створювати ще один."
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Başka bir sohbet oluşturmadan önce yeniden bağlanın veya sohbetleri yenileyin."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kết nối lại hoặc làm mới danh sách cuộc trò chuyện trước khi tạo thêm."
+          }
         }
       }
     },
@@ -11606,6 +12470,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Підключіться знову, щоб змінити модель."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modeli değiştirmek için yeniden bağlanın."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kết nối lại để đổi mô hình."
           }
         }
       },
@@ -11698,6 +12574,18 @@
             "state": "translated",
             "value": "Підключіться знову, щоб створити чат."
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sohbet oluşturmak için yeniden bağlanın."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kết nối lại để tạo cuộc trò chuyện."
+          }
         }
       }
     },
@@ -11786,6 +12674,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Підключіться знову, щоб завантажити попередні повідомлення."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Önceki mesajları yüklemek için yeniden bağlanın."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kết nối lại để tải tin nhắn trước đó."
           }
         }
       },
@@ -11877,6 +12777,18 @@
             "state": "translated",
             "value": "Підключіться знову, щоб оновити чати."
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sohbetleri yenilemek için yeniden bağlanın."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kết nối lại để làm mới cuộc trò chuyện."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -11967,6 +12879,18 @@
             "state": "translated",
             "value": "Для надсилання підключіться знову. Чернетку збережено."
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Göndermek için yeniden bağlanın. Taslağınız kaydedildi."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kết nối lại để gửi. Bản nháp của bạn đã được lưu."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -12056,6 +12980,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Підключіться знову, щоб зупинити це виконання."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu çalışmayı durdurmak için yeniden bağlanın."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kết nối lại để dừng lượt chạy này."
           }
         }
       },
@@ -12267,6 +13203,18 @@
             "state": "translated",
             "value": "Збережені підключення відновлено з останньої перевіреної копії."
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kayıtlı bağlantılarınız son doğrulanmış kopyadan kurtarıldı."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Đã khôi phục các kết nối đã lưu từ bản sao được xác minh gần nhất."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -12357,6 +13305,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Оновіть чати, перш ніж створювати ще один."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Başka bir sohbet oluşturmadan önce sohbetleri yenileyin."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Làm mới danh sách cuộc trò chuyện trước khi tạo thêm."
           }
         }
       }
@@ -12687,6 +13647,18 @@
             "state": "translated",
             "value": "Видалити %@"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ öğesini kaldır"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xóa %@"
+          }
         }
       },
       "comment": "Native UI / accessibility. Preserve each interpolated value; do not translate names or filenames."
@@ -12897,6 +13869,18 @@
             "state": "translated",
             "value": "Видалити це підключення?"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu bağlantı kaldırılsın mı?"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xóa kết nối này?"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -12987,6 +13971,18 @@
             "state": "translated",
             "value": "Відповісти в новому чаті"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yeni sohbette yanıtla"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trả lời trong cuộc trò chuyện mới"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -13076,6 +14072,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Підготовка відповіді…"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yanıt veriliyor…"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Đang phản hồi…"
           }
         }
       },
@@ -13287,6 +14295,18 @@
             "state": "translated",
             "value": "Зберегти підключення"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bağlantıyı kaydet"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lưu kết nối"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -13377,6 +14397,18 @@
             "state": "translated",
             "value": "Збережені чати залишаться на цьому пристрої. Агента можна буде знову з’єднати пізніше."
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kayıtlı sohbetler bu cihazda kalır. Agent’ı daha sonra yeniden eşleştirebilirsiniz."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Các cuộc trò chuyện đã lưu vẫn nằm trên thiết bị này. Bạn có thể ghép nối lại Agent sau."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -13466,6 +14498,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Не вдалося безпечно прочитати збережені дані. Розблокуйте пристрій і знову відкрийте Clawket."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kayıtlı veriler güvenli biçimde okunamadı. Cihazın kilidini açtıktan sonra Clawket’i yeniden açın."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Không thể đọc dữ liệu đã lưu một cách an toàn. Hãy mở khóa thiết bị này rồi mở lại Clawket."
           }
         }
       },
@@ -13677,6 +14721,18 @@
             "state": "translated",
             "value": "Сканувати QR-код"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "QR kodunu tara"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quét mã QR"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -13767,6 +14823,18 @@
             "state": "translated",
             "value": "Сканувати QR-код з’єднання"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eşleştirme QR kodunu tara"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quét QR ghép nối"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -13856,6 +14924,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Відскануйте QR-код, який Clawket показує на комп’ютері, або вставте посилання з’єднання."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bilgisayarınızdaki Clawket’te gösterilen QR kodunu tarayın veya eşleştirme bağlantısını yapıştırın."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quét mã QR Clawket hiển thị trên máy tính hoặc dán liên kết ghép nối."
           }
         }
       },
@@ -14187,6 +15267,18 @@
             "state": "translated",
             "value": "Пошук агентів і чатів"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent ve sohbetlerde ara"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tìm Agent và cuộc trò chuyện"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -14276,6 +15368,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Пошук чатів"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sohbetlerde ara"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tìm cuộc trò chuyện"
           }
         }
       },
@@ -14367,6 +15471,18 @@
             "state": "translated",
             "value": "Пошук моделей"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modellerde ara"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tìm mô hình"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -14456,6 +15572,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Захищене сховище недоступне."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Güvenli depolama kullanılamıyor."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Không thể truy cập bộ nhớ bảo mật."
           }
         }
       },
@@ -14667,6 +15795,18 @@
             "state": "translated",
             "value": "Надіслати відповідь"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yanıtı gönder"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gửi câu trả lời"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -14876,6 +16016,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Статус надсилання не підтверджено"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gönderim durumu doğrulanmadı"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chưa xác nhận trạng thái gửi"
           }
         }
       },
@@ -15447,6 +16599,18 @@
             "state": "translated",
             "value": "Показати команду повністю"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Komutun tamamını göster"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hiện toàn bộ lệnh"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -15657,6 +16821,18 @@
             "state": "translated",
             "value": "Почати чат"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sohbet başlat"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bắt đầu cuộc trò chuyện"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -15746,6 +16922,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Почати голосове введення"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sesle girişi başlat"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bắt đầu nhập bằng giọng nói"
           }
         }
       },
@@ -15957,6 +17145,18 @@
             "state": "translated",
             "value": "Зупинити запис"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kaydı durdur"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dừng ghi âm"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -16167,6 +17367,18 @@
             "state": "translated",
             "value": "Зупинення завдання"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Görev durduruluyor"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Đang dừng tác vụ"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -16256,6 +17468,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Сховище недоступне"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Depolama kullanılamıyor"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Không thể truy cập bộ nhớ"
           }
         }
       },
@@ -16347,6 +17571,18 @@
             "state": "translated",
             "value": "Натисніть для запису. Утримуйте й відпустіть для надсилання. Посуньте вгору для скасування."
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kaydetmek için dokunun. Göndermek için basılı tutup bırakın. İptal etmek için yukarı kaydırın."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chạm để ghi âm. Nhấn giữ rồi thả để gửi. Vuốt lên để hủy."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -16436,6 +17672,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Не вдалося видалити підключення. Збережені дані не змінилися."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bağlantı kaldırılamadı. Kayıtlı verileriniz değişmedi."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Không thể xóa kết nối. Dữ liệu đã lưu không thay đổi."
           }
         }
       },
@@ -16527,6 +17775,18 @@
             "state": "translated",
             "value": "Не вдалося зберегти вибране підключення. Спробуйте ще раз."
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seçilen bağlantı kaydedilemedi. Lütfen yeniden deneyin."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Không thể lưu kết nối đã chọn. Vui lòng thử lại."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -16616,6 +17876,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Не вдалося виконати операцію. Перевірте підключення й спробуйте ще раз."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "İşlem tamamlanamadı. Bağlantınızı kontrol edip yeniden deneyin."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Không thể hoàn tất thao tác. Kiểm tra kết nối rồi thử lại."
           }
         }
       },
@@ -16707,6 +17979,18 @@
             "state": "translated",
             "value": "Не вдалося виконати операцію. Спробуйте ще раз."
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "İşlem tamamlanamadı. Lütfen yeniden deneyin."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Không thể hoàn tất thao tác. Vui lòng thử lại."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -16796,6 +18080,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Не вдалося зв’язатися із сервісом з’єднання. Перевірте комп’ютер, перш ніж знову використовувати це запрошення."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eşleştirme hizmetine ulaşılamadı. Bu daveti yeniden denemeden önce bilgisayarınızı kontrol edin."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Không thể kết nối tới dịch vụ ghép nối. Kiểm tra máy tính trước khi thử lại lời mời này."
           }
         }
       },
@@ -16887,6 +18183,18 @@
             "state": "translated",
             "value": "В очікуванні 32 повідомлення. Завершіть або видаліть одне, перш ніж додати ще."
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bekleyen 32 mesaj var. Başka bir mesaj eklemeden önce birini tamamlayın veya kaldırın."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Có 32 tin nhắn đang chờ. Hãy hoàn tất hoặc xóa một tin nhắn trước khi thêm tin khác."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -16976,6 +18284,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ця дія недоступна для цього підключення."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu işlem bu bağlantı için kullanılamıyor."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hành động này không khả dụng cho kết nối này."
           }
         }
       },
@@ -17067,6 +18387,18 @@
             "state": "translated",
             "value": "Цей код належить іншому агенту. Виберіть відповідного агента й спробуйте ще раз."
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu kod başka bir Agent’a ait. İlgili Agent’ı seçip yeniden deneyin."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mã này thuộc về một Agent khác. Chọn Agent phù hợp rồi thử lại."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -17156,6 +18488,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Це підключення не має дозволу на цю дію."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu bağlantının bu işlem için izni yok."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kết nối này không có quyền thực hiện hành động đó."
           }
         }
       },
@@ -17247,6 +18591,18 @@
             "state": "translated",
             "value": "Цей чат"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu sohbet"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cuộc trò chuyện này"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -17336,6 +18692,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Тут цей чат доступний лише для читання."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu sohbet burada salt okunurdur."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bạn chỉ có thể đọc cuộc trò chuyện này tại đây."
           }
         }
       },
@@ -17427,6 +18795,18 @@
             "state": "translated",
             "value": "Цей застосунок для розробки використовує власні підключення та сховище."
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu geliştirme uygulaması kendi bağlantılarını ve depolama alanını kullanır."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ứng dụng phát triển này dùng kết nối và bộ nhớ riêng."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -17516,6 +18896,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Не вдалося зберегти чернетку. Не закривайте Clawket і спробуйте ще раз."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu taslak kaydedilemedi. Clawket’i açık tutup yeniden deneyin."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Không thể lưu bản nháp này. Giữ Clawket mở rồi thử lại."
           }
         }
       },
@@ -17607,6 +18999,18 @@
             "state": "translated",
             "value": "Термін дії запрошення минув або його вже використано. Отримайте новий код на комп’ютері."
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu davetin süresi dolmuş veya davet kullanılmış. Bilgisayarınızdan yeni bir kod alın."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lời mời này đã hết hạn hoặc đã được dùng. Lấy mã mới trên máy tính."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -17697,6 +19101,18 @@
             "state": "translated",
             "value": "У цьому запрошенні використовується інше середовище сервісу."
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu davet farklı bir hizmet ortamı kullanıyor."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lời mời này sử dụng một môi trường dịch vụ khác."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -17786,6 +19202,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Цей дозвіл діятиме й для майбутніх запитів."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu izin sonraki istekler için de geçerlidir."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quyền này cũng áp dụng cho các yêu cầu trong tương lai."
           }
         }
       },
@@ -17878,6 +19306,18 @@
             "state": "translated",
             "value": "Цей проєкт недоступний."
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu proje kullanılamıyor."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dự án này không khả dụng."
+          }
         }
       }
     },
@@ -17966,6 +19406,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Токен (якщо потрібен)"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token (gerekiyorsa)"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token (nếu cần)"
           }
         }
       },
@@ -18057,6 +19509,18 @@
             "state": "translated",
             "value": "Забагато спроб. Трохи зачекайте й спробуйте ще раз."
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Çok fazla deneme yapıldı. Yeniden denemeden önce biraz bekleyin."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Đã thử quá nhiều lần. Chờ một chút trước khi thử lại."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -18146,6 +19610,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Вивід інструмента"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Araç çıktısı"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Đầu ra công cụ"
           }
         }
       },
@@ -18477,6 +19953,18 @@
             "state": "translated",
             "value": "Розблокуйте пристрій і знову відкрийте Clawket, щоб отримати доступ до збережених підключень."
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kayıtlı bağlantılarınıza erişmek için cihazın kilidini açıp Clawket’i yeniden açın."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mở khóa thiết bị này rồi mở lại Clawket để truy cập các kết nối đã lưu."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -18687,6 +20175,18 @@
             "state": "translated",
             "value": "Використати навичку"
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bir beceri kullan"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dùng một kỹ năng"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -18776,6 +20276,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Використовуйте адресу WebSocket, надану агентом. Облікові дані безпечно зберігаються на цьому пристрої."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent’ınızın sağladığı WebSocket adresini kullanın. Kimlik bilgileri bu cihazda güvenli biçimde saklanır."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dùng địa chỉ WebSocket do Agent cung cấp. Thông tin xác thực được lưu an toàn trên thiết bị này."
           }
         }
       },
@@ -18987,6 +20499,18 @@
             "state": "translated",
             "value": "Можна вставити вміст QR-коду або ввести код з’єднання. За потреби перевірте доступ до камери в Налаштуваннях."
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bunun yerine QR içeriğini yapıştırabilir veya eşleştirme kodunu girebilirsiniz. Gerekirse Ayarlar’dan kamera erişimini kontrol edin."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bạn có thể dán nội dung mã QR hoặc nhập mã ghép nối. Nếu cần, hãy kiểm tra quyền truy cập camera trong Cài đặt."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -19076,6 +20600,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Не вдалося зв’язатися з агентом. Чернетку збережено."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent’ınıza ulaşılamadı. Taslağınız kaydedildi."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Không thể kết nối tới Agent. Bản nháp của bạn đã được lưu."
           }
         }
       },
@@ -19167,6 +20703,18 @@
             "state": "translated",
             "value": "Потрібно знову з’єднати агента. Додайте його поточний код з’єднання в Налаштуваннях."
           }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent’ınızın yeniden eşleştirilmesi gerekiyor. Güncel eşleştirme kodunu Ayarlar’dan ekleyin."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent của bạn cần được ghép nối lại. Thêm mã ghép nối hiện tại trong Cài đặt."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -19256,6 +20804,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ваші агенти завжди поруч"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent’larınız her zaman yanınızda"
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Các Agent luôn trong tầm tay"
           }
         }
       },
@@ -19466,6 +21026,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "Не вдалося безпечно зберегти дані. Не закривайте Clawket і спробуйте ще раз."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verileriniz güvenli biçimde kaydedilemedi. Clawket’i açık tutup yeniden deneyin."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Không thể lưu dữ liệu một cách an toàn. Giữ Clawket mở rồi thử lại."
           }
         }
       },
