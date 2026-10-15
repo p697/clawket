@@ -4,6 +4,96 @@ import XCTest
 @testable import Clawket
 
 final class NativeConversationStoreTests: XCTestCase, @unchecked Sendable {
+    func testQueuedEditPreservesComposerAndIdempotencyWithoutDispatching() throws {
+        var conversation = NativeConversation()
+        conversation.draft = "Keep my current unsent draft"
+        conversation.messages = [NativeMessage(id: "pending", role: .user, local: true,
+            text: "Original queued text", idempotencyKey: "same-request", delivery: .queued)]
+        let edit = try conversation.holdForEditing(messageID: "pending")
+        XCTAssertEqual(conversation.messages[0].delivery, .held)
+        try conversation.apply(edit, text: "Edited queued text")
+        XCTAssertEqual(conversation.draft, "Keep my current unsent draft")
+        XCTAssertEqual(conversation.messages.count, 1)
+        XCTAssertEqual(conversation.messages[0].id, "pending")
+        XCTAssertEqual(conversation.messages[0].idempotencyKey, "same-request")
+        XCTAssertEqual(conversation.messages[0].text, "Edited queued text")
+        XCTAssertEqual(conversation.messages[0].delivery, .held)
+    }
+
+    func testClosingQueuedEditorKeepsMessageHeldAfterRecovery() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = try NativeConversationStore(directory: directory)
+        var conversation = NativeConversation()
+        conversation.draft = "A separate draft"
+        conversation.messages = [NativeMessage(id: "pending", role: .user, local: true,
+            text: "Original", idempotencyKey: "stable-request", delivery: .queued)]
+        _ = try conversation.holdForEditing(messageID: "pending")
+        // Dismissing has no apply/send operation. Persisting the paused state is enough.
+        try await store.write(conversation, connectionID: "c", agentID: "a", sessionID: "s")
+        let reopened = try NativeConversationStore(directory: directory)
+        let recovered = try await reopened.read(connectionID: "c", agentID: "a", sessionID: "s")
+        XCTAssertEqual(recovered.messages[0].text, "Original")
+        XCTAssertEqual(recovered.messages[0].delivery, .held)
+        XCTAssertEqual(recovered.draft, "A separate draft")
+    }
+
+    func testStaleEditorCannotChangeDeliveredOrReplacedMessage() throws {
+        var original = NativeConversation()
+        original.messages = [NativeMessage(id: "pending", role: .user, local: true,
+            text: "Original", idempotencyKey: "stable-request", delivery: .queued)]
+        let edit = try original.holdForEditing(messageID: "pending")
+        let states: [NativeDelivery] = [.sending, .sent, .delivered, .uncertain, .failed, .queued]
+        for state in states {
+            var changed = original; changed.messages[0].delivery = state
+            XCTAssertThrowsError(try changed.apply(edit, text: "Replacement"))
+            XCTAssertEqual(changed.messages[0].text, "Original")
+        }
+        var changed = original; changed.messages[0].text = "Newer text"
+        XCTAssertThrowsError(try changed.apply(edit, text: "Replacement"))
+        changed = original; changed.messages[0].idempotencyKey = "another-request"
+        XCTAssertThrowsError(try changed.apply(edit, text: "Replacement"))
+        changed = original; changed.messages = []
+        XCTAssertThrowsError(try changed.apply(edit, text: "Replacement"))
+    }
+
+    func testOnlyUndispatchedLocalUserMessagesCanBeEditedOrRemoved() throws {
+        let states: [NativeDelivery] = [.queued, .held, .failed, .sending, .sent, .delivered, .uncertain]
+        for state in states {
+            var conversation = NativeConversation()
+            conversation.messages = [NativeMessage(id: "pending", role: .user, local: true,
+                text: "Original", idempotencyKey: "stable-request", delivery: state)]
+            if [.queued, .held, .failed].contains(state) {
+                var edited = conversation
+                XCTAssertNoThrow(try edited.holdForEditing(messageID: "pending"))
+                XCTAssertNoThrow(try conversation.removePending(messageID: "pending"))
+                XCTAssertTrue(conversation.messages.isEmpty)
+            } else {
+                XCTAssertThrowsError(try conversation.holdForEditing(messageID: "pending"))
+                XCTAssertThrowsError(try conversation.removePending(messageID: "pending"))
+            }
+        }
+        for message in [
+            NativeMessage(id: "pending", role: .user, text: "External participant", idempotencyKey: "remote", delivery: .queued),
+            NativeMessage(id: "pending", role: .assistant, local: true, text: "Assistant", idempotencyKey: "remote", delivery: .held),
+            NativeMessage(id: "pending", role: .user, local: true, text: "No identity", delivery: .held),
+        ] {
+            var conversation = NativeConversation(); conversation.messages = [message]
+            XCTAssertThrowsError(try conversation.holdForEditing(messageID: "pending"))
+            XCTAssertThrowsError(try conversation.removePending(messageID: "pending"))
+        }
+    }
+
+    func testEmptyEditDoesNotDestroyOriginalOrComposer() throws {
+        var conversation = NativeConversation(); conversation.draft = "Separate draft"
+        conversation.messages = [NativeMessage(id: "pending", role: .user, local: true,
+            text: "Original", idempotencyKey: "stable-request", delivery: .queued)]
+        let edit = try conversation.holdForEditing(messageID: "pending")
+        XCTAssertThrowsError(try conversation.apply(edit, text: " \n\t"))
+        XCTAssertEqual(conversation.messages[0].text, "Original")
+        XCTAssertEqual(conversation.draft, "Separate draft")
+    }
+
     func testDevelopmentAppCanRoundTripItsOwnKeychainItem() async throws {
         let values = try KeychainValueStore(service: "com.p697.clawket.nativeqa.tests." + UUID().uuidString)
         let original = Data("native development keychain".utf8)

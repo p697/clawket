@@ -518,6 +518,20 @@
       "mobileTerm": "common.Edit"
     },
     {
+      "key": "Edit message",
+      "sources": [
+        "apps/ios/Clawket/PendingMessageEditor.swift:32"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Editing pauses this message. Your current draft stays separate.",
+      "sources": [
+        "apps/ios/Clawket/PendingMessageEditor.swift:28"
+      ],
+      "mobileTerm": null
+    },
+    {
       "key": "Enter the code shown by Clawket on your computer. Keep that window open while pairing.",
       "sources": [
         "apps/ios/Clawket/ConnectAgentView.swift:71"
@@ -966,6 +980,13 @@
       "mobileTerm": "chat.Retry"
     },
     {
+      "key": "Save changes",
+      "sources": [
+        "apps/ios/Clawket/PendingMessageEditor.swift:38"
+      ],
+      "mobileTerm": null
+    },
+    {
       "key": "Save connection",
       "sources": [
         "apps/ios/Clawket/ConnectAgentView.swift:84"
@@ -1288,6 +1309,13 @@
       "key": "This invitation uses a different service environment.",
       "sources": [
         "apps/ios/Clawket/NativeAppModel.swift:686"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "This message could not be saved. Close the editor and try again.",
+      "sources": [
+        "apps/ios/Clawket/PendingMessageEditor.swift:42"
       ],
       "mobileTerm": null
     },

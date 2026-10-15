@@ -14,7 +14,16 @@ enum AddConnectionRequest {
 
 @MainActor
 final class NativeAppModel: ObservableObject {
-    enum Destination: String, Identifiable { case connect, connections; var id: String { rawValue } }
+    enum Destination: Identifiable {
+        case connect, connections, editPending(ConversationID, NativePendingEdit, activation: UUID)
+        var id: String {
+            switch self {
+            case .connect: "connect"
+            case .connections: "connections"
+            case let .editPending(_, edit, _): edit.id.uuidString
+            }
+        }
+    }
     let presentation = ClientPresentation(title: String(localized: "Agents"),
         emptyTitle: String(localized: "Your agents, within reach"),
         emptyDetail: String(localized: "Connect an agent to continue conversations and keep work moving."))
@@ -35,6 +44,7 @@ final class NativeAppModel: ObservableObject {
     private var activationTask: Task<Void, Never>?
     private var started = false
     private var selectionRevision = UUID()
+    private var activationRevision = UUID()
     private var historyRevisions: [ConversationID: UUID] = [:]
     private var state = RuntimeConnectionState()
     private var agents: [RuntimeAgent] = []
@@ -194,7 +204,8 @@ final class NativeAppModel: ObservableObject {
         guard !changingConnections, let runtime, let vault else { return }
         changingConnections = true
         activationTask?.cancel()
-        selectionRevision = UUID()
+        selectionRevision = UUID(); activationRevision = UUID()
+        unconfirmedCreations.formUnion(creatingCatalogs); creatingCatalogs = []
         Task {
             defer { changingConnections = false }
             await runtime.disconnect()
@@ -218,6 +229,7 @@ final class NativeAppModel: ObservableObject {
                 let wasActive = activeConnectionID == id
                 registry = next; connections = next.records; activeConnectionID = next.activeConnectionID
                 if wasActive {
+                    activationRevision = UUID()
                     await runtime?.disconnect()
                     agents = []; sessions = []; presentation.agents = []; presentation.selectedConversation = nil
                     if let active = next.activeConnectionID { connectSaved(active) }
@@ -250,7 +262,8 @@ final class NativeAppModel: ObservableObject {
 
     private func connectSaved(_ id: String) {
         guard let connection = connections.first(where: { $0.id == id }), let runtime else { return }
-        activationTask?.cancel(); selectionRevision = UUID()
+        activationTask?.cancel(); selectionRevision = UUID(); activationRevision = UUID()
+        unconfirmedCreations.formUnion(creatingCatalogs); creatingCatalogs = []
         if state.connectionID != id {
             agents = []; sessions = []; presentation.agents = []; presentation.catalogs = [:]
             presentation.selectedConversation = nil
@@ -307,9 +320,15 @@ final class NativeAppModel: ObservableObject {
 
     private func refresh() {
         guard let runtime, let id = activeConnectionID else { return }
+        let activation = activationRevision
         Task {
-            do { let roster = try await runtime.refreshRoster(); if id == activeConnectionID { receive(.roster(roster)) } }
-            catch { if id == activeConnectionID { showFailure(error) } }
+            guard activation == activationRevision else { return }
+            do {
+                _ = try await runtime.refreshRoster()
+                guard activation == activationRevision, id == activeConnectionID else { return }
+                unconfirmedCreations = unconfirmedCreations.filter { $0.connectionID != id }
+                rebuildRoster()
+            } catch { if activation == activationRevision, id == activeConnectionID { showFailure(error) } }
         }
     }
 
@@ -339,24 +358,27 @@ final class NativeAppModel: ObservableObject {
 
     private func showCatalog(_ id: AgentCatalogID) {
         guard id.connectionID == activeConnectionID, let runtime else { return }
+        let activation = activationRevision
         updateCatalog(id)
         presentation.catalogs[id]?.error = nil
         presentation.catalogs[id]?.isLoading = true
         Task {
+            guard activation == activationRevision else { return }
             do {
                 if state.phase == .ready {
                     if state.capabilities.projects {
                         let values = try await runtime.projects()
-                        guard id.connectionID == activeConnectionID else { return }
+                        guard activation == activationRevision, id.connectionID == activeConnectionID else { return }
                         projects[id.connectionID] = values
                     }
                     _ = try await runtime.refreshRoster()
+                    guard activation == activationRevision else { return }
                     unconfirmedCreations.remove(id)
                 }
-                guard id.connectionID == activeConnectionID else { return }
+                guard activation == activationRevision, id.connectionID == activeConnectionID else { return }
                 updateCatalog(id); presentation.catalogs[id]?.isLoading = false
             } catch {
-                guard id.connectionID == activeConnectionID else { return }
+                guard activation == activationRevision, id.connectionID == activeConnectionID else { return }
                 presentation.catalogs[id]?.isLoading = false
                 presentation.catalogs[id]?.error = String(localized: "Conversations could not be refreshed. Check your connection and try again.")
             }
@@ -390,16 +412,20 @@ final class NativeAppModel: ObservableObject {
               !creatingCatalogs.contains(id), !unconfirmedCreations.contains(id), let runtime else { return }
         if let projectID, projects[id.connectionID]?.first(where: { $0.id == projectID })?.available != true { return }
         creatingCatalogs.insert(id); updateCatalog(id)
+        let activation = activationRevision
         Task {
-            defer { creatingCatalogs.remove(id); updateCatalog(id) }
+            defer {
+                if activation == activationRevision { creatingCatalogs.remove(id); updateCatalog(id) }
+            }
+            guard activation == activationRevision, id.connectionID == activeConnectionID else { return }
             do {
                 let session = try await runtime.createSession(agentID: id.agentID, projectID: projectID)
-                guard id.connectionID == activeConnectionID else { return }
+                guard activation == activationRevision, id.connectionID == activeConnectionID else { return }
                 sessions.removeAll { $0.connectionID == id.connectionID && $0.key == session.key }; sessions.append(session)
                 presentation.selectedConversation = .init(connectionID: id.connectionID, agentID: id.agentID, sessionID: session.key)
                 rebuildRoster()
             } catch {
-                guard id.connectionID == activeConnectionID else { return }
+                guard activation == activationRevision, id.connectionID == activeConnectionID else { return }
                 unconfirmedCreations.insert(id)
                 presentation.catalogs[id]?.error = String(localized: "Creation could not be confirmed. Refresh conversations before trying again.")
             }
@@ -436,17 +462,18 @@ final class NativeAppModel: ObservableObject {
         guard route.connectionID == activeConnectionID, state.phase == .ready, state.capabilities.history,
               let runtime, let document = documents[route] else { return }
         let revision = UUID(); historyRevisions[route] = revision
+        let activation = activationRevision
         let liveRevision = liveRevisions[route, default: 0]
         let knownIDs = Set(document.messages.map(\.id))
         presentation.conversations[route]?.isLoadingHistory = true
         do {
             let history = try await runtime.loadSession(key: route.sessionID, limit: document.historyLimit,
                                                        cursor: earlier ? document.nextCursor : nil)
-            guard activeConnectionID == route.connectionID, historyRevisions[route] == revision else { return }
+            guard activation == activationRevision, activeConnectionID == route.connectionID, historyRevisions[route] == revision else { return }
             mergeHistory(history, route: route, earlier: earlier, liveRevision: liveRevision, knownIDs: knownIDs)
             presentation.conversations[route]?.isLoadingHistory = false
         } catch {
-            guard historyRevisions[route] == revision else { return }
+            guard activation == activationRevision, historyRevisions[route] == revision else { return }
             presentation.conversations[route]?.isLoadingHistory = false
             if presentation.selectedConversation == route { showFailure(error) }
         }
@@ -484,9 +511,10 @@ final class NativeAppModel: ObservableObject {
 
     private func loadModels(_ route: ConversationID) async {
         guard route.connectionID == activeConnectionID, state.capabilities.models, let runtime else { return }
+        let activation = activationRevision
         do {
             let models = try await runtime.models(sessionKey: state.capabilities.modelPerSession ? route.sessionID : nil)
-            guard route.connectionID == activeConnectionID else { return }
+            guard activation == activationRevision, route.connectionID == activeConnectionID else { return }
             var choices: [String: RuntimeModel] = [:]
             let display = try models.map { model -> ModelPresentation in
                 let key = try DocumentStore.scopedKey(namespace: "model", parts: [model.provider ?? "", model.id])
@@ -497,17 +525,19 @@ final class NativeAppModel: ObservableObject {
             presentation.conversations[route]?.models = display
             presentation.conversations[route]?.modelTitle = models.first(where: \.selected)?.name ?? String(localized: "Choose model")
             presentation.conversations[route]?.modelScopeLabel = state.capabilities.modelPerSession ? String(localized: "This conversation") : String(localized: "Applies to all conversations")
-        } catch { if route == presentation.selectedConversation { showFailure(error) } }
+        } catch { if activation == activationRevision, route == presentation.selectedConversation { showFailure(error) } }
     }
 
     private func selectModel(_ route: ConversationID, id: String) {
         guard route.connectionID == activeConnectionID, let model = modelChoices[route]?[id], let runtime else { return }
+        let activation = activationRevision
         Task {
+            guard activation == activationRevision, route.connectionID == activeConnectionID else { return }
             do {
                 try await runtime.selectModel(id: model.id, provider: model.provider,
                                               sessionKey: state.capabilities.modelPerSession ? route.sessionID : nil)
                 await loadModels(route)
-            } catch { if route.connectionID == activeConnectionID { showFailure(error) } }
+            } catch { if activation == activationRevision, route.connectionID == activeConnectionID { showFailure(error) } }
         }
     }
 
@@ -538,12 +568,15 @@ final class NativeAppModel: ObservableObject {
               let queued = documents[route]?.messages.first(where: { $0.local && $0.delivery == .queued }),
               let id = queued.idempotencyKey else { return }
         guard sessions.first(where: { $0.connectionID == route.connectionID && $0.key == route.sessionID })?.canContinue != false else { return }
+        // Reserve the item synchronously. Editing/removal can never race a Task that
+        // captured queued text but has not entered its first actor turn yet.
+        updateSend(route, id: queued.id, delivery: .sending)
+        let activation = activationRevision
         sendTasks[route] = Task {
             do {
                 // Queue persistence alone never proves dispatch. Persist sending before entering the wire path.
-                updateSend(route, id: queued.id, delivery: .sending)
                 try await persist(route)
-                guard route.connectionID == activeConnectionID, state.phase == .ready, running[route] == nil else {
+                guard activation == activationRevision, route.connectionID == activeConnectionID, state.phase == .ready, running[route] == nil else {
                     updateSend(route, id: queued.id, delivery: .held)
                     sendTasks.removeValue(forKey: route); scheduleSave(route, immediate: true); return
                 }
@@ -573,9 +606,11 @@ final class NativeAppModel: ObservableObject {
         guard route.connectionID == activeConnectionID, state.capabilities.abort, let runtime else { return }
         guard sessions.first(where: { $0.connectionID == route.connectionID && $0.key == route.sessionID })?.canContinue != false else { return }
         let runID = running[route]?.nilIfEmpty
+        let activation = activationRevision
         Task {
+            guard activation == activationRevision, route.connectionID == activeConnectionID else { return }
             do { try await runtime.abort(sessionKey: route.sessionID, runID: runID) }
-            catch { if route.connectionID == activeConnectionID { showFailure(error) } }
+            catch { if activation == activationRevision, route.connectionID == activeConnectionID { showFailure(error) } }
         }
     }
 
@@ -668,8 +703,8 @@ final class NativeAppModel: ObservableObject {
         case nil: nil
         }
         var actions: [MessageAction] = [.copy]
-        if message.local && [.failed, .uncertain].contains(message.delivery) { actions.append(.edit) }
-        if message.local && message.delivery == .held { actions += [.sendNow, .edit, .remove] }
+        if message.local && [.queued, .held, .failed].contains(message.delivery) { actions += [.edit, .remove] }
+        if message.local && message.delivery == .held { actions.append(.sendNow) }
         return .init(id: message.id, author: author, content: content, delivery: delivery, isStreaming: message.streaming, actions: actions)
     }
 
@@ -678,19 +713,46 @@ final class NativeAppModel: ObservableObject {
         switch action {
         case .copy: UIPasteboard.general.string = message.text
         case .edit:
-            presentation.draft(for: route).text = message.text
-            documents[route]?.draft = message.text; changed(route); scheduleSave(route)
+            guard route.connectionID == activeConnectionID, var document = documents[route],
+                  let edit = try? document.holdForEditing(messageID: messageID) else { return }
+            documents[route] = document; updatePresentation(route); scheduleSave(route, immediate: true)
+            destination = .editPending(route, edit, activation: activationRevision)
         case .sendNow:
             guard message.delivery == .held, route.connectionID == activeConnectionID, state.phase == .ready,
                   let index = documents[route]?.messages.firstIndex(where: { $0.id == messageID }) else { return }
             documents[route]?.messages[index].delivery = .queued; changed(route)
             updatePresentation(route); scheduleSave(route, immediate: true); drainQueue(route)
         case .remove:
-            guard message.delivery == .held else { return }
-            documents[route]?.messages.removeAll { $0.id == messageID }; changed(route)
+            guard var document = documents[route] else { return }
+            do { try document.removePending(messageID: messageID) } catch { return }
+            documents[route] = document
             updatePresentation(route); scheduleSave(route, immediate: true)
         default: break
         }
+    }
+
+    func savePendingEdit(_ edit: NativePendingEdit, route: ConversationID, activation: UUID, text: String) async throws {
+        guard activation == activationRevision, route.connectionID == activeConnectionID,
+              destination?.id == edit.id.uuidString, let original = documents[route] else { throw StoreFailure.invalidDocument }
+        var updated = original
+        try updated.apply(edit, text: text)
+        documents[route] = updated; updatePresentation(route)
+        saveTasks[route]?.cancel()
+        do { try await persist(route) }
+        catch {
+            // Do not overwrite history or delivery changes that arrived while writing.
+            if documents[route]?.revision == updated.revision {
+                var restored = original; restored.revision = updated.revision + 1
+                documents[route] = restored; updatePresentation(route); scheduleSave(route, immediate: true)
+            }
+            throw error
+        }
+        guard activation == activationRevision, destination?.id == edit.id.uuidString,
+              let current = documents[route]?.messages.first(where: { $0.id == edit.messageID }),
+              current.idempotencyKey == edit.idempotencyKey, current.text == text, current.delivery == .held else {
+            throw StoreFailure.invalidDocument
+        }
+        destination = nil
     }
 
     private func changed(_ route: ConversationID) { documents[route]?.revision += 1 }

@@ -13,6 +13,8 @@ struct ClawketApp: App {
                     switch destination {
                     case .connect: ConnectAgentView(client: client)
                     case .connections: ConnectionsView(client: client)
+                    case let .editPending(route, edit, activation):
+                        PendingMessageEditor(client: client, route: route, edit: edit, activation: activation)
                     }
                 }
                 .alert("Clawket", isPresented: Binding(get: { client.notice != nil }, set: { if !$0 { client.notice = nil } })) {

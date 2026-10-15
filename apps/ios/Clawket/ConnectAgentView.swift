@@ -108,6 +108,8 @@ struct ConnectAgentView: View {
             .sheet(isPresented: $scanner) {
                 PairingScanner { value in raw = value; scanner = false }
             }
+            .onChange(of: method) { _ in error = nil }
+            .onChange(of: backend) { _ in error = nil }
         }
     }
 

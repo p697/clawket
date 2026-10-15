@@ -27,6 +27,39 @@ struct NativeConversation: Codable, Sendable {
     var nextCursor: String?
     var historyLimit = 80
     var hasMore = false
+
+    mutating func holdForEditing(messageID: String) throws -> NativePendingEdit {
+        guard let index = editableIndex(messageID: messageID), let key = messages[index].idempotencyKey else {
+            throw StoreFailure.invalidDocument
+        }
+        messages[index].delivery = .held; revision += 1
+        return .init(messageID: messageID, idempotencyKey: key, originalText: messages[index].text)
+    }
+
+    mutating func apply(_ edit: NativePendingEdit, text: String) throws {
+        guard let index = editableIndex(messageID: edit.messageID), messages[index].delivery == .held,
+              messages[index].idempotencyKey == edit.idempotencyKey, messages[index].text == edit.originalText,
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw StoreFailure.invalidDocument }
+        messages[index].text = text; revision += 1
+    }
+
+    mutating func removePending(messageID: String) throws {
+        guard let index = editableIndex(messageID: messageID) else { throw StoreFailure.invalidDocument }
+        messages.remove(at: index); revision += 1
+    }
+
+    private func editableIndex(messageID: String) -> Int? {
+        messages.firstIndex { $0.id == messageID && $0.local && $0.role == .user && $0.idempotencyKey?.isEmpty == false &&
+            [.queued, .held, .failed].contains($0.delivery) }
+    }
+}
+
+/// A local editing snapshot, never authority to dispatch or to replace the composer's draft.
+struct NativePendingEdit: Identifiable, Sendable {
+    let id = UUID()
+    let messageID: String
+    let idempotencyKey: String
+    let originalText: String
 }
 
 actor NativeConversationStore {
