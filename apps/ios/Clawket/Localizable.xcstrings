@@ -45,6 +45,30 @@
             "state": "translated",
             "value": "%@ · Sviluppo nativo"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · Desarrollo nativo"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · Desarrollo nativo"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · Desenvolvimento nativo"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · Desenvolvimento nativo"
+          }
         }
       },
       "comment": "Native UI / accessibility. Preserve each interpolated value; do not translate names or filenames."
@@ -93,6 +117,30 @@
             "state": "translated",
             "value": "%@, %@, conversazioni"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, %@, conversaciones"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, %@, conversaciones"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, %@, conversas"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, %@, conversas"
+          }
         }
       },
       "comment": "Native UI / accessibility. Preserve each interpolated value; do not translate names or filenames."
@@ -140,6 +188,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "È già in corso un tentativo di abbinamento."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ya hay un intento de emparejamiento en curso."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ya hay un intento de emparejamiento en curso."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Já há uma tentativa de pareamento em andamento."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Já está em curso uma tentativa de emparelhamento."
           }
         }
       },
@@ -429,6 +501,30 @@
             "state": "translated",
             "value": "Aggiungi allegato o azione"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Añadir archivo adjunto o acción"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agregar archivo adjunto o acción"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adicionar anexo ou ação"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adicionar anexo ou ação"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -597,6 +693,30 @@
             "state": "translated",
             "value": "Aggiungi alla coda"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Añadir a la cola"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agregar a la cola"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adicionar à fila"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adicionar à fila"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -644,6 +764,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Indirizzo"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dirección"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dirección"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Endereço"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Endereço"
           }
         }
       },
@@ -1293,6 +1437,30 @@
             "state": "translated",
             "value": "Consenti una volta"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permitir una vez"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permitir una vez"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permitir uma vez"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permitir uma vez"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -1461,6 +1629,30 @@
             "state": "translated",
             "value": "Consenti sempre"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permitir siempre"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permitir siempre"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sempre permitir"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permitir sempre"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -1508,6 +1700,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Consentire sempre questa azione?"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Permitir siempre esta acción?"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Permitir siempre esta acción?"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sempre permitir esta ação?"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permitir sempre esta ação?"
           }
         }
       },
@@ -1557,6 +1773,30 @@
             "state": "translated",
             "value": "Consenti sempre…"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permitir siempre…"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permitir siempre…"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sempre permitir…"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permitir sempre…"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -1604,6 +1844,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Si applica a tutte le conversazioni"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se aplica a todas las conversaciones"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se aplica a todas las conversaciones"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aplica-se a todas as conversas"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aplica-se a todas as conversas"
           }
         }
       },
@@ -1653,6 +1917,30 @@
             "state": "translated",
             "value": "Autorizzazione necessaria"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se necesita autorización"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se necesita autorización"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aprovação necessária"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aprovação necessária"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -1700,6 +1988,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Preparazione dell’allegato non riuscita"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se ha podido preparar el archivo adjunto"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo preparar el archivo adjunto"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Falha ao preparar o anexo"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Falha ao preparar o anexo"
           }
         }
       },
@@ -1869,6 +2181,30 @@
             "state": "translated",
             "value": "Impossibile accedere alla fotocamera. Puoi usare un codice di abbinamento."
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se puede acceder a la cámara. Puedes usar un código de emparejamiento."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se puede acceder a la cámara. Puedes usar un código de emparejamiento."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O acesso à câmera está indisponível. Você pode usar um código de pareamento."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O acesso à câmara está indisponível. Pode usar um código de emparelhamento."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -1917,6 +2253,30 @@
             "state": "translated",
             "value": "La scansione con la fotocamera si è interrotta. Puoi inserire il codice di abbinamento."
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El escaneo con la cámara se ha detenido. Puedes introducir el código de emparejamiento."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El escaneo con la cámara se detuvo. Puedes ingresar el código de emparejamiento."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A leitura pela câmera foi interrompida. Você pode digitar o código de pareamento."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A leitura pela câmara parou. Pode introduzir o código de emparelhamento."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -1964,6 +2324,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Scansione con fotocamera non disponibile"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El escaneo con la cámara no está disponible"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El escaneo con la cámara no está disponible"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leitura pela câmera indisponível"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leitura pela câmara indisponível"
           }
         }
       },
@@ -2133,6 +2517,30 @@
             "state": "translated",
             "value": "Annulla registrazione"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancelar grabación"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancelar grabación"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancelar gravação"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancelar gravação"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -2180,6 +2588,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Verifica del tuo Agent…"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comprobando tu Agente…"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verificando tu Agente…"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verificando seu Agent…"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A verificar o seu Agent…"
           }
         }
       },
@@ -2229,6 +2661,30 @@
             "state": "translated",
             "value": "Scegli un Agent per continuare una conversazione."
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elige un Agente para continuar una conversación."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elige un Agente para continuar una conversación."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escolha um Agent para continuar uma conversa."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escolha um Agent para continuar uma conversa."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -2277,6 +2733,30 @@
             "state": "translated",
             "value": "Scegli modello"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elegir modelo"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elegir modelo"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escolher modelo"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escolher modelo"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -2324,6 +2804,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Codice"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Código"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Código"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Código"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Código"
           }
         }
       },
@@ -2853,6 +3357,30 @@
             "state": "translated",
             "value": "Collega un Agent per continuare le conversazioni e portare avanti il lavoro."
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conecta un Agente para continuar las conversaciones y avanzar con tu trabajo."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conecta un Agente para continuar las conversaciones y avanzar con tu trabajo."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conecte um Agent para continuar as conversas e avançar no trabalho."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ligue um Agent para continuar as conversas e avançar no trabalho."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -2901,6 +3429,30 @@
             "state": "translated",
             "value": "Collega un Agent per iniziare."
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conecta un Agente para empezar."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conecta un Agente para empezar."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conecte um Agent para começar."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ligue um Agent para começar."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -2948,6 +3500,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Metodo di connessione"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Método de conexión"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Método de conexión"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conectar por"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ligar por"
           }
         }
       },
@@ -3357,6 +3933,30 @@
             "state": "translated",
             "value": "Autorizzazione della connessione"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autorización de conexión"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autorización de conexión"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aprovação de conexão"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aprovação de ligação"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -3405,6 +4005,30 @@
             "state": "translated",
             "value": "La connessione richiede un’autorizzazione"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La conexión necesita autorización"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La conexión necesita autorización"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A conexão precisa de aprovação"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A ligação precisa de aprovação"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -3452,6 +4076,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "La connessione richiede attenzione"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La conexión requiere atención"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La conexión requiere atención"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A conexão precisa de atenção"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A ligação precisa de atenção"
           }
         }
       },
@@ -3741,6 +4389,30 @@
             "state": "translated",
             "value": "Azioni della conversazione"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Acciones de la conversación"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Acciones de la conversación"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ações da conversa"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ações da conversa"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -3788,6 +4460,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "File della conversazione"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archivos de la conversación"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archivos de la conversación"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arquivos da conversa"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ficheiros da conversa"
           }
         }
       },
@@ -3837,6 +4533,30 @@
             "state": "translated",
             "value": "Conversazioni"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conversaciones"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conversaciones"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conversas"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conversas"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -3885,6 +4605,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Impossibile aggiornare le conversazioni. Controlla la connessione e riprova."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se han podido actualizar las conversaciones. Comprueba la conexión e inténtalo de nuevo."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudieron actualizar las conversaciones. Revisa la conexión e inténtalo de nuevo."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível atualizar as conversas. Verifique sua conexão e tente novamente."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível atualizar as conversas. Verifique a sua ligação e tente novamente."
           }
         }
       }
@@ -4053,6 +4797,30 @@
             "state": "translated",
             "value": "Copia codice"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copiar código"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copiar código"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copiar código"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copiar código"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -4101,6 +4869,30 @@
             "state": "translated",
             "value": "Impossibile completare l’abbinamento. Controlla i dettagli e riprova."
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se ha podido completar el emparejamiento. Comprueba los datos e inténtalo de nuevo."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo completar el emparejamiento. Revisa los datos e inténtalo de nuevo."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível concluir o pareamento. Confira os dados e tente novamente."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível concluir o emparelhamento. Verifique os dados e tente novamente."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -4148,6 +4940,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Impossibile usare questo codice o link di abbinamento. Controllalo o genera un nuovo invito."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se ha podido usar este código o enlace de emparejamiento. Revísalo o genera una nueva invitación."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo usar este código o enlace de emparejamiento. Revísalo o genera una nueva invitación."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível usar este código ou link de pareamento. Verifique-o ou gere um novo convite."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível usar este código ou ligação de emparelhamento. Verifique-o ou gere um novo convite."
           }
         }
       },
@@ -4198,6 +5014,30 @@
             "state": "translated",
             "value": "Creazione della conversazione…"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Creando conversación…"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Creando conversación…"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Criando conversa…"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A criar conversa…"
+          }
         }
       }
     },
@@ -4245,6 +5085,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Impossibile confermare la creazione. Aggiorna le conversazioni prima di riprovare."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se ha podido confirmar la creación. Actualiza las conversaciones antes de volver a intentarlo."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo confirmar la creación. Actualiza las conversaciones antes de volver a intentarlo."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível confirmar a criação. Atualize as conversas antes de tentar novamente."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível confirmar a criação. Atualize as conversas antes de tentar novamente."
           }
         }
       }
@@ -4413,6 +5277,30 @@
             "state": "translated",
             "value": "Impossibile confermare la consegna. Controlla la conversazione prima di inviare di nuovo."
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se ha podido confirmar la entrega. Revisa la conversación antes de volver a enviar."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo confirmar la entrega. Revisa la conversación antes de volver a enviar."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível confirmar a entrega. Confira a conversa antes de enviar novamente."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível confirmar a entrega. Verifique a conversa antes de voltar a enviar."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -4460,6 +5348,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Impossibile confermare la consegna. Il messaggio originale è salvato. Controlla la conversazione prima di inviare di nuovo."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se ha podido confirmar la entrega. Tu mensaje original está guardado. Revisa la conversación antes de volver a enviar."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo confirmar la entrega. Tu mensaje original está guardado. Revisa la conversación antes de volver a enviar."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível confirmar a entrega. Sua mensagem original está salva. Confira a conversa antes de enviar novamente."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível confirmar a entrega. A sua mensagem original está guardada. Verifique a conversa antes de voltar a enviar."
           }
         }
       },
@@ -4629,6 +5541,30 @@
             "state": "translated",
             "value": "Diretta"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Directa"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Directa"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Direta"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Direta"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -4676,6 +5612,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Disconnetti"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desconectar"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desconectar"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desconectar"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desligar"
           }
         }
       },
@@ -4725,6 +5685,30 @@
             "state": "translated",
             "value": "Disconnesso"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desconectado"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desconectado"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desconectado"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desligado"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -4772,6 +5756,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Connessione interrotta. Impossibile salvare questa preferenza."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conexión desconectada. No se ha podido guardar esta preferencia."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conexión desconectada. No se pudo guardar esta preferencia."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desconectado. Não foi possível salvar esta preferência."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desligado. Não foi possível guardar esta preferência."
           }
         }
       },
@@ -4941,6 +5949,30 @@
             "state": "translated",
             "value": "Messaggi precedenti"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mensajes anteriores"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mensajes anteriores"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mensagens anteriores"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mensagens anteriores"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -5108,6 +6140,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Inserisci il codice mostrato da Clawket sul computer. Tieni aperta quella finestra durante l’abbinamento."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Introduce el código que muestra Clawket en tu ordenador. Mantén esa ventana abierta durante el emparejamiento."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ingresa el código que muestra Clawket en tu computadora. Mantén esa ventana abierta durante el emparejamiento."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Digite o código mostrado pelo Clawket no computador. Mantenha essa janela aberta durante o pareamento."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Introduza o código apresentado pelo Clawket no computador. Mantenha essa janela aberta durante o emparelhamento."
           }
         }
       },
@@ -5637,6 +6693,30 @@
             "state": "translated",
             "value": "È richiesta una risposta"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se necesita tu respuesta"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se necesita tu respuesta"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sua resposta é necessária"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "É necessária a sua resposta"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -5684,6 +6764,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ultimi messaggi"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Últimos mensajes"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Últimos mensajes"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mensagens mais recentes"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mensagens mais recentes"
           }
         }
       },
@@ -5853,6 +6957,30 @@
             "state": "translated",
             "value": "Caricamento degli Agent…"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cargando Agentes…"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cargando Agentes…"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Carregando Agents…"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A carregar Agents…"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -5900,6 +7028,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Caricamento delle conversazioni…"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cargando conversaciones…"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cargando conversaciones…"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Carregando conversas…"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A carregar conversas…"
           }
         }
       },
@@ -5949,6 +7101,30 @@
             "state": "translated",
             "value": "Caricamento della conversazione…"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cargando conversación…"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cargando conversación…"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Carregando conversa…"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A carregar conversa…"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -5996,6 +7172,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Caricamento dei messaggi precedenti…"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cargando mensajes anteriores…"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cargando mensajes anteriores…"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Carregando mensagens anteriores…"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A carregar mensagens anteriores…"
           }
         }
       },
@@ -6405,6 +7605,30 @@
             "state": "translated",
             "value": "Messaggio a %@"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mensaje a %@"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mensaje a %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mensagem para %@"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mensagem para %@"
+          }
         }
       },
       "comment": "Native UI / accessibility. Preserve each interpolated value; do not translate names or filenames."
@@ -6573,6 +7797,30 @@
             "state": "translated",
             "value": "Modello: %@"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelo: %@"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelo: %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelo: %@"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelo: %@"
+          }
         }
       },
       "comment": "Native UI / accessibility. Preserve each interpolated value; do not translate names or filenames."
@@ -6621,6 +7869,30 @@
             "state": "translated",
             "value": "Altre opzioni di autorizzazione"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Más opciones de permisos"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Más opciones de permisos"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mais opções de permissão"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mais opções de permissão"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -6668,6 +7940,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nome (facoltativo)"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nombre (opcional)"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nombre (opcional)"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nome (opcional)"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nome (opcional)"
           }
         }
       },
@@ -6957,6 +8253,30 @@
             "state": "translated",
             "value": "Nuova conversazione"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nueva conversación"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nueva conversación"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nova conversa"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nova conversa"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -7004,6 +8324,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nessun modello disponibile"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No hay modelos disponibles"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No hay modelos disponibles"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nenhum modelo disponível"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nenhum modelo disponível"
           }
         }
       },
@@ -7053,6 +8397,30 @@
             "state": "translated",
             "value": "Non ci sono ancora conversazioni"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aún no hay conversaciones"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Todavía no hay conversaciones"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ainda não há conversas"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ainda não há conversas"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -7100,6 +8468,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nessun Agent o conversazione corrispondente"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No hay Agentes ni conversaciones que coincidan"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No hay Agentes ni conversaciones que coincidan"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nenhum Agent ou conversa correspondente"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nenhum Agent ou conversa correspondente"
           }
         }
       },
@@ -7149,6 +8541,30 @@
             "state": "translated",
             "value": "Nessuna conversazione corrispondente"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No hay conversaciones que coincidan"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No hay conversaciones que coincidan"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nenhuma conversa correspondente"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nenhuma conversa correspondente"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -7196,6 +8612,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Non inviato. Il messaggio è salvato."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No enviado. Tu mensaje está guardado."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No enviado. Tu mensaje está guardado."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não enviado. Sua mensagem está salva."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não enviado. A sua mensagem está guardada."
           }
         }
       },
@@ -7365,6 +8805,30 @@
             "state": "translated",
             "value": "Apertura della conversazione…"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abriendo conversación…"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abriendo conversación…"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abrindo conversa…"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A abrir conversa…"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -7412,6 +8876,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Abbina il tuo Agent"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Empareja tu Agente"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Empareja tu Agente"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parear seu Agent"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Emparelhar o seu Agent"
           }
         }
       },
@@ -7581,6 +9069,30 @@
             "state": "translated",
             "value": "Impossibile salvare i dati di abbinamento. Tocca di nuovo “Connetti” per salvare il risultato già ottenuto."
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se han podido guardar los datos de emparejamiento. Toca «Conectar» de nuevo para guardar el resultado existente."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudieron guardar los datos de emparejamiento. Toca «Conectar» de nuevo para guardar el resultado existente."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível salvar os dados de pareamento. Toque em “Conectar” novamente para salvar o resultado já obtido."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível guardar os dados de emparelhamento. Toque novamente em «Ligar» para guardar o resultado já obtido."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -7629,6 +9141,30 @@
             "state": "translated",
             "value": "Partecipante"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Participante"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Participante"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Participante"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Participante"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -7676,6 +9212,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Password (se richiesta)"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contraseña (si es necesaria)"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contraseña (si se requiere)"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Senha (se necessária)"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Palavra-passe (se necessária)"
           }
         }
       },
@@ -7845,6 +9405,30 @@
             "state": "translated",
             "value": "Incolla contenuto QR o link di abbinamento"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pega el contenido del QR o el enlace de emparejamiento"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pega el contenido del QR o el enlace de emparejamiento"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cole o conteúdo do QR ou o link de pareamento"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cole o conteúdo do QR ou a ligação de emparelhamento"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -8013,6 +9597,30 @@
             "state": "translated",
             "value": "Preparazione di %@"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparando %@"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparando %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparando %@"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A preparar %@"
+          }
         }
       },
       "comment": "Native UI / accessibility. Preserve each interpolated value; do not translate names or filenames."
@@ -8060,6 +9668,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Anteprima di %@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vista previa de %@"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vista previa de %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prévia de %@"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pré-visualização de %@"
           }
         }
       },
@@ -8229,6 +9861,30 @@
             "state": "translated",
             "value": "QR o link"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "QR o enlace"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "QR o enlace"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "QR ou link"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "QR ou ligação"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -8397,6 +10053,30 @@
             "state": "translated",
             "value": "In attesa di verifica"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pendiente de revisión"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pendiente de revisión"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aguardando revisão"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A aguardar revisão"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -8444,6 +10124,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "In attesa della tua conferma. Invia questo messaggio quando la connessione sarà disponibile."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pendiente de tu confirmación. Envía este mensaje cuando la conexión esté disponible."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pendiente de tu confirmación. Envía este mensaje cuando la conexión esté disponible."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aguardando sua confirmação. Envie esta mensagem quando a conexão estiver disponível."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A aguardar a sua confirmação. Envie esta mensagem quando a ligação estiver disponível."
           }
         }
       },
@@ -8494,6 +10198,30 @@
             "state": "translated",
             "value": "Riconnettiti o aggiorna le conversazioni prima di crearne un’altra."
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vuelve a conectarte o actualiza las conversaciones antes de crear otra."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vuelve a conectarte o actualiza las conversaciones antes de crear otra."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconecte ou atualize as conversas antes de criar outra."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Volte a ligar ou atualize as conversas antes de criar outra."
+          }
         }
       }
     },
@@ -8540,6 +10268,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Riconnettiti per cambiare modello."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vuelve a conectarte para cambiar de modelo."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vuelve a conectarte para cambiar de modelo."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconecte para trocar de modelo."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Volte a ligar para alterar o modelo."
           }
         }
       },
@@ -8590,6 +10342,30 @@
             "state": "translated",
             "value": "Riconnettiti per creare una conversazione."
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vuelve a conectarte para crear una conversación."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vuelve a conectarte para crear una conversación."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconecte para criar uma conversa."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Volte a ligar para criar uma conversa."
+          }
         }
       }
     },
@@ -8636,6 +10412,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Riconnettiti per caricare i messaggi precedenti."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vuelve a conectarte para cargar los mensajes anteriores."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vuelve a conectarte para cargar los mensajes anteriores."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconecte para carregar mensagens anteriores."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Volte a ligar para carregar mensagens anteriores."
           }
         }
       },
@@ -8685,6 +10485,30 @@
             "state": "translated",
             "value": "Riconnettiti per aggiornare le conversazioni."
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vuelve a conectarte para actualizar las conversaciones."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vuelve a conectarte para actualizar las conversaciones."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconecte para atualizar as conversas."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Volte a ligar para atualizar as conversas."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -8733,6 +10557,30 @@
             "state": "translated",
             "value": "Riconnettiti per inviare. La bozza è salvata."
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vuelve a conectarte para enviar. Tu borrador está guardado."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vuelve a conectarte para enviar. Tu borrador está guardado."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconecte para enviar. Seu rascunho está salvo."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Volte a ligar para enviar. O seu rascunho está guardado."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -8780,6 +10628,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Riconnettiti per interrompere questa esecuzione."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vuelve a conectarte para detener esta ejecución."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vuelve a conectarte para detener esta ejecución."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconecte para interromper esta execução."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Volte a ligar para parar esta execução."
           }
         }
       },
@@ -8949,6 +10821,30 @@
             "state": "translated",
             "value": "Le connessioni salvate sono state recuperate dall’ultima copia verificata."
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se han recuperado tus conexiones guardadas desde la última copia verificada."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se recuperaron tus conexiones guardadas desde la última copia verificada."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suas conexões salvas foram recuperadas da última cópia verificada."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "As suas ligações guardadas foram recuperadas da última cópia verificada."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -8997,6 +10893,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aggiorna le conversazioni prima di crearne un’altra."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actualiza las conversaciones antes de crear otra."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actualiza las conversaciones antes de crear otra."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Atualize as conversas antes de criar outra."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Atualize as conversas antes de criar outra."
           }
         }
       }
@@ -9285,6 +11205,30 @@
             "state": "translated",
             "value": "Rimuovi %@"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eliminar %@"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eliminar %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remover %@"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remover %@"
+          }
         }
       },
       "comment": "Native UI / accessibility. Preserve each interpolated value; do not translate names or filenames."
@@ -9453,6 +11397,30 @@
             "state": "translated",
             "value": "Rimuovere questa connessione?"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Eliminar esta conexión?"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Eliminar esta conexión?"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remover esta conexão?"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remover esta ligação?"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -9501,6 +11469,30 @@
             "state": "translated",
             "value": "Rispondi in una nuova conversazione"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Responder en una nueva conversación"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Responder en una nueva conversación"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Responder em nova conversa"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Responder numa nova conversa"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -9548,6 +11540,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Risposta in corso…"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Respondiendo…"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Respondiendo…"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Respondendo…"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A responder…"
           }
         }
       },
@@ -9717,6 +11733,30 @@
             "state": "translated",
             "value": "Salva connessione"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar conexión"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar conexión"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Salvar conexão"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar ligação"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -9765,6 +11805,30 @@
             "state": "translated",
             "value": "Le conversazioni salvate restano su questo dispositivo. Potrai abbinare di nuovo l’Agent in seguito."
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Las conversaciones guardadas permanecen en este dispositivo. Puedes volver a emparejar el Agente más adelante."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Las conversaciones guardadas permanecen en este dispositivo. Puedes volver a emparejar el Agente más adelante."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "As conversas salvas permanecem neste dispositivo. Você pode parear o Agent novamente mais tarde."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "As conversas guardadas permanecem neste dispositivo. Pode voltar a emparelhar o Agent mais tarde."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -9812,6 +11876,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Impossibile leggere in sicurezza i dati salvati. Sblocca questo dispositivo e riapri Clawket."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se han podido leer los datos guardados de forma segura. Desbloquea este dispositivo y vuelve a abrir Clawket."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudieron leer los datos guardados de forma segura. Desbloquea este dispositivo y vuelve a abrir Clawket."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível ler os dados salvos com segurança. Desbloqueie este dispositivo e reabra o Clawket."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível ler os dados guardados em segurança. Desbloqueie este dispositivo e volte a abrir o Clawket."
           }
         }
       },
@@ -9981,6 +12069,30 @@
             "state": "translated",
             "value": "Scansiona codice QR"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escanear código QR"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escanear código QR"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ler código QR"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ler código QR"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -10029,6 +12141,30 @@
             "state": "translated",
             "value": "Scansiona QR di abbinamento"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escanear QR de emparejamiento"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escanear QR de emparejamiento"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ler QR de pareamento"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ler QR de emparelhamento"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -10076,6 +12212,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Scansiona il codice QR mostrato da Clawket sul computer oppure incolla il link di abbinamento."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escanea el código QR que muestra Clawket en tu ordenador o pega su enlace de emparejamiento."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escanea el código QR que muestra Clawket en tu computadora o pega su enlace de emparejamiento."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leia o código QR mostrado pelo Clawket no computador ou cole o link de pareamento."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leia o código QR apresentado pelo Clawket no computador ou cole a ligação de emparelhamento."
           }
         }
       },
@@ -10365,6 +12525,30 @@
             "state": "translated",
             "value": "Cerca Agent e conversazioni"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buscar Agentes y conversaciones"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buscar Agentes y conversaciones"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buscar Agents e conversas"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pesquisar Agents e conversas"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -10412,6 +12596,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cerca conversazioni"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buscar conversaciones"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buscar conversaciones"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buscar conversas"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pesquisar conversas"
           }
         }
       },
@@ -10461,6 +12669,30 @@
             "state": "translated",
             "value": "Cerca modelli"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buscar modelos"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buscar modelos"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buscar modelos"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pesquisar modelos"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -10508,6 +12740,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "L’archiviazione sicura non è disponibile."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El almacenamiento seguro no está disponible."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El almacenamiento seguro no está disponible."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O armazenamento seguro está indisponível."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O armazenamento seguro está indisponível."
           }
         }
       },
@@ -10677,6 +12933,30 @@
             "state": "translated",
             "value": "Invia risposta"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enviar respuesta"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enviar respuesta"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enviar resposta"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enviar resposta"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -10844,6 +13124,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Stato di invio non confermato"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Estado de envío sin confirmar"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Estado de envío sin confirmar"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Status de envio não confirmado"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Estado de envio não confirmado"
           }
         }
       },
@@ -11373,6 +13677,30 @@
             "state": "translated",
             "value": "Mostra comando completo"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar comando completo"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar comando completo"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar comando completo"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar comando completo"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -11541,6 +13869,30 @@
             "state": "translated",
             "value": "Inizia una conversazione"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Iniciar una conversación"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Iniciar una conversación"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Iniciar conversa"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Iniciar conversa"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -11588,6 +13940,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Avvia input vocale"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Iniciar entrada de voz"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Iniciar entrada de voz"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Iniciar entrada por voz"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Iniciar entrada por voz"
           }
         }
       },
@@ -11757,6 +14133,30 @@
             "state": "translated",
             "value": "Interrompi registrazione"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Detener grabación"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Detener grabación"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parar gravação"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parar gravação"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -11925,6 +14325,30 @@
             "state": "translated",
             "value": "Arresto dell’attività"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deteniendo tarea"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deteniendo tarea"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interrompendo tarefa"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A parar tarefa"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -11972,6 +14396,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Spazio di archiviazione non disponibile"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Almacenamiento no disponible"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Almacenamiento no disponible"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Armazenamento indisponível"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Armazenamento indisponível"
           }
         }
       },
@@ -12021,6 +14469,30 @@
             "state": "translated",
             "value": "Tocca per registrare. Tieni premuto e rilascia per inviare. Scorri verso l’alto per annullare."
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toca para grabar. Mantén pulsado y suelta para enviar. Desliza hacia arriba para cancelar."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toca para grabar. Mantén presionado y suelta para enviar. Desliza hacia arriba para cancelar."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toque para gravar. Mantenha pressionado e solte para enviar. Deslize para cima para cancelar."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toque para gravar. Mantenha premido e solte para enviar. Deslize para cima para cancelar."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -12068,6 +14540,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Impossibile rimuovere la connessione. I dati salvati non sono stati modificati."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se ha podido eliminar la conexión. Tus datos guardados no han cambiado."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo eliminar la conexión. Tus datos guardados no cambiaron."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível remover a conexão. Seus dados salvos não foram alterados."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível remover a ligação. Os seus dados guardados não foram alterados."
           }
         }
       },
@@ -12117,6 +14613,30 @@
             "state": "translated",
             "value": "Impossibile salvare la connessione selezionata. Riprova."
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se ha podido guardar la conexión seleccionada. Inténtalo de nuevo."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo guardar la conexión seleccionada. Inténtalo de nuevo."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível salvar a conexão selecionada. Tente novamente."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível guardar a ligação selecionada. Tente novamente."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -12164,6 +14684,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Impossibile completare l’operazione. Controlla la connessione e riprova."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se ha podido completar la operación. Comprueba la conexión e inténtalo de nuevo."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo completar la operación. Revisa la conexión e inténtalo de nuevo."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível concluir a operação. Verifique sua conexão e tente novamente."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível concluir a operação. Verifique a sua ligação e tente novamente."
           }
         }
       },
@@ -12213,6 +14757,30 @@
             "state": "translated",
             "value": "Impossibile completare l’operazione. Riprova."
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se ha podido completar la operación. Inténtalo de nuevo."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo completar la operación. Inténtalo de nuevo."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível concluir a operação. Tente novamente."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível concluir a operação. Tente novamente."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -12260,6 +14828,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Impossibile raggiungere il servizio di abbinamento. Controlla il computer prima di riprovare questo invito."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se ha podido acceder al servicio de emparejamiento. Comprueba tu ordenador antes de volver a usar esta invitación."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo acceder al servicio de emparejamiento. Revisa tu computadora antes de volver a usar esta invitación."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível acessar o serviço de pareamento. Verifique seu computador antes de tentar este convite novamente."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível contactar o serviço de emparelhamento. Verifique o seu computador antes de voltar a tentar este convite."
           }
         }
       },
@@ -12309,6 +14901,30 @@
             "state": "translated",
             "value": "Ci sono 32 messaggi in sospeso. Completane o rimuovine uno prima di aggiungerne un altro."
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hay 32 mensajes pendientes. Completa o elimina uno antes de añadir otro."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hay 32 mensajes pendientes. Completa o elimina uno antes de agregar otro."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Há 32 mensagens pendentes. Conclua ou remova uma antes de adicionar outra."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Há 32 mensagens pendentes. Conclua ou remova uma antes de adicionar outra."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -12356,6 +14972,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Questa azione non è disponibile per questa connessione."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta acción no está disponible para esta conexión."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta acción no está disponible para esta conexión."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta ação não está disponível para esta conexão."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta ação não está disponível para esta ligação."
           }
         }
       },
@@ -12405,6 +15045,30 @@
             "state": "translated",
             "value": "Questo codice appartiene a un altro Agent. Scegli l’Agent corrispondente e riprova."
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este código pertenece a otro Agente. Elige el Agente correspondiente e inténtalo de nuevo."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este código pertenece a otro Agente. Elige el Agente correspondiente e inténtalo de nuevo."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este código pertence a outro Agent. Escolha o Agent correspondente e tente novamente."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este código pertence a outro Agent. Escolha o Agent correspondente e tente novamente."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -12452,6 +15116,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Questa connessione non dispone dell’autorizzazione per questa azione."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta conexión no tiene permiso para esa acción."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta conexión no tiene permiso para esa acción."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta conexão não tem permissão para essa ação."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta ligação não tem permissão para essa ação."
           }
         }
       },
@@ -12501,6 +15189,30 @@
             "state": "translated",
             "value": "Questa conversazione"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta conversación"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta conversación"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta conversa"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta conversa"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -12548,6 +15260,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Questa conversazione è in sola lettura qui."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta conversación es de solo lectura aquí."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta conversación es de solo lectura aquí."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta conversa está disponível apenas para leitura aqui."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta conversa está disponível apenas para leitura aqui."
           }
         }
       },
@@ -12597,6 +15333,30 @@
             "state": "translated",
             "value": "Questa app di sviluppo usa connessioni e archiviazione dedicate."
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta app de desarrollo usa sus propias conexiones y almacenamiento."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta app de desarrollo usa sus propias conexiones y almacenamiento."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este app de desenvolvimento usa conexões e armazenamento próprios."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta app de desenvolvimento utiliza ligações e armazenamento próprios."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -12644,6 +15404,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Impossibile salvare questa bozza. Tieni Clawket aperto e riprova."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se ha podido guardar este borrador. Mantén Clawket abierto e inténtalo de nuevo."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo guardar este borrador. Mantén Clawket abierto e inténtalo de nuevo."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível salvar este rascunho. Mantenha o Clawket aberto e tente novamente."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível guardar este rascunho. Mantenha o Clawket aberto e tente novamente."
           }
         }
       },
@@ -12693,6 +15477,30 @@
             "state": "translated",
             "value": "Questo invito è scaduto o è già stato usato. Ottieni un nuovo codice dal computer."
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta invitación ha caducado o ya se ha usado. Obtén un código nuevo en tu ordenador."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta invitación venció o ya se usó. Obtén un código nuevo en tu computadora."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este convite expirou ou já foi usado. Obtenha um novo código no computador."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este convite expirou ou já foi utilizado. Obtenha um novo código no computador."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -12741,6 +15549,30 @@
             "state": "translated",
             "value": "Questo invito usa un ambiente di servizio diverso."
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta invitación usa un entorno de servicio diferente."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta invitación usa un entorno de servicio diferente."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este convite usa um ambiente de serviço diferente."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este convite usa um ambiente de serviço diferente."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -12788,6 +15620,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Questa autorizzazione si applica anche alle richieste future."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este permiso también se aplica a futuras solicitudes."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este permiso también se aplica a futuras solicitudes."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta permissão também se aplica a solicitações futuras."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta permissão também se aplica a pedidos futuros."
           }
         }
       },
@@ -12838,6 +15694,30 @@
             "state": "translated",
             "value": "Questo progetto non è disponibile."
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este proyecto no está disponible."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este proyecto no está disponible."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este projeto está indisponível."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este projeto está indisponível."
+          }
         }
       }
     },
@@ -12884,6 +15764,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Token (se richiesto)"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token (si es necesario)"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token (si se requiere)"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token (se necessário)"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token (se necessário)"
           }
         }
       },
@@ -12933,6 +15837,30 @@
             "state": "translated",
             "value": "Troppi tentativi. Attendi un po’ prima di riprovare."
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demasiados intentos. Espera un poco antes de volver a intentarlo."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demasiados intentos. Espera un poco antes de volver a intentarlo."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Muitas tentativas. Aguarde um pouco antes de tentar novamente."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demasiadas tentativas. Aguarde um pouco antes de tentar novamente."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -12980,6 +15908,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Output dello strumento"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resultado de la herramienta"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resultado de la herramienta"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saída da ferramenta"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resultado da ferramenta"
           }
         }
       },
@@ -13269,6 +16221,30 @@
             "state": "translated",
             "value": "Sblocca questo dispositivo e riapri Clawket per accedere alle connessioni salvate."
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desbloquea este dispositivo y vuelve a abrir Clawket para acceder a tus conexiones guardadas."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desbloquea este dispositivo y vuelve a abrir Clawket para acceder a tus conexiones guardadas."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desbloqueie este dispositivo e reabra o Clawket para acessar suas conexões salvas."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desbloqueie este dispositivo e volte a abrir o Clawket para aceder às suas ligações guardadas."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -13437,6 +16413,30 @@
             "state": "translated",
             "value": "Usa uno Skill"
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usar una habilidad"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usar una habilidad"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usar um Skill"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usar um Skill"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -13484,6 +16484,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Usa l’indirizzo WebSocket fornito dal tuo Agent. Le credenziali vengono salvate in modo sicuro su questo dispositivo."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usa la dirección WebSocket que proporciona tu Agente. Las credenciales se guardan de forma segura en este dispositivo."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usa la dirección WebSocket que proporciona tu Agente. Las credenciales se guardan de forma segura en este dispositivo."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use o endereço WebSocket fornecido pelo seu Agent. As credenciais são salvas com segurança neste dispositivo."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utilize o endereço WebSocket fornecido pelo seu Agent. As credenciais são guardadas em segurança neste dispositivo."
           }
         }
       },
@@ -13653,6 +16677,30 @@
             "state": "translated",
             "value": "Puoi incollare il contenuto del codice QR o inserire il codice di abbinamento. Se necessario, verifica l’accesso alla fotocamera in Impostazioni."
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Puedes pegar el contenido del código QR o introducir el código de emparejamiento. Si es necesario, comprueba el acceso a la cámara en Ajustes."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Puedes pegar el contenido del código QR o ingresar el código de emparejamiento. Si hace falta, revisa el acceso a la cámara en Configuración."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Você pode colar o conteúdo do código QR ou digitar o código de pareamento. Se necessário, verifique o acesso à câmera em Ajustes."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pode colar o conteúdo do código QR ou introduzir o código de emparelhamento. Se necessário, verifique o acesso à câmara nas Definições."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -13700,6 +16748,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Impossibile raggiungere il tuo Agent. La bozza è salvata."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se ha podido contactar con tu Agente. Tu borrador está guardado."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo contactar con tu Agente. Tu borrador está guardado."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível acessar seu Agent. Seu rascunho está salvo."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível contactar o seu Agent. O seu rascunho está guardado."
           }
         }
       },
@@ -13749,6 +16821,30 @@
             "state": "translated",
             "value": "Il tuo Agent deve essere abbinato di nuovo. Aggiungi il suo codice di abbinamento attuale in Impostazioni."
           }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Debes volver a emparejar tu Agente. Añade su código de emparejamiento actual en Ajustes."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Debes volver a emparejar tu Agente. Agrega su código de emparejamiento actual en Configuración."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seu Agent precisa ser pareado novamente. Adicione o código de pareamento atual dele em Ajustes."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "É necessário voltar a emparelhar o seu Agent. Adicione o código de emparelhamento atual nas Definições."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -13796,6 +16892,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "I tuoi Agent, sempre a portata di mano"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tus Agentes, siempre a mano"
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tus Agentes, siempre a mano"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seus Agents, sempre por perto"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Os seus Agents, sempre à mão"
           }
         }
       },
@@ -13964,6 +17084,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Impossibile salvare i dati in sicurezza. Tieni Clawket aperto e riprova."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se han podido guardar tus datos de forma segura. Mantén Clawket abierto e inténtalo de nuevo."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudieron guardar tus datos de forma segura. Mantén Clawket abierto e inténtalo de nuevo."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível salvar seus dados com segurança. Mantenha o Clawket aberto e tente novamente."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível guardar os seus dados em segurança. Mantenha o Clawket aberto e tente novamente."
           }
         }
       },
