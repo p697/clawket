@@ -79,4 +79,17 @@ struct SpeechTranscriberTests {
         try await gate.release(); #expect(factory.count == 0)
         #expect(try await store.recording(recording.id).bytes == 2)
     }
+    @Test func lateIdentityCannotWinEvenWhenItsTimeoutTaskDoesNotWake() async throws {
+        let fixture = try SpeechFixture(), store = try SpeechRecordingStore(directory: fixture.recordings)
+        let recording = try await store.create(scope: SpeechFixture.scope, draft: "")
+        _ = try await store.append(Data([0, 0]), to: recording.id); try await store.close(recording.id)
+        let gate = SpeechIdentityGate(), clock = SpeechTestClock(), factory = SpeechPeerFactory(finalPeer("unused"))
+        let transcriber = try SpeechTranscriber(store: store, configuration: SpeechServiceConfiguration("wss://speech.invalid/v1/speech"),
+            factory: factory, clock: clock, identity: { try await gate.read() })
+        let task = Task { try await transcriber.transcribe(recording.id) }
+        await speechEventually { await gate.pending != nil && clock.pendingCount == 1 }
+        clock.advanceWithoutWaking(.seconds(6)); try await gate.release()
+        await #expect(throws: SpeechFailure(.connectTimeout)) { _ = try await task.value }
+        #expect(factory.count == 0)
+    }
 }

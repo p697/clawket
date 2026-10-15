@@ -44,4 +44,26 @@ struct SpeechCaptureTests {
         #expect(Array(bytes) == [0, 128, 0, 128, 0, 192, 0, 0, 0, 64, 255, 127, 255, 127, 0, 0, 0, 0])
         #expect(level == 1)
     }
+    @Test func lateCaptureCannotAppendAfterWallDeadlineWhileTimerIsSuspended() async throws {
+        let fixture = try SpeechFixture(), store = try SpeechRecordingStore(directory: fixture.recordings), driver = SpeechFakeDriver(), clock = SpeechTestClock()
+        let recorder = SpeechRecorder(store: store, driver: driver, clock: clock)
+        let recording = try await recorder.start(scope: SpeechFixture.scope, draft: "")
+        try await driver.emit(Data([1, 2]))
+        await speechEventually { (try? await store.recording(recording.id).bytes) == 2 && clock.pendingCount == 1 }
+        clock.advanceWithoutWaking(.seconds(601)); try await driver.emit(Data([3, 4]))
+        await speechEventually { (try? await store.recording(recording.id).isRecording) == false }
+        #expect(try await store.recording(recording.id).bytes == 2); #expect(await driver.stops == 1)
+    }
+    @Test func staleRecordingStopCannotRetireItsSuccessor() async throws {
+        let fixture = try SpeechFixture(), store = try SpeechRecordingStore(directory: fixture.recordings), driver = SpeechFakeDriver()
+        let recorder = SpeechRecorder(store: store, driver: driver, clock: SpeechTestClock())
+        let old = try await recorder.start(scope: SpeechFixture.scope, draft: "old")
+        await recorder.stop(recordingID: old.id)
+        let current = try await recorder.start(scope: SpeechFixture.scope, draft: "new")
+        await recorder.stop(recordingID: old.id)
+        try await driver.emit(Data([1, 2]))
+        await speechEventually { (try? await store.recording(current.id).bytes) == 2 }
+        #expect(try await store.recording(current.id).isRecording); #expect(await driver.stops == 1)
+        await recorder.stop(recordingID: current.id); #expect(await driver.stops == 2)
+    }
 }

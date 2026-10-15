@@ -77,6 +77,7 @@ public final class IOSSpeechAudioDriver: SpeechAudioDriver, @unchecked Sendable 
     public init() { queue.setSpecific(key: queueKey, value: true) }
 
     public func requestPermission() async throws {
+        try Task.checkCancellation()
         let allowed: Bool
         if #available(iOS 17.0, *) { allowed = await AVAudioApplication.requestRecordPermission() }
         else {

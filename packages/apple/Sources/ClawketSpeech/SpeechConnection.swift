@@ -120,7 +120,7 @@ public actor SpeechConnection {
                   text.utf16.count <= 32_768 else { throw SpeechFailure(.invalidProtocol) }
             let event = try FrameCodec.decode(text)
             if let id = event["requestId"]?.stringValue,
-               id.range(of: "^[a-f0-9-]{36}$", options: .regularExpression) != nil { requestID = id }
+               SpeechASCII.requestID(id) { requestID = id }
             switch event["type"]?.stringValue {
             case "ready":
                 guard !initialized, event["maxSeconds"]?.numberValue == 120 else { throw SpeechFailure(.invalidProtocol) }

@@ -59,6 +59,7 @@ public actor SpeechRecorder {
             let recording = try await store.create(scope: scope, draft: draft); created = recording
             guard active?.token == token, !Task.isCancelled else { throw SpeechFailure(.cancelled) }
             active = Attempt(token: token, recordingID: recording.id, reader: nil)
+            let expires = clock.now() + .seconds(SpeechLimits.recordingSeconds)
             let starting = Task { [driver] in try await driver.start(id: token) }
             active?.starting = starting
             let stream = try await withTaskCancellationHandler { try await starting.value }
@@ -67,10 +68,11 @@ public actor SpeechRecorder {
             guard active?.token == token, !Task.isCancelled else {
                 await driver.stop(id: token); throw SpeechFailure(.cancelled)
             }
-            let reader = Task { [weak self, store, driver, update] in
+            let reader = Task { [weak self, store, driver, update, clock] in
                 var failure: SpeechFailure?
                 do {
                     for try await chunk in stream {
+                        guard clock.now() < expires else { failure = SpeechFailure(.tooLong); break }
                         let current = try await store.recording(recording.id)
                         let remaining = SpeechLimits.recordingBytes - current.bytes
                         if remaining > 0 {
@@ -90,7 +92,11 @@ public actor SpeechRecorder {
             }
             active?.reader = reader
             watchdog = Task { [weak self, clock] in
-                do { try await clock.sleep(for: .seconds(SpeechLimits.recordingSeconds)); try Task.checkCancellation() }
+                do {
+                    let remaining = expires - clock.now()
+                    if remaining > .zero { try await clock.sleep(for: remaining) }
+                    try Task.checkCancellation()
+                }
                 catch { return }
                 await self?.expire(token)
             }

@@ -151,8 +151,8 @@ public actor SpeechTranscriber {
                 catch { await accepted.cancel(); throw error }
             } catch let failure as SpeechFailure {
                 // Only admission busy, before ready/audio, permits automatic retry.
-                let remaining = .seconds(30) - (clock.now() - started)
-                guard failure.code == .busy, admission < 8, remaining > .zero else { throw failure }
+                let remaining: Duration = .seconds(30) - (clock.now() - started)
+                guard failure.code == .busy, (admission < 8), (remaining > .zero) else { throw failure }
                 let components = remaining.components
                 let remainingMilliseconds = Double(components.seconds) * 1_000 + Double(components.attoseconds) / 1e15
                 let suggested = failure.remainingRetryMilliseconds(now: now())

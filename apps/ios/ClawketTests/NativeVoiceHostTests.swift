@@ -1,4 +1,6 @@
 import ClawketSpeech
+import ClawketTransport
+import CryptoKit
 import Foundation
 import SwiftUI
 import UIKit
@@ -20,6 +22,27 @@ private actor VoiceHostDriver: SpeechAudioDriver {
     func allow() { let old = permission; permission = nil; old?.resume() }
     func start(id: UUID) -> AsyncThrowingStream<SpeechCaptureChunk, any Error> { starts += 1; return AsyncThrowingStream { $0.finish() } }
     func stop(id: UUID) { stops += 1 }
+}
+
+private actor VoiceHostSocket: SpeechSocket {
+    var first = true
+    var waiter: CheckedContinuation<WebSocketFrame, any Error>?
+    var finishing = false
+    var closed = false
+    func open() {}
+    func send(_ frame: WebSocketFrame) { if case .text = frame { finishing = true } }
+    func receive() async throws -> WebSocketFrame {
+        if first { first = false; return .text("{\"type\":\"ready\",\"maxSeconds\":120,\"flowControl\":\"ack.v1\"}") }
+        guard !closed else { throw SpeechFailure(.cancelled) }
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { waiter = $0 }
+        } onCancel: { Task { await self.close() } }
+    }
+    func close() { closed = true; let old = waiter; waiter = nil; old?.resume(throwing: SpeechFailure(.cancelled)) }
+}
+private struct VoiceHostSocketFactory: SpeechSocketFactory {
+    let socket: VoiceHostSocket
+    func makeSocket(request: URLRequest) -> any SpeechSocket { socket }
 }
 
 final class NativeVoiceHostTests: XCTestCase, @unchecked Sendable {
@@ -158,6 +181,34 @@ final class NativeVoiceHostTests: XCTestCase, @unchecked Sendable {
             let starts = await driver.starts, saved = try await controller.store.recordings()
             XCTAssertEqual(starts, 0); XCTAssertTrue(saved.isEmpty)
         }
+    }
+    @MainActor func testOldSheetCannotAdoptAndCancelNewRecoveryAttempt() async throws {
+        let directory = root(); defer { try? FileManager.default.removeItem(at: directory) }
+        let socket = VoiceHostSocket()
+        let controller = try NativeVoiceController(directory: directory, serviceURL: "wss://speech.invalid/v1/speech",
+            driver: VoiceHostDriver(), socketFactory: VoiceHostSocketFactory(socket: socket)) {
+                let seed = Data(0..<32), key = try Curve25519.Signing.PrivateKey(rawRepresentation: seed)
+                return .init(publicKey: key.publicKey.rawRepresentation, tweetNaClSecretKey: seed + key.publicKey.rawRepresentation)
+            }
+        let created = try await controller.store.create(scope: .init(connectionID: route.connectionID, agentID: route.agentID, sessionKey: route.sessionID), draft: "")
+        _ = try await controller.store.append(Data([0, 0]), to: created.id); try await controller.store.close(created.id)
+        let saved = try await controller.store.recording(created.id)
+        let firstContext = context(ComposerDraft(conversationID: route))
+        let firstID = try XCTUnwrap(controller.retry(saved, context: firstContext))
+        let oldRequest = NativeVoiceSheetRequest(context: firstContext, attemptID: firstID)
+        controller.retire()
+        let secondContext = context(ComposerDraft(conversationID: route))
+        let secondID = try XCTUnwrap(controller.retry(saved, context: secondContext))
+        let newRequest = NativeVoiceSheetRequest(context: secondContext, attemptID: secondID)
+        await eventually { await socket.finishing }
+        let client = NativeAppModel(); client.voice = controller; client.voiceSheet = newRequest
+        XCTAssertNil(client.retryVoice(saved, sheet: oldRequest))
+        let host = UIHostingController(rootView: NativeVoiceSheet(client: client, voice: controller, request: oldRequest))
+        let window = attach(host); await layout(host)
+        window.isHidden = true; window.rootViewController = nil
+        for _ in 0..<30 { await Task.yield() }
+        XCTAssertEqual(controller.attempt?.id, secondID)
+        controller.retire()
     }
     @MainActor private func eventually(_ condition: () async -> Bool) async {
         let deadline = ContinuousClock.now.advanced(by: .seconds(3))

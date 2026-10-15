@@ -31,17 +31,27 @@ private final class SpeechRace<Value: Sendable>: @unchecked Sendable {
 func speechDeadline<Value: Sendable>(seconds: Int, clock: any TransportClock,
                                     operation: @escaping @Sendable () async throws -> Value) async throws -> Value {
     let race = SpeechRace<Value>()
+    let expires = clock.now() + .seconds(seconds)
     return try await withTaskCancellationHandler {
         try Task.checkCancellation()
         return try await withCheckedThrowingContinuation { continuation in
             race.wait(continuation)
             let operationTask = Task {
-                do { race.complete(.success(try await operation())) }
-                catch { race.complete(.failure(error)) }
+                do {
+                    try Task.checkCancellation()
+                    let value = try await operation()
+                    try Task.checkCancellation()
+                    if clock.now() >= expires { race.complete(.failure(SpeechFailure(.connectTimeout))) }
+                    else { race.complete(.success(value)) }
+                } catch {
+                    race.complete(.failure(clock.now() >= expires ? SpeechFailure(.connectTimeout) : error))
+                }
             }
             let deadlineTask = Task {
                 do {
-                    try await clock.sleep(for: .seconds(seconds)); try Task.checkCancellation()
+                    let remaining = expires - clock.now()
+                    if remaining > .zero { try await clock.sleep(for: remaining) }
+                    try Task.checkCancellation()
                     race.complete(.failure(SpeechFailure(.connectTimeout)))
                 } catch { /* A cancelled losing deadline cannot replace the result. */ }
             }

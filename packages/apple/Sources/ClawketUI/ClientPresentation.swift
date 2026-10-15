@@ -545,11 +545,13 @@ public struct VoicePresentation: Hashable, Sendable {
     public var canCancel: Bool
     public var canRetry: Bool
     public var canReview: Bool
+    public var level: Double?
     public init(phase: Phase, label: String, detail: String? = nil,
-                canStop: Bool = false, canCancel: Bool = false, canRetry: Bool = false, canReview: Bool = false) {
+                canStop: Bool = false, canCancel: Bool = false, canRetry: Bool = false, canReview: Bool = false, level: Double? = nil) {
         self.phase = phase; self.label = label; self.detail = detail
         self.canStop = canStop; self.canCancel = canCancel; self.canRetry = canRetry
         self.canReview = canReview
+        self.level = level.flatMap { $0.isFinite ? min(1, max(0, $0)) : nil }
     }
 }
 

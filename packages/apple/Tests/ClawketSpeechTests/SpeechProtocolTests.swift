@@ -98,4 +98,23 @@ struct SpeechProtocolTests {
         await #expect(throws: SpeechFailure(.timeout)) { _ = try await connection.finish() }
         #expect(await peer.sent.isEmpty)
     }
+    @Test func signedFieldNewlinesAndNoncanonicalRequestIDsNeverPassValidation() throws {
+        for field in ["x-speech-key", "x-speech-time", "x-speech-nonce", "x-speech-signature"] {
+            var request = try SpeechFixture.request()
+            let value = request.value(forHTTPHeaderField: field) ?? ""
+            // URLRequest trims terminal newlines before the factory can observe
+            // them. Assert the raw validator separately, then send an actually
+            // malformed stored value through the consumer boundary.
+            if field == "x-speech-time" { #expect(!SpeechASCII.digits(value + "\n", bytes: 13)) }
+            else { #expect(!SpeechASCII.hex(value + "\n", bytes: value.utf8.count)) }
+            request.setValue(value + "0", forHTTPHeaderField: field)
+            #expect(throws: SpeechFailure.self) { _ = try URLSessionSpeechSocketFactory().makeSocket(request: request) }
+        }
+        #expect(SpeechFailure(.failed, requestID: "00000000-0000-0000-0000-000000000000\n").requestID == nil)
+        #expect(SpeechFailure(.failed, requestID: String(repeating: "-", count: 36)).requestID == nil)
+        #expect(throws: SpeechFailure.self) {
+            _ = try SpeechServiceConfiguration("wss://speech.invalid/v1/speech").signedRequest(identity: SpeechFixture.identity,
+                timestampMilliseconds: 1_700_000_000_000, nonce: String(repeating: "a", count: 32) + "\n")
+        }
+    }
 }

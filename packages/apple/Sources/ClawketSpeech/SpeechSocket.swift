@@ -14,16 +14,16 @@ public protocol SpeechSocketFactory: Sendable {
 public struct URLSessionSpeechSocketFactory: SpeechSocketFactory {
     public init() {}
     public func makeSocket(request: URLRequest) throws -> any SpeechSocket {
-        guard let url = request.url, request.httpBody == nil,
+        guard let url = request.url, request.httpBody == nil, request.httpBodyStream == nil,
               request.httpMethod == nil || request.httpMethod == "GET" else { throw SpeechFailure(.configuration) }
         let configuration = try SpeechServiceConfiguration(url.absoluteString)
         let expected: Set<String> = ["x-speech-protocol", "x-speech-key", "x-speech-time", "x-speech-nonce", "x-speech-signature"]
         let supplied = Set((request.allHTTPHeaderFields ?? [:]).keys.map { $0.lowercased() })
         guard supplied == expected, request.value(forHTTPHeaderField: "x-speech-protocol") == "2",
-              request.value(forHTTPHeaderField: "x-speech-key")?.range(of: "^[a-f0-9]{64}$", options: .regularExpression) != nil,
-              request.value(forHTTPHeaderField: "x-speech-time")?.range(of: "^[0-9]{13}$", options: .regularExpression) != nil,
-              request.value(forHTTPHeaderField: "x-speech-nonce")?.range(of: "^[a-f0-9]{32}$", options: .regularExpression) != nil,
-              request.value(forHTTPHeaderField: "x-speech-signature")?.range(of: "^[a-f0-9]{128}$", options: .regularExpression) != nil else {
+              SpeechASCII.hex(request.value(forHTTPHeaderField: "x-speech-key") ?? "", bytes: 64),
+              SpeechASCII.digits(request.value(forHTTPHeaderField: "x-speech-time") ?? "", bytes: 13),
+              SpeechASCII.hex(request.value(forHTTPHeaderField: "x-speech-nonce") ?? "", bytes: 32),
+              SpeechASCII.hex(request.value(forHTTPHeaderField: "x-speech-signature") ?? "", bytes: 128) else {
             throw SpeechFailure(.authentication)
         }
         var safe = request; safe.url = configuration.url; safe.httpMethod = "GET"; safe.timeoutInterval = 20

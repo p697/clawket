@@ -86,10 +86,11 @@ extension NativeAppModel {
         let draft = presentation.draft(for: route)
         if let active = voice.attempt, active.context.route == route {
             let recording = active.phase == .recording, preparing = active.phase == .preparing
-            let detail = preparing ? nil : active.failure == nil ? Self.voiceDuration(active.seconds) : String(localized: "Recording saved locally · Transcription paused")
+            let progress = !recording && !active.transcriptPreview.isEmpty ? active.transcriptPreview : Self.voiceDuration(active.seconds)
+            let detail = preparing ? nil : active.failure == nil ? progress : String(localized: "Recording saved locally · Transcription paused")
             draft.voice = .init(phase: recording ? .recording : .transcribing,
                 label: preparing ? String(localized: "Voice input") : recording ? String(localized: "Listening…") : String(localized: "Transcribing…"),
-                detail: detail, canStop: recording || preparing, canCancel: true)
+                detail: detail, canStop: recording || preparing, canCancel: true, level: recording ? active.level : nil)
         } else if !voice.saved(for: context).isEmpty {
             draft.voice = .init(phase: .recoverable, label: String(localized: "Saved recording"),
                 detail: voice.failure.map(Self.voiceFailureText), canReview: true)

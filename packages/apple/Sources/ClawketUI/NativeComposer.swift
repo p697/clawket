@@ -211,11 +211,16 @@ struct NativeComposer: View {
 
     private func voiceStatus(_ voice: VoicePresentation) -> some View {
         HStack(alignment: .center, spacing: 10) {
-            Image(systemName: voice.phase == .recording ? "mic.fill" : "waveform")
-                .foregroundStyle(voice.phase == .recording ? Color.red : Color.secondary)
+            if voice.phase == .recording, let level = voice.level {
+                HStack(spacing: 2) {
+                    ForEach(0..<5) { index in
+                        Capsule().fill(Color.red).frame(width: 3, height: 4 + CGFloat(level) * [10.0, 16, 22, 15, 8][index])
+                    }
+                }.frame(width: 24, height: 28).accessibilityHidden(true)
+            } else { Image(systemName: "waveform").foregroundStyle(.secondary) }
             VStack(alignment: .leading, spacing: 3) {
                 Text(voice.label).font(.subheadline.weight(.medium))
-                if let detail = voice.detail { Text(detail).font(.caption).foregroundStyle(.secondary) }
+                if let detail = voice.detail { Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(2) }
             }
             Spacer(minLength: 0)
             if voice.canReview {

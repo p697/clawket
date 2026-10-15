@@ -1,4 +1,5 @@
 import ClawketSpeech
+import ClawketTransport
 import ClawketUI
 import Foundation
 import SwiftUI
@@ -17,12 +18,15 @@ final class NativeVoiceController: ObservableObject {
         var failure: SpeechFailure?
         var seconds = 0.0
         var level = 0.0
+        var transcriptPreview = ""
     }
     let store: SpeechRecordingStore
     let configuration: SpeechServiceConfiguration?
     private let identity: @Sendable () async throws -> SpeechSigningIdentity
     private let driver: any SpeechAudioDriver
-    private lazy var recorder = SpeechRecorder(store: store, driver: driver) { [weak self] update in
+    private let socketFactory: any SpeechSocketFactory
+    private let clock: any TransportClock
+    private lazy var recorder = SpeechRecorder(store: store, driver: driver, clock: clock) { [weak self] update in
         await self?.receive(update)
     }
     private var transcriber: SpeechTranscriber?
@@ -38,12 +42,14 @@ final class NativeVoiceController: ObservableObject {
     var onResult: @MainActor (NativeVoiceResult) -> Void = { _ in }
 
     init(directory: URL? = nil, serviceURL: String, driver: any SpeechAudioDriver = IOSSpeechAudioDriver(),
+         socketFactory: any SpeechSocketFactory = URLSessionSpeechSocketFactory(),
+         clock: any TransportClock = MonotonicTransportClock(),
          identity: @escaping @Sendable () async throws -> SpeechSigningIdentity) throws {
         let root = try directory ?? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
             appropriateFor: nil, create: true).appendingPathComponent("NativeVoice", isDirectory: true)
         store = try SpeechRecordingStore(directory: root)
         configuration = try? SpeechServiceConfiguration(serviceURL)
-        self.identity = identity; self.driver = driver
+        self.identity = identity; self.driver = driver; self.socketFactory = socketFactory; self.clock = clock
     }
 
     func restore() async {
@@ -115,7 +121,7 @@ final class NativeVoiceController: ObservableObject {
     }
     /// Synchronously revokes the attempt before any awaited native teardown.
     func retire() {
-        attempt = nil; captureTask?.cancel(); captureTask = nil
+        attempt = nil; failure = nil; captureTask?.cancel(); captureTask = nil
         recognitionTask?.cancel(); recognitionTask = nil
         let old = transcriber; transcriber = nil
         let previous = teardownTask, recorder = self.recorder
@@ -148,12 +154,14 @@ final class NativeVoiceController: ObservableObject {
     }
     private func recognize(_ recording: SpeechRecording, context: NativeVoiceContext, recovery: Bool, id: UUID) {
         guard let configuration else { return }
-        let transcriber = SpeechTranscriber(store: store, configuration: configuration, identity: identity)
+        let transcriber = SpeechTranscriber(store: store, configuration: configuration, factory: socketFactory, clock: clock, identity: identity)
         self.transcriber = transcriber
         recognitionTask = Task { [weak self] in
             guard let self else { return }
             do {
-                let text = try await transcriber.transcribe(recording.id)
+                let text = try await transcriber.transcribe(recording.id) { [weak self] progress in
+                    await self?.transcriptionProgress(progress, id: id)
+                }
                 // Wait for the capture callback to publish an interruption/limit
                 // before considering the explicit send intent.
                 if !recovery { await recorder.stop(recordingID: recording.id) }
@@ -179,6 +187,10 @@ final class NativeVoiceController: ObservableObject {
                 onChange(); await restore()
             }
         }
+    }
+    private func transcriptionProgress(_ progress: SpeechTranscriptionProgress, id: UUID) {
+        guard attempt?.id == id else { return }
+        attempt?.transcriptPreview = String(progress.text.suffix(80)); onChange()
     }
     deinit { captureTask?.cancel(); recognitionTask?.cancel(); teardownTask?.cancel() }
 }

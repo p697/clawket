@@ -1,6 +1,18 @@
 import Foundation
 import ClawketPairing
 
+enum SpeechASCII {
+    static func hex(_ value: String, bytes: Int) -> Bool {
+        value.utf8.count == bytes && value.utf8.allSatisfy { (48...57).contains($0) || (97...102).contains($0) }
+    }
+    static func digits(_ value: String, bytes: Int) -> Bool {
+        value.utf8.count == bytes && value.utf8.allSatisfy { (48...57).contains($0) }
+    }
+    static func requestID(_ value: String) -> Bool {
+        value.utf8.count == 36 && UUID(uuidString: value)?.uuidString.lowercased() == value
+    }
+}
+
 public enum SpeechLimits {
     public static let sampleRate = 16_000
     public static let bytesPerSecond = 32_000
@@ -36,7 +48,7 @@ public struct SpeechFailure: Error, Equatable, Sendable {
     public let retryUntil: Date?
     public init(_ code: SpeechCode, requestID: String? = nil, retryAfterMilliseconds: Double = 0, now: Date = Date()) {
         self.code = code
-        self.requestID = requestID.flatMap { $0.range(of: "^[a-f0-9-]{36}$", options: .regularExpression) != nil ? $0 : nil }
+        self.requestID = requestID.flatMap { SpeechASCII.requestID($0) ? $0 : nil }
         self.retryUntil = retryAfterMilliseconds.isFinite && retryAfterMilliseconds > 0
             ? now.addingTimeInterval(min(86_400_000, retryAfterMilliseconds) / 1_000) : nil
     }
@@ -101,7 +113,7 @@ public struct SpeechServiceConfiguration: Sendable, Equatable {
 
     public func signedRequest(identity: SpeechSigningIdentity, timestampMilliseconds: Int64, nonce: String) throws -> URLRequest {
         guard (1_000_000_000_000...9_999_999_999_999).contains(timestampMilliseconds),
-              nonce.range(of: "^[a-f0-9]{32}$", options: .regularExpression) != nil else { throw SpeechFailure(.authentication) }
+              SpeechASCII.hex(nonce, bytes: 32) else { throw SpeechFailure(.authentication) }
         do {
             let signingKey = try PairingCryptography.importSigningKey(tweetNaClSecret: identity.tweetNaClSecretKey, publicKey: identity.publicKey)
             let payload = "clawket-speech-v1|\(authority)|\(timestampMilliseconds)|\(nonce)"
