@@ -47,7 +47,7 @@ struct MediaImagesTests {
         let invalid = try await library.adopt(stager.stageFile(from: svg, name: "image.svg", mimeType: "image/svg+xml"))
         let document = try await library.preparePrompt(invalid.id)
         #expect(!document.isImage); #expect(document.thumbnail == nil); #expect(document.aspectRatio == nil)
-        #expect(document.mimeType == "image/svg+xml"); #expect(document.data == Data(contentsOf: svg))
+        #expect(document.mimeType == "image/svg+xml"); #expect(document.data == (try Data(contentsOf: svg)))
         await #expect(throws: MediaFailure.unsupported) { try await library.previewImage(invalid.id) }
     }
 
