@@ -12,12 +12,15 @@ let package = Package(
         .library(name: "ClawketPersistence", targets: ["ClawketPersistence"]),
         .library(name: "ClawketUpgrade", targets: ["ClawketUpgrade"]),
         .library(name: "ClawketMedia", targets: ["ClawketMedia"]),
+        .library(name: "ClawketSpeech", targets: ["ClawketSpeech"]),
     ],
     dependencies: [
         .package(url: "https://github.com/jedisct1/swift-sodium.git", exact: "0.11.0"),
     ],
     targets: [
         .target(name: "ClawketTransport"),
+        .target(name: "ClawketSpeech", dependencies: ["ClawketTransport", "ClawketPairing", "ClawketPersistence"], exclude: ["AGENTS.md", "CLAUDE.md"]),
+        .testTarget(name: "ClawketSpeechTests", dependencies: ["ClawketSpeech", "ClawketTransport", "ClawketPairing", "ClawketPersistence"]),
         .target(name: "ClawketMedia", exclude: ["AGENTS.md", "CLAUDE.md"]),
         .testTarget(name: "ClawketMediaTests", dependencies: ["ClawketMedia"]),
         .target(name: "ClawketPairing", dependencies: ["ClawketTransport", .product(name: "Sodium", package: "swift-sodium")]),
