@@ -446,6 +446,7 @@ final class NativeAppModel: ObservableObject {
     private func send(_ route: ConversationID) {
         guard route.connectionID == activeConnectionID, state.phase == .ready, state.capabilities.chat,
               var document = documents[route] else { return }
+        guard sessions.first(where: { $0.connectionID == route.connectionID && $0.key == route.sessionID })?.canContinue != false else { return }
         let text = presentation.draft(for: route).text
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         guard document.messages.filter({ [.queued, .held, .sending].contains($0.delivery) }).count < 32 else {
@@ -468,6 +469,7 @@ final class NativeAppModel: ObservableObject {
               running[route] == nil, sendTasks[route] == nil, let runtime,
               let queued = documents[route]?.messages.first(where: { $0.local && $0.delivery == .queued }),
               let id = queued.idempotencyKey else { return }
+        guard sessions.first(where: { $0.connectionID == route.connectionID && $0.key == route.sessionID })?.canContinue != false else { return }
         sendTasks[route] = Task {
             do {
                 // Queue persistence alone never proves dispatch. Persist sending before entering the wire path.
@@ -501,6 +503,7 @@ final class NativeAppModel: ObservableObject {
 
     private func stop(_ route: ConversationID) {
         guard route.connectionID == activeConnectionID, state.capabilities.abort, let runtime else { return }
+        guard sessions.first(where: { $0.connectionID == route.connectionID && $0.key == route.sessionID })?.canContinue != false else { return }
         let runID = running[route]?.nilIfEmpty
         Task {
             do { try await runtime.abort(sessionKey: route.sessionID, runID: runID) }
@@ -557,10 +560,14 @@ final class NativeAppModel: ObservableObject {
         if state.capabilities.chat {
             features[.send] = connected ? .available
                 : .temporarilyUnavailable("Reconnect to send. Your draft is saved.")
+            if session?.canContinue == false { features[.send] = .temporarilyUnavailable("This conversation is read-only here.") }
         }
-        if state.capabilities.abort && running[route] != nil { features[.stop] = connected ? .available : .temporarilyUnavailable("Reconnect to stop this run.") }
+        if state.capabilities.abort && running[route] != nil && session?.canContinue != false { features[.stop] = connected ? .available : .temporarilyUnavailable("Reconnect to stop this run.") }
         if state.capabilities.sessions { features[.sessions] = .available }
-        if state.capabilities.models { features[.models] = connected ? .available : .temporarilyUnavailable("Reconnect to change models.") }
+        if state.capabilities.models {
+            features[.models] = connected ? .available : .temporarilyUnavailable("Reconnect to change models.")
+            if state.capabilities.modelPerSession && session?.canContinue == false { features[.models] = .temporarilyUnavailable("This conversation is read-only here.") }
+        }
         if document.hasMore { features[.loadEarlier] = connected ? .available : .temporarilyUnavailable("Reconnect to load earlier messages.") }
         let previous = presentation.conversations[route]
         presentation.conversations[route] = .init(id: route, agentName: name, sessionTitle: session?.title ?? name,
