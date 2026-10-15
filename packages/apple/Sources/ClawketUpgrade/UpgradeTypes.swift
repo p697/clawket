@@ -6,7 +6,7 @@ public enum UpgradeFailure: String, Error, Sendable, Equatable {
     case invalidRegistry, missingResource, unsafePath, tooLarge, verificationFailed, busy
 }
 
-public enum LegacyValueDomain: String, Codable, Sendable, CaseIterable { case secure, asyncStorage, userDefaults }
+public enum LegacyValueDomain: String, Codable, Sendable, CaseIterable, Hashable { case secure, asyncStorage, userDefaults }
 
 public struct LegacyValueID: Codable, Sendable, Hashable, Comparable {
     public let domain: LegacyValueDomain
@@ -22,8 +22,9 @@ public struct LegacyResource: Codable, Sendable, Equatable {
     public let relativePath: String
     public let byteCount: Int64
     public let sha256: String
-    public init(relativePath: String, byteCount: Int64, sha256: String) {
-        self.relativePath = relativePath; self.byteCount = byteCount; self.sha256 = sha256
+    public let chunks: [String]
+    public init(relativePath: String, byteCount: Int64, sha256: String, chunks: [String] = []) {
+        self.relativePath = relativePath; self.byteCount = byteCount; self.sha256 = sha256; self.chunks = chunks
     }
 }
 
@@ -33,6 +34,7 @@ public protocol LegacyUpgradeSource: Sendable {
     func readValue(_ id: LegacyValueID) async throws -> Data?
     func listResourcePaths() async throws -> [String]
     func inspectResource(_ relativePath: String) async throws -> LegacyResource
+    func readResourceChunk(_ relativePath: String, offset: Int64, maximumBytes: Int) async throws -> Data
 }
 
 public struct UpgradedIdentity: Sendable, Equatable {
@@ -40,6 +42,7 @@ public struct UpgradedIdentity: Sendable, Equatable {
     public let publicKey: Data
     /// Existing TweetNaCl seed[32] + publicKey[32].
     public let secretKey: Data
+    public let createdAt: String?
 }
 
 /// Validated current fields; original serialized bytes remain available without losing unknown fields.
