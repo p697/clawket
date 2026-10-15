@@ -16,6 +16,10 @@ public struct RuntimeMessageAttribution: Codable, Sendable, Equatable {
         public init(id: String? = nil, name: String? = nil, username: String? = nil, avatarURL: URL? = nil, kind: Kind? = nil) {
             self.id = id; self.name = name; self.username = username; self.avatarURL = avatarURL; self.kind = kind
         }
+        public static func == (left: Self, right: Self) -> Bool {
+            equalOpaqueIdentity(left.id, right.id) && left.name == right.name && left.username == right.username
+                && left.avatarURL == right.avatarURL && left.kind == right.kind
+        }
     }
     public let channel: String
     public let accountID: String?
@@ -28,6 +32,11 @@ public struct RuntimeMessageAttribution: Codable, Sendable, Equatable {
         self.channel = channel; self.accountID = accountID; self.conversationID = conversationID
         self.threadID = threadID; self.messageID = messageID; self.sender = sender
     }
+    public static func == (left: Self, right: Self) -> Bool {
+        left.channel == right.channel && equalOpaqueIdentity(left.accountID, right.accountID)
+            && equalOpaqueIdentity(left.conversationID, right.conversationID) && equalOpaqueIdentity(left.threadID, right.threadID)
+            && equalOpaqueIdentity(left.messageID, right.messageID) && left.sender == right.sender
+    }
 }
 
 /// Transcript-local ordering evidence, never a connection or diagnostic identity.
@@ -35,6 +44,17 @@ public struct RuntimeTranscriptPosition: Codable, Sendable, Equatable {
     public let source: String
     public let rawSequence: Int64
     public init(source: String, rawSequence: Int64) { self.source = source; self.rawSequence = rawSequence }
+    public static func == (left: Self, right: Self) -> Bool {
+        equalOpaqueIdentity(left.source, right.source) && left.rawSequence == right.rawSequence
+    }
 }
 
 public enum RuntimeTranscriptBoundary: String, Codable, Sendable { case reset, compaction }
+
+private func equalOpaqueIdentity(_ left: String?, _ right: String?) -> Bool {
+    switch (left, right) {
+    case (nil, nil): true
+    case let (.some(left), .some(right)): left.utf8.elementsEqual(right.utf8)
+    default: false
+    }
+}

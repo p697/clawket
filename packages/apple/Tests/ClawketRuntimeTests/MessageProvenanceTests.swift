@@ -34,6 +34,16 @@ struct MessageProvenanceTests {
         #expect(history.messages.map(\.raw) == values)
     }
 
+    @Test func canonicallyEquivalentOpaqueIDsRemainBytePreservedAndRendererSafe() throws {
+        let first = "\u{e9}", second = "e\u{301}"
+        let messages = try provenanceHistory([provenanceRow(first), provenanceRow(second)]).messages
+        #expect(messages.count == 2); #expect(Set(messages.map(\.id)).count == 2)
+        #expect(messages.allSatisfy { $0.idSource == .ambiguousProvided })
+        #expect(try #require(messages[0].providedID).utf8.elementsEqual(first.utf8))
+        #expect(try #require(messages[1].providedID).utf8.elementsEqual(second.utf8))
+        #expect(!messages[0].providedID!.utf8.elementsEqual(messages[1].providedID!.utf8))
+    }
+
     @Test func missingIdentityAndCrossPageFallbackNeverBecomeProducerEvidence() throws {
         let row = provenanceRow()
         let first = try provenanceHistory([row, row]).messages

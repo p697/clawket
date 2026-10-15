@@ -84,6 +84,17 @@ struct MessageAttributionTests {
         #expect(MessageAttributionWire.read(explicit, key: participantRoute, backend: .openclaw, role: .assistant) == nil)
     }
 
+    @Test func opaqueParticipantIdentityDoesNotUseUnicodeCanonicalEquivalence() throws {
+        let composed = "\u{e9}", decomposed = "e\u{301}"
+        #expect(composed == decomposed) // Swift display-string equality is deliberately insufficient.
+        let first = RuntimeMessageAttribution(channel: "custom", accountID: composed, sender: .init(id: composed))
+        let second = RuntimeMessageAttribution(channel: "custom", accountID: decomposed, sender: .init(id: decomposed))
+        #expect(first != second); #expect(first.sender != second.sender)
+        let decoded = try JSONDecoder().decode(RuntimeMessageAttribution.self, from: JSONEncoder().encode(second))
+        #expect(decoded == second); #expect(decoded != first)
+        #expect(RuntimeTranscriptPosition(source: composed, rawSequence: 1) != RuntimeTranscriptPosition(source: decomposed, rawSequence: 1))
+    }
+
     @Test(arguments: ["http://cdn.example.com/avatar.png", "/profile/photo", "https://user:password@cdn.example.com/avatar.png",
         "https://cdn.example.com/a?%74oken=private", "https://cdn.example.com/a?%2574oken=private", "https://cdn.example.com/a?%252574oken=private",
         "https://cdn.example.com/a?signature=value", "https://cdn.example.com/a#fragment",
