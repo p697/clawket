@@ -149,7 +149,7 @@ struct NativeMediaViewer: View {
             }
             do {
                 let url = try await preview.library.resourceURL(preview.display.resource.id)
-                try await PHPhotoLibrary.shared().performChanges {
+                try await PHPhotoLibrary.shared().performChanges { @Sendable in
                     PHAssetChangeRequest.creationRequestForAssetFromImage(atFileURL: url)
                 }
                 notice = String(localized: "Image saved.")

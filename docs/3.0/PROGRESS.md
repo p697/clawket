@@ -16,6 +16,8 @@
   - History/finalAttachments 实际显示，image-only final 可见；远端 metadata 不持久化 handle/URL 权限，读取重新取当前 Runtime handle。行图像/并发/缓存有界，失效与 A→B→A 用 token/barrier 退休；输入24/48MP/HEIC先安全准备再预览，生成图片16MP限制不放宽，SVG/HTML只文件。原生缩放、copy pixels、add-only Photos 与系统分享分别持有文件 lease；controller-created不冒充展示，未展示dismantle释放，实际分享只等system completion。
   - heavy/jobs2 下最终严格Swift6 generic App/test build-for-testing arm64+x86_64通过，无本机Simulator启动/执行；12项新增Host回归源码合并既有28项，共40项已编译，实际执行交完整PR CI。覆盖旧v1重开、crash/rejection/unknown恢复、回滚资源、附件-only编辑、未知发送、provider删除后receipt恢复、分享handoff、旧task fence、模型scope和高像素输入。19语260 UI/3权限、4,997编译值精确匹配；Node本地化6、summary validator3、文档14对/7回归、diff、all-refs Gitleaks通过并释放heavy。TS/TSX167,902/132,119保持，文档185篇；Swift净增1,462源行/236测试行用于独立host与真实故障回归。指定USB照片/相机/云素材/混合粘贴、真实后端媒体收发与分享仍待main实机验收，不把资源测试/通用编译称为媒体完成；无凭据/服务/版本/发布变更。
 
+  - 首轮远程CI发现Xcode16.4/Swift6.1将Photos保存的主actor闭包判为non-Sendable，显式标注仅捕获URL的@Sendable闭包；同时原MediaImages回归仍断言SVG不能prepare，与本次“SVG只作文件”的已记录行为不同，改为验证原文件字节/类型不变、无thumbnail/ratio并继续拒绝raster preview，未放宽图片安全限制。实际App测试执行与全门禁继续按修正head验证。
+
 
 - 2026-10-16 Native 会话生命周期运行时（host 菜单与设备验收待接入）。
   - 增加当前目录/认证代际的不可持久化 action reference、逐行操作元数据和 rename/reset/delete、Codex archive/archived/restore、Codex/Claude/Pi 只读原生会话复制。保留 OpenClaw key/label/reason、Hermes key/title 与 SDK sessionKey/title 差异、真实 active-run/ownership 限制、继承项目及主/渠道禁止删除；archive 不冒充 delete，可复制/可续聊不授予重置或删除原会话。已知 native 输入必须有当前目录和精确 canContinue:true，未知/新 owned 键保留后端最终检查。

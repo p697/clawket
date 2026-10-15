@@ -45,7 +45,10 @@ struct MediaImagesTests {
         #expect(try await library.preparePrompt(resource.id).aspectRatio == 0.5)
         let svg = root.appendingPathComponent("image.svg"); try Data("<svg xmlns=\"http://www.w3.org/2000/svg\"/>".utf8).write(to: svg)
         let invalid = try await library.adopt(stager.stageFile(from: svg, name: "image.svg", mimeType: "image/svg+xml"))
-        await #expect(throws: MediaFailure.unsupported) { try await library.preparePrompt(invalid.id) }
+        let document = try await library.preparePrompt(invalid.id)
+        #expect(!document.isImage); #expect(document.thumbnail == nil); #expect(document.aspectRatio == nil)
+        #expect(document.mimeType == "image/svg+xml"); #expect(document.data == Data(contentsOf: svg))
+        await #expect(throws: MediaFailure.unsupported) { try await library.previewImage(invalid.id) }
     }
 
     @Test func GIFBytesRemainUnchanged() async throws {
