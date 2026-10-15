@@ -5,7 +5,47 @@ import ClawketTransport
 @testable import ClawketRuntime
 
 @Suite(.serialized)
-struct BootstrapCompatibilityTests {
+struct AuthenticationCompatibilityTests {
+    @Test func hermesDirectAuthenticatesUpgradeWithSeparateToken() async throws {
+        let value = BackendConnection(id: "hermes-direct", backendKind: .hermes, transportKind: .custom,
+            label: "Fixture", url: URL(string: "ws://localhost:18080/v1/hermes/ws?token=stale&keep=value")!,
+            auth: .init(token: "current+fixture&/="))
+        let socket = ScriptSocket { request, socket in try await socket.reply(request, payload: health(.hermes)) }
+        let factory = ScriptFactory(socket)
+        let runtime = try RuntimeCoordinator(credentials: Credentials(), socketFactory: factory)
+        let reader = read(runtime, into: Events())
+        defer { reader.cancel() }
+        try await runtime.activate(value)
+        let endpoint = try #require(factory.urls.first)
+        let query = try #require(URLComponents(url: endpoint, resolvingAgainstBaseURL: false)?.queryItems)
+        #expect(query.filter { $0.name == "token" }.map(\.value) == ["current+fixture&/="])
+        #expect(endpoint.absoluteString.contains("%2B"))
+        #expect(query.first { $0.name == "keep" }?.value == "value")
+        #expect(value.url.query?.contains("stale") == true)
+        #expect(await runtime.state.phase == .ready)
+        await runtime.disconnect()
+    }
+
+    @Test func hermesLegacyEmbeddedTokenAndRelayCredentialRemainSeparate() throws {
+        let legacy = BackendConnection(id: "legacy", backendKind: .hermes, transportKind: .local,
+            label: "Fixture", url: URL(string: "ws://localhost:18080/v1/hermes/ws?token=legacy-fixture")!)
+        #expect(try BackendProfile.endpoint(legacy, deviceID: "fixture") == legacy.url)
+        let relay = connection(.hermes, relay: true)
+        let endpoint = try BackendProfile.endpoint(relay, deviceID: "fixture")
+        let query = try #require(URLComponents(url: endpoint, resolvingAgainstBaseURL: false)?.queryItems)
+        #expect(query.filter { $0.name == "token" }.map(\.value) == ["fixture-relay-token"])
+    }
+
+    @Test(arguments: [BackendKind.openclaw, .codex, .claudeCode, .pi, .localModel])
+    func otherDirectBackendsNeverReceiveUpgradeQueryCredentials(_ backend: BackendKind) throws {
+        let value = connection(backend)
+        #expect(try BackendProfile.endpoint(value, deviceID: "fixture").query == nil)
+        let oversized = BackendConnection(id: "oversized", backendKind: .hermes, transportKind: .custom,
+            label: "Fixture", url: URL(string: "ws://localhost:18080/v1/hermes/ws")!,
+            auth: .init(token: String(repeating: "x", count: 16_385)))
+        #expect(throws: RuntimeFailure.self) { try BackendProfile.endpoint(oversized, deviceID: "fixture") }
+    }
+
     @Test(arguments: ["INVALID_REQUEST", "BAD_REQUEST"])
     func directClosedSchemaFallsBackOnceToPreservedToken(_ code: String) async throws {
         let first = ScriptSocket(initial: [challengeFrame]) { request, socket in

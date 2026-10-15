@@ -42,6 +42,15 @@ struct BackendProfile: Sendable {
                       URLQueryItem(name: "token", value: token),
                       URLQueryItem(name: "capabilities", value: RelayHeartbeatConfiguration.advertisedCapabilities.joined(separator: ","))]
             parts.queryItems = query
+        } else if connection.backendKind == .hermes, let token = connection.auth?.token, !token.isEmpty {
+            guard token.utf8.count <= 16_384 else { throw RuntimeFailure(.invalidConnection) }
+            // Hermes authenticates the Upgrade, before its health RPC can run. Keep the
+            // credential separate in storage; only the ephemeral socket URL carries it.
+            var query = (parts.queryItems ?? []).filter { $0.name != "token" }
+            query.append(URLQueryItem(name: "token", value: token))
+            parts.queryItems = query
+            // URLSearchParams treats a literal '+' as a space; URLComponents does not.
+            parts.percentEncodedQuery = parts.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
         }
         guard let url = parts.url else { throw RuntimeFailure(.invalidConnection) }
         return url

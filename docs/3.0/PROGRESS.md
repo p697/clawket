@@ -1,8 +1,8 @@
 # PROGRESS · Clawket 3.0 进度日志
 
-- 2026-10-16 Native OpenClaw bootstrap 旧 Gateway 兼容。
+- 2026-10-16 Native 后端认证兼容（OpenClaw bootstrap 与 Hermes direct）。
   - 对齐当前 Mobile：仅 bootstrap 身份的 INVALID_REQUEST/BAD_REQUEST、明确 bootstrapToken 与 unexpected/invalid connect schema 错误、且保留旧 token/password 时，禁用本次连接 bootstrap 并回收一次；本地与 Relay 路径一致，不把认证失败降级为旧身份。等待者与代际围栏保持，第二次错误不循环。
-  - heavy 租约、Swift6/jobs2 逐文件通过 BootstrapCompatibilityTests 5 项/9 组输入，含两种拒绝码、Relay 密码、无旧凭据、重复拒绝及认证/无关 schema 拒绝。文档检查与完整 CI 另行记录；未改现有 Mobile、服务协议、生产、版本或发布。
+  - heavy 租约、Swift6/jobs2 逐文件通过 BootstrapCompatibilityTests 5 项/9 组输入，含两种拒绝码、Relay 密码、无旧凭据、重复拒绝及认证/无关 schema 拒绝。Hermes direct 将独立 token 只拼入临时 Upgrade URL，保留旧含token QR与Relay独立凭据，其他后端不加query；增量8测试/16组输入通过，文档10对/7项通过。完整 CI 另行记录；未改现有 Mobile、服务协议、生产、版本或发布。
 
 - 2026-10-16 原生 iOS 本地化首批源码（负责人授权，完整 19 语言仍为最终迁移门槛）。
   - 按真实 `ClawketUI` 八份源码与 native host 清点 188 条界面/无障碍文案，新增主 App bundle 字符串目录及逐项来源清单。64 条术语复用现有 Mobile 19 语言译文；英文、简中、繁中、日文当前各 188/188，其余 15 语言各 64/188，未翻译的 124 条明确缺省，不复制英文伪造完成。
