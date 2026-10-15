@@ -1,5 +1,10 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-16 原生 iOS 本地化首批源码（负责人授权，完整 19 语言仍为最终迁移门槛）。
+  - 按真实 `ClawketUI` 八份源码与 native host 清点 188 条界面/无障碍文案，新增主 App bundle 字符串目录及逐项来源清单。64 条术语复用现有 Mobile 19 语言译文；英文、简中、繁中、日文当前各 188/188，其余 15 语言各 64/188，未翻译的 124 条明确缺省，不复制英文伪造完成。
+  - `docs/native-ios/LOCALIZATION.md` 记录 host 动态状态、默认文案、条件标题及 UI helper 的本地化调用点；用户/后端文本、名称、模型、路径、代码与命令保持原文。此任务不改写 host/UI 源码或资源工程配置，后续由对应 owner 接入。catalog 使用手工维护项，避免 Swift Package 源文案未被 App 提取时误删。
+  - 单文件 Node 验证 5 项通过，覆盖实际四语言 QA 范围、缺失/空输入与译文、占位符类型/重排及阿拉伯语六种复数类别；明确 QA 模式列出全部 19 语言覆盖率，最终默认模式在缺少 15 语言时保持失败。实际 App 资源编译、语言切换/RTL/长文案、VoiceOver 及设备验收未完成，不声称 19 语言本地化已完成，无分发或发布。
+
 - 2026-10-16 Native iOS N2 集成进行中（未完成 App 验收）。
   - 新增维护式 `apps/ios/Clawket.xcodeproj`，SwiftUI host 直接绑定原生配对/后端/表示层，iOS16.4、iPhone/iPad、独立 `com.p697.clawket.nativeqa`；不含 RN/JS/WebView，不改商店 bundle、版本或现有 Mobile 实现。Keychain 凭据、只读缓存标记、草稿及有界队列分连接/Agent/会话存储；先验证写入再派发，进程中断将 sending 置为 uncertain、queued 置为 held，不自动重放。
   - `ClawketPersistence` 在 heavy 租约、jobs=2 下逐文件通过 DocumentStoreTests 8 项与 FileValueStoreTests 2 项，覆盖回滚、损坏、读回失败、异步事务串行、旧范围碰撞、文件大小与符号链接。App 新增四项恢复/隔离/旧版本覆盖/重复ID测试及带损坏输入回归的 xcresult 非空检查，尚待完整 App 编译运行；独立原生 CI 将实际构建 host 并运行模拟器测试。

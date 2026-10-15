@@ -1,0 +1,1373 @@
+{
+  "schema": 1,
+  "sourceLanguage": "en",
+  "locales": [
+    "en",
+    "zh-Hans",
+    "zh-Hant",
+    "ja",
+    "ko",
+    "de",
+    "fr",
+    "es",
+    "es-419",
+    "it",
+    "pt-BR",
+    "pt-PT",
+    "ru",
+    "uk",
+    "tr",
+    "vi",
+    "th",
+    "hi",
+    "ar"
+  ],
+  "requiredForInitialQA": [
+    "en",
+    "zh-Hans",
+    "zh-Hant",
+    "ja"
+  ],
+  "strings": [
+    {
+      "key": "%@ · Native development",
+      "sources": [
+        "ConnectionsView.swift:39"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "%@, %@, conversations",
+      "sources": [
+        "NativeClientView.swift:397"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "A pairing attempt is already in progress.",
+      "sources": [
+        "NativeAppModel.swift:688"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Account settings",
+      "sources": [
+        "NativeClientView.swift:151"
+      ],
+      "mobileTerm": "common.Account settings"
+    },
+    {
+      "key": "Add",
+      "sources": [
+        "NativeClientView.swift:174"
+      ],
+      "mobileTerm": "config.Add"
+    },
+    {
+      "key": "Add attachment or action",
+      "sources": [
+        "NativeComposer.swift:121"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Add connection",
+      "sources": [
+        "NativeClientView.swift:167",
+        "ConnectionsView.swift:33"
+      ],
+      "mobileTerm": "config.Add Connection"
+    },
+    {
+      "key": "Add to queue",
+      "sources": [
+        "ClientPresentation.swift:382",
+        "NativeAppModel.swift:577"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Address",
+      "sources": [
+        "ConnectAgentView.swift:59"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Agent",
+      "sources": [
+        "NativeAppModel.swift:556",
+        "ConnectAgentView.swift:43"
+      ],
+      "mobileTerm": "common.Agent"
+    },
+    {
+      "key": "Agent settings",
+      "sources": [
+        "NativeClientView.swift:404"
+      ],
+      "mobileTerm": "chat.Agent settings"
+    },
+    {
+      "key": "Agent unavailable",
+      "sources": [
+        "NativeAppModel.swift:655"
+      ],
+      "mobileTerm": "common.Agent unavailable"
+    },
+    {
+      "key": "Agents",
+      "sources": [
+        "ClientPresentation.swift:456"
+      ],
+      "mobileTerm": "settings.Agents"
+    },
+    {
+      "key": "All projects",
+      "sources": [
+        "ClientSheets.swift:88",
+        "ClientSheets.swift:99"
+      ],
+      "mobileTerm": "common.All projects"
+    },
+    {
+      "key": "Allow once",
+      "sources": [
+        "MessageContentView.swift:261"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Allowed",
+      "sources": [
+        "MessageContentView.swift:222"
+      ],
+      "mobileTerm": "chat.Allowed"
+    },
+    {
+      "key": "Always allow",
+      "sources": [
+        "MessageContentView.swift:240"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Always allow this action?",
+      "sources": [
+        "MessageContentView.swift:239"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Always allow…",
+      "sources": [
+        "MessageContentView.swift:265"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Applies to all conversations",
+      "sources": [
+        "NativeAppModel.swift:431"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Approval needed",
+      "sources": [
+        "NativeClientView.swift:236"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Attachment failed",
+      "sources": [
+        "NativeComposer.swift:259"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Camera",
+      "sources": [
+        "NativeComposer.swift:106"
+      ],
+      "mobileTerm": "chat.Camera"
+    },
+    {
+      "key": "Camera access is unavailable. You can use a pairing code instead.",
+      "sources": [
+        "PairingScanner.swift:41"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Camera scanning stopped. You can enter the pairing code instead.",
+      "sources": [
+        "PairingScanner.swift:64"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Camera scanning unavailable",
+      "sources": [
+        "PairingScanner.swift:18"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Cancel",
+      "sources": [
+        "PairingScanner.swift:25",
+        "ConnectAgentView.swift:94"
+      ],
+      "mobileTerm": "chat.Cancel"
+    },
+    {
+      "key": "Cancel recording",
+      "sources": [
+        "NativeComposer.swift:205"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Checking your agent…",
+      "sources": [
+        "NativeAppModel.swift:652"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Choose an agent to continue a conversation.",
+      "sources": [
+        "NativeClientView.swift:33"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Choose model",
+      "sources": [
+        "NativeAppModel.swift:430"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Code",
+      "sources": [
+        "MessageContentView.swift:80"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Collapse editor",
+      "sources": [
+        "NativeComposer.swift:23",
+        "NativeComposer.swift:71"
+      ],
+      "mobileTerm": "chat.Collapse editor"
+    },
+    {
+      "key": "Commands",
+      "sources": [
+        "NativeComposer.swift:112"
+      ],
+      "mobileTerm": "chat.Commands"
+    },
+    {
+      "key": "Connect",
+      "sources": [
+        "ConnectAgentView.swift:84"
+      ],
+      "mobileTerm": "config.Connect"
+    },
+    {
+      "key": "Connect an agent",
+      "sources": [
+        "NativeClientView.swift:90",
+        "ConnectAgentView.swift:91"
+      ],
+      "mobileTerm": "config.Connect an agent"
+    },
+    {
+      "key": "Connect an agent to continue conversations and keep work moving.",
+      "sources": [
+        "ClientPresentation.swift:461"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Connect an agent to get started.",
+      "sources": [
+        "ConnectionsView.swift:14"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Connect with",
+      "sources": [
+        "ConnectAgentView.swift:38"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Connected",
+      "sources": [
+        "NativeAppModel.swift:653"
+      ],
+      "mobileTerm": "settings.Connected"
+    },
+    {
+      "key": "Connecting…",
+      "sources": [
+        "NativeAppModel.swift:651",
+        "ConnectAgentView.swift:84"
+      ],
+      "mobileTerm": "config.Connecting…"
+    },
+    {
+      "key": "Connection",
+      "sources": [
+        "ConnectAgentView.swift:69"
+      ],
+      "mobileTerm": "common.Connection"
+    },
+    {
+      "key": "Connection approval",
+      "sources": [
+        "ClientSheets.swift:214"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Connection needs approval",
+      "sources": [
+        "NativeClientView.swift:46"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Connection needs attention",
+      "sources": [
+        "NativeAppModel.swift:656"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Connection settings",
+      "sources": [
+        "NativeClientView.swift:409"
+      ],
+      "mobileTerm": "settings.Connection settings"
+    },
+    {
+      "key": "Connections",
+      "sources": [
+        "ConnectionsView.swift:12"
+      ],
+      "mobileTerm": "config.Connections"
+    },
+    {
+      "key": "Conversation actions",
+      "sources": [
+        "NativeClientView.swift:418"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Conversation files",
+      "sources": [
+        "NativeComposer.swift:115"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Conversations",
+      "sources": [
+        "ClientSheets.swift:74",
+        "ClientSheets.swift:112",
+        "ClientSheets.swift:145"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Copy",
+      "sources": [
+        "MessageContentView.swift:84",
+        "MessageContentView.swift:404"
+      ],
+      "mobileTerm": "config.Copy"
+    },
+    {
+      "key": "Copy code",
+      "sources": [
+        "MessageContentView.swift:85"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Could not complete pairing. Check the details and try again.",
+      "sources": [
+        "NativeAppModel.swift:680"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Could not use this pairing code or link. Check it or generate a new invitation.",
+      "sources": [
+        "NativeAppModel.swift:689"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Delivered",
+      "sources": [
+        "MessageContentView.swift:385"
+      ],
+      "mobileTerm": "chat.Delivered"
+    },
+    {
+      "key": "Delivery could not be confirmed. Check the conversation before sending again.",
+      "sources": [
+        "NativeAppModel.swift:593"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Delivery could not be confirmed. Your original message is saved. Check the conversation before sending again.",
+      "sources": [
+        "NativeAppModel.swift:670"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Denied",
+      "sources": [
+        "MessageContentView.swift:222"
+      ],
+      "mobileTerm": "chat.Denied"
+    },
+    {
+      "key": "Direct",
+      "sources": [
+        "ConnectAgentView.swift:18"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Disconnect",
+      "sources": [
+        "ConnectionsView.swift:35"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Disconnected",
+      "sources": [
+        "NativeAppModel.swift:650"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Disconnected. This preference could not be saved.",
+      "sources": [
+        "NativeAppModel.swift:191"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Done",
+      "sources": [
+        "ClientSheets.swift:24",
+        "ConnectionsView.swift:46"
+      ],
+      "mobileTerm": "common.Done"
+    },
+    {
+      "key": "Earlier messages",
+      "sources": [
+        "NativeTranscript.swift:110"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Edit",
+      "sources": [
+        "MessageContentView.swift:409"
+      ],
+      "mobileTerm": "common.Edit"
+    },
+    {
+      "key": "Enter the code shown by Clawket on your computer. Keep that window open while pairing.",
+      "sources": [
+        "ConnectAgentView.swift:71"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Expand editor",
+      "sources": [
+        "NativeComposer.swift:71"
+      ],
+      "mobileTerm": "chat.Expand editor"
+    },
+    {
+      "key": "Expired",
+      "sources": [
+        "MessageContentView.swift:222"
+      ],
+      "mobileTerm": "chat.Expired"
+    },
+    {
+      "key": "Favorite",
+      "sources": [
+        "MessageContentView.swift:406"
+      ],
+      "mobileTerm": "common.Favorite"
+    },
+    {
+      "key": "Files",
+      "sources": [
+        "NativeComposer.swift:107",
+        "NativeClientView.swift:408"
+      ],
+      "mobileTerm": "common.Files"
+    },
+    {
+      "key": "Input needed",
+      "sources": [
+        "NativeClientView.swift:237"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Latest messages",
+      "sources": [
+        "NativeClientView.swift:365"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Load earlier messages",
+      "sources": [
+        "NativeClientView.swift:413"
+      ],
+      "mobileTerm": "chat.Load earlier messages"
+    },
+    {
+      "key": "Loading agents…",
+      "sources": [
+        "NativeClientView.swift:79"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Loading conversations…",
+      "sources": [
+        "ClientSheets.swift:130"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Loading conversation…",
+      "sources": [
+        "NativeClientView.swift:346"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Loading earlier messages…",
+      "sources": [
+        "NativeTranscript.swift:110"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Local model",
+      "sources": [
+        "ConnectAgentView.swift:12"
+      ],
+      "mobileTerm": "config.Local model"
+    },
+    {
+      "key": "Memory",
+      "sources": [
+        "NativeClientView.swift:405"
+      ],
+      "mobileTerm": "settings.Memory"
+    },
+    {
+      "key": "Message",
+      "sources": [
+        "NativeComposer.swift:19",
+        "NativeComposer.swift:306"
+      ],
+      "mobileTerm": "chat.Message"
+    },
+    {
+      "key": "Message %@",
+      "sources": [
+        "NativeComposer.swift:44"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Model",
+      "sources": [
+        "ClientSheets.swift:198"
+      ],
+      "mobileTerm": "chat.Model"
+    },
+    {
+      "key": "Model: %@",
+      "sources": [
+        "NativeComposer.swift:61"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "More permission options",
+      "sources": [
+        "MessageContentView.swift:268"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Name (optional)",
+      "sources": [
+        "ConnectAgentView.swift:62"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Needs attention",
+      "sources": [
+        "NativeClientView.swift:152"
+      ],
+      "mobileTerm": "config.Needs attention"
+    },
+    {
+      "key": "New agent",
+      "sources": [
+        "NativeClientView.swift:161"
+      ],
+      "mobileTerm": "chat.New Agent"
+    },
+    {
+      "key": "New conversation",
+      "sources": [
+        "ClientSheets.swift:42",
+        "ClientSheets.swift:109"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "No available models",
+      "sources": [
+        "ClientSheets.swift:195"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "No conversations yet",
+      "sources": [
+        "ClientSheets.swift:69",
+        "ClientSheets.swift:140"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "No matching agents or conversations",
+      "sources": [
+        "NativeClientView.swift:126"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "No matching conversations",
+      "sources": [
+        "ClientSheets.swift:69",
+        "ClientSheets.swift:140"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Not sent. Your message is saved.",
+      "sources": [
+        "NativeAppModel.swift:594"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "OK",
+      "sources": [
+        "ClawketApp.swift:20"
+      ],
+      "mobileTerm": "common.OK"
+    },
+    {
+      "key": "Opening conversation…",
+      "sources": [
+        "NativeClientView.swift:28"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Pair your agent",
+      "sources": [
+        "ConnectAgentView.swift:69"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Pairing code",
+      "sources": [
+        "ConnectAgentView.swift:18",
+        "ConnectAgentView.swift:48"
+      ],
+      "mobileTerm": "config.Pairing code"
+    },
+    {
+      "key": "Pairing data could not be saved. Try Connect again to save the existing result.",
+      "sources": [
+        "NativeAppModel.swift:679"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Participant",
+      "sources": [
+        "NativeAppModel.swift:583"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Password (if required)",
+      "sources": [
+        "ConnectAgentView.swift:66"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Paste",
+      "sources": [
+        "NativeComposer.swift:108"
+      ],
+      "mobileTerm": "config.Paste"
+    },
+    {
+      "key": "Paste pairing QR text or link",
+      "sources": [
+        "ConnectAgentView.swift:55"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Photos",
+      "sources": [
+        "NativeComposer.swift:105"
+      ],
+      "mobileTerm": "chat.Photos"
+    },
+    {
+      "key": "Preparing %@",
+      "sources": [
+        "NativeComposer.swift:258"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Preview %@",
+      "sources": [
+        "NativeComposer.swift:285"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Project",
+      "sources": [
+        "ClientSheets.swift:86"
+      ],
+      "mobileTerm": "chat.Project"
+    },
+    {
+      "key": "QR or link",
+      "sources": [
+        "ConnectAgentView.swift:18"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Queued",
+      "sources": [
+        "MessageContentView.swift:381"
+      ],
+      "mobileTerm": "chat.Queued"
+    },
+    {
+      "key": "Ready for review",
+      "sources": [
+        "MessageContentView.swift:382"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Ready when you are. Send this message when the connection is available.",
+      "sources": [
+        "NativeAppModel.swift:589"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Reconnect to change models.",
+      "sources": [
+        "NativeAppModel.swift:568"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Reconnect to load earlier messages.",
+      "sources": [
+        "NativeAppModel.swift:571"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Reconnect to refresh conversations.",
+      "sources": [
+        "NativeAppModel.swift:338"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Reconnect to send. Your draft is saved.",
+      "sources": [
+        "NativeAppModel.swift:562"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Reconnect to stop this run.",
+      "sources": [
+        "NativeAppModel.swift:565"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Reconnecting…",
+      "sources": [
+        "NativeAppModel.swift:654"
+      ],
+      "mobileTerm": "common.Reconnecting…"
+    },
+    {
+      "key": "Recovered your saved connections from the last verified copy.",
+      "sources": [
+        "NativeAppModel.swift:64"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Reject",
+      "sources": [
+        "MessageContentView.swift:258"
+      ],
+      "mobileTerm": "chat.Reject"
+    },
+    {
+      "key": "Remove",
+      "sources": [
+        "MessageContentView.swift:410",
+        "ConnectionsView.swift:31"
+      ],
+      "mobileTerm": "common.Remove"
+    },
+    {
+      "key": "Remove %@",
+      "sources": [
+        "NativeComposer.swift:266"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Remove connection",
+      "sources": [
+        "ConnectionsView.swift:48"
+      ],
+      "mobileTerm": "config.Remove connection"
+    },
+    {
+      "key": "Remove this connection?",
+      "sources": [
+        "ConnectionsView.swift:47"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Reply in new conversation",
+      "sources": [
+        "MessageContentView.swift:407"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Responding…",
+      "sources": [
+        "MessageContentView.swift:24"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Retry",
+      "sources": [
+        "NativeComposer.swift:197"
+      ],
+      "mobileTerm": "chat.Retry"
+    },
+    {
+      "key": "Save connection",
+      "sources": [
+        "ConnectAgentView.swift:84"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Saved conversations remain on this device. You can pair the agent again later.",
+      "sources": [
+        "ConnectionsView.swift:51"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Saved data could not be read safely. Reopen Clawket after unlocking this device.",
+      "sources": [
+        "NativeAppModel.swift:84"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Saved on this device",
+      "sources": [
+        "NativeAppModel.swift:322"
+      ],
+      "mobileTerm": "chat.Saved on this device"
+    },
+    {
+      "key": "Scan QR code",
+      "sources": [
+        "ConnectAgentView.swift:53"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Scan pairing QR",
+      "sources": [
+        "PairingScanner.swift:24"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Scan the QR code shown by Clawket on your computer, or paste its pairing link.",
+      "sources": [
+        "ConnectAgentView.swift:73"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Schedule a task",
+      "sources": [
+        "NativeComposer.swift:113"
+      ],
+      "mobileTerm": "chat.Schedule a task"
+    },
+    {
+      "key": "Scheduled tasks",
+      "sources": [
+        "NativeClientView.swift:407"
+      ],
+      "mobileTerm": "chat.Scheduled tasks"
+    },
+    {
+      "key": "Search agents and conversations",
+      "sources": [
+        "NativeClientView.swift:134"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Search conversations",
+      "sources": [
+        "ClientSheets.swift:76",
+        "ClientSheets.swift:147"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Search models",
+      "sources": [
+        "ClientSheets.swift:200"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Secure storage is unavailable.",
+      "sources": [
+        "NativeAppModel.swift:83"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Send",
+      "sources": [
+        "ClientPresentation.swift:382",
+        "ClientPresentation.swift:391",
+        "NativeAppModel.swift:577"
+      ],
+      "mobileTerm": "chat.Send"
+    },
+    {
+      "key": "Send answer",
+      "sources": [
+        "MessageContentView.swift:349"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Send now",
+      "sources": [
+        "MessageContentView.swift:408"
+      ],
+      "mobileTerm": "chat.Send now"
+    },
+    {
+      "key": "Send status unconfirmed",
+      "sources": [
+        "MessageContentView.swift:386"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Sending…",
+      "sources": [
+        "MessageContentView.swift:383"
+      ],
+      "mobileTerm": "chat.Sending…"
+    },
+    {
+      "key": "Sent",
+      "sources": [
+        "MessageContentView.swift:384"
+      ],
+      "mobileTerm": "chat.Sent"
+    },
+    {
+      "key": "Settings",
+      "sources": [
+        "ConnectionsView.swift:45"
+      ],
+      "mobileTerm": "settings.Settings"
+    },
+    {
+      "key": "Share",
+      "sources": [
+        "MessageContentView.swift:405"
+      ],
+      "mobileTerm": "chat.Share"
+    },
+    {
+      "key": "Show full command",
+      "sources": [
+        "MessageContentView.swift:215"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Skills",
+      "sources": [
+        "NativeClientView.swift:406"
+      ],
+      "mobileTerm": "settings.Skills"
+    },
+    {
+      "key": "Start a conversation",
+      "sources": [
+        "NativeClientView.swift:351"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Start voice input",
+      "sources": [
+        "NativeComposer.swift:383"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Stop",
+      "sources": [
+        "NativeComposer.swift:200"
+      ],
+      "mobileTerm": "chat.Stop"
+    },
+    {
+      "key": "Stop recording",
+      "sources": [
+        "NativeComposer.swift:383"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Stop task",
+      "sources": [
+        "NativeComposer.swift:152"
+      ],
+      "mobileTerm": "chat.Stop task"
+    },
+    {
+      "key": "Stopping task",
+      "sources": [
+        "NativeComposer.swift:152"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Storage unavailable",
+      "sources": [
+        "NativeAppModel.swift:81"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Tap to record. Hold and release to send. Slide up to cancel.",
+      "sources": [
+        "NativeComposer.swift:384"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "The connection could not be removed. Your saved data is unchanged.",
+      "sources": [
+        "NativeAppModel.swift:213"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "The connection selection could not be saved. Please try again.",
+      "sources": [
+        "NativeAppModel.swift:177"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "The operation could not be completed. Check your connection and try again.",
+      "sources": [
+        "NativeAppModel.swift:673"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "The operation could not be completed. Please try again.",
+      "sources": [
+        "NativeAppModel.swift:664"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "The pairing service could not be reached. Check your computer before trying this invitation again.",
+      "sources": [
+        "NativeAppModel.swift:687"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "There are 32 pending messages. Finish or remove one before adding another.",
+      "sources": [
+        "NativeAppModel.swift:453"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "This action is unavailable for this connection.",
+      "sources": [
+        "NativeAppModel.swift:672"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "This code belongs to a different agent. Choose the matching agent and try again.",
+      "sources": [
+        "NativeAppModel.swift:685"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "This connection does not have permission for that action.",
+      "sources": [
+        "NativeAppModel.swift:667"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "This conversation",
+      "sources": [
+        "NativeAppModel.swift:431"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "This conversation is read-only here.",
+      "sources": [
+        "NativeAppModel.swift:563",
+        "NativeAppModel.swift:569"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "This development app has its own connections and storage.",
+      "sources": [
+        "ConnectionsView.swift:40"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "This draft could not be saved. Keep Clawket open and try again.",
+      "sources": [
+        "NativeAppModel.swift:631"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "This invitation has expired or was already used. Get a new code from your computer.",
+      "sources": [
+        "NativeAppModel.swift:683"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "This invitation uses a different service environment.",
+      "sources": [
+        "NativeAppModel.swift:686"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "This permission applies beyond this single request.",
+      "sources": [
+        "MessageContentView.swift:242"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Token (if required)",
+      "sources": [
+        "ConnectAgentView.swift:63"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Too many attempts. Wait a little before trying again.",
+      "sources": [
+        "NativeAppModel.swift:684"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Tool output",
+      "sources": [
+        "NativeAppModel.swift:585"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Tools",
+      "sources": [
+        "NativeComposer.swift:114"
+      ],
+      "mobileTerm": "chat.Tools"
+    },
+    {
+      "key": "Try again",
+      "sources": [
+        "ClientSheets.swift:135"
+      ],
+      "mobileTerm": "common.Try Again"
+    },
+    {
+      "key": "Unlock this device and reopen Clawket to access your saved connections.",
+      "sources": [
+        "NativeAppModel.swift:82"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Unread messages",
+      "sources": [
+        "NativeClientView.swift:235"
+      ],
+      "mobileTerm": "common.Unread messages"
+    },
+    {
+      "key": "Use a skill",
+      "sources": [
+        "NativeComposer.swift:111"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Use the WebSocket address provided by your agent. Credentials are saved securely on this device.",
+      "sources": [
+        "ConnectAgentView.swift:75"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Version",
+      "sources": [
+        "ConnectionsView.swift:39"
+      ],
+      "mobileTerm": "settings.Version"
+    },
+    {
+      "key": "You can paste the QR text or enter the pairing code instead. Check camera access in Settings if needed.",
+      "sources": [
+        "PairingScanner.swift:19"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Your agent could not be reached. Your draft is saved.",
+      "sources": [
+        "NativeAppModel.swift:671"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Your agent needs to be paired again. Add its current pairing code in Settings.",
+      "sources": [
+        "NativeAppModel.swift:666"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Your agents, within reach",
+      "sources": [
+        "ClientPresentation.swift:461"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Your answer",
+      "sources": [
+        "MessageContentView.swift:329",
+        "MessageContentView.swift:338"
+      ],
+      "mobileTerm": "chat.Your answer"
+    },
+    {
+      "key": "Your data could not be saved safely. Keep Clawket open and try again.",
+      "sources": [
+        "NativeAppModel.swift:663"
+      ],
+      "mobileTerm": null
+    }
+  ]
+}
