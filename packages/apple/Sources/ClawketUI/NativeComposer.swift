@@ -238,6 +238,7 @@ private struct ComposerAttachmentView: View {
             .background(Color(uiColor: .tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .accessibilityHidden(true)
+            .modifier(AttachmentPreviewInteraction(canOpen: attachment.canOpen, name: attachment.name, open: onOpen))
             if attachment.kind != .image {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(attachment.name).font(.caption.weight(.medium)).lineLimit(2)
@@ -260,9 +261,20 @@ private struct ComposerAttachmentView: View {
         .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
         .accessibilityElement(children: .contain)
         .accessibilityLabel(attachment.name)
-        .accessibilityActions {
-            if attachment.canOpen { Button("Open", action: onOpen) }
-        }
+    }
+}
+
+@MainActor
+private struct AttachmentPreviewInteraction: ViewModifier {
+    let canOpen: Bool
+    let name: String
+    let open: () -> Void
+    @ViewBuilder func body(content: Content) -> some View {
+        if canOpen {
+            Button(action: open) { content }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Preview \(name)")
+        } else { content }
     }
 }
 
