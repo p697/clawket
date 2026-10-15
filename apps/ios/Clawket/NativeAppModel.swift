@@ -314,7 +314,13 @@ final class NativeAppModel: ObservableObject {
             if state.phase == .ready, !wasReady {
                 refresh()
                 if let route = presentation.selectedConversation {
-                    Task { await loadHistory(route); await loadModels(route) }
+                    let activation = activationRevision, wire = wireRevision
+                    Task {
+                        guard activation == activationRevision, wire == wireRevision else { return }
+                        await loadHistory(route)
+                        guard activation == activationRevision, wire == wireRevision else { return }
+                        await loadModels(route)
+                    }
                 }
             }
         case let .roster(roster):
@@ -552,6 +558,7 @@ final class NativeAppModel: ObservableObject {
             do {
                 try await runtime.selectModel(id: model.id, provider: model.provider,
                                               sessionKey: state.capabilities.modelPerSession ? route.sessionID : nil)
+                guard activation == activationRevision, wire == wireRevision else { return }
                 await loadModels(route)
             } catch { if activation == activationRevision, wire == wireRevision, route.connectionID == activeConnectionID { showFailure(error) } }
         }
@@ -597,17 +604,21 @@ final class NativeAppModel: ObservableObject {
                     sendTasks.removeValue(forKey: route); scheduleSave(route, immediate: true); return
                 }
                 let receipt = try await runtime.send(sessionKey: route.sessionID, input: .init(text: queued.text, idempotencyKey: id))
-                updateSend(route, id: queued.id, delivery: .sent, runID: receipt.runID)
-                if finishedRuns[route]?.contains(receipt.runID) != true { running[route] = receipt.runID }
+                if activation == activationRevision, wire == wireRevision {
+                    updateSend(route, id: queued.id, delivery: .sent, runID: receipt.runID)
+                    if finishedRuns[route]?.contains(receipt.runID) != true { running[route] = receipt.runID }
+                } else {
+                    updateSend(route, id: queued.id, delivery: .uncertain, runID: receipt.runID)
+                }
             } catch {
                 let delivery = (error as? RuntimeFailure)?.delivery
                 let uncertain = delivery == .uncertain || delivery == .responseReceived
                 updateSend(route, id: queued.id, delivery: uncertain ? .uncertain : .failed)
-                if route == presentation.selectedConversation { showFailure(error) }
+                if activation == activationRevision, wire == wireRevision, route == presentation.selectedConversation { showFailure(error) }
             }
             sendTasks.removeValue(forKey: route)
             updatePresentation(route); scheduleSave(route, immediate: true)
-            if running[route] == nil { drainQueue(route) }
+            if activation == activationRevision, wire == wireRevision, running[route] == nil { drainQueue(route) }
         }
     }
 
