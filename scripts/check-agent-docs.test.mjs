@@ -1,6 +1,35 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { isGitSymlinkPlaceholder, validateAgentDocRecords } from './check-agent-docs.mjs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { isGitSymlinkPlaceholder, readAgentDocRecords, shouldScanAgentDirectory, validateAgentDocRecords } from './check-agent-docs.mjs';
+
+test('discovers authored native app instructions while excluding generated projects and Swift dependencies', () => {
+  for (const path of ['apps/ios', 'apps/android', 'apps/mobile/modules/capture/ios', 'packages/apple/Sources']) {
+    assert.equal(shouldScanAgentDirectory(path), true, path);
+  }
+  for (const path of ['apps/mobile/ios', 'apps/mobile/android', 'packages/apple/.build', 'node_modules', '.git']) {
+    assert.equal(shouldScanAgentDirectory(path), false, path);
+  }
+});
+
+test('a copied instruction file in apps/ios cannot disappear behind the generated-project exclusion', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'clawket-native-agent-docs-'));
+  try {
+    for (const path of ['apps/ios', 'apps/mobile/ios', 'packages/apple/.build']) {
+      const target = join(directory, path);
+      mkdirSync(target, { recursive: true });
+      writeFileSync(join(target, 'AGENTS.md'), '# Native instructions');
+      writeFileSync(join(target, 'CLAUDE.md'), '# Unreviewed copied instructions');
+    }
+    const records = readAgentDocRecords(directory);
+    assert.deepEqual(records.map(record => record.agentPath), ['apps/ios/AGENTS.md']);
+    assert.match(validateAgentDocRecords(records).join('\n'), /apps\/ios\/AGENTS.md: CLAUDE.md must be a symlink/);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
 
 test('Windows placeholders require both the tracked symlink mode and exact target bytes', () => {
   const entry = `120000 ${'a'.repeat(40)} 0\tapps/mobile/CLAUDE.md`;

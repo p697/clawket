@@ -2,6 +2,12 @@
 
 This repository is the Clawket monorepo.
 
+## Native Client Program
+
+Owner decision 2026-10-15: migrate to platform-native clients, with iOS first and Android deferred. Read `docs/native-ios/PLAN.md`, `RESEARCH.md` and `PARITY.md` for this program. The owner delegates architecture, product and interaction decisions to the implementation agent. This supersedes the old 3.0 shared-UI, custom-navigation, no-SF-Symbols/no-Liquid-Glass and no-simulator-screenshots choices for the native iOS app; existing privacy, compatibility, release, worktree and resource rules remain binding. Preserve all six currently implemented backends and current user capabilities, not just the original 3.0 scope. Keep the existing client until the native parity gate passes. Continue recording milestones in `docs/3.0/PROGRESS.md`.
+
+Native iOS source belongs in `apps/ios`; Apple domain, protocol and persistence packages belong in `packages/apple`. Do not place maintained native source inside Expo-generated `apps/mobile/ios`. Development installs use a distinct bundle ID and never replace the store app. Identify an authorized physical device by its USB hardware identifier before any automation; wireless availability or a device name is insufficient. Use WebDriverAgent for the owner's requested phone research and automation.
+
 ## Clawket 3.0 Program Rule
 
 1. `docs/3.0/` is the single implementation source for the 3.0 rebuild. Read `docs/3.0/README.md` first, then `docs/3.0/00-decisions.md` (product decisions; implementation may deviate only under the README deviation rules) and `docs/3.0/08-milestones.md` (execution order).

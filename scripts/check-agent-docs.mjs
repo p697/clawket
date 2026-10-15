@@ -6,13 +6,21 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const REPOSITORY_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const IGNORED_DIRECTORIES = new Set(['.git', 'node_modules', 'ios', 'android', 'build', 'dist']);
+const IGNORED_DIRECTORIES = new Set(['.git', '.build', 'node_modules', 'build', 'dist']);
+const GENERATED_NATIVE_DIRECTORIES = new Set(['apps/mobile/ios', 'apps/mobile/android']);
+
+export function shouldScanAgentDirectory(repositoryRelativePath) {
+  const normalized = repositoryRelativePath.replaceAll('\\', '/');
+  return !IGNORED_DIRECTORIES.has(normalized.split('/').at(-1))
+    && !GENERATED_NATIVE_DIRECTORIES.has(normalized);
+}
 
 function discoverAgentPaths(root, directory = root, paths = []) {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     if (entry.isDirectory()) {
-      if (!IGNORED_DIRECTORIES.has(entry.name)) {
-        discoverAgentPaths(root, join(directory, entry.name), paths);
+      const child = join(directory, entry.name);
+      if (shouldScanAgentDirectory(relative(root, child))) {
+        discoverAgentPaths(root, child, paths);
       }
       continue;
     }
