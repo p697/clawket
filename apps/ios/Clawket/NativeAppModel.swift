@@ -37,8 +37,8 @@ final class NativeAppModel: ObservableObject {
     private var rosterReading = NativeRosterReadingVisibility()
     private var rosterForeground = true
     private var rosterHistoryReady: [ConversationID: NativeRosterHistoryRead] = [:]
-    /// A future verified entitlement provider may supply accessible Agent scopes. Empty grants nothing extra.
-    var rosterExplicitAccess: Set<AgentCatalogID> = [] { didSet { rebuildRoster() } }
+    /// Nil preserves the pre-provider fallback; any injected set is authoritative, including an empty set.
+    var rosterExplicitAccess: Set<AgentCatalogID>? = nil { didSet { rebuildRoster() } }
     let preferences = NativePreferences()
     let presentation = ClientPresentation(title: String(localized: "Agents"),
         emptyTitle: String(localized: "Your agents, within reach"),

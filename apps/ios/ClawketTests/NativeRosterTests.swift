@@ -111,6 +111,8 @@ final class NativeRosterTests: XCTestCase, @unchecked Sendable {
         XCTAssertFalse(NativeRosterProjection.canUseLocalActions(unknown, freeConnectionID: "c"))
         XCTAssertFalse(NativeRosterProjection.canUseLocalActions(secondary, freeConnectionID: "c"))
         XCTAssertFalse(NativeRosterProjection.canUseLocalActions(known, freeConnectionID: nil))
+        XCTAssertFalse(NativeRosterProjection.canUseLocalActions(known, freeConnectionID: "c", explicitAccess: []))
+        XCTAssertFalse(NativeRosterProjection.canUseLocalActions(known, freeConnectionID: "c", explicitAccess: [NativeRosterProjection.scope(secondary)]))
         XCTAssertTrue(NativeRosterProjection.canUseLocalActions(secondary, freeConnectionID: nil, explicitAccess: [NativeRosterProjection.scope(secondary)]))
         XCTAssertEqual(NativeRosterProjection.summaries(agents: [rosterAgent(main: "", entry: .sessions)], sessions: [], document: .init(), connectionID: "c", live: true).first?.agent.mainSessionKey, "")
     }

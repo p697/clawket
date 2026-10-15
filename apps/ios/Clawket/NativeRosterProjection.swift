@@ -82,8 +82,9 @@ enum NativeRosterProjection {
         }
     }
     /// Pinning has no separate paywall. It inherits actual Agent access; no fabricated Pro or grace.
-    static func canUseLocalActions(_ agent: RuntimeAgent, freeConnectionID: String?, explicitAccess: Set<AgentCatalogID> = []) -> Bool {
-        explicitAccess.contains(scope(agent)) || (agent.isMain == true && freeConnectionID.map { $0.utf8.elementsEqual(agent.connectionID.utf8) } == true)
+    static func canUseLocalActions(_ agent: RuntimeAgent, freeConnectionID: String?, explicitAccess: Set<AgentCatalogID>? = nil) -> Bool {
+        if let explicitAccess { return explicitAccess.contains(scope(agent)) }
+        return agent.isMain == true && freeConnectionID.map { $0.utf8.elementsEqual(agent.connectionID.utf8) } == true
     }
     static func renderID(_ scope: AgentCatalogID, sessionID: String? = nil) -> String {
         // Length-independent UTF-8 encoding avoids both delimiter and Unicode aliases in SwiftUI IDs.
