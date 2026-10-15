@@ -46,6 +46,13 @@ struct ConsentContractTests {
         #expect(throws: RuntimeFailure.self) { try ConsentWire.answer(.form(["q0": ["One", "One"]]), question: question) }
         #expect(throws: RuntimeFailure.self) { try ConsentWire.answer(.form(["other": ["One"]]), question: question) }
         #expect(try ConsentWire.answer(.form(["q0": ["Custom text"]]), question: question)["answers"] != nil)
+        var customOnly = formQuestion(multi: true).object!
+        var customField = customOnly["fields"]!.array![0].object!
+        customField["options"] = .array([]); customOnly["fields"] = .array([.object(customField)])
+        let (_, customParsed) = try ConsentWire.question(.object(customOnly), sessionKey: "s", connection: connection(.claudeCode))
+        guard case .question(let customQuestion) = customParsed else { return }
+        #expect(try ConsentWire.answer(.form(["q0": ["Custom text"]]), question: customQuestion)["answers"] != nil)
+        #expect(throws: RuntimeFailure.self) { try ConsentWire.answer(.form(["q0": ["First", "Second"]]), question: customQuestion) }
         let (_, codex) = try ConsentWire.question(formQuestion(multi: true, custom: false), sessionKey: "s", connection: connection(.codex))
         guard case .question(let single) = codex else { return }
         #expect(!single.fields[0].allowsMultiple)

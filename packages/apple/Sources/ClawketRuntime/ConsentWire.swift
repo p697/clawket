@@ -138,10 +138,11 @@ enum ConsentWire {
             var result: [String: JSONValue] = [:]
             for field in question.fields {
                 guard let values = answers[field.id], !values.isEmpty,
-                      values.count <= (field.allowsMultiple ? field.options.count : 1), Set(values).count == values.count,
+                      Set(values).count == values.count,
                       values.allSatisfy({ !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && $0.utf16.count <= 64_000 }) else { throw RuntimeFailure(.invalidAnswer) }
                 let allListed = values.allSatisfy { value in field.options.contains { $0.label == value } }
-                guard allListed || (values.count == 1 && field.allowsCustom) else { throw RuntimeFailure(.invalidAnswer) }
+                guard allListed ? values.count <= (field.allowsMultiple ? field.options.count : 1)
+                    : values.count == 1 && field.allowsCustom else { throw RuntimeFailure(.invalidAnswer) }
                 result[field.id] = .array(values.map(JSONValue.string))
             }
             return ["answers": .object(result)]
