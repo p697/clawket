@@ -1418,5 +1418,21 @@
       ],
       "mobileTerm": null
     }
+  ],
+  "infoPlistStrings": [
+    {
+      "key": "NSCameraUsageDescription",
+      "sourceValue": "Scan a pairing QR code to connect your agent.",
+      "sources": [
+        "apps/ios/Clawket/Info.plist:15"
+      ]
+    },
+    {
+      "key": "NSLocalNetworkUsageDescription",
+      "sourceValue": "Connect to agents running on your local network.",
+      "sources": [
+        "apps/ios/Clawket/Info.plist:16"
+      ]
+    }
   ]
 }

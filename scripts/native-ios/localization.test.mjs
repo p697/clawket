@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { formatArguments, inspectCatalog, validateCatalog } from './localization.mjs';
+import { formatArguments, inspectCatalog, inspectPermissionCatalog, validateCatalog } from './localization.mjs';
 
 const inventory = { schema: 1, locales: ['en', 'ar'], strings: [{ key: 'Preview %@' }] };
 const unit = (value) => ({ stringUnit: { state: 'translated', value } });
@@ -11,13 +11,29 @@ const fixture = () => ({
   },
 });
 
-test('validates the real catalog under the explicit initial-QA scope and reports all 19 locales', () => {
+test('validates the real UI and permission catalogs in all 19 locales', () => {
   const inventory = JSON.parse(readFileSync(new URL('../../docs/native-ios/localization-inventory.json', import.meta.url), 'utf8'));
   const catalog = JSON.parse(readFileSync(new URL('../../apps/ios/Clawket/Localizable.xcstrings', import.meta.url), 'utf8'));
-  const result = validateCatalog(catalog, inventory, { requiredLocales: inventory.requiredForInitialQA });
+  const result = validateCatalog(catalog, inventory);
+  const permissionCatalog = JSON.parse(readFileSync(new URL('../../apps/ios/Clawket/InfoPlist.xcstrings', import.meta.url), 'utf8'));
+  const permissions = inspectPermissionCatalog(permissionCatalog, inventory);
+  assert.deepEqual(permissions.issues, []);
   assert.equal(result.keyCount, inventory.strings.length);
   assert.equal(Object.keys(result.coverage).length, 19);
-  for (const locale of inventory.requiredForInitialQA) assert.equal(result.coverage[locale], result.keyCount);
+  assert.equal(permissions.keyCount, 2);
+  for (const locale of inventory.locales) {
+    assert.equal(result.coverage[locale], result.keyCount);
+    assert.equal(permissions.coverage[locale], permissions.keyCount);
+  }
+});
+
+test('permission purposes reject a changed source or missing inventory instead of claiming resource coverage', () => {
+  const purposeInventory = { ...inventory, infoPlistStrings: [{ key: 'Preview %@', sourceValue: 'Preview %@' }] };
+  const catalog = fixture();
+  assert.deepEqual(inspectPermissionCatalog(catalog, purposeInventory).issues, []);
+  catalog.strings['Preview %@'].localizations.en = unit('Changed %@');
+  assert.match(inspectPermissionCatalog(catalog, purposeInventory).issues.join('\n'), /permission source differs/);
+  assert.throws(() => inspectPermissionCatalog(catalog, { ...purposeInventory, infoPlistStrings: [] }), /empty/);
 });
 
 test('missing required translations fail and never become English-filled completeness', () => {

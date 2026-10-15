@@ -1,10 +1,10 @@
 # Native iOS localization
 
-The app owns `apps/ios/Clawket/Localizable.xcstrings` in its main bundle. The 19 locale codes match `apps/mobile/src/i18n/supported-locales.js`; backend identity, transport identity and app language remain separate. Product names, user messages, agent/session/project names, model/provider names, filenames, commands and tool output stay verbatim.
+The app owns `apps/ios/Clawket/Localizable.xcstrings` and `InfoPlist.xcstrings` in its main bundle. The 19 locale codes match `apps/mobile/src/i18n/supported-locales.js`; backend identity, transport identity and app language remain separate. Product names, user messages, agent/session/project names, model/provider names, filenames, commands and tool output stay verbatim.
 
 The initial source inventory contains 195 user-facing and accessibility keys from the eight `ClawketUI` sources and the real native host. `localization-inventory.json` records their locations and any reused Mobile term. Catalog entries are manual because most presentation strings originate in a Swift Package while the resource belongs to the app. Do not remove them merely because the app target's extractor does not see a package source.
 
-Current source coverage: all 19 supported locales contain 195/195 actual translations (3,705 string units, including the English source). The catalog reuses 64 existing Mobile terms; the other 131 native strings were translated for each locale. Regional Spanish and Portuguese retain their existing terminology, including Settings, pairing and connection labels.
+Current source coverage: all 19 supported locales contain 195/195 UI translations plus both camera/local-network permission purposes (3,743 string units, including the English source). The UI catalog reuses 64 existing Mobile terms; the other 131 native strings were translated for each locale. Regional Spanish and Portuguese retain their existing terminology, including Settings, pairing and connection labels. Permission descriptions use the separate `InfoPlist` table because `Localizable` does not localize system permission prompts.
 
 No missing translation was filled with English and marked complete. Completing this source catalog does not complete the native language parity gate: resource integration, language selection, device rendering and linguistic acceptance remain separate checks. New source strings must still add real translations before the all-19 validation passes.
 
@@ -31,7 +31,7 @@ Host changes required at the current source snapshot:
 | `ConnectAgentView` | Give each connection method a localized display title instead of showing its English raw value. Localize the `Local model` backend label, conditional section headers and conditional connect/save button titles. Keep the five backend product names unchanged. |
 | `PairingScanner` | Localize the strings passed to `onFailure`, and localize the fallback explanation before placing it in a runtime `String`. |
 | `ConnectionsView` | Use the catalog format `%@ · Native development` for the version value, with the version as an untranslated argument. Keep saved connection labels unchanged. |
-| App resource setup | Add the catalog to the app's Resources phase and declare the same 19 known regions. The package has no separate localization resource bundle. |
+| App resource setup | Both catalogs belong in the app's Resources phase with the same 19 known regions. The package has no separate localization resource bundle. |
 
 Presentation-library binding applied in this branch (public types unchanged; app integration and iOS compilation are separate checks):
 
@@ -61,4 +61,4 @@ node scripts/native-ios/localization.mjs --initial-qa
 node scripts/native-ios/localization.mjs
 ```
 
-The first command checks real initial-QA coverage plus corrupted/missing text, empty input, mismatched/reordered placeholders and incomplete Arabic plurals. The second explicitly requires the four initial-QA locales and prints coverage for all 19. The final command requires all 19 and currently passes for all 195 inventoried keys; any missing translation fails it. None substitutes for compiling the catalog in the real app and testing English, Chinese IME, Japanese, long German text, Arabic/RTL, Dynamic Type and VoiceOver on the simulator/device.
+The first command checks both real catalogs in all 19 locales plus corrupted/missing text, changed permission purposes, empty input, mismatched/reordered placeholders and incomplete Arabic plurals. The second retains an explicit four-locale initial-QA scope and prints coverage for all 19. The final command requires all 19 and currently passes for all 195 UI keys and both permission purposes; any missing translation fails it. None substitutes for compiling the catalogs in the real app and testing English, Chinese IME, Japanese, long German text, Arabic/RTL, Dynamic Type and VoiceOver on the simulator/device.

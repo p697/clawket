@@ -140,6 +140,17 @@ export function validateCatalog(catalog, inventory, options) {
   return report;
 }
 
+export function inspectPermissionCatalog(catalog, inventory, options) {
+  const report = inspectCatalog(catalog, { ...inventory, strings: inventory.infoPlistStrings }, options);
+  for (const entry of inventory.infoPlistStrings) {
+    if (typeof entry.sourceValue !== 'string' || !entry.sourceValue.trim()
+        || catalog.strings[entry.key]?.localizations?.en?.stringUnit?.value !== entry.sourceValue) {
+      report.issues.push(`${entry.key}: permission source differs from the inventoried purpose`);
+    }
+  }
+  return report;
+}
+
 function main() {
   const args = process.argv.slice(2);
   if (args.some((arg) => arg !== '--initial-qa') || args.length > 1) throw new Error('Usage: node scripts/native-ios/localization.mjs [--initial-qa]');
@@ -148,10 +159,16 @@ function main() {
     throw new Error('Native locale inventory differs from the shared 19-locale product contract');
   }
   const catalog = JSON.parse(readFileSync(path.join(root, 'apps/ios/Clawket/Localizable.xcstrings'), 'utf8'));
-  const report = inspectCatalog(catalog, inventory, args.includes('--initial-qa') ? { requiredLocales: inventory.requiredForInitialQA } : {});
-  console.log(`Native catalog: ${report.keyCount} keys; required locale scope: ${report.requiredLocales.join(', ')}`);
-  for (const [locale, count] of Object.entries(report.coverage)) console.log(`${locale}: ${count}/${report.keyCount}`);
-  if (report.issues.length) throw new Error(report.issues.join('\n'));
+  const permissionCatalog = JSON.parse(readFileSync(path.join(root, 'apps/ios/Clawket/InfoPlist.xcstrings'), 'utf8'));
+  const options = args.includes('--initial-qa') ? { requiredLocales: inventory.requiredForInitialQA } : {};
+  const report = inspectCatalog(catalog, inventory, options);
+  const permissions = inspectPermissionCatalog(permissionCatalog, inventory, options);
+  console.log(`Native catalogs: ${report.keyCount} UI keys; ${permissions.keyCount} permission purposes; required locale scope: ${report.requiredLocales.join(', ')}`);
+  for (const [locale, count] of Object.entries(report.coverage)) {
+    console.log(`${locale}: UI ${count}/${report.keyCount}, permissions ${permissions.coverage[locale]}/${permissions.keyCount}`);
+  }
+  const issues = [...report.issues.map((issue) => `UI: ${issue}`), ...permissions.issues.map((issue) => `InfoPlist: ${issue}`)];
+  if (issues.length) throw new Error(issues.join('\n'));
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
