@@ -21,7 +21,7 @@ private actor RosterValues: ValueStore {
 private func rosterSession(_ key: String, agent: String = "a", kind: String = "main", time: Int64? = 100,
                            metadataTime: Int64 = 500, attention: String? = nil, pin: Bool = true, archived: Bool = false) throws -> RuntimeSession {
     var raw: [String: Any] = ["key": key, "connectionID": "c", "agentID": agent, "title": key, "kind": kind,
-        "updatedAtMs": metadataTime, "hasActiveRun": false, "archived": archived,
+        "updatedAtMs": metadataTime, "preview": "Preview for \(key)", "hasActiveRun": false, "archived": archived,
         "allowedActions": ["rename": false, "reset": false, "delete": false, "pin": pin, "archive": false],
         "raw": attention.map { ["attention": $0] } ?? [:]]
     if let time { raw["lastActivityAtMs"] = time }
@@ -63,6 +63,7 @@ final class NativeRosterTests: XCTestCase, @unchecked Sendable {
         for session in [missing, cron, sub] { XCTAssertNil(NativeRosterProjection.activity(session)); XCTAssertFalse(NativeRosterProjection.unread(session, document: state.document, live: true)) }
         let summary = NativeRosterProjection.summaries(agents: [rosterAgent()], sessions: [missing, cron, sub], document: state.document, connectionID: "c", live: true)
         XCTAssertNil(summary.first?.lastActivityAtMs)
+        XCTAssertEqual(summary.first?.previewSession?.preview, "Preview for main") // A null clock hides recency, not the stored preview.
         await state.flush()
     }
     func testMainBadgeAndAllSessionUnreadRemainSeparateWithTruthfulCacheSignals() throws {

@@ -14,6 +14,7 @@ enum NativeRosterProjection {
         var unread: Bool
         var attention: AgentPresentation.Attention
         var pinned: Bool
+        var previewSession: RuntimeSession? { recent ?? sessions.first { $0.key.utf8.elementsEqual(agent.mainSessionKey.utf8) } }
     }
     static func route(_ session: RuntimeSession) -> ConversationID {
         .init(connectionID: session.connectionID, agentID: session.agentID, sessionID: session.key)

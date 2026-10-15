@@ -586,12 +586,17 @@ final class NativeAppModel: ObservableObject {
             let agent = summary.agent, scope = NativeRosterProjection.scope(agent)
             let mode: AgentEntryMode = agent.entryMode == .sessions || agent.mainSessionKey.isEmpty
                 ? .catalog(scope) : .conversation(.init(connectionID: agent.connectionID, agentID: agent.agentID, sessionID: agent.mainSessionKey))
-            let backend = connections.first { $0.id.utf8.elementsEqual(agent.connectionID.utf8) }?.backendKind.title
+            let connection = connections.first { $0.id.utf8.elementsEqual(agent.connectionID.utf8) }
+            let backend = connection?.backendKind.title
             let localAccess = canUseRosterActions(agent)
             let pending = rosterIsLive ? taskRequests?.attention(connectionID: agent.connectionID,
                 sessionKeys: Set(summary.sessions.map(\.key)).union(agent.mainSessionKey.isEmpty ? [] : [agent.mainSessionKey])) ?? .none : .none
             let attention = NativeRosterProjection.stronger(summary.attention, pending)
-            let preview = summary.recent?.preview ?? (agent.entryMode == .sessions ? summary.recent.map { displayTitle(for: $0) } : nil) ?? ""
+            var preview = summary.previewSession?.preview ?? (agent.entryMode == .sessions ? summary.recent.map { displayTitle(for: $0) } : nil) ?? ""
+            if let source = summary.previewSession, source.preview != nil, !source.key.utf8.elementsEqual(agent.mainSessionKey.utf8),
+               agent.entryMode != .sessions, connection?.backendKind != .pi {
+                preview = "\(displayTitle(for: source)): \(preview)"
+            }
             var rows = [AgentPresentation(id: NativeRosterProjection.renderID(scope), entryMode: mode, name: agent.name,
                 subtitle: preview, backendLabel: backend, initials: String(agent.name.prefix(1)),
                 timeLabel: rosterTime(summary.lastActivityAtMs), unread: summary.unread, attention: attention,
