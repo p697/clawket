@@ -117,11 +117,14 @@ actor NativeMediaController {
             do { _ = try await library.resourceURL(id); return try await library.resource(id) }
             catch { guard reference.artifactID != nil else { throw error } }
         }
-        guard let artifactID = reference.artifactID, let runtime else { throw MediaFailure.missing }
+        guard let artifactID = reference.artifactID else { throw MediaFailure.missing }
+        let key = MediaArtifactKey(connectionID: route.connectionID, sessionKey: route.sessionID, artifactID: artifactID)
+        do { if let cached = try await library.cachedArtifact(key: key) { return cached } }
+        catch { guard runtime != nil else { throw error } }
+        guard let runtime else { throw MediaFailure.missing }
         let handle = try await runtime.openArtifact(sessionKey: route.sessionID, artifactID: artifactID)
         do {
-            let resource = try await library.cacheArtifact(key: .init(connectionID: route.connectionID,
-                sessionKey: route.sessionID, artifactID: artifactID), name: handle.name, mimeType: handle.mimeType, size: handle.size) {
+            let resource = try await library.cacheArtifact(key: key, name: handle.name, mimeType: handle.mimeType, size: handle.size) {
                 try await runtime.readArtifact(handle, offset: $0)
             }
             await runtime.closeArtifact(handle)

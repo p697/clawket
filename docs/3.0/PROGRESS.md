@@ -20,6 +20,8 @@
 
   - 重基已合并work/review journal主线9aebc8d0，保留全部journal初始化、持久review、history/live/receipt与两个读取handler；旧tool文本不再伪标complete。工程源/测试引用按并集保留，实际发现56个App方法（44+媒体12），门槛及损坏fixture同步56；不将新合并代码冒称本机已执行，最终完整编译/运行交当前head CI。
 
+  - 自审补齐已下载输出的离线/冷启读取：Library只读cachedArtifact按精确connection/session/artifact+24小时+SHA验证已owned文件，不发网络或创造凭据权限；缺失/损坏在线才重取当前Runtime handle，离线不能换scope。新增第13项Host冷启/离线/过期/损坏回归，当前与journal并集门槛57，实际执行继续交最终CI。
+
 
 - 2026-10-16 Native 会话生命周期运行时（host 菜单与设备验收待接入）。
   - 增加当前目录/认证代际的不可持久化 action reference、逐行操作元数据和 rename/reset/delete、Codex archive/archived/restore、Codex/Claude/Pi 只读原生会话复制。保留 OpenClaw key/label/reason、Hermes key/title 与 SDK sessionKey/title 差异、真实 active-run/ownership 限制、继承项目及主/渠道禁止删除；archive 不冒充 delete，可复制/可续聊不授予重置或删除原会话。已知 native 输入必须有当前目录和精确 canContinue:true，未知/新 owned 键保留后端最终检查。

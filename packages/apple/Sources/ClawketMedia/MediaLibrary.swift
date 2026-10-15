@@ -149,14 +149,27 @@ public actor MediaLibrary {
         return try MediaImages.preview(data: prepared.data, pixels: maximumPixels)
     }
 
+    /// Reads only already-owned verified bytes. Stable metadata grants no network authority.
+    public func cachedArtifact(key: MediaArtifactKey, now: Date = Date()) throws -> MediaResource? {
+        try validateArtifactKey(key)
+        guard !unavailable else { throw MediaFailure.corrupt }
+        guard let entry = entries.values.first(where: { $0.artifact == key && now.timeIntervalSince($0.resource.createdAt) < 86_400 }) else { return nil }
+        _ = try resourceURL(entry.resource.id)
+        return entry.resource
+    }
+
+    private func validateArtifactKey(_ key: MediaArtifactKey) throws {
+        guard !key.connectionID.isEmpty, key.connectionID.utf8.count <= 256,
+              !key.sessionKey.isEmpty, key.sessionKey.utf8.count <= 1_024,
+              !key.artifactID.isEmpty, key.artifactID.utf8.count <= 512 else { throw MediaFailure.invalidFile }
+    }
+
     /// One task per stable scope/reference; writes one chunk at a time. `read`
     /// must be backed by a captured RuntimeArtifactHandle, never an arbitrary URL.
     public func cacheArtifact(key: MediaArtifactKey, name: String, mimeType: String, size: Int,
                               read: @escaping @Sendable (Int) async throws -> Data) async throws -> MediaResource {
-        guard !key.connectionID.isEmpty, key.connectionID.utf8.count <= 256,
-              !key.sessionKey.isEmpty, key.sessionKey.utf8.count <= 1_024,
-              !key.artifactID.isEmpty, key.artifactID.utf8.count <= 512,
-              size >= 0, size <= MediaLimits.artifactBytes else { throw MediaFailure.invalidFile }
+        try validateArtifactKey(key)
+        guard size >= 0, size <= MediaLimits.artifactBytes else { throw MediaFailure.invalidFile }
         let name = try mediaName(name), mime = try mediaMIME(mimeType)
         if let cached = entries.values.first(where: { $0.artifact == key && Date().timeIntervalSince($0.resource.createdAt) < 86_400 }) {
             do {

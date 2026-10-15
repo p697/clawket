@@ -177,6 +177,31 @@ final class NativeMediaHostTests: XCTestCase, @unchecked Sendable {
         try await controller.library.remove(appeared.id)
     }
 
+    func testDownloadedArtifactReopensOfflineWithoutAuthorizingAnotherScopeOrExpiredCache() async throws {
+        let directory = root(); defer { try? FileManager.default.removeItem(at: directory) }
+        let controller = try NativeMediaController(directory: directory)
+        let key = MediaArtifactKey(connectionID: "c", sessionKey: "s", artifactID: "asset")
+        let bytes = Data("downloaded output".utf8)
+        let resource = try await controller.library.cacheArtifact(key: key, name: "result.txt", mimeType: "text/plain", size: bytes.count) { offset in
+            XCTAssertEqual(offset, 0); return bytes
+        }
+        var reference = NativeMediaReference(resource: resource, isImage: false)
+        reference.resourceID = nil; reference.artifactID = "asset"
+        let reopened = try NativeMediaController(directory: directory)
+        let restored = try await reopened.resolve(reference, route: .init(connectionID: "c", agentID: "a", sessionID: "s"), runtime: nil)
+        XCTAssertEqual(restored.id, resource.id)
+        let url = try await reopened.library.resourceURL(restored.id)
+        XCTAssertEqual(try Data(contentsOf: url), bytes)
+        for route in [ConversationID(connectionID: "other", agentID: "a", sessionID: "s"),
+                      ConversationID(connectionID: "c", agentID: "a", sessionID: "other")] {
+            do { _ = try await reopened.resolve(reference, route: route, runtime: nil); XCTFail("Cache must stay in its exact scope") } catch { }
+        }
+        let expired = try await reopened.library.cachedArtifact(key: key, now: resource.createdAt.addingTimeInterval(86_401))
+        XCTAssertNil(expired)
+        try Data("bad".utf8).write(to: url)
+        do { _ = try await reopened.resolve(reference, route: .init(connectionID: "c", agentID: "a", sessionID: "s"), runtime: nil); XCTFail("Corrupt cache must not be previewed") } catch { }
+    }
+
     @MainActor func testOldMediaLoadCompletionCannotRemoveReplacementOperation() {
         let model = NativeAppModel(), old = UUID(), current = UUID()
         model.mediaLoadRevisions["image"] = current

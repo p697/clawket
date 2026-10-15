@@ -301,11 +301,11 @@ extension NativeAppModel {
             let reference = item.reference
             if let id = reference.resourceID {
                 loadMediaDisplay(id, referenceID: reference.id, route: route, input: item.input)
-            } else if reference.kind == .image, ["image/png", "image/jpeg", "image/gif", "image/webp"].contains(reference.mimeType), reference.artifactID != nil, state.phase == .ready, state.capabilities.artifacts {
+            } else if reference.kind == .image, ["image/png", "image/jpeg", "image/gif", "image/webp"].contains(reference.mimeType), reference.artifactID != nil {
                 let activation = activationRevision, wire = wireRevision, selection = selectionRevision, token = UUID()
                 mediaLoadRevisions[reference.id] = token
                 mediaDisplays[reference.id] = .init(id: reference.id, name: reference.name, kind: .image, phase: .preparing)
-                let runtime = runtime
+                let runtime = state.phase == .ready && state.capabilities.artifacts ? runtime : nil
                 mediaLoads[reference.id] = Task {
                     defer { finishMediaLoad(reference.id, token: token) }
                     do {
@@ -318,8 +318,10 @@ extension NativeAppModel {
                             thumbnailData: display.image, aspectRatio: display.aspectRatio, canOpen: true)
                     } catch {
                         guard !Task.isCancelled, activation == activationRevision, wire == wireRevision, selection == selectionRevision else { return }
-                        mediaDisplays[reference.id] = .init(id: reference.id, name: reference.name, kind: .image,
-                            phase: .failed(String(localized: "Attachment could not be loaded. Try again.")), canOpen: true)
+                        mediaDisplays[reference.id] = runtime == nil
+                            ? .init(id: reference.id, name: reference.name, kind: .image, detail: String(localized: "Download"), canOpen: true)
+                            : .init(id: reference.id, name: reference.name, kind: .image,
+                                phase: .failed(String(localized: "Attachment could not be loaded. Try again.")), canOpen: true)
                     }
                     updatePresentation(route)
                 }
