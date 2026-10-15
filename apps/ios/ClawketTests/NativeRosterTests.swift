@@ -161,7 +161,7 @@ final class NativeRosterTests: XCTestCase, @unchecked Sendable {
             catch { XCTAssertEqual(error as? StoreFailure, .invalidDocument) }
         }
     }
-    func testUnknownReplacementCannotBeRetriedAndOlderSnapshotCannotOverwriteVerifiedValue() async throws {
+    @MainActor func testUnknownReplacementCannotBeRetriedAndOlderSnapshotCannotOverwriteVerifiedValue() async throws {
         let values = RosterValues(), store = try NativeRosterStore(values: values)
         let initial = try await store.read(); XCTAssertEqual(initial.revision, 0)
         var latest = initial; latest.revision = 2; latest.baselines = ["c"]
@@ -173,5 +173,11 @@ final class NativeRosterTests: XCTestCase, @unchecked Sendable {
         do { try await store.write(.init(revision: 4)); XCTFail("Unknown replacement overwritten") } catch { XCTAssertEqual(error as? StoreFailure, .verificationFailed) }
         let reopened = try NativeRosterStore(values: values); let restored = try await reopened.read()
         XCTAssertEqual(restored.revision, 3); XCTAssertEqual(restored.preferences.first?.pinned, true)
+        let state = NativeRosterState(store: reopened); await state.load()
+        await values.failAfterNextWrite()
+        state.setAgentPinned(.init(connectionID: "c", agentID: "a"), pinned: false); await state.flush()
+        XCTAssertFalse(state.canSave); XCTAssertTrue(state.document.preferences.first?.pinned == true)
+        let actual = try NativeRosterStore(values: values); let disk = try await actual.read()
+        XCTAssertFalse(try XCTUnwrap(disk.preferences.first).pinned) // Unknown memory cannot overwrite the committed disk truth.
     }
 }
