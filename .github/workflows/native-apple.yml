@@ -78,6 +78,10 @@ jobs:
       - name: Check native test result validator
         working-directory: apps/ios/scripts
         run: python3 -m unittest test_validate_xctest_result.py
+      - name: Check initial native localization coverage and validation
+        run: |
+          node --test scripts/native-ios/localization.test.mjs
+          node scripts/native-ios/localization.mjs --initial-qa
       - name: Create a simulator matching the selected SDK
         shell: bash
         run: |

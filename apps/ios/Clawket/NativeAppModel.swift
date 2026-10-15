@@ -15,7 +15,9 @@ enum AddConnectionRequest {
 @MainActor
 final class NativeAppModel: ObservableObject {
     enum Destination: String, Identifiable { case connect, connections; var id: String { rawValue } }
-    let presentation = ClientPresentation()
+    let presentation = ClientPresentation(title: String(localized: "Agents"),
+        emptyTitle: String(localized: "Your agents, within reach"),
+        emptyDetail: String(localized: "Connect an agent to continue conversations and keep work moving."))
     @Published var destination: Destination?
     @Published var notice: String?
     @Published private(set) var connections: [BackendConnection] = []
@@ -64,7 +66,7 @@ final class NativeAppModel: ObservableObject {
             self.catalogCache = try NativeCatalogStore()
             if let saved = try await vault.readRegistry() {
                 registry = saved.value
-                if saved.recoveredFromRollback { notice = "Recovered your saved connections from the last verified copy." }
+                if saved.recoveredFromRollback { notice = String(localized: "Recovered your saved connections from the last verified copy.") }
             }
             connections = registry.records; activeConnectionID = registry.activeConnectionID
             eventTask = Task { [weak self, runtime] in
@@ -81,10 +83,10 @@ final class NativeAppModel: ObservableObject {
             networkMonitor.start(queue: DispatchQueue(label: "ai.clawket.native.network-hints"))
             if !registry.paused, let id = registry.activeConnectionID { connectSaved(id) }
         } catch {
-            presentation.connection = .init(phase: .unavailable, label: "Storage unavailable",
-                detail: "Unlock this device and reopen Clawket to access your saved connections.")
-            presentation.features[.addConnection] = .temporarilyUnavailable("Secure storage is unavailable.")
-            notice = "Saved data could not be read safely. Reopen Clawket after unlocking this device."
+            presentation.connection = .init(phase: .unavailable, label: String(localized: "Storage unavailable"),
+                detail: String(localized: "Unlock this device and reopen Clawket to access your saved connections."))
+            presentation.features[.addConnection] = .temporarilyUnavailable(String(localized: "Secure storage is unavailable."))
+            notice = String(localized: "Saved data could not be read safely. Reopen Clawket after unlocking this device.")
         }
     }
 
@@ -184,7 +186,7 @@ final class NativeAppModel: ObservableObject {
                 try await vault.writeRegistry(next)
                 guard next.revision >= registry.revision else { return }
                 registry = next; activeConnectionID = id; connectSaved(id)
-            } catch { notice = "The connection selection could not be saved. Please try again." }
+            } catch { notice = String(localized: "The connection selection could not be saved. Please try again.") }
         }
     }
 
@@ -198,7 +200,7 @@ final class NativeAppModel: ObservableObject {
             await runtime.disconnect()
             var next = registry; next.paused = true; next.revision += 1
             do { try await vault.writeRegistry(next); registry = next }
-            catch { notice = "Disconnected. This preference could not be saved." }
+            catch { notice = String(localized: "Disconnected. This preference could not be saved.") }
         }
     }
 
@@ -220,7 +222,7 @@ final class NativeAppModel: ObservableObject {
                     agents = []; sessions = []; presentation.agents = []; presentation.selectedConversation = nil
                     if let active = next.activeConnectionID { connectSaved(active) }
                 }
-            } catch { notice = "The connection could not be removed. Your saved data is unchanged." }
+            } catch { notice = String(localized: "The connection could not be removed. Your saved data is unchanged.") }
         }
     }
 
@@ -329,7 +331,7 @@ final class NativeAppModel: ObservableObject {
             return AgentPresentation(id: agent.agentID, entryMode: mode, name: agent.name,
                 subtitle: last?.preview ?? "", backendLabel: connections.first { $0.id == agent.connectionID }?.backendKind.title,
                 initials: String(agent.name.prefix(1)), isWorking: showingCachedRoster ? false : last?.hasActiveRun ?? false,
-                cachedLabel: showingCachedRoster ? "Saved on this device" : nil)
+                cachedLabel: showingCachedRoster ? String(localized: "Saved on this device") : nil)
         }
         for key in presentation.catalogs.keys { updateCatalog(key) }
         for key in presentation.conversations.keys { updatePresentation(key) }
@@ -356,7 +358,7 @@ final class NativeAppModel: ObservableObject {
             } catch {
                 guard id.connectionID == activeConnectionID else { return }
                 presentation.catalogs[id]?.isLoading = false
-                presentation.catalogs[id]?.error = "Conversations could not be refreshed. Check your connection and try again."
+                presentation.catalogs[id]?.error = String(localized: "Conversations could not be refreshed. Check your connection and try again.")
             }
         }
     }
@@ -373,14 +375,14 @@ final class NativeAppModel: ObservableObject {
         var create: ActionAvailability = .unsupported
         if state.capabilities.sessionCreate {
             create = state.phase == .ready && !creating && !unavailableProject && !unconfirmedCreations.contains(id) ? .available
-                : .temporarilyUnavailable(creating ? "Creating conversation…" : unavailableProject ? "This project is unavailable." : "Reconnect to create a conversation.")
-            if unconfirmedCreations.contains(id) { create = .temporarilyUnavailable("Refresh conversations before creating another.") }
+                : .temporarilyUnavailable(creating ? String(localized: "Creating conversation…") : unavailableProject ? String(localized: "This project is unavailable.") : String(localized: "Reconnect to create a conversation."))
+            if unconfirmedCreations.contains(id) { create = .temporarilyUnavailable(String(localized: "Refresh conversations before creating another.")) }
         }
         presentation.catalogs[id] = .init(id: id, title: agent.name,
             sessions: rows, projects: (projects[id.connectionID] ?? []).map { .init(id: $0.id, title: $0.name) },
             selectedProjectID: projectID, isLoading: previous?.isLoading ?? false, error: previous?.error,
             createSession: create,
-            refresh: state.phase == .ready ? .available : .temporarilyUnavailable("Reconnect to refresh conversations."))
+            refresh: state.phase == .ready ? .available : .temporarilyUnavailable(String(localized: "Reconnect to refresh conversations.")))
     }
 
     private func createSession(_ id: AgentCatalogID, projectID: String?) {
@@ -399,7 +401,7 @@ final class NativeAppModel: ObservableObject {
             } catch {
                 guard id.connectionID == activeConnectionID else { return }
                 unconfirmedCreations.insert(id)
-                presentation.catalogs[id]?.error = "Creation could not be confirmed. Refresh conversations before trying again."
+                presentation.catalogs[id]?.error = String(localized: "Creation could not be confirmed. Refresh conversations before trying again.")
             }
         }
     }
@@ -493,8 +495,8 @@ final class NativeAppModel: ObservableObject {
             }
             modelChoices[route] = choices
             presentation.conversations[route]?.models = display
-            presentation.conversations[route]?.modelTitle = models.first(where: \.selected)?.name ?? "Choose model"
-            presentation.conversations[route]?.modelScopeLabel = state.capabilities.modelPerSession ? "This conversation" : "Applies to all conversations"
+            presentation.conversations[route]?.modelTitle = models.first(where: \.selected)?.name ?? String(localized: "Choose model")
+            presentation.conversations[route]?.modelScopeLabel = state.capabilities.modelPerSession ? String(localized: "This conversation") : String(localized: "Applies to all conversations")
         } catch { if route == presentation.selectedConversation { showFailure(error) } }
     }
 
@@ -516,7 +518,7 @@ final class NativeAppModel: ObservableObject {
         let text = presentation.draft(for: route).text
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         guard document.messages.filter({ [.queued, .held, .sending].contains($0.delivery) }).count < 32 else {
-            presentation.draft(for: route).hint = "There are 32 pending messages. Finish or remove one before adding another."
+            presentation.draft(for: route).hint = String(localized: "There are 32 pending messages. Finish or remove one before adding another.")
             return
         }
         let id = UUID().uuidString.lowercased()
@@ -619,50 +621,50 @@ final class NativeAppModel: ObservableObject {
 
     private func updatePresentation(_ route: ConversationID) {
         guard let document = documents[route] else { return }
-        let name = agents.first { $0.agentID == route.agentID && $0.connectionID == route.connectionID }?.name ?? "Agent"
+        let name = agents.first { $0.agentID == route.agentID && $0.connectionID == route.connectionID }?.name ?? String(localized: "Agent")
         let session = sessions.first { $0.key == route.sessionID && $0.connectionID == route.connectionID }
         let connected = route.connectionID == activeConnectionID && state.phase == .ready
         var features: [ClientFeature: ActionAvailability] = [.connectionSettings: .available]
         if state.capabilities.chat {
             features[.send] = connected ? .available
-                : .temporarilyUnavailable("Reconnect to send. Your draft is saved.")
-            if session?.canContinue == false { features[.send] = .temporarilyUnavailable("This conversation is read-only here.") }
+                : .temporarilyUnavailable(String(localized: "Reconnect to send. Your draft is saved."))
+            if session?.canContinue == false { features[.send] = .temporarilyUnavailable(String(localized: "This conversation is read-only here.")) }
         }
-        if state.capabilities.abort && running[route] != nil && session?.canContinue != false { features[.stop] = connected ? .available : .temporarilyUnavailable("Reconnect to stop this run.") }
+        if state.capabilities.abort && running[route] != nil && session?.canContinue != false { features[.stop] = connected ? .available : .temporarilyUnavailable(String(localized: "Reconnect to stop this run.")) }
         if state.capabilities.sessions { features[.sessions] = .available }
         if state.capabilities.sessionCreate {
             let catalogID = AgentCatalogID(connectionID: route.connectionID, agentID: route.agentID)
             features[.newSession] = connected && !creatingCatalogs.contains(catalogID) && !unconfirmedCreations.contains(catalogID) ? .available
-                : .temporarilyUnavailable("Reconnect or refresh conversations before creating another.")
+                : .temporarilyUnavailable(String(localized: "Reconnect or refresh conversations before creating another."))
         }
         if state.capabilities.models {
-            features[.models] = connected ? .available : .temporarilyUnavailable("Reconnect to change models.")
-            if state.capabilities.modelPerSession && session?.canContinue == false { features[.models] = .temporarilyUnavailable("This conversation is read-only here.") }
+            features[.models] = connected ? .available : .temporarilyUnavailable(String(localized: "Reconnect to change models."))
+            if state.capabilities.modelPerSession && session?.canContinue == false { features[.models] = .temporarilyUnavailable(String(localized: "This conversation is read-only here.")) }
         }
-        if document.hasMore { features[.loadEarlier] = connected ? .available : .temporarilyUnavailable("Reconnect to load earlier messages.") }
+        if document.hasMore { features[.loadEarlier] = connected ? .available : .temporarilyUnavailable(String(localized: "Reconnect to load earlier messages.")) }
         let previous = presentation.conversations[route]
         presentation.conversations[route] = .init(id: route, agentName: name, sessionTitle: session?.title ?? name,
             messages: document.messages.map { present($0, agentName: name) }, connection: presentation.connection,
             sessions: sessionPresentations(connectionID: route.connectionID, agentID: route.agentID),
             models: previous?.models ?? [], modelTitle: previous?.modelTitle,
-            modelScopeLabel: previous?.modelScopeLabel, sendLabel: running[route] == nil ? "Send" : "Add to queue",
+            modelScopeLabel: previous?.modelScopeLabel, sendLabel: running[route] == nil ? String(localized: "Send") : String(localized: "Add to queue"),
             isLoadingHistory: previous?.isLoadingHistory ?? false, features: features)
     }
 
     private func present(_ message: NativeMessage, agentName: String) -> MessagePresentation {
         let author: MessageAuthor = message.local ? .local : message.role == .assistant ? .agent(name: agentName, label: nil)
-            : message.role == .user ? .participant(name: "Participant", channel: nil) : .system
+            : message.role == .user ? .participant(name: String(localized: "Participant"), channel: nil) : .system
         let content: [MessageContent] = message.isWork
-            ? [.work(.init(id: message.id, title: "Tool output", phase: .complete, output: message.text))]
+            ? [.work(.init(id: message.id, title: String(localized: "Tool output"), phase: .complete, output: message.text))]
             : [.markdown(message.text)]
         let delivery: MessageDelivery? = switch message.delivery {
         case .queued: .queued
-        case .held: .held("Ready when you are. Send this message when the connection is available.")
+        case .held: .held(String(localized: "Ready when you are. Send this message when the connection is available."))
         case .sending: .sending
         case .sent: .sent
         case .delivered: .delivered
-        case .uncertain: .uncertain("Delivery could not be confirmed. Check the conversation before sending again.")
-        case .failed: .failed("Not sent. Your message is saved.")
+        case .uncertain: .uncertain(String(localized: "Delivery could not be confirmed. Check the conversation before sending again."))
+        case .failed: .failed(String(localized: "Not sent. Your message is saved."))
         case nil: nil
         }
         var actions: [MessageAction] = [.copy]
@@ -699,7 +701,7 @@ final class NativeAppModel: ObservableObject {
             if !immediate { try? await Task.sleep(for: .milliseconds(350)) }
             guard !Task.isCancelled else { return }
             do { try await persist(route) }
-            catch { presentation.draft(for: route).hint = "This draft could not be saved. Keep Clawket open and try again." }
+            catch { presentation.draft(for: route).hint = String(localized: "This draft could not be saved. Keep Clawket open and try again.") }
         }
     }
 
@@ -718,46 +720,46 @@ final class NativeAppModel: ObservableObject {
         case .error: .unavailable
         }
         let label: String = switch state.phase {
-        case .idle: "Disconnected"
-        case .connecting: "Connecting…"
-        case .handshaking: "Checking your agent…"
-        case .ready: "Connected"
-        case .reconnecting: "Reconnecting…"
-        case .offline: "Agent unavailable"
-        case .error: "Connection needs attention"
+        case .idle: String(localized: "Disconnected")
+        case .connecting: String(localized: "Connecting…")
+        case .handshaking: String(localized: "Checking your agent…")
+        case .ready: String(localized: "Connected")
+        case .reconnecting: String(localized: "Reconnecting…")
+        case .offline: String(localized: "Agent unavailable")
+        case .error: String(localized: "Connection needs attention")
         }
         return .init(phase: phase, label: label, connectionID: state.connectionID,
                      action: [.offline, .error, .idle].contains(state.phase) && activeConnectionID != nil ? .available : .unsupported)
     }
 
     private func showFailure(_ error: Error) {
-        if error is StoreFailure { notice = "Your data could not be saved safely. Keep Clawket open and try again."; return }
-        guard let failure = error as? RuntimeFailure else { notice = "The operation could not be completed. Please try again."; return }
+        if error is StoreFailure { notice = String(localized: "Your data could not be saved safely. Keep Clawket open and try again."); return }
+        guard let failure = error as? RuntimeFailure else { notice = String(localized: "The operation could not be completed. Please try again."); return }
         switch failure.code {
-        case .authenticationRequired, .pairingRequired: notice = "Your agent needs to be paired again. Add its current pairing code in Settings."
-        case .permissionsRequired: notice = "This connection does not have permission for that action."
+        case .authenticationRequired, .pairingRequired: notice = String(localized: "Your agent needs to be paired again. Add its current pairing code in Settings.")
+        case .permissionsRequired: notice = String(localized: "This connection does not have permission for that action.")
         case .superseded: break
         case .timeout, .network, .notConnected:
-            notice = failure.delivery == .uncertain ? "Delivery could not be confirmed. Your original message is saved. Check the conversation before sending again."
-                : "Your agent could not be reached. Your draft is saved."
-        case .unsupported: notice = "This action is unavailable for this connection."
-        default: notice = "The operation could not be completed. Check your connection and try again."
+            notice = failure.delivery == .uncertain ? String(localized: "Delivery could not be confirmed. Your original message is saved. Check the conversation before sending again.")
+                : String(localized: "Your agent could not be reached. Your draft is saved.")
+        case .unsupported: notice = String(localized: "This action is unavailable for this connection.")
+        default: notice = String(localized: "The operation could not be completed. Check your connection and try again.")
         }
     }
 
     static func pairingErrorText(_ error: Error) -> String {
         guard let error = error as? PairingError else {
-            return error is StoreFailure ? "Pairing data could not be saved. Try Connect again to save the existing result."
-                : "Could not complete pairing. Check the details and try again."
+            return error is StoreFailure ? String(localized: "Pairing data could not be saved. Try Connect again to save the existing result.")
+                : String(localized: "Could not complete pairing. Check the details and try again.")
         }
         switch error {
-        case .expired, .alreadyUsed: return "This invitation has expired or was already used. Get a new code from your computer."
-        case .rateLimited: return "Too many attempts. Wait a little before trying again."
-        case .backendMismatch: return "This code belongs to a different agent. Choose the matching agent and try again."
-        case .environmentMismatch, .previewRequiresDebugMode: return "This invitation uses a different service environment."
-        case .timeout, .network: return "The pairing service could not be reached. Check your computer before trying this invitation again."
-        case .busy: return "A pairing attempt is already in progress."
-        default: return "Could not use this pairing code or link. Check it or generate a new invitation."
+        case .expired, .alreadyUsed: return String(localized: "This invitation has expired or was already used. Get a new code from your computer.")
+        case .rateLimited: return String(localized: "Too many attempts. Wait a little before trying again.")
+        case .backendMismatch: return String(localized: "This code belongs to a different agent. Choose the matching agent and try again.")
+        case .environmentMismatch, .previewRequiresDebugMode: return String(localized: "This invitation uses a different service environment.")
+        case .timeout, .network: return String(localized: "The pairing service could not be reached. Check your computer before trying this invitation again.")
+        case .busy: return String(localized: "A pairing attempt is already in progress.")
+        default: return String(localized: "Could not use this pairing code or link. Check it or generate a new invitation.")
         }
     }
 }

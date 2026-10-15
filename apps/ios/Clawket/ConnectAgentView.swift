@@ -9,13 +9,22 @@ extension PairingBackend {
         case .codex: "Codex"
         case .claudeCode: "Claude Code"
         case .pi: "Pi"
-        case .localModel: "Local model"
+        case .localModel: String(localized: "Local model")
         }
     }
 }
 
 struct ConnectAgentView: View {
-    private enum Method: String, CaseIterable { case code = "Pairing code", qr = "QR or link", direct = "Direct" }
+    private enum Method: String, CaseIterable {
+        case code, qr, direct
+        var title: String {
+            switch self {
+            case .code: String(localized: "Pairing code")
+            case .qr: String(localized: "QR or link")
+            case .direct: String(localized: "Direct")
+            }
+        }
+    }
     @EnvironmentObject private var client: NativeAppModel
     @Environment(\.dismiss) private var dismiss
     @State private var method = Method.code
@@ -36,7 +45,7 @@ struct ConnectAgentView: View {
             Form {
                 Section {
                     Picker("Connect with", selection: $method) {
-                        ForEach(Method.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                        ForEach(Method.allCases, id: \.self) { Text($0.title).tag($0) }
                     }.pickerStyle(.segmented).labelsHidden().disabled(client.pendingPairing != nil)
                 }.listRowBackground(Color.clear).listRowInsets(EdgeInsets())
                 Section {
@@ -66,7 +75,7 @@ struct ConnectAgentView: View {
                             SecureField("Password (if required)", text: $password).textInputAutocapitalization(.never).autocorrectionDisabled()
                         }
                     }
-                } header: { Text(method == .direct ? "Connection" : "Pair your agent") } footer: {
+                } header: { Text(method == .direct ? String(localized: "Connection") : String(localized: "Pair your agent")) } footer: {
                     if method == .code {
                         Text("Enter the code shown by Clawket on your computer. Keep that window open while pairing.")
                     } else if method == .qr {
@@ -81,7 +90,7 @@ struct ConnectAgentView: View {
                 }
                 Section {
                     Button(action: connect) {
-                        HStack { Spacer(); if connecting { ProgressView().padding(.trailing, 4) }; Text(connecting ? "Connecting…" : client.pendingPairing != nil ? "Save connection" : "Connect").bold(); Spacer() }
+                        HStack { Spacer(); if connecting { ProgressView().padding(.trailing, 4) }; Text(connecting ? String(localized: "Connecting…") : client.pendingPairing != nil ? String(localized: "Save connection") : String(localized: "Connect")).bold(); Spacer() }
                             .frame(minHeight: 32)
                     }
                     .disabled(connecting || (!canConnect && client.pendingPairing == nil))

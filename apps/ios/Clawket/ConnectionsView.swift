@@ -36,7 +36,8 @@ struct ConnectionsView: View {
                     }
                 }
                 Section {
-                    LabeledContent("Version", value: "3.1.2 · Native development")
+                    let version = "3.1.2"
+                    LabeledContent("Version", value: String(localized: "\(version) · Native development"))
                     Text("This development app has its own connections and storage.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }

@@ -16,7 +16,7 @@ struct PairingScanner: View {
                     VStack(spacing: 18) {
                         Image(systemName: "qrcode.viewfinder").font(.system(size: 44)).foregroundStyle(.secondary)
                         Text("Camera scanning unavailable").font(.title3.bold())
-                        Text(error ?? "You can paste the QR text or enter the pairing code instead. Check camera access in Settings if needed.")
+                        Text(error ?? String(localized: "You can paste the QR text or enter the pairing code instead. Check camera access in Settings if needed."))
                             .foregroundStyle(.secondary).multilineTextAlignment(.center)
                     }.padding(32).frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
@@ -38,7 +38,7 @@ private struct ScannerSurface: UIViewControllerRepresentable {
             isPinchToZoomEnabled: true, isGuidanceEnabled: true, isHighlightingEnabled: true)
         controller.delegate = context.coordinator
         do { try controller.startScanning() }
-        catch { Task { @MainActor in onFailure("Camera access is unavailable. You can use a pairing code instead.") } }
+        catch { Task { @MainActor in onFailure(String(localized: "Camera access is unavailable. You can use a pairing code instead.")) } }
         return controller
     }
     func updateUIViewController(_ uiViewController: DataScannerViewController, context: Context) {}
@@ -61,7 +61,7 @@ private struct ScannerSurface: UIViewControllerRepresentable {
             }
         }
         func dataScanner(_ dataScanner: DataScannerViewController, becameUnavailableWithError error: DataScannerViewController.ScanningUnavailable) {
-            onFailure("Camera scanning stopped. You can enter the pairing code instead.")
+            onFailure(String(localized: "Camera scanning stopped. You can enter the pairing code instead."))
         }
     }
 }

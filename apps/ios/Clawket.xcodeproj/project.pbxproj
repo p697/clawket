@@ -18,6 +18,7 @@
 		7FA2632EF83D1302AC0C0FE3 /* ConnectionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06C52C439D7B014576D9687E /* ConnectionsView.swift */; };
 		A7376BF94645E91C6749B0C6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B14E842129D8941746AC76AC /* Assets.xcassets */; };
 		A981AF688DA1876182E7C515 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 305D6E7D33031255FC087A1D /* Foundation.framework */; };
+		C426985C465AE071721F25E7 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 4A674C0333CD433EA1589533 /* Localizable.xcstrings */; };
 		CBFC1E150EA9AA900620C6B5 /* NativeAppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0F468FDE5E27A277EF1DC29 /* NativeAppModel.swift */; };
 		CCBE62272C230BFE2C964EA1 /* NativeVault.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1425ABDA3CA558320898A191 /* NativeVault.swift */; };
 		E3EF23E922BC183B80037647 /* ClawketRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = 17D4C878DFA9BEACD825E778 /* ClawketRuntime */; };
@@ -44,6 +45,7 @@
 		1A8D8F99FE6BF72DD9B9F8AF /* ConnectAgentView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConnectAgentView.swift; sourceTree = "<group>"; };
 		2474FDEDA96EC763B092AFA6 /* Clawket.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Clawket.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		305D6E7D33031255FC087A1D /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		4A674C0333CD433EA1589533 /* Localizable.xcstrings */ = {isa = PBXFileReference; includeInIndex = 1; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		5B9A7097C7DD4ABA36FBB7A1 /* NativeConversationStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeConversationStore.swift; sourceTree = "<group>"; };
 		62CEF4BAC15E5B5B6DD99FD7 /* NativeConversationStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeConversationStoreTests.swift; sourceTree = "<group>"; };
 		6D291C423374289C8E540A39 /* PairingScanner.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PairingScanner.swift; sourceTree = "<group>"; };
@@ -113,6 +115,7 @@
 				A0F468FDE5E27A277EF1DC29 /* NativeAppModel.swift */,
 				5B9A7097C7DD4ABA36FBB7A1 /* NativeConversationStore.swift */,
 				E47B4B0906605C4BAE48CF90 /* NativeCatalogStore.swift */,
+				4A674C0333CD433EA1589533 /* Localizable.xcstrings */,
 			);
 			name = Clawket;
 			path = Clawket;
@@ -208,6 +211,24 @@
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
+				"zh-Hans",
+				"zh-Hant",
+				ja,
+				ko,
+				de,
+				fr,
+				es,
+				"es-419",
+				it,
+				"pt-BR",
+				"pt-PT",
+				ru,
+				uk,
+				tr,
+				vi,
+				th,
+				hi,
+				ar,
 				Base,
 			);
 			mainGroup = 8AE68C3C17032D75972ECD2D;
@@ -232,6 +253,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A7376BF94645E91C6749B0C6 /* Assets.xcassets in Resources */,
+				C426985C465AE071721F25E7 /* Localizable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
