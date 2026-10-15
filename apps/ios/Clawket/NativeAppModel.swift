@@ -39,6 +39,7 @@ final class NativeAppModel: ObservableObject {
     private var catalogCacheRevision: Int64 = 0
     private var showingCachedRoster = false
     private var runtime: RuntimeCoordinator?
+    private var taskRequests: NativeTaskRequests?
     private let pairing = PairingService()
     private var eventTask: Task<Void, Never>?
     private var activationTask: Task<Void, Never>?
@@ -75,6 +76,11 @@ final class NativeAppModel: ObservableObject {
                 client: .init(version: "3.1.2", deviceFamily: UIDevice.current.userInterfaceIdiom == .pad ? "ipad" : "iphone"))
             self.vault = vault; self.runtime = runtime; self.cache = try NativeConversationStore()
             self.catalogCache = try NativeCatalogStore()
+            self.taskRequests = NativeTaskRequests(presentation: presentation, runtime: runtime,
+                drafts: try NativeQuestionDraftStore(), onChange: { [weak self] in self?.rebuildRoster() },
+                onStorageFailure: { [weak self] in
+                    self?.notice = String(localized: "This draft could not be saved. Keep Clawket open and try again.")
+                })
             if let saved = try await vault.readRegistry() {
                 registry = saved.value
                 if saved.recoveredFromRollback { notice = String(localized: "Recovered your saved connections from the last verified copy.") }
@@ -133,10 +139,15 @@ final class NativeAppModel: ObservableObject {
         case let .openURL(url):
             guard ["https", "http", "mailto"].contains(url.scheme?.lowercased() ?? "") else { return }
             UIApplication.shared.open(url)
-        case .pickAttachment, .removeAttachment, .openAttachment, .voice,
-             .resolveApproval, .prepareApprovalConfirmation, .confirmApproval, .dismissApprovalConfirmation,
-             .questionDraftChanged, .answerQuestion, .cancelQuestion:
-            break // These request capabilities stay hidden until the host binds real runtime references.
+        case let .resolveApproval(id, decision): taskRequests?.resolve(id: id, decision: decision)
+        case let .prepareApprovalConfirmation(id): taskRequests?.prepareApproval(id: id)
+        case let .confirmApproval(id): taskRequests?.confirmApproval(id: id)
+        case let .dismissApprovalConfirmation(id): taskRequests?.dismissConfirmation(id: id)
+        case let .questionDraftChanged(id, response): taskRequests?.draftChanged(id: id, response: response)
+        case let .answerQuestion(id, response): taskRequests?.answer(id: id, response: response)
+        case let .cancelQuestion(id): taskRequests?.cancelQuestion(id: id)
+        case .pickAttachment, .removeAttachment, .openAttachment, .voice:
+            break // These capabilities stay hidden until their concrete host handlers are available.
         }
     }
 
@@ -209,6 +220,7 @@ final class NativeAppModel: ObservableObject {
         changingConnections = true
         activationTask?.cancel()
         selectionRevision = UUID(); activationRevision = UUID(); wireRevision = UUID()
+        taskRequests?.invalidate()
         unconfirmedCreations.formUnion(creatingCatalogs); creatingCatalogs = []
         Task {
             defer { changingConnections = false }
@@ -234,6 +246,7 @@ final class NativeAppModel: ObservableObject {
                 registry = next; connections = next.records; activeConnectionID = next.activeConnectionID
                 if wasActive {
                     activationRevision = UUID(); wireRevision = UUID()
+                    taskRequests?.invalidate()
                     await runtime?.disconnect()
                     agents = []; sessions = []; presentation.agents = []; presentation.selectedConversation = nil
                     if let active = next.activeConnectionID { connectSaved(active) }
@@ -249,6 +262,8 @@ final class NativeAppModel: ObservableObject {
     func setForeground(_ foreground: Bool) {
         if !foreground { for route in documents.keys { scheduleSave(route, immediate: true) } }
         Task { await runtime?.setForeground(foreground) }
+        if foreground { taskRequests?.refresh(route: presentation.selectedConversation) }
+        else { taskRequests?.flushDrafts() }
     }
 
     private func networkPathHint() {
@@ -267,6 +282,7 @@ final class NativeAppModel: ObservableObject {
     private func connectSaved(_ id: String) {
         guard let connection = connections.first(where: { $0.id == id }), let runtime else { return }
         activationTask?.cancel(); selectionRevision = UUID(); activationRevision = UUID(); wireRevision = UUID()
+        taskRequests?.invalidate()
         unconfirmedCreations.formUnion(creatingCatalogs); creatingCatalogs = []
         let activation = activationRevision
         let alreadyReady = state.phase == .ready && state.connectionID == id
@@ -281,7 +297,9 @@ final class NativeAppModel: ObservableObject {
             }
             do {
                 try await runtime.activate(connection)
-                if alreadyReady, activation == activationRevision, activeConnectionID == id { refresh() }
+                if alreadyReady, activation == activationRevision, activeConnectionID == id {
+                    taskRequests?.update(state); refresh()
+                }
             }
             catch is CancellationError { }
             catch { if activation == activationRevision, activeConnectionID == id { showFailure(error) } }
@@ -311,6 +329,7 @@ final class NativeAppModel: ObservableObject {
             }
             self.state = state
             presentation.connection = connectionPresentation(state)
+            taskRequests?.update(state)
             presentation.isLoading = [.connecting, .handshaking].contains(state.phase) && agents.isEmpty
             presentation.features[.refresh] = state.phase == .ready ? .available : .unsupported
             for route in presentation.conversations.keys { updatePresentation(route) }
@@ -342,16 +361,17 @@ final class NativeAppModel: ObservableObject {
             if !failure.retryable { showFailure(failure) }
         case let .pendingRequests(snapshot):
             guard snapshot.connectionID == activeConnectionID else { return }
-            // Typed runtime support is ready; host consent binding remains capability-gated.
-            break
-        case let .requestResolved(connectionID, _, _):
+            taskRequests?.apply(snapshot)
+        case let .requestResolved(connectionID, reference, resolution):
             guard connectionID == activeConnectionID else { return }
-            break
+            taskRequests?.resolved(reference: reference, resolution: resolution)
         }
     }
 
     private func refresh() {
         guard let runtime, let id = activeConnectionID else { return }
+        taskRequests?.refresh()
+        if let route = presentation.selectedConversation { taskRequests?.refresh(route: route) }
         let activation = activationRevision, wire = wireRevision
         Task {
             guard activation == activationRevision, wire == wireRevision else { return }
@@ -381,7 +401,9 @@ final class NativeAppModel: ObservableObject {
             let last = sessions.filter { $0.agentID == agent.agentID }.max { ($0.lastActivityAtMs ?? 0) < ($1.lastActivityAtMs ?? 0) }
             return AgentPresentation(id: agent.agentID, entryMode: mode, name: agent.name,
                 subtitle: last?.preview ?? "", backendLabel: connections.first { $0.id == agent.connectionID }?.backendKind.title,
-                initials: String(agent.name.prefix(1)), isWorking: showingCachedRoster ? false : last?.hasActiveRun ?? false,
+                initials: String(agent.name.prefix(1)), attention: taskRequests?.attention(connectionID: agent.connectionID,
+                    sessionKeys: Set(sessions.filter { $0.connectionID == agent.connectionID && $0.agentID == agent.agentID }.map(\.key))
+                        .union(agent.mainSessionKey.isEmpty ? [] : [agent.mainSessionKey])) ?? .none, isWorking: showingCachedRoster ? false : last?.hasActiveRun ?? false,
                 cachedLabel: showingCachedRoster ? String(localized: "Saved on this device") : nil)
         }
         for key in presentation.catalogs.keys { updateCatalog(key) }
@@ -484,6 +506,7 @@ final class NativeAppModel: ObservableObject {
                     presentation.drafts[route] = ComposerDraft(conversationID: route, text: cached.draft)
                 }
                 updatePresentation(route)
+                taskRequests?.refresh(route: route)
                 await loadHistory(route)
                 await loadModels(route)
             } catch { if selectionRevision == revision { showFailure(error) } }
@@ -716,7 +739,8 @@ final class NativeAppModel: ObservableObject {
         if document.hasMore { features[.loadEarlier] = connected ? .available : .temporarilyUnavailable(String(localized: "Reconnect to load earlier messages.")) }
         let previous = presentation.conversations[route]
         presentation.conversations[route] = .init(id: route, agentName: name, sessionTitle: session?.title ?? name,
-            messages: document.messages.map { present($0, agentName: name) }, connection: presentation.connection,
+            messages: document.messages.map { present($0, agentName: name) } + (taskRequests?.messages(for: route) ?? []),
+            connection: presentation.connection,
             sessions: sessionPresentations(connectionID: route.connectionID, agentID: route.agentID),
             models: previous?.models ?? [], modelTitle: previous?.modelTitle,
             modelScopeLabel: previous?.modelScopeLabel, sendLabel: running[route] == nil ? String(localized: "Send") : String(localized: "Add to queue"),

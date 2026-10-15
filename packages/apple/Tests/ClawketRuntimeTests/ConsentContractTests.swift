@@ -114,6 +114,22 @@ struct ConsentContractTests {
         #expect(!a.draftKey.contains("question")); #expect(b.title == "Updated question wording")
     }
 
+    @Test func reviewKeysCorrelateDisplayCopiesWithoutReusingActionReferences() throws {
+        let (_, first) = try ConsentWire.approval(execution(), sessionKey: "s", connection: connection(.openclaw))
+        let (_, updated) = try ConsentWire.approval(execution(command: "git diff"), sessionKey: "s", connection: connection(.openclaw))
+        let (_, otherSession) = try ConsentWire.approval(execution(), sessionKey: "other", connection: connection(.openclaw))
+        let (_, otherBackend) = try ConsentWire.approval(execution(), sessionKey: "s", connection: connection(.hermes))
+        guard case .approval(let a) = first, case .approval(let b) = updated,
+              case .approval(let c) = otherSession, case .approval(let d) = otherBackend else { return }
+        #expect(a.reviewKey == b.reviewKey); #expect(a.reference != b.reference)
+        #expect(a.reviewKey != c.reviewKey); #expect(a.reviewKey != d.reviewKey)
+        #expect(a.reviewKey.count == 64); #expect(!a.reviewKey.contains("approval"))
+        #expect(ConsentWire.reviewKey(backend: "a", connection: "bc", session: nil, kind: "device", request: "r")
+            != ConsentWire.reviewKey(backend: "ab", connection: "c", session: nil, kind: "device", request: "r"))
+        #expect(ConsentWire.reviewKey(backend: "a", connection: "c", session: nil, kind: "device", request: "r")
+            != ConsentWire.reviewKey(backend: "a", connection: "c", session: nil, kind: "node", request: "r"))
+    }
+
     @Test func canonicalWorkKeepsLineageProducerClocksAndUnknownStatus() throws {
         var mapper = SessionEvents()
         let raw: JSONValue = .object(["type": .string("tool_call_update"), "sessionKey": .string("s"), "runId": .string("r"),

@@ -168,6 +168,13 @@
       "mobileTerm": null
     },
     {
+      "key": "Answer sent",
+      "sources": [
+        "apps/ios/Clawket/NativeTaskRequests.swift:258"
+      ],
+      "mobileTerm": null
+    },
+    {
       "key": "Applies to all conversations",
       "sources": [
         "apps/ios/Clawket/NativeAppModel.swift:559"
@@ -1263,6 +1270,13 @@
       "mobileTerm": null
     },
     {
+      "key": "The confirmation expired. Review this request again.",
+      "sources": [
+        "apps/ios/Clawket/NativeTaskRequests.swift:335"
+      ],
+      "mobileTerm": null
+    },
+    {
       "key": "The connection could not be removed. Your saved data is unchanged.",
       "sources": [
         "apps/ios/Clawket/NativeAppModel.swift:241"
@@ -1294,6 +1308,13 @@
       "key": "The pairing service could not be reached. Check your computer before trying this invitation again.",
       "sources": [
         "apps/ios/Clawket/NativeAppModel.swift:861"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "The result could not be confirmed. Reconnect to check this request.",
+      "sources": [
+        "apps/ios/Clawket/NativeTaskRequests.swift:387"
       ],
       "mobileTerm": null
     },
@@ -1393,6 +1414,14 @@
       "key": "This project is unavailable.",
       "sources": [
         "apps/ios/Clawket/NativeAppModel.swift:432"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "This request is no longer available.",
+      "sources": [
+        "apps/ios/Clawket/NativeTaskRequests.swift:259",
+        "apps/ios/Clawket/NativeTaskRequests.swift:338"
       ],
       "mobileTerm": null
     },

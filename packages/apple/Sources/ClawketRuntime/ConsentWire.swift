@@ -70,7 +70,9 @@ enum ConsentWire {
             if connection.backendKind == .openclaw { decisions = [.approve, .reject] }
         default: throw RuntimeFailure(.unsupported)
         }
-        let value = RuntimeApproval(reference: reference, kind: approvalKind, pairingTarget: target,
+        let value = RuntimeApproval(reference: reference,
+            reviewKey: reviewKey(backend: connection.backendKind.rawValue, connection: connection.id,
+                session: session, kind: keyKind.rawValue, request: id), kind: approvalKind, pairingTarget: target,
             command: try string(raw["command"], max: 128_000), category: try string(raw["category"], max: 64),
             reason: try string(raw["reason"], max: 16_000), title: try string(raw["title"], max: 8_000),
             pluginID: try string(raw["pluginId"], max: 512), cwd: try string(raw["cwd"], max: 8_192),
@@ -180,8 +182,16 @@ enum ConsentWire {
     }
 
     static func draftKey(backend: String, connection: String, session: String, request: String) -> String {
+        scopedKey(["question-v1", backend, connection, session, request])
+    }
+
+    static func reviewKey(backend: String, connection: String, session: String?, kind: String, request: String) -> String {
+        scopedKey(["approval-v1", backend, connection, session ?? "", kind, request])
+    }
+
+    private static func scopedKey(_ values: [String]) -> String {
         var bytes = Data()
-        for value in ["question-v1", backend, connection, session, request] {
+        for value in values {
             let data = Data(value.utf8)
             bytes.append(contentsOf: "\(data.count):".utf8); bytes.append(data)
         }

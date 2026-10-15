@@ -24,6 +24,8 @@ public struct RuntimeApproval: Sendable, Equatable, Identifiable {
     public enum PairingTarget: String, Sendable { case device, node }
     public var id: UUID { reference.id }
     public let reference: RuntimeRequestReference
+    /// Stable local review correlation only. Never authorize, serialize an action or diagnose with this key.
+    public let reviewKey: String
     public let kind: Kind
     public let pairingTarget: PairingTarget?
     public let command: String?

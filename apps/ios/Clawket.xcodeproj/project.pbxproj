@@ -12,18 +12,24 @@
 		10CEF133A2AFC5BFCE9B1E31 /* NativeConversationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B9A7097C7DD4ABA36FBB7A1 /* NativeConversationStore.swift */; };
 		120EF71EFB3EA1E9173A565B /* ConnectAgentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A8D8F99FE6BF72DD9B9F8AF /* ConnectAgentView.swift */; };
 		2247135D3C8C70511420729B /* PairingScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D291C423374289C8E540A39 /* PairingScanner.swift */; };
+		2F91D2478DFB46E4FE62AC72 /* NativeTaskPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D1DA96C0D5461424FA70517 /* NativeTaskPresentation.swift */; };
 		3CC3E055379A87DCF34B5A9D /* NativeCatalogStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E47B4B0906605C4BAE48CF90 /* NativeCatalogStore.swift */; };
 		4111A823020D58A2C9AE3CED /* ClawketTransport in Frameworks */ = {isa = PBXBuildFile; productRef = FB889001F1244000EC725E25 /* ClawketTransport */; };
 		44DD38E10C3292EF4F89CD64 /* ClawketRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = B354D017C96AC77858BE7A91 /* ClawketRuntime */; };
+		475F5B966EAA0E954DEFBCDB /* ClawketUI in Frameworks */ = {isa = PBXBuildFile; productRef = EE43E43C07082D0E9B174E3F /* ClawketUI */; };
 		525AC5AA6876B193A893CA1C /* ClawketPersistence in Frameworks */ = {isa = PBXBuildFile; productRef = F5775CE4CCE6F16F9D1400CE /* ClawketPersistence */; };
+		72620A6CA1CBC261C9D08231 /* NativeTaskRequestsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83E37C1EE73DD7335ED11156 /* NativeTaskRequestsTests.swift */; };
 		7A694C62FB9D749CD18EE6C6 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = F9DC4D8745DDCA79E2D272D5 /* InfoPlist.xcstrings */; };
 		7FA2632EF83D1302AC0C0FE3 /* ConnectionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06C52C439D7B014576D9687E /* ConnectionsView.swift */; };
+		8B15DDB46A3D105034AC29C6 /* NativeQuestionDraftStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EA8C05BF26248B8F8DA8395 /* NativeQuestionDraftStoreTests.swift */; };
 		920873EB85FAAF50FD58FA78 /* PendingMessageEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49C7A8ABB20415EEB075F0C7 /* PendingMessageEditor.swift */; };
+		9F79D7036FFE9CE9857C9A64 /* NativeTaskRequests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42F4E937EB35AD3FCDB52A53 /* NativeTaskRequests.swift */; };
 		A7376BF94645E91C6749B0C6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B14E842129D8941746AC76AC /* Assets.xcassets */; };
 		A981AF688DA1876182E7C515 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 305D6E7D33031255FC087A1D /* Foundation.framework */; };
 		C426985C465AE071721F25E7 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 4A674C0333CD433EA1589533 /* Localizable.xcstrings */; };
 		CBFC1E150EA9AA900620C6B5 /* NativeAppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0F468FDE5E27A277EF1DC29 /* NativeAppModel.swift */; };
 		CCBE62272C230BFE2C964EA1 /* NativeVault.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1425ABDA3CA558320898A191 /* NativeVault.swift */; };
+		D31FA392DA1F3DE9035432F5 /* NativeQuestionDraftStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4226A597815E0BC70CE657C2 /* NativeQuestionDraftStore.swift */; };
 		E3EF23E922BC183B80037647 /* ClawketRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = 17D4C878DFA9BEACD825E778 /* ClawketRuntime */; };
 		E467366C8E9F56FF927B7BA0 /* ClawketApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F82081877A8E20091FD78626 /* ClawketApp.swift */; };
 		F198A05A5D7D86C890E9264C /* ClawketPersistence in Frameworks */ = {isa = PBXBuildFile; productRef = CC7E6FCD762618577595D7D1 /* ClawketPersistence */; };
@@ -48,11 +54,16 @@
 		1A8D8F99FE6BF72DD9B9F8AF /* ConnectAgentView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConnectAgentView.swift; sourceTree = "<group>"; };
 		2474FDEDA96EC763B092AFA6 /* Clawket.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Clawket.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		305D6E7D33031255FC087A1D /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		4226A597815E0BC70CE657C2 /* NativeQuestionDraftStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeQuestionDraftStore.swift; sourceTree = "<group>"; };
+		42F4E937EB35AD3FCDB52A53 /* NativeTaskRequests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeTaskRequests.swift; sourceTree = "<group>"; };
 		49C7A8ABB20415EEB075F0C7 /* PendingMessageEditor.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PendingMessageEditor.swift; sourceTree = "<group>"; };
 		4A674C0333CD433EA1589533 /* Localizable.xcstrings */ = {isa = PBXFileReference; includeInIndex = 1; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		5B9A7097C7DD4ABA36FBB7A1 /* NativeConversationStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeConversationStore.swift; sourceTree = "<group>"; };
 		62CEF4BAC15E5B5B6DD99FD7 /* NativeConversationStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeConversationStoreTests.swift; sourceTree = "<group>"; };
+		6D1DA96C0D5461424FA70517 /* NativeTaskPresentation.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeTaskPresentation.swift; sourceTree = "<group>"; };
 		6D291C423374289C8E540A39 /* PairingScanner.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PairingScanner.swift; sourceTree = "<group>"; };
+		83E37C1EE73DD7335ED11156 /* NativeTaskRequestsTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeTaskRequestsTests.swift; sourceTree = "<group>"; };
+		8EA8C05BF26248B8F8DA8395 /* NativeQuestionDraftStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeQuestionDraftStoreTests.swift; sourceTree = "<group>"; };
 		A0F468FDE5E27A277EF1DC29 /* NativeAppModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeAppModel.swift; sourceTree = "<group>"; };
 		B14E842129D8941746AC76AC /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		D2163EB819C0F5C468B4F05B /* ClawketTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ClawketTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -84,6 +95,7 @@
 				F54CB52E76F08F39810B272A /* Foundation.framework in Frameworks */,
 				525AC5AA6876B193A893CA1C /* ClawketPersistence in Frameworks */,
 				44DD38E10C3292EF4F89CD64 /* ClawketRuntime in Frameworks */,
+				475F5B966EAA0E954DEFBCDB /* ClawketUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -124,6 +136,9 @@
 				4A674C0333CD433EA1589533 /* Localizable.xcstrings */,
 				F9DC4D8745DDCA79E2D272D5 /* InfoPlist.xcstrings */,
 				49C7A8ABB20415EEB075F0C7 /* PendingMessageEditor.swift */,
+				4226A597815E0BC70CE657C2 /* NativeQuestionDraftStore.swift */,
+				6D1DA96C0D5461424FA70517 /* NativeTaskPresentation.swift */,
+				42F4E937EB35AD3FCDB52A53 /* NativeTaskRequests.swift */,
 			);
 			name = Clawket;
 			path = Clawket;
@@ -150,6 +165,8 @@
 			isa = PBXGroup;
 			children = (
 				62CEF4BAC15E5B5B6DD99FD7 /* NativeConversationStoreTests.swift */,
+				8EA8C05BF26248B8F8DA8395 /* NativeQuestionDraftStoreTests.swift */,
+				83E37C1EE73DD7335ED11156 /* NativeTaskRequestsTests.swift */,
 			);
 			name = ClawketTests;
 			path = ClawketTests;
@@ -200,6 +217,7 @@
 			packageProductDependencies = (
 				F5775CE4CCE6F16F9D1400CE /* ClawketPersistence */,
 				B354D017C96AC77858BE7A91 /* ClawketRuntime */,
+				EE43E43C07082D0E9B174E3F /* ClawketUI */,
 			);
 			productName = ClawketTests;
 			productReference = D2163EB819C0F5C468B4F05B /* ClawketTests.xctest */;
@@ -282,6 +300,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				0965FDA079959C9465C271AD /* NativeConversationStoreTests.swift in Sources */,
+				8B15DDB46A3D105034AC29C6 /* NativeQuestionDraftStoreTests.swift in Sources */,
+				72620A6CA1CBC261C9D08231 /* NativeTaskRequestsTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -298,6 +318,9 @@
 				10CEF133A2AFC5BFCE9B1E31 /* NativeConversationStore.swift in Sources */,
 				3CC3E055379A87DCF34B5A9D /* NativeCatalogStore.swift in Sources */,
 				920873EB85FAAF50FD58FA78 /* PendingMessageEditor.swift in Sources */,
+				D31FA392DA1F3DE9035432F5 /* NativeQuestionDraftStore.swift in Sources */,
+				2F91D2478DFB46E4FE62AC72 /* NativeTaskPresentation.swift in Sources */,
+				9F79D7036FFE9CE9857C9A64 /* NativeTaskRequests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -584,6 +607,11 @@
 			productName = ClawketPairing;
 		};
 		E4FCEFB36539FD378035E5F5 /* ClawketUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CD7AB3640BEDF49787C304FD /* XCLocalSwiftPackageReference "apple" */;
+			productName = ClawketUI;
+		};
+		EE43E43C07082D0E9B174E3F /* ClawketUI */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = CD7AB3640BEDF49787C304FD /* XCLocalSwiftPackageReference "apple" */;
 			productName = ClawketUI;

@@ -1,5 +1,11 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-16 Native host 问答/授权绑定进行中（完整任务历史和手机授权尚未验收）。
+  - Host 按真实 opaque reference 接执行/device/node 审批和 select/confirm/input/editor/form；Always 先取运行时令牌并发布冻结唯一确认，同步消费后才启动 Task。重复/迟到确认、同连接重连和选项重排不迁移权限；unknown/取消ACK保持暂停且无伪提交动画。安全列表只读刷新不替代后端健康，connection-wide inbox 与会话请求分开。
+  - 断线保留32项/8MiB惰性 review 副本但不保留 action reference/token；Runtime 新增 scoped SHA256 reviewKey 仅关联本地显示，实际新请求才能重新操作。问题草稿按7天/32项/256,000编码字节持久化，串行读回校验、旧编辑修订和 resolved tombstone 阻止迟写复活；保持明确false/空白/原值选项身份，后台立即flush。收据目前只在内存，持久任务journal另行推进，parity保持未完成。
+  - 正确 USB 手机 WebDriver 实测 main2fbcc478 的独立3.1.2 Debug QA：逐字读回核实输入后，Hermes direct 新 QA 会话单次请求得到实际 native-ok 回复且运行结束；冷启动用已存凭据、下拉读到非缓存真实Agent目录。20秒后台往返composer保留/无错误；原live回复ID查询未找到，需核对history ID转换与文本，不能据此说回复丢失或后台历史通过。OpenClaw 精确输入后进入正常设备批准门槛，尚无该后端手机 ready/推理。测试只操作指定USB QA，未覆盖商店App、改Gateway/Bridge服务或发布。
+  - 新增18项实际Host/storage回归源码，App非空门槛提升28；严格Swift6/jobs2下ConsentContractTests单文件8项通过。实际iOS16.4 generic Simulator App/全部28项测试源码在Swift6/jobs2编译通过，19语两表4,066条编译值逐一读回一致；实际App测试执行与完整CI继续验证，不启动另一个本机模拟器。本轮新增四条错误/结果文案各19语；212 UI/2系统权限共4,066语言单元源码覆盖通过，后续合并work UI资源另记最终数。
+
 - 2026-10-16 Native 媒体与附件协议模块（host 与真机媒体流程另行接入）。
   - 新增独立 `ClawketMedia`：NSItemProvider 回调内同步复制临时文件、受保护 UUID/原文件名资源与 SHA 校验、ImageIO 顺序缩图/GIF 原字节/透明 PNG/EXIF 比例、16M 像素安全预览。原始输入32 MiB、准备后5 MiB；草稿显式删除，metadata 双代读回、未知提交保留文件并封闭至重开；冷启恢复持久化草稿 ID，孤立暂存可显式回收。实际文件/回滚/预留均计入128项/100 MiB，生成缓存另限单会话16项/30 MiB、24小时，分享 retain/release。
   - Runtime 增加六后端类型化输入、按现有协商降级的图片/文件/文档能力与五后端输出 artifact handles；local-model 不虚报输出。预检与派发共用完整8 MiB UTF-8 RPC serializer，保留原草稿及未知写入不重放；JSON slash 与 JS 一致，名义5 MiB 图片不会因转义翻倍。稳定引用、inline 显式有界解码和 image-only finals 保留，Pi 仅协商后请求 artifacts history；模型输入 metadata 保留为当前会话的三态图片 gate。
