@@ -99,7 +99,7 @@ extension NativeMessage {
 
 extension NativeConversation {
     enum CodingKeys: String, CodingKey {
-        case version, revision, draft, messages, nextCursor, historyLimit, hasMore, draftResourceIDs
+        case version, revision, draft, messages, nextCursor, historyLimit, hasMore, draftResourceIDs, historyEpoch, physicalSessionID
     }
 
     init(from decoder: any Decoder) throws {
@@ -111,7 +111,9 @@ extension NativeConversation {
             nextCursor: try values.decodeIfPresent(String.self, forKey: .nextCursor),
             historyLimit: try values.decode(Int.self, forKey: .historyLimit),
             hasMore: try values.decode(Bool.self, forKey: .hasMore),
-            draftResourceIDs: try values.decodeIfPresent([UUID].self, forKey: .draftResourceIDs) ?? [])
+            draftResourceIDs: try values.decodeIfPresent([UUID].self, forKey: .draftResourceIDs) ?? [],
+            historyEpoch: try values.decodeIfPresent(UUID.self, forKey: .historyEpoch),
+            physicalSessionID: try values.decodeIfPresent(String.self, forKey: .physicalSessionID))
         try validateMedia()
     }
 
@@ -124,6 +126,7 @@ extension NativeConversation {
     func validateMedia() throws {
         guard version == 1, revision >= 0, draftResourceIDs.count <= 6,
               Set(draftResourceIDs).count == draftResourceIDs.count,
+              physicalSessionID == nil || (!physicalSessionID!.isEmpty && physicalSessionID!.utf8.count <= 2_048),
               Set(messages.map(\.id)).count == messages.count else { throw StoreFailure.invalidDocument }
         for message in messages {
             guard message.media.count <= (message.local && message.role == .user ? 6 : 64),

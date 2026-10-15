@@ -29,6 +29,8 @@ struct NativeConversation: Codable, Sendable {
     var historyLimit = 80
     var hasMore = false
     var draftResourceIDs: [UUID] = []
+    var historyEpoch: UUID? = nil
+    var physicalSessionID: String? = nil
 
     mutating func holdForEditing(messageID: String) throws -> NativePendingEdit {
         guard let index = editableIndex(messageID: messageID), let key = messages[index].idempotencyKey else {
@@ -71,13 +73,17 @@ struct NativePendingEdit: Identifiable, Sendable {
 }
 
 actor NativeConversationStore {
-    private let documents: DocumentStore
+    let documents: DocumentStore
+    let values: FileValueStore
+    let historyFiles: NativeHistoryFiles
+    let historyFault: @Sendable (NativeHistoryFault) throws -> Void
+    var historyUnavailable = false
     private let directory: URL
-    private var latestRevision: [String: Int64] = [:]
+    var latestRevision: [String: Int64] = [:]
     private var mediaSnapshotLocked = false
     private var mediaSnapshotWaiters: [CheckedContinuation<Void, Never>] = []
 
-    init(directory: URL? = nil) throws {
+    init(directory: URL? = nil, historyFault: @escaping @Sendable (NativeHistoryFault) throws -> Void = { _ in }) throws {
         let root: URL
         if let directory { root = directory }
         else {
@@ -86,11 +92,21 @@ actor NativeConversationStore {
             root = support.appendingPathComponent("NativeConversations", isDirectory: true)
         }
         self.directory = root
-        documents = try DocumentStore(values: FileValueStore(directory: root),
+        self.historyFault = historyFault
+        values = try FileValueStore(directory: root)
+        historyFiles = try NativeHistoryFiles(directory: root.appendingPathComponent("History", isDirectory: true))
+        documents = try DocumentStore(values: values,
                                       maximumBytes: 8 * 1024 * 1024)
     }
 
     func read(connectionID: String, agentID: String, sessionID: String) async throws -> NativeConversation {
+        await acquireMediaSnapshot()
+        defer { releaseMediaSnapshot() }
+        try await recoverHistory()
+        return try await readLocked(connectionID: connectionID, agentID: agentID, sessionID: sessionID)
+    }
+
+    private func readLocked(connectionID: String, agentID: String, sessionID: String) async throws -> NativeConversation {
         let key = try scopedKey(connectionID, agentID, sessionID)
         guard var conversation = try await documents.read(NativeConversation.self, key: key)?.value else { return .init() }
         guard conversation.version == 1, conversation.revision >= 0,
@@ -112,7 +128,7 @@ actor NativeConversationStore {
         }
         if changed {
             conversation.revision += 1
-            try await write(conversation, connectionID: connectionID, agentID: agentID, sessionID: sessionID)
+            try await writeLocked(conversation, connectionID: connectionID, agentID: agentID, sessionID: sessionID)
         }
         return conversation
     }
@@ -121,8 +137,18 @@ actor NativeConversationStore {
         try conversation.validateMedia()
         await acquireMediaSnapshot()
         defer { releaseMediaSnapshot() }
+        try await recoverHistory()
+        try await writeLocked(conversation, connectionID: connectionID, agentID: agentID, sessionID: sessionID)
+    }
+
+    private func writeLocked(_ conversation: NativeConversation, connectionID: String, agentID: String, sessionID: String) async throws {
+        try conversation.validateMedia()
         let key = try scopedKey(connectionID, agentID, sessionID)
         guard conversation.revision >= latestRevision[key, default: 0] else { return }
+        if let previous = try await documents.read(NativeConversation.self, key: key)?.value {
+            guard previous.historyEpoch == conversation.historyEpoch,
+                  previous.physicalSessionID == conversation.physicalSessionID else { throw NativeHistoryFailure.changed }
+        }
         latestRevision[key] = conversation.revision
         try await documents.write(conversation, key: key)
     }
@@ -132,6 +158,7 @@ actor NativeConversationStore {
     func verifiedVoiceDraft(_ text: String, minimumRevision: Int64,
                             connectionID: String, agentID: String, sessionID: String) async throws -> Bool {
         await acquireMediaSnapshot(); defer { releaseMediaSnapshot() }
+        try await recoverHistory()
         let key = try scopedKey(connectionID, agentID, sessionID)
         guard let saved = try await documents.read(NativeConversation.self, key: key), !saved.recoveredFromRollback else { return false }
         try saved.value.validateMedia()
@@ -145,12 +172,14 @@ actor NativeConversationStore {
         // outside every current→rollback replacement, including across awaits.
         await acquireMediaSnapshot()
         defer { releaseMediaSnapshot() }
+        try await recoverHistory()
         try Task.checkCancellation()
         let files = try FileManager.default.contentsOfDirectory(at: directory,
             includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
         guard files.count <= 4_096 else { throw StoreFailure.tooLarge }
-        var result: Set<UUID> = []
+        var result = try historyResourceIDs()
         for file in files {
+            if file.lastPathComponent == "History" { continue }
             guard file.lastPathComponent.range(of: "^[a-f0-9]{64}\\.json$", options: .regularExpression) != nil else {
                 throw StoreFailure.invalidDocument
             }
@@ -169,18 +198,20 @@ actor NativeConversationStore {
         return result
     }
 
-    private func acquireMediaSnapshot() async {
+    func acquireMediaSnapshot() async {
         if !mediaSnapshotLocked { mediaSnapshotLocked = true; return }
         await withCheckedContinuation { mediaSnapshotWaiters.append($0) }
     }
 
-    private func releaseMediaSnapshot() {
+    func releaseMediaSnapshot() {
         if mediaSnapshotWaiters.isEmpty { mediaSnapshotLocked = false }
         else { mediaSnapshotWaiters.removeFirst().resume() }
     }
 
     func recoverImport(_ pending: NativePendingMediaImport) async throws -> Bool {
-        var conversation = try await read(connectionID: pending.connectionID, agentID: pending.agentID, sessionID: pending.sessionID)
+        await acquireMediaSnapshot(); defer { releaseMediaSnapshot() }
+        try await recoverHistory()
+        var conversation = try await readLocked(connectionID: pending.connectionID, agentID: pending.agentID, sessionID: pending.sessionID)
         if conversation.mediaResourceIDs.contains(pending.id) { return true }
         if let messageID = pending.messageID, let referenceID = pending.referenceID {
             guard let message = conversation.messages.firstIndex(where: { $0.id == messageID }),
@@ -191,11 +222,11 @@ actor NativeConversationStore {
             conversation.draftResourceIDs.append(pending.id)
         }
         conversation.revision += 1
-        try await write(conversation, connectionID: pending.connectionID, agentID: pending.agentID, sessionID: pending.sessionID)
+        try await writeLocked(conversation, connectionID: pending.connectionID, agentID: pending.agentID, sessionID: pending.sessionID)
         return true
     }
 
-    private func scopedKey(_ connectionID: String, _ agentID: String, _ sessionID: String) throws -> String {
+    func scopedKey(_ connectionID: String, _ agentID: String, _ sessionID: String) throws -> String {
         guard !connectionID.isEmpty, !agentID.isEmpty, !sessionID.isEmpty else { throw StoreFailure.invalidKey }
         return try DocumentStore.scopedKey(namespace: "conversation.v1", parts: [connectionID, agentID, sessionID])
     }
