@@ -1,0 +1,128 @@
+{
+  "provenance": {
+    "implementation": "apps/mobile/src/services/pairing-session.ts",
+    "algorithm": "tweetnacl@1.0.3",
+    "synthetic": true
+  },
+  "plaintext": "{\"k\":\"cp\",\"v\":2,\"b\":\"codex\",\"s\":\"https://codex-registry.clawket.ai\",\"g\":\"synthetic-gateway\",\"a\":\"SYNTHETIC-ACCESS\",\"n\":\"Codex · Test device\"}",
+  "secretBox": {
+    "code": "ABCD1234EFGH",
+    "codeHash": "72d21fed44fcb4ca886526fe3d1da2fa41976d9a6284b36036f089955dc650fd",
+    "nonce": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYX",
+    "ciphertext": "dCYqo_FJ-HSV463XHow6aPTYdH9snS66ZY2E42I8fOtafZKx0BDQTtxv3F1iXYGnmnxKTW9oMHBlPlpyvY0oZAXWDs8Ak2dWTel-bFfX3bWGcaSxyn0BKEmjFUMsdjC28alwecCh7To7OP2GGEI7osh0-lzrv4dtfZMR4fSfIbQJKSJZl8rp9WPLerY9AGGpcMVyyxer8-dR9X5edU0",
+    "linkKey": "wMHCw8TFxsfIycrLzM3Oz9DR0tPU1dbX2Nna29zd3t8",
+    "linkCiphertext": "sRJMp2D59vQy-1MZ-ZkqRg7rrjnJc25wsjOaWE1YKZD3BFsVSdDqrZyPk-6qt3KJmvYQnaPEb9J5S4QiEZ7Huj6jnsYWYrTyD_r1KtTJgyHRmHhtHdNVeFEfILcRgANfTdqff0Nqz_1p4p7pJdNjhwSOyCGiRj8MqDT-irVVyuOlo99almz6AnAAz8eK--Vat__WjqnrvcesmLTxlFY"
+  },
+  "secure": {
+    "code": "314159",
+    "codeHash": "c5b389beb081fe1e43ae92e895deca086b4eed5cf9efc7b78eebbbc9dc75c3f0",
+    "sessionID": "ps_abababababababababababababababababababababababababababababababab",
+    "requestID": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+    "clientSecret": "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f",
+    "clientPublic": "NYBy1jZYgNGu6jKa35EhODhR7SGijjt16WXQ0s0WYlQ",
+    "bridgeSecret": "606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f",
+    "bridgePublic": "Z13VdO13iTELPS52gfN5C0ZsdzsVIf7PNld5WDcepS8",
+    "nonce": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYX",
+    "ciphertext": "JOGe6pYwc_yZLaYGEBOsHgHfKuxPH0Dn7hvghAo9_LBjcYj_4Ig_fGTheqsMlMmfKBGQkyrYfO8t7ZBq0SnUCsFBqNMqlN3_eLv0sKVcwR2PS8LTuayhf_JqrCeX-2pqycmDVX5nGpFu176ZDbn4MCtgqvAO-CaXcIevoCpRAETu9ni6kySnT-5L9W-pOqcGt_dcsgT_IXjev3RAJ5g",
+    "startProof": "51c350489ab34a8f312253f5ccb4f176c0fc04908f4a95c642b388b4c007b45a",
+    "resultProof": "e5c1a4c4905aa289bd488053f44c8f02571b0e2c686dd14cf0ae2c138ff264c2",
+    "resultFrame": "__clawket_relay_control__:{\"type\":\"control\",\"event\":\"pairing.secure.result\",\"requestId\":\"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\",\"payload\":{\"protocol\":2,\"sessionId\":\"ps_abababababababababababababababababababababababababababababababab\",\"bridgePublicKey\":\"Z13VdO13iTELPS52gfN5C0ZsdzsVIf7PNld5WDcepS8\",\"nonce\":\"AAECAwQFBgcICQoLDA0ODxAREhMUFRYX\",\"ciphertext\":\"JOGe6pYwc_yZLaYGEBOsHgHfKuxPH0Dn7hvghAo9_LBjcYj_4Ig_fGTheqsMlMmfKBGQkyrYfO8t7ZBq0SnUCsFBqNMqlN3_eLv0sKVcwR2PS8LTuayhf_JqrCeX-2pqycmDVX5nGpFu176ZDbn4MCtgqvAO-CaXcIevoCpRAETu9ni6kySnT-5L9W-pOqcGt_dcsgT_IXjev3RAJ5g\",\"bridgeProof\":\"e5c1a4c4905aa289bd488053f44c8f02571b0e2c686dd14cf0ae2c138ff264c2\"}}"
+  },
+  "signing": {
+    "secretKey": "808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fcd14b37f956e953194ff7fb73b3d81dcc561d61a7538094b7c3e1a643ee5f3aa",
+    "publicKey": "cd14b37f956e953194ff7fb73b3d81dcc561d61a7538094b7c3e1a643ee5f3aa",
+    "deviceID": "519cae93e93ad011d785355894405ed8fa8162c6e54ada133bbb6dbb932df57b",
+    "signedPayload": "v3|519cae93e93ad011d785355894405ed8fa8162c6e54ada133bbb6dbb932df57b|clawket-ios|ui|operator|operator.read,operator.write|1700000000123|synthetic-token|synthetic-nonce|ios|iPhone",
+    "signature": "220ec1c1c8fbc40debb6da9b784ff90109596fe065d3a214db62a06ba647398e844a5f1fa1140617d046c009424156cae1453d373970d84f476de2d0914c3b0c"
+  },
+  "services": [
+    {
+      "backend": "openclaw",
+      "environment": "production",
+      "registryHost": "registry.clawket.ai",
+      "relayHost": "relay.clawket.ai",
+      "legacyRegistryHost": "clawket-registry.clawket.workers.dev",
+      "legacyRelayHost": "clawket-relay.clawket.workers.dev"
+    },
+    {
+      "backend": "openclaw",
+      "environment": "preview",
+      "registryHost": "registry-preview.clawket.ai",
+      "relayHost": "relay-preview.clawket.ai",
+      "legacyRegistryHost": "clawket-registry-preview.clawket.workers.dev",
+      "legacyRelayHost": "clawket-relay-preview.clawket.workers.dev"
+    },
+    {
+      "backend": "hermes",
+      "environment": "production",
+      "registryHost": "hermes-registry.clawket.ai",
+      "relayHost": "hermes-relay.clawket.ai",
+      "legacyRegistryHost": "clawket-hermes-registry.clawket.workers.dev",
+      "legacyRelayHost": "clawket-hermes-relay.clawket.workers.dev"
+    },
+    {
+      "backend": "hermes",
+      "environment": "preview",
+      "registryHost": "hermes-registry-preview.clawket.ai",
+      "relayHost": "hermes-relay-preview.clawket.ai",
+      "legacyRegistryHost": "clawket-hermes-registry-preview.clawket.workers.dev",
+      "legacyRelayHost": "clawket-hermes-relay-preview.clawket.workers.dev"
+    },
+    {
+      "backend": "codex",
+      "environment": "production",
+      "registryHost": "codex-registry.clawket.ai",
+      "relayHost": "codex-relay.clawket.ai",
+      "legacyRegistryHost": "clawket-codex-registry.clawket.workers.dev",
+      "legacyRelayHost": "clawket-codex-relay.clawket.workers.dev"
+    },
+    {
+      "backend": "codex",
+      "environment": "preview",
+      "registryHost": "codex-registry-preview.clawket.ai",
+      "relayHost": "codex-relay-preview.clawket.ai",
+      "legacyRegistryHost": "clawket-codex-registry-preview.clawket.workers.dev",
+      "legacyRelayHost": "clawket-codex-relay-preview.clawket.workers.dev"
+    },
+    {
+      "backend": "claude-code",
+      "environment": "production",
+      "registryHost": "claude-code-registry.clawket.ai",
+      "relayHost": "claude-code-relay.clawket.ai",
+      "legacyRegistryHost": "clawket-claude-code-registry.clawket.workers.dev",
+      "legacyRelayHost": "clawket-claude-code-relay.clawket.workers.dev"
+    },
+    {
+      "backend": "claude-code",
+      "environment": "preview",
+      "registryHost": "claude-code-registry-preview.clawket.ai",
+      "relayHost": "claude-code-relay-preview.clawket.ai",
+      "legacyRegistryHost": "clawket-claude-code-registry-preview.clawket.workers.dev",
+      "legacyRelayHost": "clawket-claude-code-relay-preview.clawket.workers.dev"
+    },
+    {
+      "backend": "pi",
+      "environment": "production",
+      "registryHost": "pi-registry.clawket.ai",
+      "relayHost": "pi-relay.clawket.ai",
+      "legacyRegistryHost": "clawket-pi-registry.clawket.workers.dev",
+      "legacyRelayHost": "clawket-pi-relay.clawket.workers.dev"
+    },
+    {
+      "backend": "pi",
+      "environment": "preview",
+      "registryHost": "pi-registry-preview.clawket.ai",
+      "relayHost": "pi-relay-preview.clawket.ai",
+      "legacyRegistryHost": "clawket-pi-registry-preview.clawket.workers.dev",
+      "legacyRelayHost": "clawket-pi-relay-preview.clawket.workers.dev"
+    },
+    {
+      "backend": "local-model",
+      "environment": "preview",
+      "registryHost": "local-model-registry.clawket.ai",
+      "relayHost": "local-model-relay.clawket.ai",
+      "legacyRegistryHost": "clawket-local-model-registry-preview.clawket.workers.dev",
+      "legacyRelayHost": "clawket-local-model-relay-preview.clawket.workers.dev"
+    }
+  ]
+}
