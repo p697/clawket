@@ -118,9 +118,18 @@ final class NativeRevenueCatSource: ProStoreSource {
     private func checkIdentity() throws {
         guard sdk.appUserID.utf8.elementsEqual(identity.utf8) else { throw ProStoreFailure.changed }
     }
-    private static func project(_ info: CustomerInfo, entitlement: String) throws -> ProCustomer {
-        guard info.subscriptionsByProductIdentifier.count <= 64, info.requestDate.timeIntervalSince1970.isFinite else { throw ProStoreFailure.invalid }
-        let item = info.entitlements.active[entitlement] ?? info.entitlements.all[entitlement]
+    static func project(_ info: CustomerInfo, entitlement: String) throws -> ProCustomer {
+        let requestMs = info.requestDate.timeIntervalSince1970 * 1_000
+        guard info.subscriptionsByProductIdentifier.count <= 64, info.entitlements.all.count <= 128,
+              requestMs.isFinite, requestMs >= 0, requestMs <= 9_007_199_254_740_991 else { throw ProStoreFailure.invalid }
+        let item = info.entitlements.all.first { $0.key.utf8.elementsEqual(entitlement.utf8) }?.value
+        if let item {
+            let dates = [item.expirationDate, item.originalPurchaseDate, item.latestPurchaseDate].compactMap { $0?.timeIntervalSince1970 }
+            guard item.identifier.utf8.elementsEqual(entitlement.utf8), !item.productIdentifier.isEmpty,
+                  item.productIdentifier.utf8.count <= 1_024,
+                  dates.allSatisfy({ $0.isFinite && $0 >= 0 && $0 * 1_000 <= 9_007_199_254_740_991 }) else { throw ProStoreFailure.invalid }
+        }
+        guard info.subscriptionsByProductIdentifier.values.allSatisfy({ !$0.productIdentifier.isEmpty && $0.productIdentifier.utf8.count <= 1_024 }) else { throw ProStoreFailure.invalid }
         let verification: ProVerification
         switch item?.verification ?? info.entitlements.verification {
         case .verified: verification = .verified
@@ -128,10 +137,14 @@ final class NativeRevenueCatSource: ProStoreSource {
         case .failed: verification = .failed
         default: verification = .notRequested
         }
-        let subscriptions = info.subscriptionsByProductIdentifier.values.map {
+        var subscriptions = info.subscriptionsByProductIdentifier.values.map {
             ProCustomer.Subscription(productID: $0.productIdentifier, isActive: $0.isActive,
                 willRenew: $0.willRenew, familyShared: $0.ownershipType == .familyShared, store: storeName($0.store))
         }.sorted { $0.productID.utf8.lexicographicallyPrecedes($1.productID.utf8) }
+        if subscriptions.isEmpty, let item, item.isActive, item.expirationDate != nil {
+            subscriptions = [.init(productID: item.productIdentifier, isActive: true, willRenew: item.willRenew,
+                familyShared: item.ownershipType == .familyShared, store: storeName(item.store))]
+        }
         return .init(active: item?.isActive == true, verification: verification, productID: item?.productIdentifier,
             expirationMs: item?.expirationDate.map { $0.timeIntervalSince1970 * 1_000 },
             originalPurchaseMs: (item?.originalPurchaseDate ?? info.originalPurchaseDate).map { $0.timeIntervalSince1970 * 1_000 },
@@ -141,7 +154,7 @@ final class NativeRevenueCatSource: ProStoreSource {
     private static func storeName(_ value: Store) -> String {
         switch value { case .appStore: "APP_STORE"; case .macAppStore: "MAC_APP_STORE"; case .playStore: "PLAY_STORE"; case .testStore: "TEST_STORE"; default: "OTHER" }
     }
-    private static func failure(_ error: Error) -> ProStoreFailure {
+    static func failure(_ error: Error) -> ProStoreFailure {
         if let failure = error as? ProStoreFailure { return failure }
         guard let nativeCode = error as? ErrorCode else { return .failed }
         let code = nativeCode.rawValue

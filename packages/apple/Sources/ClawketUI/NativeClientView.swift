@@ -121,7 +121,16 @@ public struct NativeClientView: View {
             } else {
                 ForEach(filteredAgents) { agent in
                     Group {
-                        switch agent.entryMode {
+                        if agent.requiresUpgrade {
+                            Button {
+                                let id: AgentCatalogID
+                                switch agent.entryMode {
+                                case let .conversation(route): id = .init(connectionID: route.connectionID, agentID: route.agentID)
+                                case let .catalog(value): id = value
+                                }
+                                onIntent(.reviewProAgent(id))
+                            } label: { AgentRow(agent: agent) }.buttonStyle(.plain)
+                        } else { switch agent.entryMode {
                         case let .conversation(route):
                             if route.isConcrete {
                                 NavigationLink(value: route) { AgentRow(agent: agent) }
@@ -132,10 +141,10 @@ public struct NativeClientView: View {
                                 sheet = .catalog(id)
                             } label: { AgentRow(agent: agent) }
                                 .buttonStyle(.plain)
-                        }
+                        } }
                     }
                     .contextMenu { rosterActions(agent) }
-                    .disabled(!agent.availability.isEnabled)
+                    .disabled(!agent.availability.isEnabled && !agent.requiresUpgrade)
                     .accessibilityIdentifier("agent-\(agent.id)")
                     .listRowSeparator(.hidden)
                     .listRowInsets(EdgeInsets(top: 11, leading: 20, bottom: 11, trailing: 20))

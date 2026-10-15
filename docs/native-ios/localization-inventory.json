@@ -3201,6 +3201,373 @@
         "packages/apple/Sources/ClawketUI/NativeClientView.swift:242"
       ],
       "mobileTerm": null
+    },
+    {
+      "key": "%@ · One-time purchase",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:193"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "%@/mo · Auto-renews",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:192"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "%@/yr · Auto-renews",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:191"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Annual",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:183"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Buy lifetime",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:130"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Cancel anytime in App Store",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:115"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Change to annual",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:128"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Change to monthly",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:129"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Checking access…",
+      "sources": [
+        "apps/ios/Clawket/NativeAppPro.swift:141",
+        "apps/ios/Clawket/NativeProView.swift:27",
+        "apps/ios/Clawket/NativeProView.swift:112"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Choose free connection",
+      "sources": [
+        "apps/ios/Clawket/NativeSettingsView.swift:15",
+        "apps/ios/Clawket/NativeProSettings.swift:55"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Clawket Pro",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:19"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Community build",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:24",
+        "apps/ios/Clawket/NativeProSettings.swift:22"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Complete redemption in the store. Your Pro access will sync here.",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:172"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Connect more computers and servers",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:58"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Continue",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:131"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Current plan",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:92"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Equivalent to %@ / month",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:96"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Every conversation, in full",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:61"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Everything is unlocked. Picking up where you left off...",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:150"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Features are available without a store subscription.",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:25",
+        "apps/ios/Clawket/NativeProSettings.swift:26"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Full chat and task history",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:76"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Latest messages · read-only preview",
+      "sources": [
+        "apps/ios/Clawket/NativeAppPro.swift:141",
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:435"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Lifetime",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:185"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Lifetime does not cancel your existing subscription. Turn off its renewal in your store to avoid further charges.",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:147"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Lifetime is active",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:157",
+        "apps/ios/Clawket/NativeProSettings.swift:28"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Manage Clawket Pro",
+      "sources": [
+        "apps/ios/Clawket/NativeProSettings.swift:30"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Manage subscription",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:148",
+        "apps/ios/Clawket/NativeProView.swift:170"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Monthly",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:184"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "No new Pro access confirmed yet. If you redeemed a code, tap Restore.",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:200"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Plan change submitted",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:156"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Privacy Policy",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:178"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Purchase is being verified",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:158"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Purchases are unavailable in this build.",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:113",
+        "apps/ios/Clawket/NativeProView.swift:201"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Redeem code",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:166"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Restore Purchases",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:164"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Search and bulk export",
+      "sources": [
+        "apps/ios/Clawket/NativeSavedHistoryView.swift:57",
+        "apps/ios/Clawket/NativeProView.swift:60",
+        "apps/ios/Clawket/NativeProView.swift:77"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Start using your other Agents",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:59"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Terms of Use",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:177"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Unable to load subscription options right now.",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:136"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Unlimited connections and Agents",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:75",
+        "apps/ios/Clawket/NativeProSettings.swift:30"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Upgrade to Pro",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:126",
+        "apps/ios/Clawket/NativeProSettings.swift:23"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Use as free connection",
+      "sources": [
+        "apps/ios/Clawket/NativeProSettings.swift:52"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "View the full conversation",
+      "sources": [
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:434"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "You can change your free connection once every 24 hours.",
+      "sources": [
+        "apps/ios/Clawket/NativeAppPro.swift:111",
+        "apps/ios/Clawket/NativeProSettings.swift:54"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "You're Pro",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:155",
+        "apps/ios/Clawket/NativeProSettings.swift:23"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Your Pro status could not be verified. Try again when you’re online.",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:202"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Your current access is unchanged. Check your store before trying again.",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:145"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Your free connection could not be saved. Reopen Clawket before trying again.",
+      "sources": [
+        "apps/ios/Clawket/NativeAppPro.swift:28",
+        "apps/ios/Clawket/NativeAppPro.swift:45",
+        "apps/ios/Clawket/NativeAppPro.swift:114"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Your purchase is pending approval.",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:199"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Your store confirms when the new plan and price take effect.",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:144"
+      ],
+      "mobileTerm": null
     }
   ],
   "infoPlistStrings": [

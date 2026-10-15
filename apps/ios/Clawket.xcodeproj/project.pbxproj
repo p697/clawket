@@ -12,6 +12,8 @@
 		0666E5214AE34FA582FA21BC /* ClawketMedia in Frameworks */ = {isa = PBXBuildFile; productRef = B6A6C2405DAB4BAA85179F4E /* ClawketMedia */; };
 		0965FDA079959C9465C271AD /* NativeConversationStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62CEF4BAC15E5B5B6DD99FD7 /* NativeConversationStoreTests.swift */; };
 		0C727CF37004F6DE5BAEE3D4 /* NativeHistoryReconciliation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 173B7D279A7C6D2A46CFEB22 /* NativeHistoryReconciliation.swift */; };
+		0AE2E8B3EBBF32CE6C992B0B /* RevenueCat in Frameworks */ = {isa = PBXBuildFile; productRef = 816089087A786A4F43E08801 /* RevenueCat */; };
+		0CD490F2ED817288F4A578E7 /* NativeRevenueCatSourceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F9FAEFE5E0C5A8098B3A30A /* NativeRevenueCatSourceTests.swift */; };
 		0DAC715792728991EE89EA34 /* NativeSavedHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC7E855EB6D39C8962317147 /* NativeSavedHistoryView.swift */; };
 		10CEF133A2AFC5BFCE9B1E31 /* NativeConversationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B9A7097C7DD4ABA36FBB7A1 /* NativeConversationStore.swift */; };
 		120EF71EFB3EA1E9173A565B /* ConnectAgentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A8D8F99FE6BF72DD9B9F8AF /* ConnectAgentView.swift */; };
@@ -23,6 +25,7 @@
 		29F4A92E861041558A7A08D3 /* NativeTranscriptPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9E6C8E4C8FE4E0482478AA8 /* NativeTranscriptPresentationTests.swift */; };
 		2EFA14A6E0BD75518CA9B696 /* DeviceApprovalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97DA58B8030AC479B4610849 /* DeviceApprovalView.swift */; };
 		2F91D2478DFB46E4FE62AC72 /* NativeTaskPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D1DA96C0D5461424FA70517 /* NativeTaskPresentation.swift */; };
+		313DEAA56CE82FC3C99908E8 /* NativeProTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 574B3EF50CAE5D596990E834 /* NativeProTests.swift */; };
 		357706CC5B6E1913DA8A8C82 /* NativeSavedConversations.swift in Sources */ = {isa = PBXBuildFile; fileRef = 425D6CF90AA4A41BAE116FF6 /* NativeSavedConversations.swift */; };
 		367A5790C5CDA6DAA969E678 /* NativeModelControlsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93FF817FB18D2D6DE5735749 /* NativeModelControlsTests.swift */; };
 		3A4DC2B5F3F1F5EAABF4FA29 /* NativeMediaHostTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4EC25AD0042FDF3973AE588 /* NativeMediaHostTests.swift */; };
@@ -161,6 +164,7 @@
 		49C7A8ABB20415EEB075F0C7 /* PendingMessageEditor.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PendingMessageEditor.swift; sourceTree = "<group>"; };
 		4A674C0333CD433EA1589533 /* Localizable.xcstrings */ = {isa = PBXFileReference; includeInIndex = 1; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		5015A4C0D5A3109D98C15F52 /* NativePhysicalHistoryBindingTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NativePhysicalHistoryBindingTests.swift; path = ClawketTests/NativePhysicalHistoryBindingTests.swift; sourceTree = "<group>"; };
+		574B3EF50CAE5D596990E834 /* NativeProTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeProTests.swift; sourceTree = "<group>"; };
 		5B9A7097C7DD4ABA36FBB7A1 /* NativeConversationStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeConversationStore.swift; sourceTree = "<group>"; };
 		62CEF4BAC15E5B5B6DD99FD7 /* NativeConversationStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeConversationStoreTests.swift; sourceTree = "<group>"; };
 		64C289B16E5D001DC8770A47 /* NativeTaskJournal.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeTaskJournal.swift; sourceTree = "<group>"; };
@@ -174,6 +178,7 @@
 		79FDD4876580D84DDCBD865B /* NativeModelPreferencesTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeModelPreferencesTests.swift; sourceTree = "<group>"; };
 		7C3A18D71A11FB82E402A566 /* NativeSavedHistoryTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeSavedHistoryTests.swift; sourceTree = "<group>"; };
 		7F25F5C498707AFFF744F974 /* NativeProSettings.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeProSettings.swift; sourceTree = "<group>"; };
+		7F9FAEFE5E0C5A8098B3A30A /* NativeRevenueCatSourceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeRevenueCatSourceTests.swift; sourceTree = "<group>"; };
 		8067F83594D1305EF54DC4BE /* NativeHistoryTransactions.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeHistoryTransactions.swift; sourceTree = "<group>"; };
 		80F3D3004DA864D521332AD3 /* NativeHistoryApplication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeHistoryApplication.swift; sourceTree = "<group>"; };
 		83E37C1EE73DD7335ED11156 /* NativeTaskRequestsTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeTaskRequestsTests.swift; sourceTree = "<group>"; };
@@ -256,6 +261,7 @@
 				6023E9AB20021B8FB7F5E049 /* ClawketMedia in Frameworks */,
 				D4FB07D7B8BF59CFF5869DFD /* ClawketSpeech in Frameworks */,
 				FB09AD578FCD7E20F58E2BA2 /* ClawketCommerce in Frameworks */,
+				0AE2E8B3EBBF32CE6C992B0B /* RevenueCat in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -400,6 +406,8 @@
 				7C3A18D71A11FB82E402A566 /* NativeSavedHistoryTests.swift */,
 				FBA9397A956804E6C9BE0C07 /* NativeRosterTests.swift */,
 				104AA4B27912F4FDE723352D /* NativeLiveMessagesTests.swift */,
+				574B3EF50CAE5D596990E834 /* NativeProTests.swift */,
+				7F9FAEFE5E0C5A8098B3A30A /* NativeRevenueCatSourceTests.swift */,
 			);
 			name = ClawketTests;
 			path = ClawketTests;
@@ -458,6 +466,7 @@
 				1EE0AEE4BF493835E5982FAD /* ClawketMedia */,
 				9669240F20934ABDA8E987FF /* ClawketSpeech */,
 				C0D22DC286D2C68004172537 /* ClawketCommerce */,
+				816089087A786A4F43E08801 /* RevenueCat */,
 			);
 			productName = ClawketTests;
 			productReference = D2163EB819C0F5C468B4F05B /* ClawketTests.xctest */;
@@ -566,6 +575,8 @@
 				AD81BDA5037009D2ABD8408C /* NativeLiveMessagesTests.swift in Sources */,
 				6FA829EA244DE215DA13E2DF /* NativePhysicalHistoryBindingTests.swift in Sources */,
 				F118217B3707E5A82F1FDF2B /* NativePhysicalHistoryHostTests.swift in Sources */,
+				313DEAA56CE82FC3C99908E8 /* NativeProTests.swift in Sources */,
+				0CD490F2ED817288F4A578E7 /* NativeRevenueCatSourceTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -936,6 +947,11 @@
 			productName = ClawketMedia;
 		};
 		6C47D1E6BA85AB7CC921CB05 /* RevenueCat */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D92BC549D323A7FD63A4F1D1 /* XCRemoteSwiftPackageReference "purchases-ios-spm" */;
+			productName = RevenueCat;
+		};
+		816089087A786A4F43E08801 /* RevenueCat */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = D92BC549D323A7FD63A4F1D1 /* XCRemoteSwiftPackageReference "purchases-ios-spm" */;
 			productName = RevenueCat;

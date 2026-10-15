@@ -49,7 +49,7 @@ struct NativeFreeConnectionView: View {
                             }
                         }.frame(minHeight: 44)
                     }.disabled(client.proSwitching || client.changingConnections || client.proStorageFailed || !canSwitch)
-                        .accessibilityLabel(Text("Use as free connection") + Text(": ") + Text(verbatim: connection.label))
+                        .accessibilityLabel(Text("Use as free connection") + Text(verbatim: ": ") + Text(verbatim: connection.label))
                 }
             } footer: { Text("You can change your free connection once every 24 hours.") }
         }.navigationTitle("Choose free connection").navigationBarTitleDisplayMode(.inline)

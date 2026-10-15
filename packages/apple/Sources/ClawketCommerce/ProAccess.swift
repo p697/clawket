@@ -44,8 +44,10 @@ public struct ProCustomer: Sendable, Equatable {
     }
     public func isActive(at now: Double) -> Bool {
         guard active, verification == .verified || verification == .verifiedOnDevice,
-              now.isFinite, now >= 0, requestMs.isFinite, requestMs >= 0,
-              let productID, !productID.isEmpty else { return false }
+              now.isFinite, now >= 0, now <= 9_007_199_254_740_991,
+              requestMs.isFinite, requestMs >= 0, requestMs <= 9_007_199_254_740_991,
+              [originalPurchaseMs, latestPurchaseMs, expirationMs].compactMap({ $0 }).allSatisfy({ $0.isFinite && $0 >= 0 && $0 <= 9_007_199_254_740_991 }),
+              let productID, !productID.isEmpty, productID.utf8.count <= 1_024 else { return false }
         guard let expirationMs else { return true }
         return expirationMs.isFinite && expirationMs > max(now, requestMs)
     }

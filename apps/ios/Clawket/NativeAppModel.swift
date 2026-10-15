@@ -250,6 +250,11 @@ final class NativeAppModel: ObservableObject {
             guard presentation.acceptsReadingContext(for: route, scopeID: scope) else { return }
             rosterReading.update(route, viewID: viewID, scope: scope, visible: visible,
                 currentView: conversationVisibility.isShowing(route, viewID: viewID)); markVisibleRosterRead()
+        case let .reviewProAgent(id):
+            guard let agent = agents.first(where: { $0.connectionID == id.connectionID && $0.agentID == id.agentID }) else { return }
+            let action: NativeProContinuation.Action = agent.entryMode == .sessions ? .catalog(id)
+                : .conversation(.init(connectionID: id.connectionID, agentID: id.agentID, sessionID: agent.mainSessionKey))
+            showPro(.agents, continuing: action)
         case let .openDestination(destination, _):
             retireVoice()
             switch destination {
@@ -662,6 +667,14 @@ final class NativeAppModel: ObservableObject {
                         markRead: localAccess && NativeRosterProjection.unread(session, index: index, live: rosterIsLive) ? .available : .unsupported))
             }
             return rows
+        }
+        for index in presentation.agents.indices {
+            let id: AgentCatalogID
+            switch presentation.agents[index].entryMode {
+            case let .catalog(value): id = value
+            case let .conversation(route): id = .init(connectionID: route.connectionID, agentID: route.agentID)
+            }
+            presentation.agents[index].requiresUpgrade = proAgentAccess(id) != .allowed
         }
         for key in presentation.catalogs.keys { updateCatalog(key) }
         restoreNavigationIfAvailable()
