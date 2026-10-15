@@ -47,7 +47,8 @@ enum WireModels {
         }
     }
 
-    static func session(_ value: JSONValue, connection: BackendConnection, legacyActivity: Bool) throws -> RuntimeSession {
+    static func session(_ value: JSONValue, connection: BackendConnection, legacyActivity: Bool,
+                        archivedList: Bool = false) throws -> RuntimeSession {
         guard value.object != nil, let key = value["key"]?.nonemptyString, key.utf8.count <= 1_024 else {
             throw RuntimeFailure(.invalidResponse)
         }
@@ -57,7 +58,7 @@ enum WireModels {
             guard value["agentId"]?.nonemptyString != nil, value["title"]?.stringValue != nil,
                   kinds.contains(value["kind"]?.stringValue ?? ""),
                   value["updatedAt"] == .null || timestamp(value["updatedAt"]) != nil,
-                  value["hasActiveRun"]?.boolValue != nil,
+                  value["hasActiveRun"]?.boolValue != nil || (archivedList && value["archived"]?.boolValue == true),
                   let actions = value["allowedActions"]?.object,
                   ["rename", "reset", "delete", "pin"].allSatisfy({ actions[$0]?.boolValue != nil }) else {
                 throw RuntimeFailure(.invalidResponse)
@@ -66,9 +67,23 @@ enum WireModels {
         let pieces = key.split(separator: ":")
         let agentID = connection.backendKind == .hermes ? "hermes" : value["agentId"]?.nonemptyString
             ?? (pieces.first == "agent" && pieces.count > 1 ? String(pieces[1]) : "main")
-        let kind = value["kind"]?.nonemptyString ?? (key == "main" || key.hasSuffix(":main") ? "main"
+        var kind = value["kind"]?.nonemptyString ?? (key == "main" || key.hasSuffix(":main") ? "main"
             : key.contains(":subagent:") ? "subagent" : key.contains(":cron:") ? "cron" : "other")
+        if connection.backendKind == .openclaw {
+            if key == "main" || (pieces.count == 3 && pieces.first == "agent" && pieces.last == "main") { kind = "main" }
+            else if key.contains(":cron:") { kind = "cron" }
+            else if key.contains(":subagent:") { kind = "subagent" }
+            else if value["channel"]?.nonemptyString != nil { kind = "channel" }
+            else { kind = ["direct", "group"].contains(value["kind"]?.stringValue ?? "") ? value["kind"]!.stringValue! : "other" }
+        }
         let updatedAt = timestamp(value["updatedAt"])
+        let actions = try sessionActions(value, backend: connection.backendKind, kind: kind)
+        for field in ["source", "sessionId"] {
+            if let raw = value[field], raw != .null {
+                guard let text = raw.stringValue, !text.isEmpty, text.utf8.count <= 1_024 else { throw RuntimeFailure(.invalidResponse) }
+            }
+        }
+        if let archived = value["archived"], archived != .null, archived.boolValue == nil { throw RuntimeFailure(.invalidResponse) }
         let activity: Int64?
         if connection.backendKind == .openclaw {
             let clocks = [timestamp(value["lastInteractionAt"]), timestamp(value["lastActivityAt"])].compactMap { $0 }
@@ -91,7 +106,25 @@ enum WireModels {
                               modelProvider: value["modelProvider"]?.stringValue,
                               hasActiveRun: value["hasActiveRun"]?.boolValue == true, project: project,
                               canContinue: value["canContinue"]?.boolValue, continuationBlockedReason: value["continuationBlockedReason"]?.stringValue,
+                              source: value["source"]?.stringValue, sessionID: value["sessionId"]?.stringValue,
+                              archived: value["archived"]?.boolValue, allowedActions: actions,
                               raw: value)
+    }
+
+    private static func sessionActions(_ value: JSONValue, backend: BackendKind, kind: String) throws -> RuntimeSessionAllowedActions? {
+        let gateway = backend == .openclaw || backend == .hermes
+        guard gateway || value["allowedActions"] != nil else { return nil }
+        if let supplied = value["allowedActions"], supplied.object == nil { throw RuntimeFailure(.invalidResponse) }
+        let row = value["allowedActions"]?.object ?? [:]
+        for name in ["rename", "reset", "delete", "pin", "archive"] {
+            if let raw = row[name], raw.boolValue == nil { throw RuntimeFailure(.invalidResponse) }
+        }
+        let nativeHermes = backend == .hermes && value["source"]?.stringValue == "native"
+        return RuntimeSessionAllowedActions(
+            rename: !nativeHermes && (row["rename"]?.boolValue ?? gateway),
+            reset: !nativeHermes && (row["reset"]?.boolValue ?? gateway),
+            delete: !nativeHermes && !(backend == .openclaw && ["main", "channel"].contains(kind)) && (row["delete"]?.boolValue ?? gateway),
+            pin: row["pin"]?.boolValue ?? gateway, archive: row["archive"]?.boolValue == true)
     }
 
     static func history(_ payload: JSONValue, key: String, backend: BackendKind, artifactsEnabled: Bool = false) throws -> RuntimeHistory {

@@ -109,6 +109,8 @@ public struct RuntimeCapabilities: Codable, Sendable, Equatable {
     public var fileAttachments = false
     public var documentAttachments = false
     public var artifacts = false
+    /// Optional for compatibility with previously persisted native state.
+    public var sessionManagement: RuntimeSessionManagementCapabilities?
     public init() {}
 }
 
@@ -183,6 +185,10 @@ public struct RuntimeSession: Codable, Sendable, Equatable, Identifiable {
     public let project: RuntimeProject?
     public let canContinue: Bool?
     public let continuationBlockedReason: String?
+    public let source: String?
+    public let sessionID: String?
+    public let archived: Bool?
+    public let allowedActions: RuntimeSessionAllowedActions?
     public let raw: JSONValue
 }
 

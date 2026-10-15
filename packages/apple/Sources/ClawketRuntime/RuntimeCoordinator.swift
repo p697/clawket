@@ -45,6 +45,8 @@ public actor RuntimeCoordinator {
     var previouslyReady = false
     var unavailableAttempts = 0
     var catalog: [RuntimeSession] = []
+    var sessionManagementState = SessionManagementState()
+    var historyRevisions: [String: UUID] = [:]
     var catalogTask: Task<RuntimeRoster, any Error>?
     var catalogTaskID = UUID()
     var historyTasks: [String: Task<RuntimeHistory, any Error>] = [:]
@@ -214,6 +216,7 @@ public actor RuntimeCoordinator {
                 do {
                     if try receiveConsent(frame, scope: scope()) { return }
                     for update in try sessionEvents.map(frame, connection: connection, artifactsEnabled: state.capabilities.artifacts) {
+                        observeSessionManagement(update)
                         emit(.update(connectionID: connection.id, update), weight: (try? FrameCodec.encode(frame).utf8.count) ?? 128)
                     }
                 } catch { attemptFailed(runtimeFailure(error), epoch: epoch, attempt: attempt) }
@@ -371,6 +374,8 @@ public actor RuntimeCoordinator {
         attempt = UUID(); authentication = UUID()
         resetConsents()
         clearArtifacts()
+        sessionManagementState = SessionManagementState()
+        historyRevisions = [:]
         readerTask?.cancel(); readerTask = nil; openTask?.cancel(); openTask = nil
         handshakeTask?.cancel(); handshakeTask = nil; retryTask?.cancel(); retryTask = nil
         periodicProbeTask?.cancel(); periodicProbeTask = nil; probeTask?.cancel(); probeTask = nil
@@ -403,6 +408,8 @@ public actor RuntimeCoordinator {
             capabilities.executionApprovals = [.openclaw, .hermes, .codex, .claudeCode].contains(connection.backendKind) && consents.evidence.contains("execution")
             capabilities.pairingApprovals = connection.backendKind == .openclaw && consents.evidence.contains("pairing")
             configureAttachmentCapabilities(&capabilities)
+            capabilities.sessionManagement = SessionManagementPolicy.capabilities(connection.backendKind, methods: supportedMethods,
+                health: backendHealth, bridgeCapabilities: bridgeCapabilities)
         }
         if !capabilities.artifacts { clearArtifacts() }
         state = RuntimeConnectionState(connectionID: connection?.id, phase: phase, capabilities: capabilities,

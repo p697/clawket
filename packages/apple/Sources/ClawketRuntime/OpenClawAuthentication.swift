@@ -26,6 +26,8 @@ extension RuntimeCoordinator {
         authentication = UUID(); lastNonce = nonce; sessionEvents = SessionEvents()
         resetConsents()
         clearArtifacts()
+        sessionManagementState = SessionManagementState()
+        historyRevisions = [:]
         if state.phase == .ready {
             catalogTask?.cancel(); catalogTask = nil; probeTask?.cancel(); probeTask = nil
             for task in historyTasks.values { task.cancel() }

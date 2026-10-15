@@ -6,6 +6,7 @@ extension RuntimeCoordinator {
         let scope = try scope(), id: UUID, task: Task<RuntimeRoster, any Error>
         if let pending = catalogTask { id = catalogTaskID; task = pending }
         else {
+            sessionManagementState.invalidateRows()
             id = UUID(); catalogTaskID = id
             task = Task { [weak self] in
                 guard let self else { throw RuntimeFailure(.superseded) }
@@ -19,6 +20,7 @@ extension RuntimeCoordinator {
             guard catalogTaskID == id else { throw RuntimeFailure(.superseded) }
             if catalogTaskID == id { catalogTask = nil }
             catalog = value.sessions
+            sessionManagementState.liveScope = scope; sessionManagementState.liveRevision = UUID()
             emit(.roster(value), weight: value.sessions.reduce(128) { $0 + ((try? FrameCodec.encode($1.raw).utf8.count) ?? 128) })
             return value
         } catch {
@@ -121,6 +123,8 @@ extension RuntimeCoordinator {
         guard !key.isEmpty, key.utf8.count <= 1_024, (1...1_000).contains(limit), cursor?.utf8.count ?? 0 <= 4_096,
               historyPending < 128, historyTasks.count < 32 || historyTasks[key] != nil else { throw RuntimeFailure(.capacity) }
         let previous = historyTasks[key], id = UUID()
+        let revision = historyRevisions[key] ?? UUID()
+        historyRevisions[key] = revision
         historyPending += 1; historyTaskIDs[key] = id
         let task = Task { [weak self] in
             if let previous { _ = try? await previous.value }
@@ -133,9 +137,14 @@ extension RuntimeCoordinator {
             if isCurrent(scope) {
                 historyPending = max(0, historyPending - 1)
                 if historyTaskIDs[key] == id { historyTasks.removeValue(forKey: key); historyTaskIDs.removeValue(forKey: key) }
+                if historyPending == 0 { historyRevisions = [:] }
             }
         }
-        do { let result = try await task.value; try assertCurrent(scope); return result }
+        do {
+            let result = try await task.value; try assertCurrent(scope)
+            guard historyRevisions[key] == revision else { throw RuntimeFailure(.superseded, delivery: .responseReceived) }
+            return result
+        }
         catch { throw runtimeFailure(error) }
     }
 
@@ -162,6 +171,7 @@ extension RuntimeCoordinator {
     public func send(sessionKey: String, input: RuntimePrompt) async throws -> RuntimeRunReceipt {
         let scope = try scope()
         guard let connection else { throw RuntimeFailure(.superseded) }
+        try validateNativeSessionInput(sessionKey, scope: scope)
         let gateway = connection.backendKind == .openclaw || connection.backendKind == .hermes
         let params = try promptParameters(sessionKey: sessionKey, input: input)
         do {
@@ -215,6 +225,7 @@ extension RuntimeCoordinator {
         if raw?["title"] == nil, let title { raw?["title"] = .string(title) }
         let session = try WireModels.session(.object(raw!), connection: connection, legacyActivity: !hasHumanActivityClock)
         catalogTask?.cancel(); catalogTask = nil; catalogTaskID = UUID()
+        sessionManagementState.invalidateRows()
         catalog.removeAll { $0.key == session.key }; catalog.insert(session, at: 0)
         emit(.update(connectionID: connection.id, .sessionMetadata(session)))
         return session
