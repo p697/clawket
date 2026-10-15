@@ -109,7 +109,7 @@ jobs:
             -configuration Debug -destination "platform=iOS Simulator,id=$CLAWKET_CI_SIMULATOR" \
             -derivedDataPath "$RUNNER_TEMP/clawket-native-derived" \
             -resultBundlePath "$RUNNER_TEMP/clawket-native-tests.xcresult" \
-            -jobs 2 -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=NO \
+            -jobs 2 -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- \
             test -only-testing:ClawketTests
           xcrun xcresulttool get test-results summary \
             --path "$RUNNER_TEMP/clawket-native-tests.xcresult" > "$RUNNER_TEMP/clawket-native-summary.json"

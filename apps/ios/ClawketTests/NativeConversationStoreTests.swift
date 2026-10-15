@@ -4,6 +4,17 @@ import XCTest
 @testable import Clawket
 
 final class NativeConversationStoreTests: XCTestCase, @unchecked Sendable {
+    func testDevelopmentAppCanRoundTripItsOwnKeychainItem() async throws {
+        let values = try KeychainValueStore(service: "com.p697.clawket.nativeqa.tests." + UUID().uuidString)
+        let original = Data("native development keychain".utf8)
+        try await values.write(original, for: "credential")
+        let recovered = try await values.read("credential")
+        XCTAssertEqual(recovered, original)
+        try await values.remove("credential")
+        let removed = try await values.read("credential")
+        XCTAssertNil(removed)
+    }
+
     func testInterruptedSendingBecomesUncertainAndQueuedBecomesHeld() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
