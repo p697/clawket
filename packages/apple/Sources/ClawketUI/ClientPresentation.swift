@@ -111,13 +111,15 @@ public struct ConnectionPresentation: Hashable, Sendable {
         self.approvalReviewID = approvalReviewID
     }
 
-    var primaryIntent: ClientIntent? {
+    var primaryIntent: ClientIntent? { primaryIntent(fallbackConnectionID: nil) }
+
+    func primaryIntent(fallbackConnectionID: String?) -> ClientIntent? {
         guard action.isEnabled else { return nil }
         if phase == .approvalRequired {
             guard let connectionID, !connectionID.isEmpty, let approvalReviewID else { return nil }
             return .reviewDeviceApproval(connectionID: connectionID, contextID: approvalReviewID)
         }
-        return .reconnect(connectionID: connectionID)
+        return .reconnect(connectionID: connectionID ?? fallbackConnectionID)
     }
 }
 

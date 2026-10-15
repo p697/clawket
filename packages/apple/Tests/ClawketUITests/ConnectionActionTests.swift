@@ -5,7 +5,7 @@ import Testing
 struct ConnectionActionTests {
     @Test func approvalStatusOpensTheExactReviewRatherThanReconnectingBlindly() {
         let id = UUID(), status = ConnectionPresentation(phase: .approvalRequired, connectionID: "a", action: .available, approvalReviewID: id)
-        guard case let .reviewDeviceApproval(connectionID, contextID) = status.primaryIntent else { Issue.record("Missing exact approval intent"); return }
+        guard case let .reviewDeviceApproval(connectionID, contextID)? = status.primaryIntent else { Issue.record("Missing exact approval intent"); return }
         #expect(connectionID == "a"); #expect(contextID == id)
     }
     @Test func missingReviewOrUnavailableCapabilityNeverBecomesAReconnectAction() {
@@ -19,8 +19,13 @@ struct ConnectionActionTests {
     @Test func ordinaryReconnectKeepsTheExistingOptionalConnectionScope() {
         for connection in [String?.none, "a"] {
             let status = ConnectionPresentation(phase: .unavailable, connectionID: connection, action: .available)
-            guard case let .reconnect(id) = status.primaryIntent else { Issue.record("Ordinary reconnect changed"); return }
+            guard case let .reconnect(id)? = status.primaryIntent else { Issue.record("Ordinary reconnect changed"); return }
             #expect(id == connection)
         }
+        let cachedConversation = ConnectionPresentation(phase: .unavailable, action: .available)
+        guard case let .reconnect(id)? = cachedConversation.primaryIntent(fallbackConnectionID: "route-connection") else {
+            Issue.record("Lost cached conversation scope"); return
+        }
+        #expect(id == "route-connection")
     }
 }

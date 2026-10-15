@@ -454,7 +454,7 @@ private struct NativeConversationView: View {
         .overlay(alignment: .top) {
             if !expanded && conversation.connection.phase != .ready && !conversation.connection.label.isEmpty {
                 ConnectionStatusView(status: conversation.connection) {
-                    if let intent = conversation.connection.primaryIntent { onIntent(intent) }
+                    if let intent = conversation.connection.primaryIntent(fallbackConnectionID: conversation.id.connectionID) { onIntent(intent) }
                 }
                 .padding(.horizontal, 12)
                 .background(.regularMaterial, in: Capsule())
