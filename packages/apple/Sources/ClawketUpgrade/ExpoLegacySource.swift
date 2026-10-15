@@ -63,7 +63,7 @@ public actor ExpoLegacySource: LegacyUpgradeSource {
         for rootName in ["incoming-share", "voice-drafts-v1"] {
             let root = container.appendingPathComponent("Documents/\(rootName)", isDirectory: true)
             guard FileManager.default.fileExists(atPath: root.path) else { continue }
-            try validateLegacyDirectory(root)
+            try validateLegacyDescendant(root, container: container)
             let folders = try directoryContents(root)
             guard folders.count <= (rootName == "incoming-share" ? 200 : 10) else { throw UpgradeFailure.tooLarge }
             for folder in folders {
@@ -201,7 +201,8 @@ func validateLegacyDirectory(_ url: URL) throws {
 
 func legacyFileProperties(_ url: URL, maximumBytes: Int) throws -> (size: Int64, modified: Date) {
     do {
-        let properties = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey, .contentModificationDateKey])
+        let freshURL = URL(fileURLWithPath: url.path)
+        let properties = try freshURL.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey, .contentModificationDateKey])
         guard properties.isRegularFile == true, properties.isSymbolicLink != true else { throw UpgradeFailure.unsafePath }
         guard let size = properties.fileSize, size >= 0, size <= maximumBytes else { throw UpgradeFailure.tooLarge }
         return (Int64(size), properties.contentModificationDate ?? .distantPast)
