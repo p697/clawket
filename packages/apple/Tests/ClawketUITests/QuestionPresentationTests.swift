@@ -31,7 +31,9 @@ struct QuestionPresentationTests {
     }
 
     @Test func editingPermissionIsIndependentAndCannotReopenBusyOrResolvedFields() {
-        var question = QuestionPresentation(id: "q", title: "Question", fields: [], canSubmit: false)
+        var question = QuestionPresentation(id: "q", title: "Question", fields: [])
+        #expect(question.canEditFields)
+        question.canSubmit = false // Older hosts may disable a copied held review after construction.
         #expect(!question.canEditFields)
         question.canEdit = true
         #expect(question.canEditFields) // Explicit host-owned offline local editing is possible.

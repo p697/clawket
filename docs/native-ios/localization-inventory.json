@@ -39,7 +39,7 @@
     {
       "key": "%@, %@, conversations",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:406"
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:429"
       ],
       "mobileTerm": null
     },
@@ -53,14 +53,14 @@
     {
       "key": "Account settings",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:151"
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:164"
       ],
       "mobileTerm": "common.Account settings"
     },
     {
       "key": "Add",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:174"
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:197"
       ],
       "mobileTerm": "config.Add"
     },
@@ -74,7 +74,7 @@
     {
       "key": "Add connection",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:167",
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:190",
         "apps/ios/Clawket/ConnectionsView.swift:33"
       ],
       "mobileTerm": "config.Add Connection"
@@ -82,7 +82,7 @@
     {
       "key": "Add to queue",
       "sources": [
-        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:450",
+        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:455",
         "apps/ios/Clawket/NativeAppModel.swift:723"
       ],
       "mobileTerm": null
@@ -105,7 +105,7 @@
     {
       "key": "Agent settings",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:413"
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:436"
       ],
       "mobileTerm": "chat.Agent settings"
     },
@@ -119,7 +119,7 @@
     {
       "key": "Agents",
       "sources": [
-        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:527",
+        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:532",
         "apps/ios/Clawket/NativeAppModel.swift:27"
       ],
       "mobileTerm": "settings.Agents"
@@ -184,7 +184,7 @@
     {
       "key": "Approval needed",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:236"
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:259"
       ],
       "mobileTerm": null
     },
@@ -264,7 +264,7 @@
     {
       "key": "Choose an agent to continue a conversation.",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:33"
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:35"
       ],
       "mobileTerm": null
     },
@@ -328,7 +328,7 @@
     {
       "key": "Connect an agent",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:90",
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:103",
         "apps/ios/Clawket/ConnectAgentView.swift:100"
       ],
       "mobileTerm": "config.Connect an agent"
@@ -336,7 +336,7 @@
     {
       "key": "Connect an agent to continue conversations and keep work moving.",
       "sources": [
-        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:533",
+        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:538",
         "apps/ios/Clawket/NativeAppModel.swift:29"
       ],
       "mobileTerm": null
@@ -387,7 +387,7 @@
     {
       "key": "Connection needs approval",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:46"
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:48"
       ],
       "mobileTerm": null
     },
@@ -401,7 +401,7 @@
     {
       "key": "Connection settings",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:418"
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:441"
       ],
       "mobileTerm": "settings.Connection settings"
     },
@@ -423,7 +423,7 @@
     {
       "key": "Conversation actions",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:427"
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:450"
       ],
       "mobileTerm": null
     },
@@ -652,7 +652,7 @@
     {
       "key": "Files",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:417",
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:440",
         "packages/apple/Sources/ClawketUI/NativeComposer.swift:107"
       ],
       "mobileTerm": "common.Files"
@@ -674,28 +674,28 @@
     {
       "key": "Input needed",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:237"
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:260"
       ],
       "mobileTerm": null
     },
     {
       "key": "Latest messages",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:367"
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:390"
       ],
       "mobileTerm": null
     },
     {
       "key": "Load earlier messages",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:422"
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:445"
       ],
       "mobileTerm": "chat.Load earlier messages"
     },
     {
       "key": "Loading agents…",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:79"
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:92"
       ],
       "mobileTerm": null
     },
@@ -709,7 +709,7 @@
     {
       "key": "Loading conversation…",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:348"
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:371"
       ],
       "mobileTerm": null
     },
@@ -737,7 +737,7 @@
     {
       "key": "Memory",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:414"
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:437"
       ],
       "mobileTerm": "settings.Memory"
     },
@@ -789,14 +789,14 @@
     {
       "key": "Needs attention",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:152"
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:165"
       ],
       "mobileTerm": "config.Needs attention"
     },
     {
       "key": "New agent",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:161"
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:184"
       ],
       "mobileTerm": "chat.New Agent"
     },
@@ -842,7 +842,7 @@
     {
       "key": "No matching agents or conversations",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:126"
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:139"
       ],
       "mobileTerm": null
     },
@@ -886,7 +886,7 @@
     {
       "key": "Opening conversation…",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:28"
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:30"
       ],
       "mobileTerm": null
     },
@@ -1067,6 +1067,13 @@
       "mobileTerm": null
     },
     {
+      "key": "Refresh",
+      "sources": [
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:171"
+      ],
+      "mobileTerm": "common.Refresh"
+    },
+    {
       "key": "Refresh conversations before creating another.",
       "sources": [
         "apps/ios/Clawket/NativeAppModel.swift:434"
@@ -1225,14 +1232,14 @@
     {
       "key": "Scheduled tasks",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:416"
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:439"
       ],
       "mobileTerm": "chat.Scheduled tasks"
     },
     {
       "key": "Search agents and conversations",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:134"
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:147"
       ],
       "mobileTerm": null
     },
@@ -1268,8 +1275,8 @@
     {
       "key": "Send",
       "sources": [
-        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:450",
-        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:460",
+        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:455",
+        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:465",
         "apps/ios/Clawket/NativeAppModel.swift:723"
       ],
       "mobileTerm": "chat.Send"
@@ -1333,14 +1340,14 @@
     {
       "key": "Skills",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:415"
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:438"
       ],
       "mobileTerm": "settings.Skills"
     },
     {
       "key": "Start a conversation",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:353"
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:376"
       ],
       "mobileTerm": null
     },
@@ -1637,7 +1644,7 @@
     {
       "key": "Unread messages",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:235"
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:258"
       ],
       "mobileTerm": "common.Unread messages"
     },
@@ -1715,7 +1722,7 @@
     {
       "key": "Your agents, within reach",
       "sources": [
-        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:532",
+        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:537",
         "apps/ios/Clawket/NativeAppModel.swift:28"
       ],
       "mobileTerm": null

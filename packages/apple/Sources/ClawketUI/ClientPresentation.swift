@@ -356,7 +356,12 @@ public struct QuestionPresentation: Identifiable, Hashable, Sendable {
     public var canSubmit: Bool
     public var canCancel: Bool
     /// Local editing permission is separate from wire response/cancellation authority.
-    public var canEdit: Bool
+    /// Without an explicit override, it follows canSubmit even on a copied held review.
+    public var canEdit: Bool {
+        get { explicitCanEdit ?? canSubmit }
+        set { explicitCanEdit = newValue }
+    }
+    private var explicitCanEdit: Bool?
     /// Only authoritative acceptance of this exact local answer may set this true.
     public var responseIsAccepted: Bool
     /// Only the pressed action spins. Unknown delivery must disable actions without claiming a submission.
@@ -370,7 +375,7 @@ public struct QuestionPresentation: Identifiable, Hashable, Sendable {
         self.id = id; self.title = title; self.detail = detail; self.fields = fields
         self.isSubmitting = isSubmitting; self.resolvedLabel = resolvedLabel; self.error = error; self.canSubmit = canSubmit
         self.kind = kind; self.canCancel = canCancel; self.submittingAction = submittingAction
-        self.canEdit = canEdit ?? canSubmit; self.responseIsAccepted = responseIsAccepted
+        self.explicitCanEdit = canEdit; self.responseIsAccepted = responseIsAccepted
     }
 
     public var canEditFields: Bool { canEdit && !isSubmitting && submittingAction == nil && resolvedLabel == nil }

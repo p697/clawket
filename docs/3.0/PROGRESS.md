@@ -6,6 +6,8 @@
   - heavy/jobs2 下实际 iOS16.4/Swift6 UI 源码 typecheck、单文件 WorkPresentationTests 8 项通过；覆盖默认隐藏、顺序/同序稳定、同 run 不同输入、重复身份、权限撤回、未知状态与草稿保持。新增26条固定文案各19语，其中13条复用现有可信术语、13条逐语言翻译；234 UI/2权限，共4,484语言单元，源码全19语与6项目录回归通过。真实 App/编译资源完整门禁交 CI；未启动本机模拟器、改 Vault/Runtime、绑定生产 work 或发布。详见 `docs/native-ios/WORK-UI.md`。
   - 与真实 host 联查修复提问UI：wire动作预占后仍保留被点按钮及精确spinner，离线/未知review独立禁用输入避免假编辑回弹，resolved保留原问题与可选取回答；仅typed accepted标志把本地响应展示为已接收，外部解决/过期仍标Draft answer，confirm缺失不变No。尾部兼容新增canEdit/responseIsAccepted，纯QuestionPresentationTests六项、最终13源码iOS16.4/Swift6 typecheck通过，随后释放heavy给USB验收。无host Runtime动作变更。
 
+  - 根据负责人 USB 后台恢复实测修复导航选中边界：List 独立持有 sidebar selection，secondary 会话只映射同连接/Agent 行，规范化/nil/Back 不再改写真实会话或取消缓存恢复；程序同步绕过用户选择 setter，Back 后目录刷新不自动重开。移除按 ready 条件替换 List 的 refreshable 分支，改为 capability 控制的原生工具栏 Refresh，保留实际刷新和会话目录独立刷新；系统 refresh 环境只读，未引入私有滚动 hack 或空操作。新增纯 selection 五项回归；heavy/jobs2 下最终14份真实 iOS16.4/Swift6 UI源码、selection5与修改过的Question6均通过并释放租约。canEdit未显式覆盖时动态跟随canSubmit，旧host复制held/uncertain值也安全锁定。Refresh复用全19语，当前235 UI/2权限共4,503语言单元。实际USB后台/Back/iPad复验仍由负责人在main验收，无新发送或生产变更。
+
 - 2026-10-16 Native host 问答/授权绑定进行中（完整任务历史和手机授权尚未验收）。
   - Host 按真实 opaque reference 接执行/device/node 审批和 select/confirm/input/editor/form；Always 先取运行时令牌并发布冻结唯一确认，同步消费后才启动 Task。重复/迟到确认、同连接重连和选项重排不迁移权限；unknown/取消ACK保持暂停且无伪提交动画。安全列表只读刷新不替代后端健康，connection-wide inbox 与会话请求分开。
   - 断线保留32项/8MiB惰性 review 副本但不保留 action reference/token；Runtime 新增 scoped SHA256 reviewKey 仅关联本地显示，实际新请求才能重新操作。问题草稿按7天/32项/256,000编码字节持久化，串行读回校验、旧编辑修订和 resolved tombstone 阻止迟写复活；保持明确false/空白/原值选项身份，后台立即flush。收据目前只在内存，持久任务journal另行推进，parity保持未完成。
