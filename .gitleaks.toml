@@ -30,3 +30,11 @@ targetRules = ["generic-api-key"]
 regexTarget = "secret"
 paths = ['''^packages/apple/Sources/ClawketRuntime/OpenClawAuthentication\.swift$''']
 regexes = ['''^Curve25519\.Signing\.PrivateKey$''']
+
+[[allowlists]]
+description = "Reviewed Swift public artifact identifier byte-count expression, not a credential value"
+condition = "AND"
+targetRules = ["generic-api-key"]
+regexTarget = "secret"
+paths = ['''^packages/apple/Sources/ClawketMedia/MediaLibrary\.swift$''']
+regexes = ['''^key\.artifactID\.utf8\.count$''']

@@ -37,7 +37,10 @@ extension RuntimeCoordinator {
             let handle = RuntimeArtifactHandle(artifactID: artifactID, name: file.name, mimeType: file.mime, size: file.size, token: token)
             entry = RuntimeArtifactEntry(handle: handle, scope: scope, sessionKey: sessionKey, remoteID: file.id, data: nil, expires: clock.now() + .seconds(120))
         } else {
-            guard connection.transportKind != .relay, artifactEntries.values.reduce(0, { $0 + ($1.data?.count ?? 0) }) <= 10 * 1_024 * 1_024 else { throw RuntimeFailure(.capacity) }
+            let retainedBytes: Int = artifactEntries.values.reduce(0) { partial, entry in
+                partial + (entry.data?.count ?? 0)
+            }
+            guard connection.transportKind != .relay, retainedBytes <= 10 * 1_024 * 1_024 else { throw RuntimeFailure(.capacity) }
             let deadline = clock.now() + .seconds(45)
             func remaining() throws -> Duration {
                 let duration = deadline - clock.now()
@@ -71,9 +74,13 @@ extension RuntimeCoordinator {
                 catch { throw RuntimeFailure(.network, retryable: true) }
             }
             try assertCurrent(scope); guard !Task.isCancelled else { throw RuntimeFailure(.superseded) }; _ = try remaining()
+            let currentRetainedBytes: Int = artifactEntries.values.reduce(0) { partial, entry in
+                partial + (entry.data?.count ?? 0)
+            }
+            let totalBytes = currentRetainedBytes + bytes.count
             guard artifactOpenings.contains(token), bytes.count <= 10 * 1_024 * 1_024,
                   expected == nil || expected == Int64(bytes.count),
-                  artifactEntries.values.reduce(0, { $0 + ($1.data?.count ?? 0) }) + bytes.count <= 20 * 1_024 * 1_024 else { throw RuntimeFailure(.invalidResponse) }
+                  totalBytes <= 20 * 1_024 * 1_024 else { throw RuntimeFailure(.invalidResponse) }
             let mime = RuntimeAttachmentProjection.mime(response["artifact"]?["mimeType"]?.stringValue ?? "") ?? "application/octet-stream"
             let rawName = response["artifact"]?["title"]?.stringValue ?? ""
             let name = validArtifactName(rawName, maximum: 200) ? rawName : "attachment." + (["image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "application/pdf": "pdf"][mime] ?? "bin")
