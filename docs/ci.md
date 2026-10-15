@@ -10,6 +10,12 @@ Owner decision 2026-10-07: newly indexed dependency advisories must not block or
 
 Before an authorized release, run `npm run security:audit` on the fixed candidate and save the current report. Review findings against the actual delivered product: Bridge package provenance/bundle externals, App bundled/native production dependencies, or deployed Worker dependencies. A development-tool finding alone is not evidence that the shipped product contains it. Record relevant fixes or the owner's accepted risk and rationale in the release evidence; do not silently treat a failed/incomplete audit as clean. The checker remains strict for report accuracy, but its exit code is not an automatic release decision. A report exception still names one advisory/package, reason and expiry with owner approval. This review never authorizes packaging, deployment or publication.
 
+## Native Apple checks
+
+`.github/workflows/native-apple.yml` independently builds and tests `packages/apple` on macOS for native package/App, native-contract, historical-fixture and workflow changes; it also supports manual dispatch. The Swift 6 package preserves iOS 16.4/macOS 13 support. Discovery must produce a nonempty list, prints the verified test scope, and failures block that workflow. Tests include deterministic socket/clock regressions and a real loopback URLSession WebSocket roundtrip; they require no maintainer credentials, live Bridge or production service. The selected runner Xcode/Swift versions are printed; this gate does not require the owner's Xcode 27 installation. Existing protected checks and `check:required` keep their current composition. Before merging a matching PR, wait for this native check as well as the protected checks.
+
+Local Swift builds/tests use the `heavy` lease, at most two compiler jobs, and one affected test file at a time. Native package tests are not phone/Relay/inference acceptance or release authorization.
+
 ## Build and checkout costs
 
 The CLI's standalone build and typecheck commands already compile Bridge Core and Runtime. Root wrappers delegate to them once. Ubuntu source-test and replay jobs need only Core's built entry; CLI tests build their own runtime dependencies, and historical replay builds its pinned Bridges independently. Relative to the previous desktop-affecting workflow, this removes twelve duplicate/unneeded TypeScript compiler invocations and two unused CLI bundle builds. Typecheck, Mobile and self-contained test jobs use shallow checkout; secret scanning, change detection and historical replay retain full history.

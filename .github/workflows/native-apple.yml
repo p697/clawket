@@ -1,0 +1,51 @@
+name: Native Apple checks
+
+on:
+  pull_request:
+    paths:
+      - packages/apple/**
+      - apps/ios/**
+      - tests/native-contract/**
+      - tests/compat/fixtures/v1/**
+      - .github/workflows/native-apple.yml
+  push:
+    branches: [main]
+    paths:
+      - packages/apple/**
+      - apps/ios/**
+      - tests/native-contract/**
+      - tests/compat/fixtures/v1/**
+      - .github/workflows/native-apple.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-apple-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  swift-package:
+    name: Native Apple package
+    runs-on: macos-15
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: packages/apple
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show selected Xcode and Swift compiler
+        run: |
+          xcodebuild -version
+          swift --version
+      - name: Discover native tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          swift test list --jobs 2 > "$RUNNER_TEMP/clawket-native-tests.txt"
+          test -s "$RUNNER_TEMP/clawket-native-tests.txt"
+          cat "$RUNNER_TEMP/clawket-native-tests.txt"
+          echo "Native test cases discovered: $(wc -l < "$RUNNER_TEMP/clawket-native-tests.txt")"
+      - name: Test native package with Swift 6 concurrency checking
+        run: swift test --jobs 2

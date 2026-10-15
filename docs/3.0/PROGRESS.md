@@ -1,5 +1,11 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-15 原生 iOS 连接基础（负责人授权原生重构，iOS 优先）。
+  - 新增 Swift 6 `ClawketTransport` package，保留 iOS 16.4 / macOS 13：真实 URLSession WebSocket、可注入时钟/Socket、8 MiB 双向帧限制、64 层/250,000 token JSON 预算、128 个并行 RPC 和有界事件流。原始 Relay 控制与后端帧分流，只有适配器验证的后端证据可进入 ready、重置退避；实现旧版 tick/pong 与三间隔下限，能力只声明已实现的 `relay.client-pong.v1`。
+  - Socket 代际、握手截止、RPC 取消/超时、迟到 Upgrade/响应和新 challenge 都有明确边界；退休先拒绝旧请求再关闭捕获 Socket，原生 send 挂起也保留取消所有权。发送结果区分本地未派发、未知与已收到响应；连接层不重放写入。屏幕及六后端适配器在后续里程碑接入，现有 Mobile/Bridge/服务实现保持。
+  - `heavy` 租约下 jobs=2，逐文件串行通过 `TransportTests.swift` 25 项（含 OpenClaw/Hermes 历史 fixture 两种报文）与 `URLSessionSocketTests.swift` 4 项（真实 loopback Upgrade/UTF-8 收发、Upgrade/receive 取消、无效 URL 三种参数）；测试发现首轮 Swift 泛型推断诊断失败，补显式 continuation 类型后通过。原生测试发现 29 项非空；完整仓库门禁与新增 macOS 原生检查交 PR CI，不代表手机/Relay/推理验收。
+  - 新增独立 `Native Apple checks`，匹配原生/fixture 改动后发现非空测试并完整运行 package；原有受保护门禁与 `check:required` 组成保持。现有 LOC 只统计 TS/TSX（167,902 源码行、132,119 测试行）；本轮另有 Swift 源码 923 行、测试 706 行，未隐藏到旧统计。未制作分发包、上传或发布。
+
 - 2026-10-15 Native iOS N0：负责人授权原生重构、iOS 优先、Android 后续，产品/交互/架构由实施代理决定。
   - 新增 `docs/native-ios/PLAN.md`、`RESEARCH.md`、`PARITY.md`：完整 Swift 核心、SwiftUI/UIKit 原生交互、保持 iOS16.4 下限，保留现有 App 直到六后端及全部现有能力通过验收。明确覆盖旧文档的共享UI/自绘导航限制，保留安全、数据、发布与工作树边界，不改版本。
   - 研究代理记录30分08秒的 Apple HIG/WWDC文字稿、官方商店图、编辑/开发者案例阅读；主代理另做当前代码与升级风险审计、正确USB测试机的 WebDriver 实测。Grok/ChatGPT/Gemini 的附件入口、多行输入与 Gemini 面板关闭后的草稿保留有实际操作证据；研究草稿均清空，未发送/上传私人文件或研究 Claude。首次误选无线可用个人设备已停止，之后每次命令校验 USB 硬件和有线 tunnel，不将错误目标算作验收。
