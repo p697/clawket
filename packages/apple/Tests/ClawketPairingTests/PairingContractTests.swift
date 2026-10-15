@@ -47,6 +47,7 @@ final class PairingContractTests: XCTestCase, @unchecked Sendable {
         XCTAssertNil(try exchange.receive("__clawket_relay_control__:{\"event\":\"relay.ready\"}"))
         XCTAssertNil(try exchange.receive(vector.secure.resultFrame.replacingOccurrences(of: vector.secure.requestID, with: String(repeating: "0", count: 32))))
         XCTAssertThrowsError(try exchange.receive(vector.secure.resultFrame.replacingOccurrences(of: vector.secure.resultProof, with: String(repeating: "0", count: 64)))) { XCTAssertEqual($0 as? PairingError, .decryptionFailed) }
+        XCTAssertThrowsError(try exchange.receive(vector.secure.resultFrame.replacingOccurrences(of: vector.secure.resultProof, with: String(repeating: "a", count: PairingLimits.responseBytes + 2)))) { XCTAssertEqual($0 as? PairingError, .decryptionFailed) }
         XCTAssertThrowsError(try exchange.receive("__clawket_relay_control__:{\"event\":\"pairing.secure.error\",\"requestId\":\"\(vector.secure.requestID)\"}"))
     }
 
@@ -76,6 +77,7 @@ final class PairingContractTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(try PairingCryptography.decodeBase64URL("AA"), Data([0]))
         XCTAssertThrowsError(try PairingCryptography.decodeBase64URL("AA", count: 32))
         XCTAssertThrowsError(try PairingCryptography.decodeHex("zz"))
+        XCTAssertThrowsError(try PairingCryptography.decodeHex(String(repeating: "a", count: PairingLimits.responseBytes + 2))) { XCTAssertEqual($0 as? PairingError, .invalidSecret) }
     }
 
     func testEveryOfficialAliasMatchesTypeScriptSourceFixture() throws {

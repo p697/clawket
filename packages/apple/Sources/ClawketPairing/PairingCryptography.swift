@@ -54,13 +54,14 @@ public enum PairingCryptography {
     }
 
     static func verifyProof(_ proof: String, message: String, codeKey: Data) -> Bool {
-        guard let bytes = try? decodeHex(proof), bytes.count == 32 else { return false }
+        guard proof.utf8.count == 64, let bytes = try? decodeHex(proof), bytes.count == 32 else { return false }
         return HMAC<SHA256>.isValidAuthenticationCode(bytes, authenticating: Data(message.utf8), using: SymmetricKey(data: codeKey))
     }
 
     public static func hex(_ data: Data) -> String { data.map { String(format: "%02x", $0) }.joined() }
     public static func decodeHex(_ value: String) throws -> Data {
-        guard value.count.isMultiple(of: 2), value.range(of: "^[a-f0-9]+$", options: .regularExpression) != nil else { throw PairingError.invalidSecret }
+        guard value.utf8.count <= PairingLimits.responseBytes, value.count.isMultiple(of: 2),
+              value.range(of: "^[a-f0-9]+$", options: .regularExpression) != nil else { throw PairingError.invalidSecret }
         let characters = Array(value.utf8)
         return try Data(stride(from: 0, to: characters.count, by: 2).map { index in
             guard let byte = UInt8(String(bytes: characters[index...index + 1], encoding: .utf8)!, radix: 16) else { throw PairingError.invalidSecret }; return byte
