@@ -19,12 +19,16 @@ final class NativeAppModel: ObservableObject {
     enum Destination: Identifiable {
         case connect, settings, connections, editPending(ConversationID, NativePendingEdit, activation: UUID)
         case deviceApproval(connectionID: String)
+        case savedHistory(UUID), previousTranscripts(NativeHistoryScope, UUID), exportConversation(NativeHistoryExportRequest)
         var id: String {
             switch self {
             case .connect: "connect"
             case .connections: "connections"
             case .settings: "settings"
             case let .deviceApproval(id): "device-approval-\(id)"
+            case let .savedHistory(id): "saved-\(id)"
+            case let .previousTranscripts(_, id): "previous-\(id)"
+            case let .exportConversation(request): "export-\(request.id)"
             case let .editPending(_, edit, _): edit.id.uuidString
             }
         }
@@ -43,6 +47,7 @@ final class NativeAppModel: ObservableObject {
     private var registry = ConnectionRegistry()
     private var vault: NativeVault?
     var cache: NativeConversationStore?
+    var historyController: NativeHistoryController?
     private var catalogCache: NativeCatalogStore?
     private var catalogCacheRevision: Int64 = 0
     private var showingCachedRoster = false
@@ -140,6 +145,7 @@ final class NativeAppModel: ObservableObject {
                 if let cache { try await media.recover(cache: cache) }
                 self.media = media
             } catch { notice = String(localized: "Some attachments could not be recovered. Your files have been kept.") }
+            setupSavedHistory(runtime: runtime)
             self.sessionManager = NativeSessionManagement(presentation: presentation, runtime: runtime,
                 context: { [weak self] in self?.sessionHostContext ?? .init(activation: UUID(), wire: UUID(), selection: UUID()) },
                 prepare: { [weak self] target in
@@ -199,6 +205,8 @@ final class NativeAppModel: ObservableObject {
             case .addConnection: self.destination = .connect
             case .account: self.destination = .settings
             case .connectionSettings: self.destination = .connections
+            case .savedHistory, .exportConversation, .previousTranscripts:
+                if case let .openDestination(_, route) = intent { openHistory(destination, route: route) }
             case .newSession:
                 if case let .openDestination(_, route?) = intent {
                     createSession(.init(connectionID: route.connectionID, agentID: route.agentID), projectID: nil)
@@ -1022,6 +1030,7 @@ final class NativeAppModel: ObservableObject {
         if document.hasMore { features[.loadEarlier] = connected ? .available : .temporarilyUnavailable(String(localized: "Reconnect to load earlier messages.")) }
         addMediaFeatures(route, features: &features)
         addVoiceFeatures(route, editable: session?.canContinue != false, features: &features)
+        addHistoryFeatures(route, features: &features)
         prepareMessageMedia(route)
         let previous = presentation.conversations[route]
         let transcript: [MessagePresentation] = document.messages.filter(NativeTranscriptPresentation.isVisible)

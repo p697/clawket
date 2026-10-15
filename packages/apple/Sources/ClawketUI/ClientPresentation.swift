@@ -82,11 +82,13 @@ public enum ClientFeature: String, Hashable, Sendable {
     case sessions, newSession, models, send, stop, voice
     case photos, camera, files, paste, skills, commands, schedule, tools, sessionFiles
     case agentSettings, memory, connectionSettings, loadEarlier, sessionManagement, modelControls
+    case savedHistory, exportConversation, previousTranscripts
 }
 
 public enum ClientDestination: String, Hashable, Sendable {
     case account, addConnection, createAgent, newSession, agentSettings, memory
     case connectionSettings, skills, commands, schedule, tools, sessionFiles
+    case savedHistory, exportConversation, previousTranscripts
 }
 
 public enum AttachmentSource: String, Hashable, Sendable {

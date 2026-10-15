@@ -5,7 +5,9 @@ import SwiftUI
 import UniformTypeIdentifiers
 import UIKit
 
-actor NativeMediaLease {
+protocol NativeShareLease: Sendable { func release() async }
+
+actor NativeMediaLease: NativeShareLease {
     let resourceID: UUID
     let library: MediaLibrary
     private var released = false
@@ -46,9 +48,9 @@ struct NativeMediaPreview: Identifiable, Sendable {
     private enum Phase { case pending, controllerCreated, handedOff, finished }
     let id = UUID()
     let url: URL
-    let lease: NativeMediaLease
+    let lease: any NativeShareLease
     private var phase = Phase.pending
-    init(url: URL, lease: NativeMediaLease) { self.url = url; self.lease = lease }
+    init(url: URL, lease: any NativeShareLease) { self.url = url; self.lease = lease }
     func controllerCreated() { if phase == .pending { phase = .controllerCreated } }
     func appeared() { if phase == .controllerCreated { phase = .handedOff } }
     func releaseIfUnpresented(controllerDismantled: Bool = false) async {
@@ -158,7 +160,7 @@ struct NativeMediaViewer: View {
     }
 }
 
-private struct NativeActivityView: UIViewControllerRepresentable {
+struct NativeActivityView: UIViewControllerRepresentable {
     let share: NativeMediaShare
     func makeUIViewController(context: Context) -> NativeActivityController {
         let controller = NativeActivityController(share: share)
@@ -175,7 +177,7 @@ private struct NativeActivityView: UIViewControllerRepresentable {
     }
 }
 
-private final class NativeActivityController: UIActivityViewController {
+final class NativeActivityController: UIActivityViewController {
     let share: NativeMediaShare
     init(share: NativeMediaShare) {
         self.share = share

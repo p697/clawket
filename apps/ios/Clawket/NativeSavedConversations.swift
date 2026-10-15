@@ -8,9 +8,14 @@ struct NativePublicTranscript: Codable, Equatable, Sendable {
         let text: String
         let timestampMs: Double?
         let attachments: [String]
+        static func == (lhs: Self, rhs: Self) -> Bool {
+            lhs.role == rhs.role && historySame(lhs.text, rhs.text) && lhs.timestampMs == rhs.timestampMs &&
+                lhs.attachments.map { Data($0.utf8) } == rhs.attachments.map { Data($0.utf8) }
+        }
     }
     let title: String
     let messages: [Message]
+    static func == (lhs: Self, rhs: Self) -> Bool { historySame(lhs.title, rhs.title) && lhs.messages == rhs.messages }
 
     var textUnits: Int { title.utf16.count + messages.reduce(0) { $0 + $1.text.utf16.count + $1.attachments.reduce(0) { $0 + $1.utf16.count } } }
     var hasFiles: Bool { messages.contains { !$0.attachments.isEmpty } }
@@ -52,11 +57,22 @@ struct NativeSavedListing: Sendable {
     let recoveredFromRollback: Bool
 }
 
-enum NativeSavedFilter: String, CaseIterable, Sendable { case all, pinned, files }
+enum NativeSavedFilter: String, CaseIterable, Hashable, Sendable { case all, pinned, files }
 
 /// Public text/name snapshots only. Full native frames, local URLs, attachment bytes and action tokens have no representation here.
 actor NativeSavedConversations {
     private struct Identity: Encodable { let scope: NativeHistoryScope; let transcript: NativePublicTranscript }
+    private struct Document: Codable, Sendable {
+        let values: [NativeSavedConversation]
+        init(_ values: [NativeSavedConversation]) { self.values = values }
+        init(from decoder: any Decoder) throws {
+            values = try decoder.singleValueContainer().decode([NativeSavedConversation].self)
+            try NativeSavedConversations.validate(values)
+        }
+        func encode(to encoder: any Encoder) throws {
+            var container = encoder.singleValueContainer(); try container.encode(values)
+        }
+    }
     private let documents: DocumentStore
     private var unavailable = false
     private var locked = false
@@ -82,6 +98,16 @@ actor NativeSavedConversations {
         let entries = try await read().0
         guard let value = entries.first(where: { $0.id == id }) else { throw NativeHistoryFailure.missing }
         return value
+    }
+
+    func conversations(_ ids: [String]) async throws -> [NativeSavedConversation] {
+        await acquire(); defer { release() }
+        guard ids.count <= 100, Set(ids).count == ids.count else { throw NativeHistoryFailure.invalid }
+        let values = try await read().0
+        return try ids.map { id in
+            guard let value = values.first(where: { $0.id == id }) else { throw NativeHistoryFailure.changed }
+            return value
+        }
     }
 
     /// Search is explicit and remains entitlement-gated by the host. Ordinary list/open never makes a network request.
@@ -131,16 +157,16 @@ actor NativeSavedConversations {
     }
 
     private func read() async throws -> ([NativeSavedConversation], Bool) {
+        try Task.checkCancellation()
         guard !unavailable else { throw NativeHistoryFailure.commitUncertain }
-        guard let stored = try await documents.read([NativeSavedConversation].self, key: "conversation-archives.v1") else { return ([], false) }
-        try Self.validate(stored.value)
-        return (stored.value, stored.recoveredFromRollback)
+        guard let stored = try await documents.read(Document.self, key: "conversation-archives.v1") else { return ([], false) }
+        return (stored.value.values, stored.recoveredFromRollback)
     }
 
     private func write(_ values: [NativeSavedConversation]) async throws {
         try Self.validate(values)
         try Task.checkCancellation()
-        do { try await documents.write(values, key: "conversation-archives.v1") }
+        do { try await documents.write(Document(values), key: "conversation-archives.v1") }
         catch { unavailable = true; throw NativeHistoryFailure.commitUncertain }
     }
 

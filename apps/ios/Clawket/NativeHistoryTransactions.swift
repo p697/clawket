@@ -14,7 +14,7 @@ extension NativeConversationStore {
         let key = try scopedKey(scope.connectionID, scope.agentID, scope.sessionID)
         let raw = try await historyCurrentBytes(key)
         var current = try raw.map(decodeHistoryConversation) ?? NativeConversation()
-        if current.historyEpoch == epoch, current.physicalSessionID == physicalSessionID,
+        if current.historyEpoch == epoch, historySame(current.physicalSessionID, physicalSessionID),
            current.revision == expectedRevision || current.revision == expectedRevision + 1 { return current }
         guard current.revision == expectedRevision, current.messages.isEmpty, current.physicalSessionID == nil,
               current.historyEpoch == nil || current.historyEpoch == epoch,
@@ -54,7 +54,9 @@ extension NativeConversationStore {
         let current = try decodeHistoryConversation(original)
         if current.historyEpoch == toEpoch {
             let matches = try historyManifests().filter { $0.scope == scope && $0.toEpoch == toEpoch && $0.fromEpoch == fromEpoch && $0.sourceRevision == expectedRevision }
-            guard matches.count == 1, matches[0].replacementSHA256 == historyHash(original) else { throw NativeHistoryFailure.changed }
+            guard matches.count == 1, matches[0].replacementSHA256 == historyHash(original),
+                  historySame(current.physicalSessionID, physicalSessionID), Set(current.messages.map(\.id)) == retainingMessageIDs,
+                  expectedCurrentHash == nil || expectedCurrentHash == matches[0].sha256 else { throw NativeHistoryFailure.changed }
             _ = try readPhysicalBody(matches[0]); return .init(archive: matches[0], current: current)
         }
         guard current.revision == expectedRevision, current.historyEpoch == fromEpoch,
@@ -69,6 +71,7 @@ extension NativeConversationStore {
         let replacement = try historyEncode(next)
         guard replacement.count <= NativeHistoryLimits.recordBytes else { throw NativeHistoryFailure.full }
         let inventory = try historyFiles.inventory(), manifests = try historyManifests()
+        guard !manifests.contains(where: { $0.scope == scope && $0.toEpoch == toEpoch }) else { throw NativeHistoryFailure.changed }
         guard manifests.count < NativeHistoryLimits.physicalRecords else { throw NativeHistoryFailure.full }
         let rollbackBytes = try await values.read(key + ".rollback")?.count ?? 0
         // Count actual archives/staging plus this scope's existing current/rollback and worst atomic replacements.
@@ -103,6 +106,7 @@ extension NativeConversationStore {
         await acquireMediaSnapshot(); defer { releaseMediaSnapshot() }
         try await recoverHistory()
         if let scope { try scope.validate() }
+        try Task.checkCancellation()
         return try historyManifests().filter { scope == nil || $0.scope == scope }.sorted {
             $0.savedAt == $1.savedAt ? $0.id.uuidString < $1.id.uuidString : $0.savedAt > $1.savedAt
         }
@@ -111,6 +115,7 @@ extension NativeConversationStore {
     func physicalArchive(_ id: UUID) async throws -> (NativePhysicalArchive, NativeConversation) {
         await acquireMediaSnapshot(); defer { releaseMediaSnapshot() }
         try await recoverHistory()
+        try Task.checkCancellation()
         guard let metadata = try historyManifests().first(where: { $0.id == id }) else { throw NativeHistoryFailure.missing }
         return (metadata, try decodeHistoryConversation(readPhysicalBody(metadata)))
     }
@@ -143,8 +148,8 @@ extension NativeConversationStore {
         if actual == archive.sha256 {
             let old = try decodeHistoryConversation(raw)
             guard old.revision == archive.sourceRevision, old.historyEpoch == archive.fromEpoch,
-                  old.physicalSessionID == archive.physicalSessionID,
-                  old.mediaResourceIDs == Set(archive.resourceIDs), old.draft == next.draft,
+                  historySame(old.physicalSessionID, archive.physicalSessionID),
+                  old.mediaResourceIDs == Set(archive.resourceIDs), historySame(old.draft, next.draft),
                   old.draftResourceIDs == next.draftResourceIDs else { throw NativeHistoryFailure.invalid }
             let retainedIDs = Set(next.messages.map(\.id))
             guard old.messages.filter({ retainedIDs.contains($0.id) }).count == next.messages.count,
@@ -211,7 +216,7 @@ extension NativeConversationStore {
               raw.count == metadata.byteCount, historyHash(raw) == metadata.sha256 else { throw NativeHistoryFailure.invalid }
         let value = try decodeHistoryConversation(raw)
         guard value.revision == metadata.sourceRevision, value.historyEpoch == metadata.fromEpoch,
-              value.physicalSessionID == metadata.physicalSessionID, value.mediaResourceIDs == Set(metadata.resourceIDs) else { throw NativeHistoryFailure.invalid }
+              historySame(value.physicalSessionID, metadata.physicalSessionID), value.mediaResourceIDs == Set(metadata.resourceIDs) else { throw NativeHistoryFailure.invalid }
         return raw
     }
 

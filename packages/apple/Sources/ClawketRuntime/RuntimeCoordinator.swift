@@ -4,6 +4,7 @@ import ClawketTransport
 
 /// One active backend, one transport reader, and one retry owner. Writes are never replayed.
 public actor RuntimeCoordinator {
+    var historyExportPending = 0
     public nonisolated let events: AsyncThrowingStream<RuntimeEvent, any Error>
     let eventContinuation: AsyncThrowingStream<RuntimeEvent, any Error>.Continuation
     let credentials: any DeviceCredentialProvider

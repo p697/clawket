@@ -147,7 +147,7 @@ actor NativeConversationStore {
         guard conversation.revision >= latestRevision[key, default: 0] else { return }
         if let previous = try await documents.read(NativeConversation.self, key: key)?.value {
             guard previous.historyEpoch == conversation.historyEpoch,
-                  previous.physicalSessionID == conversation.physicalSessionID else { throw NativeHistoryFailure.changed }
+                  historySame(previous.physicalSessionID, conversation.physicalSessionID) else { throw NativeHistoryFailure.changed }
         }
         latestRevision[key] = conversation.revision
         try await documents.write(conversation, key: key)

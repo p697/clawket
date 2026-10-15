@@ -13,6 +13,12 @@ struct NativeHistoryScope: Codable, Hashable, Sendable {
     }
     init(_ route: ConversationID) { self.init(connectionID: route.connectionID, agentID: route.agentID, sessionID: route.sessionID) }
     var route: ConversationID { .init(connectionID: connectionID, agentID: agentID, sessionID: sessionID) }
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        historySame(lhs.connectionID, rhs.connectionID) && historySame(lhs.agentID, rhs.agentID) && historySame(lhs.sessionID, rhs.sessionID)
+    }
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(Data(connectionID.utf8)); hasher.combine(Data(agentID.utf8)); hasher.combine(Data(sessionID.utf8))
+    }
     func validate() throws {
         guard !connectionID.isEmpty, connectionID.utf16.count <= 1_000,
               !agentID.isEmpty, agentID.utf16.count <= 1_000,
@@ -72,6 +78,13 @@ enum NativeHistoryLimits {
 }
 
 func historyHash(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
+func historySame(_ lhs: String?, _ rhs: String?) -> Bool {
+    switch (lhs, rhs) {
+    case (nil, nil): true
+    case let (lhs?, rhs?): Data(lhs.utf8) == Data(rhs.utf8)
+    default: false
+    }
+}
 func historyDigest(_ value: String) -> Bool {
     value.utf8.count == 64 && value.utf8.allSatisfy { (48...57).contains($0) || (97...102).contains($0) }
 }

@@ -170,6 +170,14 @@ public struct NativeClientView: View {
                 }
             }
             ToolbarItem(placement: .navigationBarTrailing) {
+                if model.availability(.savedHistory).isVisible {
+                    Button { onIntent(.openDestination(.savedHistory, conversation: nil)) } label: {
+                        Image(systemName: "books.vertical").frame(minWidth: 44, minHeight: 44)
+                    }.accessibilityLabel("Saved conversations")
+                        .disabled(!model.availability(.savedHistory).isEnabled)
+                }
+            }
+            ToolbarItem(placement: .navigationBarTrailing) {
                 if model.availability(.refresh).isVisible {
                     Button { onIntent(.refresh) } label: {
                         Label("Refresh", systemImage: "arrow.clockwise")
@@ -456,6 +464,9 @@ private struct NativeConversationView: View {
                         destinationButton("Scheduled tasks", symbol: "calendar", feature: .schedule, destination: .schedule)
                         destinationButton("Files", symbol: "folder", feature: .sessionFiles, destination: .sessionFiles)
                         destinationButton("Connection settings", symbol: "link", feature: .connectionSettings, destination: .connectionSettings)
+                        destinationButton("Export conversation", symbol: "square.and.arrow.up", feature: .exportConversation, destination: .exportConversation)
+                        destinationButton("Saved conversations", symbol: "books.vertical", feature: .savedHistory, destination: .savedHistory)
+                        destinationButton("Previous transcripts", symbol: "clock.arrow.circlepath", feature: .previousTranscripts, destination: .previousTranscripts)
                         if conversation.availability(.loadEarlier).isVisible {
                             Button {
                                 onIntent(.loadEarlier(conversation.id))
@@ -481,7 +492,8 @@ private struct NativeConversationView: View {
     }
 
     private var hasMoreActions: Bool {
-        [ClientFeature.agentSettings, .memory, .skills, .schedule, .sessionFiles, .connectionSettings, .loadEarlier, .sessionManagement]
+        [ClientFeature.agentSettings, .memory, .skills, .schedule, .sessionFiles, .connectionSettings, .loadEarlier, .sessionManagement,
+         .savedHistory, .exportConversation, .previousTranscripts]
             .contains { conversation.availability($0).isVisible }
     }
 

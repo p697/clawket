@@ -2,7 +2,7 @@ import ClawketRuntime
 import ClawketTransport
 import Foundation
 
-enum NativeHistoryExportFailure: Error { case changed, running, tooLarge, timedOut }
+enum NativeHistoryExportFailure: Error, Equatable { case changed, running, tooLarge, timedOut }
 
 struct NativeHistoryExportLoader {
     typealias Read = @Sendable (String, Int, String?) async throws -> RuntimeHistory
@@ -14,15 +14,28 @@ struct NativeHistoryExportLoader {
     }
 
     /// Never label an incomplete or changing history window as a complete portable snapshot.
-    static func load(key: String, title: String, read: Read) async throws -> NativePublicTranscript {
+    static func load(key: String, title: String, read: @escaping Read) async throws -> NativePublicTranscript {
+        try await withThrowingTaskGroup(of: NativePublicTranscript.self) { group in
+            group.addTask { try await pages(key: key, title: title, read: read) }
+            group.addTask {
+                try await Task.sleep(for: .seconds(90))
+                throw NativeHistoryExportFailure.timedOut
+            }
+            defer { group.cancelAll() }
+            guard let result = try await group.next() else { throw NativeHistoryExportFailure.changed }
+            return result
+        }
+    }
+
+    private static func pages(key: String, title: String, read: Read) async throws -> NativePublicTranscript {
         let deadline = ContinuousClock.now.advanced(by: .seconds(90))
-        var cursor: String?, cursors: Set<String> = [], seen: [String: String] = [:]
+        var cursor: String?, cursors: Set<Data> = [], seen: [Data: String] = [:]
         var messages: [NativePublicTranscript.Message] = [], physicalID: String?, firstHash = "", textUnits = 0, limit = 100
         for page in 0..<100 {
             try check(deadline)
             let snapshot = try await read(key, limit, cursor)
             try check(deadline)
-            guard snapshot.key == key, page == 0 || snapshot.sessionID == physicalID else { throw NativeHistoryExportFailure.changed }
+            guard historySame(snapshot.key, key), page == 0 || historySame(snapshot.sessionID, physicalID) else { throw NativeHistoryExportFailure.changed }
             guard !snapshot.hasActiveRun else { throw NativeHistoryExportFailure.running }
             if page == 0 { physicalID = snapshot.sessionID; firstHash = try fingerprint(snapshot.messages) }
             let growingLimit = page > 0 && cursor == nil
@@ -30,15 +43,16 @@ struct NativeHistoryExportLoader {
             var additions: [NativePublicTranscript.Message] = []
             for message in snapshot.messages {
                 let signature = try fingerprint([message])
-                if let prior = seen[message.id] {
+                let identity = Data(message.id.utf8)
+                if let prior = seen[identity] {
                     // Renderer fallbacks and ambiguous supplied IDs never become cross-page merge authority.
                     guard message.idSource == .provided, prior == signature else { throw NativeHistoryExportFailure.changed }
                     continue
                 }
-                seen[message.id] = signature
+                seen[identity] = signature
                 textUnits += message.text.utf16.count + message.attachments.reduce(0) { $0 + ($1.name?.utf16.count ?? 0) }
                 guard seen.count <= 10_000, textUnits <= 2_000_000 else { throw NativeHistoryExportFailure.tooLarge }
-                if let role = NativePublicTranscript.Role(rawValue: message.role.rawValue), message.raw["tool"] == nil {
+                if let role = NativePublicTranscript.Role(rawValue: message.role.rawValue), message.raw["tool"] == nil || message.raw["tool"] == .null {
                     additions.append(.init(role: role, text: role == .user ? NativeHistoryUserText.sanitize(message.text) : message.text,
                         timestampMs: message.timestampMs.flatMap { $0 > 0 ? Double($0) : nil },
                         attachments: message.attachments.map { $0.name?.isEmpty == false ? $0.name! : $0.mimeType }))
@@ -46,7 +60,7 @@ struct NativeHistoryExportLoader {
             }
             messages = additions + messages
             if let next = snapshot.nextCursor {
-                guard cursors.insert(next).inserted else { throw NativeHistoryExportFailure.changed }
+                guard cursors.insert(Data(next.utf8)).inserted else { throw NativeHistoryExportFailure.changed }
                 cursor = next; continue
             }
             if snapshot.hasMore == true || snapshot.pagination == .limit && snapshot.hasMore == nil && snapshot.messages.count >= limit {
@@ -55,7 +69,7 @@ struct NativeHistoryExportLoader {
             }
             let latest = try await read(key, 100, nil)
             try check(deadline)
-            guard latest.key == key, latest.sessionID == physicalID, !latest.hasActiveRun,
+            guard historySame(latest.key, key), historySame(latest.sessionID, physicalID), !latest.hasActiveRun,
                   try fingerprint(latest.messages) == firstHash else { throw NativeHistoryExportFailure.changed }
             let result = NativePublicTranscript(title: historyUTF16Prefix(title.trimmingCharacters(in: .whitespacesAndNewlines), maximum: 200), messages: messages)
             try result.validate(); return result
@@ -75,17 +89,25 @@ struct NativeHistoryExportLoader {
 enum NativeHistoryExportFormat: String, CaseIterable, Sendable { case markdown, json }
 
 enum NativeHistoryExportFormatter {
-    private struct Portable: Encodable { var version = 1; let title: String; let messages: [NativePublicTranscript.Message] }
+    private struct Portable: Encodable {
+        var version = 1
+        let title: String
+        let messages: [NativePublicTranscript.Message]
+        let loadedOnDeviceOnly: Bool?
+    }
     private struct Bulk: Encodable {
         var version = 1
         struct Entry: Encodable { let savedAt: Double; let pinned: Bool; let title: String; let messages: [NativePublicTranscript.Message] }
         let archives: [Entry]
     }
     static func format(_ value: NativePublicTranscript, format: NativeHistoryExportFormat,
-                       userLabel: String, assistantLabel: String) throws -> Data {
+                       userLabel: String, assistantLabel: String, loadedOnlyLabel: String? = nil) throws -> Data {
         try value.validate()
         guard value.textUnits <= 2_000_000 else { throw NativeHistoryExportFailure.tooLarge }
-        if format == .json { return try bounded(historyEncode(Portable(title: value.title, messages: value.messages))) }
+        if format == .json {
+            return try bounded(historyEncode(Portable(title: value.title, messages: value.messages,
+                loadedOnDeviceOnly: loadedOnlyLabel == nil ? nil : true)))
+        }
         let title = value.title.replacingOccurrences(of: "\r", with: " ").replacingOccurrences(of: "\n", with: " ")
         let clock = ISO8601DateFormatter(); clock.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         let lines = value.messages.map { message in
@@ -96,7 +118,17 @@ enum NativeHistoryExportFormatter {
             } else { time = "" }
             return "## " + name + time + "\n\n" + message.text + (message.attachments.isEmpty ? "" : "\n\n" + message.attachments.joined(separator: "\n"))
         }
-        return try bounded(Data(("# " + title + "\n\n" + lines.joined(separator: "\n\n---\n\n") + "\n").utf8))
+        let warning = loadedOnlyLabel.map { $0 + "\n\n" } ?? ""
+        return try bounded(Data(("# " + title + "\n\n" + warning + lines.joined(separator: "\n\n---\n\n") + "\n").utf8))
+    }
+    static func localSnapshot(_ value: NativeConversation, title: String) throws -> NativePublicTranscript {
+        let messages = value.messages.compactMap { message -> NativePublicTranscript.Message? in
+            guard !message.isWork, let role = NativePublicTranscript.Role(rawValue: message.role.rawValue) else { return nil }
+            return .init(role: role, text: role == .user ? NativeHistoryUserText.sanitize(message.text) : message.text,
+                timestampMs: message.timestampMs.flatMap { $0 > 0 ? Double($0) : nil }, attachments: message.media.map(\.name))
+        }
+        let result = NativePublicTranscript(title: historyUTF16Prefix(title, maximum: 200), messages: messages)
+        try result.validate(); return result
     }
     static func bulk(_ values: [NativeSavedConversation]) throws -> Data {
         guard values.count <= 100 else { throw NativeHistoryExportFailure.tooLarge }
