@@ -85,11 +85,13 @@ enum MessageAttributionWire {
 
     private static func localHost(_ raw: String) -> Bool {
         let host = (raw.removingPercentEncoding ?? raw).trimmingCharacters(in: CharacterSet(charactersIn: "."))
-        if host.contains("%") { return true }
+        if host.contains("%") || !host.contains(".") { return true }
         if host.hasPrefix("localhost") || host.contains(":") || host.contains("[") || host.hasSuffix(".local") { return true }
         if ["127.", "0.", "10.", "192.168.", "169.254."].contains(where: host.hasPrefix) { return true }
         let pieces = host.split(separator: ".", omittingEmptySubsequences: false)
         if pieces.count > 1, pieces[0] == "172", let second = Int(pieces[1]), (16...31).contains(second) { return true }
+        if pieces.count > 1, pieces[0] == "100", let second = Int(pieces[1]), (64...127).contains(second) { return true }
+        if let first = pieces.first.flatMap({ Int($0) }), first >= 224 { return true }
         // WHATWG normalizes legacy integer/octal/hex IPv4 forms. Foundation may
         // retain their spelling, so ambiguous numeric hosts must not bypass the guard.
         if pieces.contains(where: { $0.lowercased().hasPrefix("0x") }) { return true }

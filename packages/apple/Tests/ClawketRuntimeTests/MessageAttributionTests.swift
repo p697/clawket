@@ -89,7 +89,8 @@ struct MessageAttributionTests {
         "https://cdn.example.com/a?signature=value", "https://cdn.example.com/a#fragment",
         "https://localhost/a", "https://127.0.0.1/a", "https://10.1.2.3/a", "https://192.168.1.2/a",
         "https://169.254.0.1/a", "https://172.16.0.1/a", "https://host.local/a", "https://[::1]/a",
-        "https://2130706433/a", "https://0x7f.1/a", "https://0177.0.0.1/a", "https://127.1/a", "https://%31%32%37.0.0.1/a"])
+        "https://2130706433/a", "https://0x7f.1/a", "https://0177.0.0.1/a", "https://127.1/a", "https://%31%32%37.0.0.1/a",
+        "https://./a", "https://profile/a", "https://100.64.0.1/a", "https://224.0.0.1/a"])
     func credentialAndLocalAvatarURLsNeverLeaveProjection(_ url: String) {
         #expect(MessageAttributionWire.avatar(.string(url)) == nil)
     }
