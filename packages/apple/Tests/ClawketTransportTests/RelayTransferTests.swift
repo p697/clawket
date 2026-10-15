@@ -82,8 +82,10 @@ struct RelayTransferTests {
         await connection.disconnect()
     }
 
-    @Test func incomingCompletionGrantsOneResponseWindowWithoutManufacturingHealth() async throws {
+    @Test(arguments: [4, 6])
+    func incomingCompletionGrantsOneResponseWindowWithoutManufacturingHealth(_ delay: Int) async throws {
         let (connection, peer, clock, generation) = try await readyRelay()
+        await peer.configure(echoPings: true)
         let task = Task { try await connection.request(method: "health", timeout: .seconds(5)) }
         try await relayEventually { await peer.requests.count == 1 }
         let frame = try FrameCodec.encode(.object(["type": .string("event"), "event": .string("update"),
@@ -93,11 +95,38 @@ struct RelayTransferTests {
         clock.advance(by: .seconds(30), fireTimers: false)
         await peer.pushRaw(frame)
         try await relayEventually { await connection.current?.liveness.transfer.incomingBytes == nil }
+        try await relayEventually { await connection.current?.liveness.transfer.hasWindow == false }
         #expect(await connection.transferGrace(generation: generation) == .zero)
         #expect(await connection.pendingRequestCount == 1)
-        clock.advance(by: .seconds(4), fireTimers: false)
+        clock.advance(by: .seconds(delay), fireTimers: false)
         try await peer.push(relayResponse(peer.requests[0], payload: .object(["ok": .bool(true)])))
-        #expect(try await task.value["ok"] == .bool(true))
+        if delay == 4 { #expect(try await task.value["ok"] == .bool(true)) }
+        else {
+            let error = await relayFailure(task)
+            #expect(error.code == .timeout)
+            #expect(error.delivery == .uncertain)
+        }
+        #expect(await connection.state == .ready)
+        await connection.disconnect()
+    }
+
+    @Test func uploadConfirmationStartsResponseWindowBeforeDelayedTimerRuns() async throws {
+        let (connection, peer, clock, generation) = try await readyRelay()
+        let health = Task { try await connection.request(method: "health", timeout: .seconds(5)) }
+        try await relayEventually { await peer.requests.count == 1 }
+        try await connection.sendBackendFrame(.object(["type": .string("event"),
+            "text": .string(String(repeating: "a", count: 200_000))]), generation: generation)
+        try await relayEventually { await peer.pings.count == 1 }
+        let payload = try #require(await peer.pings.first?["payload"])
+        clock.advance(by: .seconds(30), fireTimers: false)
+        try await peer.pushRaw(relayControl("relay.client-pong", payload))
+        try await relayEventually { await connection.current?.liveness.transfer.hasWindow == false }
+        #expect(await connection.pendingRequestCount == 1)
+        clock.advance(by: .seconds(6), fireTimers: false)
+        try await peer.push(relayResponse(peer.requests[0], payload: .object(["ok": .bool(true)])))
+        let error = await relayFailure(health)
+        #expect(error.code == .timeout)
+        #expect(error.delivery == .uncertain)
         #expect(await connection.state == .ready)
         await connection.disconnect()
     }

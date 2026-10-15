@@ -24,6 +24,8 @@ Background pauses nonce checks and retires their pending authority, while the so
 
 RPC and backend handshake waits retain their ordinary deadlines unless a known current transfer protects them. Their absolute cap is the greater of the existing timeout and ninety seconds from that wait's start. Completing protection allows one ordinary response window within that cap; later traffic cannot restart it. The existing 190-second model-switch bound stays 190 seconds. A real five-second backend health probe uses this same RPC policy, without treating Relay echoes as health.
 
+Observe waits immediately before and after protection ends. This fixes the response window at that boundary even when a timer has been suspended; the first later business frame must not start another ordinary window.
+
 WebSocket Upgrade retains its ordinary open timeout. Bootstrap control waits retain their separate absolute twelve seconds, matching Mobile's `requestRelayControl`; restricted pairing keeps its independent fifteen-second whole-exchange deadline. Neither gains an unrelated transfer timeout extension.
 
 ## Sources and acceptance

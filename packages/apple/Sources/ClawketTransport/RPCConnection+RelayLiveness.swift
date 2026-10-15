@@ -61,13 +61,17 @@ extension RPCConnection {
         guard let token, current?.generation == generation else { return }
         observeTransferDeadlines(generation)
         current?.liveness.transfer.finishOutgoing(token, accepted: accepted)
+        observeTransferDeadlines(generation)
         refreshTransferPing(generation)
     }
 
     func completeIncomingTransfer(bytes: Int, generation: ConnectionGeneration) {
         observeTransferDeadlines(generation)
         guard current?.generation == generation else { return }
-        if current?.liveness.transfer.completeIncoming(bytes: bytes) == true { refreshTransferPing(generation) }
+        if current?.liveness.transfer.completeIncoming(bytes: bytes) == true {
+            observeTransferDeadlines(generation)
+            refreshTransferPing(generation)
+        }
     }
 
     func refreshTransferPing(_ generation: ConnectionGeneration) {
@@ -200,6 +204,7 @@ extension RPCConnection {
         observeTransferDeadlines(generation)
         guard current?.generation == generation else { return }
         let confirmed = current?.liveness.transfer.confirmProbe(generation: pending.transferGeneration, at: now) == true
+        observeTransferDeadlines(generation)
         current?.liveness.pause()
         if confirmed {
             current?.lastTick = now // Transport traffic only; never backend ready/backoff.
