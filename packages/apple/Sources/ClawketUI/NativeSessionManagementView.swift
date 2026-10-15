@@ -87,7 +87,7 @@ private struct NativeSessionRenameEditor: View {
                     .onSubmit { save() }
             }
             if let error = current?.error { Section { Text(verbatim: error).foregroundStyle(.secondary) } }
-            if current == nil || current?.phase == .unavailable {
+            if current == nil {
                 Text("This conversation is no longer available.").foregroundStyle(.secondary)
             }
         }
