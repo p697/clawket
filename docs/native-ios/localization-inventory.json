@@ -58,13 +58,6 @@
       "mobileTerm": "common.Account settings"
     },
     {
-      "key": "Adaptive",
-      "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:482"
-      ],
-      "mobileTerm": "chat.thinking_adaptive"
-    },
-    {
       "key": "Add",
       "sources": [
         "packages/apple/Sources/ClawketUI/NativeClientView.swift:197"
@@ -147,14 +140,6 @@
         "packages/apple/Sources/ClawketUI/ClientPresentation.swift:588"
       ],
       "mobileTerm": "settings.Agents"
-    },
-    {
-      "key": "All models",
-      "sources": [
-        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:230",
-        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:99"
-      ],
-      "mobileTerm": "chat.All models"
     },
     {
       "key": "All projects",
@@ -387,15 +372,6 @@
       "mobileTerm": null
     },
     {
-      "key": "Cannot save more audio. Free up device storage or remove a saved recording.",
-      "sources": [
-        "apps/ios/Clawket/NativeAppVoice.swift:121",
-        "apps/ios/Clawket/NativeAppVoice.swift:187",
-        "apps/ios/Clawket/NativeAppVoice.swift:26"
-      ],
-      "mobileTerm": "chat.Cannot save more audio. Free up device storage or remove a saved recording."
-    },
-    {
       "key": "Change confirmed. Refresh conversations to see the latest state.",
       "sources": [
         "apps/ios/Clawket/NativeSessionManagement.swift:144",
@@ -447,14 +423,6 @@
       "mobileTerm": null
     },
     {
-      "key": "Choose permissions again before sending.",
-      "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:937",
-        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:174"
-      ],
-      "mobileTerm": "chat.Choose permissions again before sending."
-    },
-    {
       "key": "Choose smaller attachments before sending.",
       "sources": [
         "apps/ios/Clawket/NativeAppMedia.swift:474"
@@ -496,20 +464,6 @@
         "packages/apple/Sources/ClawketUI/NativeWorkInspector.swift:298"
       ],
       "mobileTerm": "chat.Completed"
-    },
-    {
-      "key": "Computer settings",
-      "sources": [
-        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:175"
-      ],
-      "mobileTerm": "chat.Computer settings"
-    },
-    {
-      "key": "Confirm",
-      "sources": [
-        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:263"
-      ],
-      "mobileTerm": "common.Confirm"
     },
     {
       "key": "Connect",
@@ -749,31 +703,9 @@
       "mobileTerm": null
     },
     {
-      "key": "Default",
-      "sources": [
-        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:244"
-      ],
-      "mobileTerm": "chat.Default"
-    },
-    {
-      "key": "Delete",
-      "sources": [
-        "apps/ios/Clawket/NativeVoiceSheet.swift:49",
-        "apps/ios/Clawket/NativeVoiceSheet.swift:65"
-      ],
-      "mobileTerm": "chat.Delete"
-    },
-    {
       "key": "Delete conversation",
       "sources": [
         "packages/apple/Sources/ClawketUI/NativeSessionManagementView.swift:146"
-      ],
-      "mobileTerm": null
-    },
-    {
-      "key": "Delete recording?",
-      "sources": [
-        "apps/ios/Clawket/NativeVoiceSheet.swift:64"
       ],
       "mobileTerm": null
     },
@@ -956,28 +888,11 @@
       "mobileTerm": "chat.Expired"
     },
     {
-      "key": "Extra High",
-      "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:479"
-      ],
-      "mobileTerm": "chat.thinking_xhigh"
-    },
-    {
       "key": "Failed",
       "sources": [
         "packages/apple/Sources/ClawketUI/NativeWorkInspector.swift:299"
       ],
       "mobileTerm": "chat.Failed"
-    },
-    {
-      "key": "Fast mode",
-      "sources": [
-        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:149",
-        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:52",
-        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:55",
-        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:59"
-      ],
-      "mobileTerm": "chat.Fast mode"
     },
     {
       "key": "Favorite",
@@ -1000,20 +915,6 @@
         "packages/apple/Sources/ClawketUI/NativeWorkInspector.swift:259"
       ],
       "mobileTerm": "chat.Finished"
-    },
-    {
-      "key": "Full access",
-      "sources": [
-        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:282"
-      ],
-      "mobileTerm": "chat.Full access"
-    },
-    {
-      "key": "High",
-      "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:478"
-      ],
-      "mobileTerm": "chat.thinking_high"
     },
     {
       "key": "Image saved.",
@@ -1042,13 +943,6 @@
         "packages/apple/Sources/ClawketUI/NativeClientView.swift:392"
       ],
       "mobileTerm": null
-    },
-    {
-      "key": "Listening…",
-      "sources": [
-        "apps/ios/Clawket/NativeAppVoice.swift:92"
-      ],
-      "mobileTerm": "chat.Listening…"
     },
     {
       "key": "Load earlier messages",
@@ -1093,14 +987,6 @@
       "mobileTerm": null
     },
     {
-      "key": "Loading model settings…",
-      "sources": [
-        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:25",
-        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:70"
-      ],
-      "mobileTerm": null
-    },
-    {
       "key": "Loading work details…",
       "sources": [
         "packages/apple/Sources/ClawketUI/NativeWorkInspector.swift:142"
@@ -1115,32 +1001,11 @@
       "mobileTerm": "config.Local model"
     },
     {
-      "key": "Low",
-      "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:476"
-      ],
-      "mobileTerm": "chat.thinking_low"
-    },
-    {
       "key": "Manage conversation",
       "sources": [
         "packages/apple/Sources/ClawketUI/NativeClientView.swift:443"
       ],
       "mobileTerm": null
-    },
-    {
-      "key": "Max",
-      "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:480"
-      ],
-      "mobileTerm": null
-    },
-    {
-      "key": "Medium",
-      "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:477"
-      ],
-      "mobileTerm": "chat.thinking_medium"
     },
     {
       "key": "Memory",
@@ -1167,41 +1032,12 @@
       "mobileTerm": null
     },
     {
-      "key": "Microphone access is required to transcribe speech.",
-      "sources": [
-        "apps/ios/Clawket/NativeAppVoice.swift:185"
-      ],
-      "mobileTerm": "chat.Microphone access is required to transcribe speech."
-    },
-    {
-      "key": "Minimal",
-      "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:475"
-      ],
-      "mobileTerm": "chat.thinking_minimal"
-    },
-    {
       "key": "Model",
       "sources": [
         "packages/apple/Sources/ClawketUI/ClientSheets.swift:252",
         "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:95"
       ],
       "mobileTerm": "chat.Model"
-    },
-    {
-      "key": "Model settings",
-      "sources": [
-        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:73"
-      ],
-      "mobileTerm": "chat.Model settings"
-    },
-    {
-      "key": "Model settings could not be loaded. Try again.",
-      "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:310",
-        "apps/ios/Clawket/NativeModelControls.swift:335"
-      ],
-      "mobileTerm": null
     },
     {
       "key": "Model: %@",
@@ -1303,13 +1139,6 @@
       "mobileTerm": null
     },
     {
-      "key": "No speech detected. Please try again.",
-      "sources": [
-        "apps/ios/Clawket/NativeAppVoice.swift:190"
-      ],
-      "mobileTerm": "chat.No speech detected. Please try again."
-    },
-    {
       "key": "No steps yet",
       "sources": [
         "packages/apple/Sources/ClawketUI/NativeWorkInspector.swift:82",
@@ -1338,21 +1167,6 @@
         "apps/ios/Clawket/NativeMediaViewer.swift:106"
       ],
       "mobileTerm": "common.OK"
-    },
-    {
-      "key": "Off",
-      "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:474",
-        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:141"
-      ],
-      "mobileTerm": "chat.thinking_off"
-    },
-    {
-      "key": "On",
-      "sources": [
-        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:141"
-      ],
-      "mobileTerm": null
     },
     {
       "key": "Only part of this content is available.",
@@ -1441,20 +1255,6 @@
       "mobileTerm": null
     },
     {
-      "key": "Permissions",
-      "sources": [
-        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:172"
-      ],
-      "mobileTerm": "config.Permissions"
-    },
-    {
-      "key": "Permissions could not be prepared. Refresh settings and try again.",
-      "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:190"
-      ],
-      "mobileTerm": null
-    },
-    {
       "key": "Photos",
       "sources": [
         "packages/apple/Sources/ClawketUI/NativeComposer.swift:120"
@@ -1511,20 +1311,6 @@
         "packages/apple/Sources/ClawketUI/MessageContentView.swift:345"
       ],
       "mobileTerm": "chat.Queued"
-    },
-    {
-      "key": "Read files. Ask before making changes.",
-      "sources": [
-        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:287"
-      ],
-      "mobileTerm": "chat.Read files. Ask before making changes."
-    },
-    {
-      "key": "Read only",
-      "sources": [
-        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:280"
-      ],
-      "mobileTerm": "chat.Read only"
     },
     {
       "key": "Ready for review",
@@ -1585,14 +1371,6 @@
       "mobileTerm": null
     },
     {
-      "key": "Reconnect to review model settings.",
-      "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:951",
-        "apps/ios/Clawket/NativeModelControls.swift:77"
-      ],
-      "mobileTerm": null
-    },
-    {
       "key": "Reconnect to send. Your draft is saved.",
       "sources": [
         "apps/ios/Clawket/NativeAppModel.swift:929"
@@ -1619,13 +1397,6 @@
         "apps/ios/Clawket/NativeAppModel.swift:1185"
       ],
       "mobileTerm": "common.Reconnecting…"
-    },
-    {
-      "key": "Recording saved locally · Transcription paused",
-      "sources": [
-        "apps/ios/Clawket/NativeAppVoice.swift:90"
-      ],
-      "mobileTerm": "chat.Recording saved locally · Transcription paused"
     },
     {
       "key": "Recovered your saved connections from the last verified copy.",
@@ -1759,21 +1530,6 @@
       "mobileTerm": "chat.Retry"
     },
     {
-      "key": "Review model settings before adding images.",
-      "sources": [
-        "apps/ios/Clawket/NativeAppMedia.swift:40"
-      ],
-      "mobileTerm": null
-    },
-    {
-      "key": "Review model settings before sending.",
-      "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:938",
-        "apps/ios/Clawket/NativeAppModel.swift:940"
-      ],
-      "mobileTerm": null
-    },
-    {
       "key": "Review the conversation update before sending.",
       "sources": [
         "apps/ios/Clawket/NativeAppModel.swift:933"
@@ -1794,21 +1550,6 @@
         "apps/ios/Clawket/DeviceApprovalView.swift:41"
       ],
       "mobileTerm": null
-    },
-    {
-      "key": "Review transcription",
-      "sources": [
-        "apps/ios/Clawket/NativeVoiceSheet.swift:104",
-        "apps/ios/Clawket/NativeVoiceSheet.swift:99"
-      ],
-      "mobileTerm": null
-    },
-    {
-      "key": "Run commands and change files without asking.",
-      "sources": [
-        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:289"
-      ],
-      "mobileTerm": "chat.Run commands and change files without asking."
     },
     {
       "key": "Running",
@@ -1863,21 +1604,6 @@
         "apps/ios/Clawket/NativeAppModel.swift:507"
       ],
       "mobileTerm": "chat.Saved on this device"
-    },
-    {
-      "key": "Saved recording",
-      "sources": [
-        "apps/ios/Clawket/NativeAppVoice.swift:95",
-        "packages/apple/Sources/ClawketUI/NativeComposer.swift:227"
-      ],
-      "mobileTerm": "chat.Saved recording"
-    },
-    {
-      "key": "Saved recordings",
-      "sources": [
-        "apps/ios/Clawket/NativeVoiceSheet.swift:53"
-      ],
-      "mobileTerm": null
     },
     {
       "key": "Scan QR code",
@@ -1952,16 +1678,6 @@
       "mobileTerm": null
     },
     {
-      "key": "Selected",
-      "sources": [
-        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:126",
-        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:144",
-        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:166",
-        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:249"
-      ],
-      "mobileTerm": "config.Selected"
-    },
-    {
       "key": "Send",
       "sources": [
         "apps/ios/Clawket/NativeAppModel.swift:969",
@@ -2004,14 +1720,6 @@
         "packages/apple/Sources/ClawketUI/MessageContentView.swift:348"
       ],
       "mobileTerm": "chat.Sent"
-    },
-    {
-      "key": "Setting confirmed. Refresh to see the latest state.",
-      "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:271",
-        "apps/ios/Clawket/NativeModelControls.swift:334"
-      ],
-      "mobileTerm": null
     },
     {
       "key": "Settings",
@@ -2088,26 +1796,12 @@
       "mobileTerm": null
     },
     {
-      "key": "Stop recording before sending.",
-      "sources": [
-        "apps/ios/Clawket/NativeAppVoice.swift:78"
-      ],
-      "mobileTerm": null
-    },
-    {
       "key": "Stop task",
       "sources": [
         "packages/apple/Sources/ClawketUI/NativeComposer.swift:177",
         "packages/apple/Sources/ClawketUI/QuestionContentView.swift:151"
       ],
       "mobileTerm": "chat.Stop task"
-    },
-    {
-      "key": "Stop voice input",
-      "sources": [
-        "packages/apple/Sources/ClawketUI/NativeComposer.swift:129"
-      ],
-      "mobileTerm": "chat.Stop voice input"
     },
     {
       "key": "Stopped",
@@ -2168,25 +1862,11 @@
       "mobileTerm": null
     },
     {
-      "key": "The connection was interrupted. Your recording is saved on this device.",
-      "sources": [
-        "apps/ios/Clawket/NativeAppVoice.swift:192"
-      ],
-      "mobileTerm": "chat.The connection was interrupted. Your recording is saved on this device."
-    },
-    {
       "key": "The conversation could not be changed. Close this sheet and try again.",
       "sources": [
         "apps/ios/Clawket/NativeSessionManagement.swift:276"
       ],
       "mobileTerm": null
-    },
-    {
-      "key": "The microphone stopped. Your recorded audio is saved.",
-      "sources": [
-        "apps/ios/Clawket/NativeAppVoice.swift:188"
-      ],
-      "mobileTerm": "chat.The microphone stopped. Your recorded audio is saved."
     },
     {
       "key": "The operation could not be completed. Check your connection and try again.",
@@ -2211,14 +1891,6 @@
       "mobileTerm": null
     },
     {
-      "key": "The previous voice session is still closing. Please retry shortly.",
-      "sources": [
-        "apps/ios/Clawket/NativeAppVoice.swift:191",
-        "apps/ios/Clawket/NativeAppVoice.swift:75"
-      ],
-      "mobileTerm": "chat.The previous voice session is still closing. Please retry shortly."
-    },
-    {
       "key": "The result could not be confirmed. Reconnect to check this request.",
       "sources": [
         "apps/ios/Clawket/NativeTaskRequests.swift:452"
@@ -2226,63 +1898,9 @@
       "mobileTerm": null
     },
     {
-      "key": "The setting could not be changed. Refresh and try again.",
-      "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:275"
-      ],
-      "mobileTerm": null
-    },
-    {
-      "key": "The setting could not be confirmed. Refresh before trying again.",
-      "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:274"
-      ],
-      "mobileTerm": null
-    },
-    {
-      "key": "The transcription limit has been reached. Your recording is saved.",
-      "sources": [
-        "apps/ios/Clawket/NativeAppVoice.swift:189"
-      ],
-      "mobileTerm": "chat.The transcription limit has been reached. Your recording is saved."
-    },
-    {
-      "key": "The transcription service is unavailable. Your recording is saved on this device.",
-      "sources": [
-        "apps/ios/Clawket/NativeAppVoice.swift:193"
-      ],
-      "mobileTerm": "chat.The transcription service is unavailable. Your recording is saved on this device."
-    },
-    {
       "key": "There are 32 pending messages. Finish or remove one before adding another.",
       "sources": [
         "apps/ios/Clawket/NativeAppModel.swift:756"
-      ],
-      "mobileTerm": null
-    },
-    {
-      "key": "These settings cannot be changed right now.",
-      "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:199",
-        "apps/ios/Clawket/NativeModelControls.swift:361",
-        "apps/ios/Clawket/NativeModelControls.swift:364",
-        "apps/ios/Clawket/NativeModelControls.swift:368",
-        "apps/ios/Clawket/NativeModelControls.swift:375"
-      ],
-      "mobileTerm": null
-    },
-    {
-      "key": "Thinking",
-      "sources": [
-        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:132",
-        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:40"
-      ],
-      "mobileTerm": "chat.Thinking"
-    },
-    {
-      "key": "Thinking command added to queue.",
-      "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:219"
       ],
       "mobileTerm": null
     },
@@ -2327,13 +1945,6 @@
         "apps/ios/Clawket/NativeAppModel.swift:1205"
       ],
       "mobileTerm": null
-    },
-    {
-      "key": "This connection is not encrypted. Use a trusted network or switch to Relay.",
-      "sources": [
-        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:179"
-      ],
-      "mobileTerm": "chat.This connection is not encrypted. Use a trusted network or switch to Relay."
     },
     {
       "key": "This conversation",
@@ -2473,27 +2084,12 @@
       "mobileTerm": "chat.Tools"
     },
     {
-      "key": "Transcribing…",
-      "sources": [
-        "apps/ios/Clawket/NativeAppVoice.swift:92",
-        "apps/ios/Clawket/NativeVoiceSheet.swift:29"
-      ],
-      "mobileTerm": "chat.Transcribing…"
-    },
-    {
       "key": "Try again",
       "sources": [
         "packages/apple/Sources/ClawketUI/ClientSheets.swift:148",
         "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:30"
       ],
       "mobileTerm": "common.Try Again"
-    },
-    {
-      "key": "Ultra",
-      "sources": [
-        "apps/ios/Clawket/NativeModelControls.swift:481"
-      ],
-      "mobileTerm": "chat.thinking_ultra"
     },
     {
       "key": "Unattributed work",
@@ -2533,13 +2129,6 @@
       "mobileTerm": null
     },
     {
-      "key": "Use text",
-      "sources": [
-        "apps/ios/Clawket/NativeVoiceSheet.swift:101"
-      ],
-      "mobileTerm": null
-    },
-    {
       "key": "Use the WebSocket address provided by your agent. Credentials are saved securely on this device.",
       "sources": [
         "apps/ios/Clawket/ConnectAgentView.swift:84"
@@ -2561,41 +2150,11 @@
       "mobileTerm": null
     },
     {
-      "key": "Voice authentication failed. Check your device date and time.",
-      "sources": [
-        "apps/ios/Clawket/NativeAppVoice.swift:186"
-      ],
-      "mobileTerm": "chat.Voice authentication failed. Check your device date and time."
-    },
-    {
-      "key": "Voice input",
-      "sources": [
-        "apps/ios/Clawket/NativeAppVoice.swift:92",
-        "apps/ios/Clawket/NativeVoiceSheet.swift:58",
-        "packages/apple/Sources/ClawketUI/NativeComposer.swift:129"
-      ],
-      "mobileTerm": "chat.Voice input"
-    },
-    {
-      "key": "Voice transcription is unavailable in this build.",
-      "sources": [
-        "apps/ios/Clawket/NativeVoiceSheet.swift:56"
-      ],
-      "mobileTerm": null
-    },
-    {
       "key": "Waiting",
       "sources": [
         "packages/apple/Sources/ClawketUI/NativeWorkInspector.swift:297"
       ],
       "mobileTerm": null
-    },
-    {
-      "key": "Work in the project. Ask before broader access.",
-      "sources": [
-        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:288"
-      ],
-      "mobileTerm": "chat.Work in the project. Ask before broader access."
     },
     {
       "key": "Work record",
@@ -2605,13 +2164,6 @@
         "packages/apple/Sources/ClawketUI/NativeWorkInspector.swift:94"
       ],
       "mobileTerm": "chat.Work record"
-    },
-    {
-      "key": "Workspace access",
-      "sources": [
-        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:281"
-      ],
-      "mobileTerm": "chat.Workspace access"
     },
     {
       "key": "Yes",
@@ -2664,19 +2216,182 @@
       "mobileTerm": "chat.Your answer"
     },
     {
-      "key": "Your audio is saved on this device. Retry transcription or delete it.",
-      "sources": [
-        "apps/ios/Clawket/NativeVoiceSheet.swift:54"
-      ],
-      "mobileTerm": "chat.Your audio is saved on this device. Retry transcription or delete it."
-    },
-    {
       "key": "Your data could not be saved safely. Keep Clawket open and try again.",
       "sources": [
         "apps/ios/Clawket/NativeAppMedia.swift:251",
         "apps/ios/Clawket/NativeAppModel.swift:1195"
       ],
       "mobileTerm": null
+    },
+    {
+      "key": "Cannot save more audio. Free up device storage or remove a saved recording.",
+      "sources": [
+        "apps/ios/Clawket/NativeAppVoice.swift:121",
+        "apps/ios/Clawket/NativeAppVoice.swift:187",
+        "apps/ios/Clawket/NativeAppVoice.swift:26"
+      ],
+      "mobileTerm": "chat.Cannot save more audio. Free up device storage or remove a saved recording."
+    },
+    {
+      "key": "Delete",
+      "sources": [
+        "apps/ios/Clawket/NativeVoiceSheet.swift:49",
+        "apps/ios/Clawket/NativeVoiceSheet.swift:65"
+      ],
+      "mobileTerm": "chat.Delete"
+    },
+    {
+      "key": "Delete recording?",
+      "sources": [
+        "apps/ios/Clawket/NativeVoiceSheet.swift:64"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Listening…",
+      "sources": [
+        "apps/ios/Clawket/NativeAppVoice.swift:92"
+      ],
+      "mobileTerm": "chat.Listening…"
+    },
+    {
+      "key": "Microphone access is required to transcribe speech.",
+      "sources": [
+        "apps/ios/Clawket/NativeAppVoice.swift:185"
+      ],
+      "mobileTerm": "chat.Microphone access is required to transcribe speech."
+    },
+    {
+      "key": "No speech detected. Please try again.",
+      "sources": [
+        "apps/ios/Clawket/NativeAppVoice.swift:190"
+      ],
+      "mobileTerm": "chat.No speech detected. Please try again."
+    },
+    {
+      "key": "Recording saved locally · Transcription paused",
+      "sources": [
+        "apps/ios/Clawket/NativeAppVoice.swift:90"
+      ],
+      "mobileTerm": "chat.Recording saved locally · Transcription paused"
+    },
+    {
+      "key": "Review transcription",
+      "sources": [
+        "apps/ios/Clawket/NativeVoiceSheet.swift:104",
+        "apps/ios/Clawket/NativeVoiceSheet.swift:99"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Saved recording",
+      "sources": [
+        "apps/ios/Clawket/NativeAppVoice.swift:95",
+        "packages/apple/Sources/ClawketUI/NativeComposer.swift:227"
+      ],
+      "mobileTerm": "chat.Saved recording"
+    },
+    {
+      "key": "Saved recordings",
+      "sources": [
+        "apps/ios/Clawket/NativeVoiceSheet.swift:53"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Stop recording before sending.",
+      "sources": [
+        "apps/ios/Clawket/NativeAppVoice.swift:78"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Stop voice input",
+      "sources": [
+        "packages/apple/Sources/ClawketUI/NativeComposer.swift:129"
+      ],
+      "mobileTerm": "chat.Stop voice input"
+    },
+    {
+      "key": "The connection was interrupted. Your recording is saved on this device.",
+      "sources": [
+        "apps/ios/Clawket/NativeAppVoice.swift:192"
+      ],
+      "mobileTerm": "chat.The connection was interrupted. Your recording is saved on this device."
+    },
+    {
+      "key": "The microphone stopped. Your recorded audio is saved.",
+      "sources": [
+        "apps/ios/Clawket/NativeAppVoice.swift:188"
+      ],
+      "mobileTerm": "chat.The microphone stopped. Your recorded audio is saved."
+    },
+    {
+      "key": "The previous voice session is still closing. Please retry shortly.",
+      "sources": [
+        "apps/ios/Clawket/NativeAppVoice.swift:191",
+        "apps/ios/Clawket/NativeAppVoice.swift:75"
+      ],
+      "mobileTerm": "chat.The previous voice session is still closing. Please retry shortly."
+    },
+    {
+      "key": "The transcription limit has been reached. Your recording is saved.",
+      "sources": [
+        "apps/ios/Clawket/NativeAppVoice.swift:189"
+      ],
+      "mobileTerm": "chat.The transcription limit has been reached. Your recording is saved."
+    },
+    {
+      "key": "The transcription service is unavailable. Your recording is saved on this device.",
+      "sources": [
+        "apps/ios/Clawket/NativeAppVoice.swift:193"
+      ],
+      "mobileTerm": "chat.The transcription service is unavailable. Your recording is saved on this device."
+    },
+    {
+      "key": "Transcribing…",
+      "sources": [
+        "apps/ios/Clawket/NativeAppVoice.swift:92",
+        "apps/ios/Clawket/NativeVoiceSheet.swift:29"
+      ],
+      "mobileTerm": "chat.Transcribing…"
+    },
+    {
+      "key": "Use text",
+      "sources": [
+        "apps/ios/Clawket/NativeVoiceSheet.swift:101"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Voice authentication failed. Check your device date and time.",
+      "sources": [
+        "apps/ios/Clawket/NativeAppVoice.swift:186"
+      ],
+      "mobileTerm": "chat.Voice authentication failed. Check your device date and time."
+    },
+    {
+      "key": "Voice input",
+      "sources": [
+        "apps/ios/Clawket/NativeAppVoice.swift:92",
+        "apps/ios/Clawket/NativeVoiceSheet.swift:58",
+        "packages/apple/Sources/ClawketUI/NativeComposer.swift:129"
+      ],
+      "mobileTerm": "chat.Voice input"
+    },
+    {
+      "key": "Voice transcription is unavailable in this build.",
+      "sources": [
+        "apps/ios/Clawket/NativeVoiceSheet.swift:56"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Your audio is saved on this device. Retry transcription or delete it.",
+      "sources": [
+        "apps/ios/Clawket/NativeVoiceSheet.swift:54"
+      ],
+      "mobileTerm": "chat.Your audio is saved on this device. Retry transcription or delete it."
     },
     {
       "key": "Your draft changed. Insert the transcript where you want it.",
@@ -2691,6 +2406,291 @@
         "apps/ios/Clawket/NativeVoiceSheet.swift:104"
       ],
       "mobileTerm": null
+    },
+    {
+      "key": "Adaptive",
+      "sources": [
+        "apps/ios/Clawket/NativeModelControls.swift:482"
+      ],
+      "mobileTerm": "chat.thinking_adaptive"
+    },
+    {
+      "key": "All models",
+      "sources": [
+        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:230",
+        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:99"
+      ],
+      "mobileTerm": "chat.All models"
+    },
+    {
+      "key": "Choose permissions again before sending.",
+      "sources": [
+        "apps/ios/Clawket/NativeAppModel.swift:937",
+        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:174"
+      ],
+      "mobileTerm": "chat.Choose permissions again before sending."
+    },
+    {
+      "key": "Computer settings",
+      "sources": [
+        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:175"
+      ],
+      "mobileTerm": "chat.Computer settings"
+    },
+    {
+      "key": "Confirm",
+      "sources": [
+        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:263"
+      ],
+      "mobileTerm": "common.Confirm"
+    },
+    {
+      "key": "Default",
+      "sources": [
+        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:244"
+      ],
+      "mobileTerm": "chat.Default"
+    },
+    {
+      "key": "Extra High",
+      "sources": [
+        "apps/ios/Clawket/NativeModelControls.swift:479"
+      ],
+      "mobileTerm": "chat.thinking_xhigh"
+    },
+    {
+      "key": "Fast mode",
+      "sources": [
+        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:149",
+        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:52",
+        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:55",
+        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:59"
+      ],
+      "mobileTerm": "chat.Fast mode"
+    },
+    {
+      "key": "Full access",
+      "sources": [
+        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:282"
+      ],
+      "mobileTerm": "chat.Full access"
+    },
+    {
+      "key": "High",
+      "sources": [
+        "apps/ios/Clawket/NativeModelControls.swift:478"
+      ],
+      "mobileTerm": "chat.thinking_high"
+    },
+    {
+      "key": "Loading model settings…",
+      "sources": [
+        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:25",
+        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:70"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Low",
+      "sources": [
+        "apps/ios/Clawket/NativeModelControls.swift:476"
+      ],
+      "mobileTerm": "chat.thinking_low"
+    },
+    {
+      "key": "Max",
+      "sources": [
+        "apps/ios/Clawket/NativeModelControls.swift:480"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Medium",
+      "sources": [
+        "apps/ios/Clawket/NativeModelControls.swift:477"
+      ],
+      "mobileTerm": "chat.thinking_medium"
+    },
+    {
+      "key": "Minimal",
+      "sources": [
+        "apps/ios/Clawket/NativeModelControls.swift:475"
+      ],
+      "mobileTerm": "chat.thinking_minimal"
+    },
+    {
+      "key": "Model settings",
+      "sources": [
+        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:73"
+      ],
+      "mobileTerm": "chat.Model settings"
+    },
+    {
+      "key": "Model settings could not be loaded. Try again.",
+      "sources": [
+        "apps/ios/Clawket/NativeModelControls.swift:310",
+        "apps/ios/Clawket/NativeModelControls.swift:335"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Off",
+      "sources": [
+        "apps/ios/Clawket/NativeModelControls.swift:474",
+        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:141"
+      ],
+      "mobileTerm": "chat.thinking_off"
+    },
+    {
+      "key": "On",
+      "sources": [
+        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:141"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Permissions",
+      "sources": [
+        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:172"
+      ],
+      "mobileTerm": "config.Permissions"
+    },
+    {
+      "key": "Permissions could not be prepared. Refresh settings and try again.",
+      "sources": [
+        "apps/ios/Clawket/NativeModelControls.swift:190"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Read files. Ask before making changes.",
+      "sources": [
+        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:287"
+      ],
+      "mobileTerm": "chat.Read files. Ask before making changes."
+    },
+    {
+      "key": "Read only",
+      "sources": [
+        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:280"
+      ],
+      "mobileTerm": "chat.Read only"
+    },
+    {
+      "key": "Reconnect to review model settings.",
+      "sources": [
+        "apps/ios/Clawket/NativeAppModel.swift:951",
+        "apps/ios/Clawket/NativeModelControls.swift:77"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Review model settings before adding images.",
+      "sources": [
+        "apps/ios/Clawket/NativeAppMedia.swift:40"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Review model settings before sending.",
+      "sources": [
+        "apps/ios/Clawket/NativeAppModel.swift:938",
+        "apps/ios/Clawket/NativeAppModel.swift:940"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Run commands and change files without asking.",
+      "sources": [
+        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:289"
+      ],
+      "mobileTerm": "chat.Run commands and change files without asking."
+    },
+    {
+      "key": "Selected",
+      "sources": [
+        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:126",
+        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:144",
+        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:166",
+        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:249"
+      ],
+      "mobileTerm": "config.Selected"
+    },
+    {
+      "key": "Setting confirmed. Refresh to see the latest state.",
+      "sources": [
+        "apps/ios/Clawket/NativeModelControls.swift:271",
+        "apps/ios/Clawket/NativeModelControls.swift:334"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "The setting could not be changed. Refresh and try again.",
+      "sources": [
+        "apps/ios/Clawket/NativeModelControls.swift:275"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "The setting could not be confirmed. Refresh before trying again.",
+      "sources": [
+        "apps/ios/Clawket/NativeModelControls.swift:274"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "These settings cannot be changed right now.",
+      "sources": [
+        "apps/ios/Clawket/NativeModelControls.swift:199",
+        "apps/ios/Clawket/NativeModelControls.swift:361",
+        "apps/ios/Clawket/NativeModelControls.swift:364",
+        "apps/ios/Clawket/NativeModelControls.swift:368",
+        "apps/ios/Clawket/NativeModelControls.swift:375"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Thinking",
+      "sources": [
+        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:132",
+        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:40"
+      ],
+      "mobileTerm": "chat.Thinking"
+    },
+    {
+      "key": "Thinking command added to queue.",
+      "sources": [
+        "apps/ios/Clawket/NativeModelControls.swift:219"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "This connection is not encrypted. Use a trusted network or switch to Relay.",
+      "sources": [
+        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:179"
+      ],
+      "mobileTerm": "chat.This connection is not encrypted. Use a trusted network or switch to Relay."
+    },
+    {
+      "key": "Ultra",
+      "sources": [
+        "apps/ios/Clawket/NativeModelControls.swift:481"
+      ],
+      "mobileTerm": "chat.thinking_ultra"
+    },
+    {
+      "key": "Work in the project. Ask before broader access.",
+      "sources": [
+        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:288"
+      ],
+      "mobileTerm": "chat.Work in the project. Ask before broader access."
+    },
+    {
+      "key": "Workspace access",
+      "sources": [
+        "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:281"
+      ],
+      "mobileTerm": "chat.Workspace access"
     }
   ],
   "infoPlistStrings": [
