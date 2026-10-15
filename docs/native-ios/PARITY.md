@@ -50,7 +50,7 @@ Use `packages/agent-protocol/src/capabilities.ts` plus runtime adapter negotiati
 | Phone Node | Distinct role handshake; per-command info/status/notify/camera/photos/location/clipboard/media, foreground permissions | `node-client`; handlers/dispatcher/capability tests | Pending |
 | Incoming share | Native extension/app-group handoff, review draft and selected destination, staged files | share extension; `features/sharing`; incoming-share tests | Pending |
 | Widgets and links | Existing shortcuts, app-group state, universal/custom links, QR flow | `native-widgets/ios`; app config; navigation tests | Pending |
-| Pro | RevenueCat identity, purchase/restore/manage/redeem, dynamic prices/offering, free slot/grace, success continuation | ProPaywall; entitlement/pro/storage tests | Pending |
+| Pro | RevenueCat identity, purchase/restore/manage/redeem, dynamic prices/offering, free slot/grace, success continuation | ProPaywall; entitlement/pro/storage tests; `PRO.md` | Pinned Swift SDK and real host/policy consumers implemented; deterministic policies and actual native compilation verified. Real offerings/Sandbox purchase, restore, redemption and same-bundle identity acceptance pending |
 | Review and help | Eligible system review, store/manual link, releases/help/community/legal, debug/Preview controls | ios-app-review; releases; AccountSettings | Pending |
 | Localization | All19locales, Arabic RTL, dynamic formatting, localized accessibility | `src/i18n/locales`; strict i18n gate | Pending |
 | Adaptive/accessibility | iPad windows, Dynamic Type, VoiceOver/focus, contrast/reduced motion/transparency, gestures/hit regions | native acceptance matrix in PLAN | Pending |

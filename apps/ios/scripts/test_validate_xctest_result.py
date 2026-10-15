@@ -20,7 +20,7 @@ class NativeResultTests(unittest.TestCase):
                 validate_summary(corrupt)
 
     def test_rejects_empty_reduced_skipped_and_failed_reports(self):
-        for total in (0, 1, 10, 28, 40, 44, 47, 49, 50, 57, 59, 60, 62, 63, 71, 72, 73, 75, 76, 80, 81, 86, 87, 91, 92, 95, 96, 101, 111, 112, 126, 127, 141, 142, 143, 144, 145, 146, 157, 158, 159, 160, 161, 191, 192, 193, 202, 203, 205, 206, 216, 229, 239):
+        for total in (0, 1, 10, 28, 40, 44, 47, 49, 50, 57, 59, 60, 62, 63, 71, 72, 73, 75, 76, 80, 81, 86, 87, 91, 92, 95, 96, 101, 111, 112, 126, 127, 136, 137, 141, 142, 143, 144, 145, 146, 157, 158, 159, 160, 161, 170, 171, 191, 192, 193, 202, 203, 205, 206, 215, 216, 218, 219, 220, 221, 222, 223, 229, 233, 239, 257):
             with self.assertRaises(ValueError):
                 validate_summary({**self.valid, "totalTestCount": total, "passedTests": total})
         for field in ("failedTests", "skippedTests", "expectedFailures"):
