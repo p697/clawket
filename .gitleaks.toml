@@ -11,3 +11,14 @@ regexes = [
   '''^1789390790301_afobgrvb$''',
   '''^1789390791301_otherkey$''',
 ]
+
+[[allowlists]]
+description = "Reviewed deterministic TweetNaCl fixture keys from sequence(192, 32) and fromSeed(sequence(128, 32)); never used by a service"
+condition = "AND"
+targetRules = ["generic-api-key"]
+regexTarget = "secret"
+paths = ['''^packages/apple/Tests/ClawketPairingTests/Fixtures/pairing-vectors\.json$''']
+regexes = [
+  '''^wMHCw8TFxsfIycrLzM3Oz9DR0tPU1dbX2Nna29zd3t8$''',
+  '''^808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fcd14b37f956e953194ff7fb73b3d81dcc561d61a7538094b7c3e1a643ee5f3aa$''',
+]
