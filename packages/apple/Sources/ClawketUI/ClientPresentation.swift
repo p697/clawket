@@ -63,13 +63,17 @@ public struct AgentCatalogPresentation: Identifiable, Hashable, Sendable {
     public var error: String?
     public var createSession: ActionAvailability
     public var refresh: ActionAvailability
+    public var archive: ActionAvailability
+    public var showingArchived: Bool
     public init(id: AgentCatalogID, title: String, sessions: [SessionPresentation] = [],
                 projects: [ProjectPresentation] = [], selectedProjectID: String? = nil,
                 isLoading: Bool = false, error: String? = nil,
-                createSession: ActionAvailability = .unsupported, refresh: ActionAvailability = .unsupported) {
+                createSession: ActionAvailability = .unsupported, refresh: ActionAvailability = .unsupported,
+                archive: ActionAvailability = .unsupported, showingArchived: Bool = false) {
         self.id = id; self.title = title; self.sessions = sessions; self.projects = projects
         self.selectedProjectID = selectedProjectID; self.isLoading = isLoading; self.error = error
         self.createSession = createSession; self.refresh = refresh
+        self.archive = archive; self.showingArchived = showingArchived
     }
 }
 
@@ -77,7 +81,7 @@ public enum ClientFeature: String, Hashable, Sendable {
     case account, addConnection, createAgent, refresh, reconnect
     case sessions, newSession, models, send, stop, voice
     case photos, camera, files, paste, skills, commands, schedule, tools, sessionFiles
-    case agentSettings, memory, connectionSettings, loadEarlier
+    case agentSettings, memory, connectionSettings, loadEarlier, sessionManagement
 }
 
 public enum ClientDestination: String, Hashable, Sendable {
@@ -184,12 +188,16 @@ public struct SessionPresentation: Identifiable, Hashable, Sendable {
     public var timeLabel: String?
     public var isSelected: Bool
     public var unread: Bool
+    public var management: ActionAvailability
+    public var isArchived: Bool
 
     public init(id: String, route: ConversationID, title: String, subtitle: String? = nil,
                 symbol: String = "bubble.left", timeLabel: String? = nil,
-                isSelected: Bool = false, unread: Bool = false) {
+                isSelected: Bool = false, unread: Bool = false, management: ActionAvailability = .unsupported,
+                isArchived: Bool = false) {
         self.id = id; self.route = route; self.title = title; self.subtitle = subtitle
         self.symbol = symbol; self.timeLabel = timeLabel; self.isSelected = isSelected; self.unread = unread
+        self.management = management; self.isArchived = isArchived
     }
 }
 
@@ -552,6 +560,7 @@ public final class ClientPresentation: ObservableObject {
     /// Connection-wide consents remain separate from transcript-owned approvals.
     @Published public var connectionApprovals: [ApprovalPresentation]
     @Published public var approvalConfirmation: ApprovalConfirmationPresentation?
+    @Published public var sessionManagement: SessionManagementPresentation?
 
     public init(title: String = String(localized: "Agents"), agents: [AgentPresentation] = [],
                 selectedConversation: ConversationID? = nil,
@@ -563,7 +572,8 @@ public final class ClientPresentation: ObservableObject {
                 accountAttentionCount: Int = 0, features: [ClientFeature: ActionAvailability] = [:],
                 drafts: [ConversationID: ComposerDraft] = [:], questionResponses: [String: QuestionResponse] = [:],
                 expandedContentIDs: Set<String> = [],
-                connectionApprovals: [ApprovalPresentation] = [], approvalConfirmation: ApprovalConfirmationPresentation? = nil) {
+                connectionApprovals: [ApprovalPresentation] = [], approvalConfirmation: ApprovalConfirmationPresentation? = nil,
+                sessionManagement: SessionManagementPresentation? = nil) {
         self.title = title; self.agents = agents; self.selectedConversation = selectedConversation
         self.conversations = conversations; self.connection = connection; self.isLoading = isLoading
         self.catalogs = catalogs
@@ -572,6 +582,7 @@ public final class ClientPresentation: ObservableObject {
         self.expandedContentIDs = expandedContentIDs
         self.connectionApprovals = connectionApprovals
         self.approvalConfirmation = approvalConfirmation
+        self.sessionManagement = sessionManagement
     }
 
     public func availability(_ feature: ClientFeature) -> ActionAvailability { features[feature] ?? .unsupported }
@@ -594,6 +605,13 @@ public enum ClientIntent: Sendable {
     case selectCatalogProject(AgentCatalogID, projectID: String?)
     case createSession(AgentCatalogID, projectID: String?)
     case refreshCatalog(AgentCatalogID)
+    case selectCatalogArchive(AgentCatalogID, archived: Bool)
+    case prepareSessionManagement(ConversationID, requestID: UUID)
+    case dismissSessionManagement(reviewID: UUID)
+    case requestSessionAction(reviewID: UUID, action: SessionLifecycleAction)
+    case renameSession(reviewID: UUID, title: String)
+    case confirmSessionMutation(confirmationID: UUID)
+    case dismissSessionMutationConfirmation(confirmationID: UUID)
     case openConversation(ConversationID)
     case closeConversation
     case openDestination(ClientDestination, conversation: ConversationID?)

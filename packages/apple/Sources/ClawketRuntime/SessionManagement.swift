@@ -179,6 +179,9 @@ extension RuntimeCoordinator {
         }
         sessionManagementState.writes.removeValue(forKey: entry.session.key)
         sessionManagementState.invalidateRows()
+        // A catalog read started while the write was pending may still contain its old row.
+        // The host's post-ACK refresh must start a new RPC, never join that earlier task.
+        catalogTask?.cancel(); catalogTask = nil; catalogTaskID = UUID()
         // No synthetic renamed/reset/deleted row: a later explicit refresh owns the result.
     }
 

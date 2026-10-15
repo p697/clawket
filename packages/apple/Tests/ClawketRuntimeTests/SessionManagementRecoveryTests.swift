@@ -134,4 +134,27 @@ struct SessionManagementRecoveryTests {
         await #expect(throws: RuntimeFailure.self) { try await history.value }
         await runtime.disconnect(); reader.cancel()
     }
+
+    @Test func postAcknowledgementRefreshCannotJoinCatalogReadStartedDuringWrite() async throws {
+        let peer = LifecyclePeer(.codex)
+        let (runtime, socket, _, reader) = try lifecycleFixture(.codex, peer: peer)
+        try await runtime.activate(connection(.codex)); _ = try await runtime.refreshRoster()
+        let context = try await runtime.sessionManagement(sessionKey: "owned")
+        await peer.hold("sessions.rename"); await peer.hold("sessions.list")
+        let write = Task { try await runtime.renameSession(reference: context.reference, title: "Confirmed") }
+        try await eventually { await socket.requests("sessions.rename").count == 1 }
+        let duringWrite = Task { try await runtime.refreshRoster() }
+        try await eventually { await socket.requests("sessions.list").count == 2 }
+        try await socket.reply(await socket.requests("sessions.rename")[0], payload: .object(["ok": .bool(true)]))
+        _ = try await write.value
+        let afterAcknowledgement = Task { try await runtime.refreshRoster() }
+        try await eventually { await socket.requests("sessions.list").count == 3 }
+        let lists = await socket.requests("sessions.list")
+        try await socket.reply(lists[1], payload: .array([lifecycleRow(.codex)]))
+        var current = lifecycleRow(.codex).object!; current["title"] = .string("Confirmed")
+        try await socket.reply(lists[2], payload: .array([.object(current)]))
+        await #expect(throws: RuntimeFailure.self) { try await duringWrite.value }
+        #expect(try await afterAcknowledgement.value.sessions.first?.title == "Confirmed")
+        await runtime.disconnect(); reader.cancel()
+    }
 }

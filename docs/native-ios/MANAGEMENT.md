@@ -14,7 +14,7 @@ Codex archive requires exact `health.sessionArchive === true` plus `allowedActio
 
 `branchSession(reference:title:)` is separate from original-session writes. Codex/Claude Code/Pi require the declared branch feature, a current `source:native` read-only row and an available inherited project. It sends `sessions.create {fromSession,title?}` without an arbitrary project/path override, validates a different owned result and leaves the original intact. Claude's desktop `in_use`/`ownership_unknown` rows may be copied; `project_unavailable` cannot. Codex's active source cannot be copied. Known native original input requires current catalog evidence and exact `canContinue:true`; Hermes native input remains read-only. Unknown/created owned keys retain the backend's final enforcement, with no key-shape inference.
 
-No write is replayed. A proven local non-dispatch permits a newly obtained explicit action; an uncertain or malformed response holds that target for the current authentication, including across catalog refreshes. New authentication removes old authority, never resends an old request and cannot let a late receipt mutate the replacement. This runtime verification does not complete host menus/confirmations or device acceptance.
+No write is replayed. A proven local non-dispatch permits a newly obtained explicit action; an uncertain or malformed response holds that target for the current authentication, including across catalog refreshes. New authentication removes old authority, never resends an old request and cannot let a late receipt mutate the replacement. The native host menu and confirmation boundary is described in [conversation management](SESSION-UI.md); device acceptance remains separate.
 
 ## Remaining management slices
 

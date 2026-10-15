@@ -12,6 +12,10 @@
   - 无竞争进程/内存42%预检、heavy/jobs2 下逐文件严格Swift6通过：Deadline6函数/7输入、Liveness9/10、Transfer11/15、URLSession6/8、双后端RelayProbe2/4、既有Transport25/26与RuntimeContract9/10（共68函数/80输入）。实际 Foundation loopback 完成名义5 MiB原帧往返（约0.75秒）与协商后nonce echo；不是手机/Relay吞吐或模型推理。首次仅Testing宏直接调用mutating Bool展开失败，改等值断言后完整编译通过，未改断言语义；通过后才启用两cap并复验四个实际消费者/旧兼容文件，立即释放heavy。文档14对/7回归、diff与metrics通过；TS/TSX167,902/132,119及617测试文件保持，重基journal后文档187，本轮Swift净增476源行/885测试行用于独立有界状态和真实Socket/故障回归。不改Worker/Bridge/协议/auth/App/UI/凭据/版本，不制作发行包或发布；完整App/仓库门禁交PR CI。
   - 首轮远端Native package通过后源审补获挂起竞态：仅保护结束前标deferred，结束后未立即冻结普通响应窗口，迟到帧可能从到达时再起算。现在incoming完成、upload确认与失败reservation结束均在同actor前后观察，窗口固定在结束当刻；新增incoming第4/6秒与upload确认第6秒响应边界回归，不放宽原断言。负责人正在占用USB QA租约，本次后续只做source/远端CI验证，不叠加本机编译。
   - 后续自审区分“未进入native”的本地reservation与进入系统I/O后的取消：后者delivery仍unknown，只清upload grace，保留原90秒预算锁与fresh nonce要求，不能晚取消后直接重领90秒。新增纯预算锁/证明重开及第89秒取消后显式第二次操作仍只有1秒的回归；未知写不自动重发，真实send错误仍退休Socket。USB验收释放后，memory48%/无compiler预检、heavy/jobs2严格Swift6编译16.46秒，逐文件Deadline7/8、Transfer13/18通过（包括全部新response-window回归）；14指令对/7docs与diff通过后立即释放租约。累计七个窄文件71函数/84输入，本轮最终Swift净增481源行/930测试行，完整最新主线门禁继续CI。
+- 2026-10-16 Native 会话管理host与原生菜单（独立负责人授权切片，验证继续）。
+  - 当前选中会话点击才获取Runtime不持久ref，原生sheet/rename编辑/破坏性确认/归档筛选/只读原生复制均由实际allowedActions决定，默认unsupported。确认在host同步冻结并消费动作+ref；关闭、取消/菜单替换不发后台写入。捕获activation/wire/selection与原physical session ID，旧ACK不导航替代会话。
+  - ACK后必须新read，不能用任意迟到roster解除锁；Runtime finish明确退休write pending期间启动的catalogTask，post-ACK刷新不join旧请求。未知写保持目标锁、无spinner/重播；queue在破坏性操作前hold并保存，draft/本地消息身份/未知消息不丢失，不删除整NativeConversation/journal，physical reset reconciliation交独立transcript回调。
+  - 追加协议晚list、表示层字节/UTF16/default门控及12项实际Host故障回归源码；当前274UI+2权限/19语共5,244语言单元源码检查通过。编译/窄测试/实际App CI/USB与六后端管理验收尚未完成，不宣称完整parity。详见 `docs/native-ios/SESSION-UI.md`。
 
 - 2026-10-16 Native work/review host journal（负责人授权，完整parity与设备验收继续）。
   - 实际App接 typed live/history work、工具输入/输出、累计commentary、run/start/final与captured send receipt；原生dock/详情读取只验证当前route/record/step，无RPC写入或composer/focus/scroll副作用。独立持久render UUID，精确run/turn/input归属；复用run时缺失输入的窗口留为未归属，partial final不选错已有执行。早期分页按API规范顺序前插，不按缺失/偏斜时钟排序，也不把旧工具变成最新任务。

@@ -341,12 +341,14 @@ struct ConnectionStatusView: View {
 enum ClientSheet: Identifiable {
     case sessions(ConversationID), models(ConversationID), catalog(AgentCatalogID), connectionApprovals
     case work(ConversationID, workID: String)
+    case management(ConversationID, reviewID: UUID)
     var id: String {
         switch self {
         case let .sessions(route): "sessions-\(route.connectionID)-\(route.agentID)"
         case let .models(route): "models-\(route.connectionID)-\(route.agentID)"
         case let .catalog(id): "catalog-\(id.connectionID)-\(id.agentID)"
         case .connectionApprovals: "connection-approvals"
+        case let .management(_, reviewID): "management-\(reviewID)"
         case let .work(route, workID): "work-\(route.connectionID)-\(route.agentID)-\(route.sessionID)-\(workID)"
         }
     }
@@ -433,6 +435,14 @@ private struct NativeConversationView: View {
             ToolbarItem(placement: .navigationBarTrailing) {
                 if hasMoreActions {
                     Menu {
+                        if conversation.availability(.sessionManagement).isVisible {
+                            Button {
+                                let id = UUID()
+                                onIntent(.prepareSessionManagement(conversation.id, requestID: id))
+                                showSheet(.management(conversation.id, reviewID: id))
+                            } label: { Label("Manage conversation", systemImage: "slider.horizontal.3") }
+                                .disabled(!conversation.availability(.sessionManagement).isEnabled)
+                        }
                         destinationButton("Agent settings", symbol: "slider.horizontal.3", feature: .agentSettings, destination: .agentSettings)
                         destinationButton("Memory", symbol: "brain", feature: .memory, destination: .memory)
                         destinationButton("Skills", symbol: "sparkles", feature: .skills, destination: .skills)
@@ -464,7 +474,7 @@ private struct NativeConversationView: View {
     }
 
     private var hasMoreActions: Bool {
-        [ClientFeature.agentSettings, .memory, .skills, .schedule, .sessionFiles, .connectionSettings, .loadEarlier]
+        [ClientFeature.agentSettings, .memory, .skills, .schedule, .sessionFiles, .connectionSettings, .loadEarlier, .sessionManagement]
             .contains { conversation.availability($0).isVisible }
     }
 

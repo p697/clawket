@@ -8,6 +8,7 @@ struct ClientSheetView: View {
     let onIntent: @MainActor (ClientIntent) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var search = ""
+    @State private var management: ManagementSheetRequest?
 
     var body: some View {
         NavigationStack {
@@ -17,6 +18,8 @@ struct ClientSheetView: View {
                 case let .models(route): models(route)
                 case let .catalog(id): catalog(id)
                 case .connectionApprovals: connectionApprovals
+                case let .management(route, reviewID):
+                    NativeSessionManagementView(model: model, route: route, reviewID: reviewID, onIntent: onIntent)
                 case let .work(route, workID):
                     NativeWorkInspector(model: model, conversationID: route, workID: workID, onIntent: onIntent)
                 }
@@ -26,6 +29,23 @@ struct ClientSheetView: View {
                     Button("Done") { dismiss() }
                 }
             }
+        }
+        .sheet(item: $management) { request in
+            NavigationStack {
+                NativeSessionManagementView(model: model, route: request.route, reviewID: request.id, onIntent: onIntent)
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { management = nil } } }
+            }
+            .presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
+            .onDisappear { onIntent(.dismissSessionManagement(reviewID: request.id)) }
+            .onChange(of: model.sessionManagement?.id) { id in
+                if id == nil, management?.id == request.id { management = nil }
+            }
+        }
+        .onDisappear {
+            if case let .management(_, id) = item { onIntent(.dismissSessionManagement(reviewID: id)) }
+        }
+        .onChange(of: model.sessionManagement?.id) { id in
+            if case .management = item, id == nil { dismiss() }
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
@@ -56,26 +76,7 @@ struct ClientSheetView: View {
             }
             Section {
                 ForEach(rows) { session in
-                    Button {
-                        model.selectedConversation = session.route
-                        dismiss()
-                    } label: {
-                        HStack(alignment: .top, spacing: 12) {
-                            Image(systemName: session.symbol).foregroundStyle(.secondary).frame(width: 24)
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(session.title).font(.body).foregroundStyle(.primary)
-                                if let subtitle = session.subtitle {
-                                    Text(subtitle).font(.caption).foregroundStyle(.secondary)
-                                }
-                            }
-                            Spacer(minLength: 4)
-                            if session.isSelected { Image(systemName: "checkmark").font(.body.weight(.semibold)) }
-                            else if session.unread { Circle().fill(Color.accentColor).frame(width: 7, height: 7).padding(.top, 7) }
-                        }
-                        .padding(.vertical, 4).frame(minHeight: 44)
-                    }
-                    .accessibilityAddTraits(session.isSelected ? .isSelected : [])
-                    .accessibilityIdentifier("session-\(session.id)")
+                    sessionRow(session) { model.selectedConversation = session.route; dismiss() }
                 }
                 if rows.isEmpty {
                     Text(search.isEmpty ? String(localized: "No conversations yet") : String(localized: "No matching conversations"))
@@ -94,6 +95,13 @@ struct ClientSheetView: View {
             $0.route.isConcrete && (search.isEmpty || $0.title.localizedStandardContains(search) || ($0.subtitle ?? "").localizedStandardContains(search))
         }
         return List {
+            if catalog?.archive.isVisible == true {
+                Picker("Conversations", selection: Binding(get: { catalog?.showingArchived ?? false },
+                    set: { onIntent(.selectCatalogArchive(id, archived: $0)) })) {
+                    Text("Conversations").tag(false)
+                    Text("Archived").tag(true)
+                }.pickerStyle(.segmented).disabled(catalog?.archive.isEnabled != true)
+            }
             if let catalog, !catalog.projects.isEmpty {
                 Section("Project") {
                     Menu {
@@ -115,7 +123,7 @@ struct ClientSheetView: View {
                     }
                 }
             }
-            if catalog?.createSession.isVisible == true {
+            if catalog?.createSession.isVisible == true && catalog?.showingArchived != true {
                 Button {
                     onIntent(.createSession(id, projectID: catalog?.selectedProjectID))
                 } label: { Label("New conversation", systemImage: "square.and.pencil") }
@@ -123,20 +131,7 @@ struct ClientSheetView: View {
             }
             Section("Conversations") {
                 ForEach(rows) { session in
-                    Button {
-                        model.selectedConversation = session.route
-                        dismiss()
-                    } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: session.symbol).foregroundStyle(.secondary)
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(session.title).foregroundStyle(.primary)
-                                if let subtitle = session.subtitle { Text(subtitle).font(.caption).foregroundStyle(.secondary) }
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
-                        }.padding(.vertical, 5).frame(minHeight: 44)
-                    }
+                    sessionRow(session) { model.selectedConversation = session.route; dismiss() }
                 }
                 if catalog == nil || catalog?.isLoading == true {
                     ProgressView("Loading conversations…").frame(maxWidth: .infinity, minHeight: 60)
@@ -157,6 +152,47 @@ struct ClientSheetView: View {
         .navigationTitle(catalog?.title ?? String(localized: "Conversations"))
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $search, prompt: "Search conversations")
+    }
+
+    private struct ManagementSheetRequest: Identifiable {
+        let id: UUID
+        let route: ConversationID
+    }
+
+    private func openManagement(_ session: SessionPresentation) {
+        guard session.management.isEnabled else { return }
+        let id = UUID()
+        onIntent(.prepareSessionManagement(session.route, requestID: id))
+        management = .init(id: id, route: session.route)
+    }
+
+    private func sessionRow(_ session: SessionPresentation, select: @escaping () -> Void) -> some View {
+        HStack(spacing: 4) {
+            Button {
+                if session.isArchived { openManagement(session) } else { select() }
+            } label: {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: session.isArchived ? "archivebox" : session.symbol)
+                        .foregroundStyle(.secondary).frame(width: 24)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(verbatim: session.title).foregroundStyle(.primary)
+                        if let subtitle = session.subtitle { Text(verbatim: subtitle).font(.caption).foregroundStyle(.secondary) }
+                    }
+                    Spacer(minLength: 4)
+                    if session.isSelected { Image(systemName: "checkmark").font(.body.weight(.semibold)) }
+                    else if session.unread { Circle().fill(Color.accentColor).frame(width: 7, height: 7).padding(.top, 7) }
+                }.padding(.vertical, 4).frame(minHeight: 44)
+            }.buttonStyle(.borderless)
+                .disabled(session.isArchived && !session.management.isEnabled)
+                .accessibilityAddTraits(session.isSelected ? .isSelected : [])
+                .accessibilityIdentifier("session-\(session.id)")
+            if session.management.isVisible {
+                Button { openManagement(session) } label: {
+                    Image(systemName: "ellipsis").frame(minWidth: 44, minHeight: 44)
+                }.buttonStyle(.borderless).disabled(!session.management.isEnabled)
+                    .accessibilityLabel("Conversation actions").accessibilityValue(Text(verbatim: session.title))
+            }
+        }
     }
 
     private func models(_ route: ConversationID) -> some View {
