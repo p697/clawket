@@ -205,6 +205,7 @@ public struct RuntimeMessage: Codable, Sendable, Equatable, Identifiable {
     public let sentLocally: Bool
     public let raw: JSONValue
     public var attachments: [RuntimeMessageAttachment] { RuntimeAttachmentProjection.extract(raw) }
+    public func workUpdates(sessionKey: String) -> [RuntimeWorkUpdate] { WorkEvents.history(self, sessionKey: sessionKey) }
     /// Legacy inline images/files are decoded only on explicit consumption,
     /// never while constructing presentation metadata. Managed IDs win over bytes.
     public func inlineAttachmentData(at index: Int) throws -> Data? {
@@ -290,6 +291,11 @@ public enum RuntimeSessionUpdate: Sendable, Equatable {
     case work(RuntimeWorkUpdate)
     /// Preserves unimplemented task/consent metadata without advertising an action.
     case other(JSONValue)
+
+    public var workCompletion: RuntimeWorkCompletion? {
+        guard case let .runFinished(_, _, _, _, raw) = self else { return nil }
+        return try? WorkEvents.completion(raw)
+    }
 }
 
 public enum RuntimeEvent: Sendable, Equatable {

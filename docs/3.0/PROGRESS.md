@@ -1,5 +1,12 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-16 Native work/review host journal（负责人授权，完整parity与设备验收继续）。
+  - 实际App接 typed live/history work、工具输入/输出、累计commentary、run/start/final与captured send receipt；原生dock/详情读取只验证当前route/record/step，无RPC写入或composer/focus/scroll副作用。独立持久render UUID，精确run/turn/input归属；复用run时缺失输入的窗口留为未归属，partial final不选错已有执行。早期分页按API规范顺序前插，不按缺失/偏斜时钟排序，也不把旧工具变成最新任务。
+  - 独立保护目录内单cache原子双代读回，primary8MiB、128run/4096step/每run1024step、32review；raw输入/输出每项256KiB安全预览，producer完整性缺失不虚报。全局JSON字节/深度/token与身份/计数/答案语义校验；Int64.max损坏计数拒绝并只读回退，不在恢复后溢出。旧/同revision写入拒绝，未知提交停journal写入至重开，不清源或妨碍文字连接。
+  - 保存惰性授权/问题复核与精确收据，不存Runtime action ref/选项权限/Always token。冷开值不可操作，新真实请求才接authority；后台立即flush。仅成功本机answer/confirm RPC确认才标accepted，支持先到resolution后到ACK，外部解决、预占但未派发、取消及未知结果保留draft。phone观察时长与backend时钟分离；恢复非terminal为unknown，不重启任务或计时。
+  - heavy/jobs2串行WorkHistory6项通过，首次actual generic Simulator App与44测试方法源码编译通过，未启动本机sim；随后独立审查追加上述overflow/归属/分页/ACK回归与一份纯排序源码，最终编译/实际44项运行交CI。App新增12journal+4request回归，非空门槛44；全19语239UI/2权限保持4,579条，不新增或覆盖译文。完整assistant segment/CLI rollup/reset reconciliation、真实后端工具与USB/iPad/VoiceOver仍pending，不把cache称完整功能或发布。详见 `docs/native-ios/WORK-JOURNAL.md`。
+
+
 - 2026-10-16 Native 会话生命周期运行时（host 菜单与设备验收待接入）。
   - 增加当前目录/认证代际的不可持久化 action reference、逐行操作元数据和 rename/reset/delete、Codex archive/archived/restore、Codex/Claude/Pi 只读原生会话复制。保留 OpenClaw key/label/reason、Hermes key/title 与 SDK sessionKey/title 差异、真实 active-run/ownership 限制、继承项目及主/渠道禁止删除；archive 不冒充 delete，可复制/可续聊不授予重置或删除原会话。已知 native 输入必须有当前目录和精确 canContinue:true，未知/新 owned 键保留后端最终检查。
   - OpenClaw 缺失 method 广告与明确空/缺项列表分开：仅实际当前认证 sessions.list 成功可保留既有 legacy CRUD ceiling；明确/损坏广告不降级，不因 UNKNOWN_METHOD 换 RPC 或重放。操作严格本地验证后才消费 reference，旧目录/历史先退休；回执只标识原目标，迟到 ACK/同 ID 重连/同 Socket 新 challenge 不作用于替换会话。未知与异常写回执跨刷新保持 inert，当前认证内最多256引用/256写目标/32派发。

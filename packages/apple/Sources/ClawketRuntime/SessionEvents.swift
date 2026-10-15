@@ -55,6 +55,9 @@ struct SessionEvents: Sendable {
                 try register(runID: runID, sessionKey: sessionKey)
                 if work.kind == .toolCall { try boundary(runID: runID, toolID: work.itemID) }
             }
+            if work.kind == .runStart, let session = work.sessionKey, let run = work.runID {
+                return [.runStarted(sessionKey: session, runID: run), .work(work)]
+            }
             return [.work(work)]
         }
         guard let runID = payload["runId"]?.nonemptyString,
@@ -94,7 +97,9 @@ struct SessionEvents: Sendable {
         if stream == "lifecycle", data["phase"]?.stringValue == "start" { return [.runStarted(sessionKey: key, runID: runID)] }
         if stream == "tool" {
             if data["phase"]?.stringValue == "start" { try boundary(runID: runID, toolID: data["toolCallId"]?.nonemptyString) }
-            return [.tool(sessionKey: key, runID: runID, payload: payload)]
+            var result: [RuntimeSessionUpdate] = [.tool(sessionKey: key, runID: runID, payload: payload)]
+            if let work = try WorkEvents.gateway(payload, session: key, run: runID) { result.append(.work(work)) }
+            return result
         }
         // Main conversations settle only from chat finals, never lifecycle silence/end.
         if key.contains(":subagent:"), stream == "assistant" {

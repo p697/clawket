@@ -51,7 +51,8 @@ enum NativeTaskPresentation {
             isSubmitting: value.state != .uncertain && (value.state == .submitting || submitting != nil),
             error: error, canSubmit: available && value.canAnswer && value.state == .pending,
             kind: kind, canCancel: available && value.canAnswer && value.state == .pending,
-            submittingAction: value.state == .uncertain ? nil : submitting)
+            submittingAction: value.state == .uncertain ? nil : submitting,
+            canEdit: available && value.state == .pending && submitting == nil)
     }
 
     static func initialResponse(_ value: RuntimeQuestion) -> QuestionResponse {

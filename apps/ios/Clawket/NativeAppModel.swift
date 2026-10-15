@@ -40,6 +40,7 @@ final class NativeAppModel: ObservableObject {
     private var showingCachedRoster = false
     private var runtime: RuntimeCoordinator?
     private var taskRequests: NativeTaskRequests?
+    private var taskJournal: NativeTaskJournal?
     private let pairing = PairingService()
     private var eventTask: Task<Void, Never>?
     private var activationTask: Task<Void, Never>?
@@ -76,11 +77,19 @@ final class NativeAppModel: ObservableObject {
                 client: .init(version: "3.1.2", deviceFamily: UIDevice.current.userInterfaceIdiom == .pad ? "ipad" : "iphone"))
             self.vault = vault; self.runtime = runtime; self.cache = try NativeConversationStore()
             self.catalogCache = try NativeCatalogStore()
+            do {
+                let journal = NativeTaskJournal(store: try NativeJournalStore(), onFailure: { [weak self] in
+                    self?.notice = String(localized: "Saved data could not be read safely. Reopen Clawket after unlocking this device.")
+                })
+                await journal.restore(); self.taskJournal = journal
+            } catch {
+                notice = String(localized: "Saved data could not be read safely. Reopen Clawket after unlocking this device.")
+            }
             self.taskRequests = NativeTaskRequests(presentation: presentation, runtime: runtime,
                 drafts: try NativeQuestionDraftStore(), onChange: { [weak self] in self?.rebuildRoster() },
                 onStorageFailure: { [weak self] in
                     self?.notice = String(localized: "This draft could not be saved. Keep Clawket open and try again.")
-                })
+                }, journal: taskJournal)
             if let saved = try await vault.readRegistry() {
                 registry = saved.value
                 if saved.recoveredFromRollback { notice = String(localized: "Recovered your saved connections from the last verified copy.") }
@@ -146,7 +155,11 @@ final class NativeAppModel: ObservableObject {
         case let .questionDraftChanged(id, response): taskRequests?.draftChanged(id: id, response: response)
         case let .answerQuestion(id, response): taskRequests?.answer(id: id, response: response)
         case let .cancelQuestion(id): taskRequests?.cancelQuestion(id: id)
-        case .pickAttachment, .removeAttachment, .openAttachment, .voice, .workInspectorOpened, .workStepOpened:
+        case let .workInspectorOpened(route, workID):
+            guard taskJournal?.canInspect(route, workID: workID) == true else { return }
+        case let .workStepOpened(route, workID, recordID, stepID):
+            guard taskJournal?.canInspect(route, workID: workID, recordID: recordID, stepID: stepID) == true else { return }
+        case .pickAttachment, .removeAttachment, .openAttachment, .voice:
             break // These capabilities stay hidden until their concrete host handlers are available.
         }
     }
@@ -263,7 +276,7 @@ final class NativeAppModel: ObservableObject {
         if !foreground { for route in documents.keys { scheduleSave(route, immediate: true) } }
         Task { await runtime?.setForeground(foreground) }
         if foreground { taskRequests?.refresh(route: presentation.selectedConversation) }
-        else { taskRequests?.flushDrafts() }
+        else { taskRequests?.flushDrafts(); taskJournal?.flush() }
     }
 
     private func networkPathHint() {
@@ -312,6 +325,7 @@ final class NativeAppModel: ObservableObject {
             guard state.connectionID == nil || state.connectionID == activeConnectionID else { return }
             let wasReady = self.state.phase == .ready
             if state.connectionID != self.state.connectionID || wasReady && state.phase != .ready {
+                if let oldConnection = self.state.connectionID { taskJournal?.hold(connectionID: oldConnection) }
                 wireRevision = UUID()
                 unconfirmedCreations.formUnion(creatingCatalogs); creatingCatalogs = []
                 for id in presentation.catalogs.keys { presentation.catalogs[id]?.isLoading = false }
@@ -536,6 +550,7 @@ final class NativeAppModel: ObservableObject {
 
     private func mergeHistory(_ history: RuntimeHistory, route: ConversationID, earlier: Bool, liveRevision: Int64, knownIDs: Set<String>) {
         guard var document = documents[route] else { return }
+        taskJournal?.history(history, route: route, earlier: earlier)
         let old = document.messages
         var remote = history.messages.map { message -> NativeMessage in
             let previous = old.first { $0.remoteID == message.id || (message.role == .user && message.idempotencyKey != nil && $0.idempotencyKey == message.idempotencyKey) }
@@ -638,6 +653,7 @@ final class NativeAppModel: ObservableObject {
                 }
                 let receipt = try await runtime.send(sessionKey: route.sessionID, input: .init(text: queued.text, idempotencyKey: id))
                 if activation == activationRevision, wire == wireRevision {
+                    taskJournal?.receipt(receipt, route: route, input: queued.text)
                     updateSend(route, id: queued.id, delivery: .sent, runID: receipt.runID)
                     if finishedRuns[route]?.contains(receipt.runID) != true { running[route] = receipt.runID }
                 } else {
@@ -677,11 +693,13 @@ final class NativeAppModel: ObservableObject {
     private func receive(_ update: RuntimeSessionUpdate, connectionID: String) {
         switch update {
         case let .runStarted(key, runID):
+            for route in journalRoutes(connectionID: connectionID, sessionKey: key) { taskJournal?.started(route, runID: runID) }
             for route in documents.keys where route.connectionID == connectionID && route.sessionID == key {
                 liveRevisions[route, default: 0] += 1
                 running[route] = runID; updatePresentation(route)
             }
         case let .text(update):
+            for route in journalRoutes(connectionID: connectionID, sessionKey: update.sessionKey) { taskJournal?.text(update, route: route) }
             for route in documents.keys where route.connectionID == connectionID && route.sessionID == update.sessionKey {
                 liveRevisions[route, default: 0] += 1
                 let key = "stream-\(update.runID)-\(update.segmentID)"
@@ -694,7 +712,8 @@ final class NativeAppModel: ObservableObject {
                 }
                 running[route] = update.runID; changed(route); updatePresentation(route); scheduleSave(route)
             }
-        case let .runFinished(key, runID, _, _, _):
+        case let .runFinished(key, runID, reason, _, _):
+            for route in journalRoutes(connectionID: connectionID, sessionKey: key) { taskJournal?.finished(route, runID: runID, reason: reason, completion: update.workCompletion) }
             for route in documents.keys where route.connectionID == connectionID && route.sessionID == key {
                 liveRevisions[route, default: 0] += 1
                 var finished = finishedRuns[route] ?? []
@@ -710,8 +729,21 @@ final class NativeAppModel: ObservableObject {
             }
         case let .sessionMetadata(session):
             sessions.removeAll { $0.key == session.key && $0.connectionID == connectionID }; sessions.append(session); rebuildRoster()
-        case .thought, .tool, .work, .other: break
+        case let .work(work):
+            guard let key = work.sessionKey else { return }
+            for route in journalRoutes(connectionID: connectionID, sessionKey: key) {
+                taskJournal?.record(work, route: route); updatePresentation(route)
+            }
+        case .thought, .tool, .other: break
         }
+    }
+
+    private func journalRoutes(connectionID: String, sessionKey: String) -> Set<ConversationID> {
+        var routes = Set(documents.keys.filter { $0.connectionID == connectionID && $0.sessionID == sessionKey })
+        for session in sessions where session.connectionID == connectionID && session.key == sessionKey {
+            routes.insert(.init(connectionID: connectionID, agentID: session.agentID, sessionID: sessionKey))
+        }
+        return routes
     }
 
     private func updatePresentation(_ route: ConversationID) {
@@ -747,15 +779,13 @@ final class NativeAppModel: ObservableObject {
             sessions: sessionPresentations(connectionID: route.connectionID, agentID: route.agentID),
             models: previous?.models ?? [], modelTitle: previous?.modelTitle,
             modelScopeLabel: previous?.modelScopeLabel, sendLabel: running[route] == nil ? String(localized: "Send") : String(localized: "Add to queue"),
-            isLoadingHistory: previous?.isLoadingHistory ?? false, features: features)
+            isLoadingHistory: previous?.isLoadingHistory ?? false, features: features, work: taskJournal?.work(for: route))
     }
 
     private func present(_ message: NativeMessage, agentName: String) -> MessagePresentation {
         let author: MessageAuthor = message.local ? .local : message.role == .assistant ? .agent(name: agentName, label: nil)
             : message.role == .user ? .participant(name: String(localized: "Participant"), channel: nil) : .system
-        let content: [MessageContent] = message.isWork
-            ? [.work(.init(id: message.id, title: String(localized: "Tool output"), phase: .complete, output: message.text))]
-            : [.markdown(message.text)]
+        let content: [MessageContent] = [.markdown(message.text)]
         let delivery: MessageDelivery? = switch message.delivery {
         case .queued: .queued
         case .held: .held(String(localized: "Ready when you are. Send this message when the connection is available."))

@@ -15,7 +15,7 @@ The 44-point minimum dock sits above the existing composer. It opens the system 
 
 The dock emits `workInspectorOpened(conversationID, workID:)`; entering an authorized step emits `workStepOpened(conversationID, workID:, recordID:, stepID:)` once per detail view lifetime. These are read intents only. The host revalidates the concrete conversation, current work identity, permissions and any async generation before loading or marking read. Dismissal has no task effect. A replaced/removed/unauthorized record makes an open detail unavailable; the navigation destination stays mounted so it cannot silently retarget to replacement content.
 
-The app host currently handles the new intent cases as explicitly unsupported and supplies no default work data. Real Runtime aggregation, bounded storage, permission mapping and device acceptance are separate host work; there are no shipping fixtures.
+The actual app now binds Runtime work to `NativeTaskJournal`, supplies the local authorized inspector, and validates both read intents against the exact conversation/dock/record/step identity. These reads issue no command or RPC. See [WORK-JOURNAL.md](WORK-JOURNAL.md) for aggregation, bounds, cold recovery and remaining reconciliation/device acceptance. There are no shipping fixtures.
 
 ## Verification boundary
 

@@ -36,6 +36,13 @@
 		F54CB52E76F08F39810B272A /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 305D6E7D33031255FC087A1D /* Foundation.framework */; };
 		F9CEDDB86DC3D8DC8B99A105 /* ClawketPairing in Frameworks */ = {isa = PBXBuildFile; productRef = E2A7336EB6B1F9F998B0351B /* ClawketPairing */; };
 		FE4BA71818051CEDD9C7204A /* ClawketUI in Frameworks */ = {isa = PBXBuildFile; productRef = E4FCEFB36539FD378035E5F5 /* ClawketUI */; };
+		A927BE30932FFD57F745B1FF /* NativeJournalModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = D198A09D2950CA7425089621 /* NativeJournalModels.swift */; };
+		EF52CE302BC9C5549A5FFC53 /* NativeJournalStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94642FE9C8E94C3F5D72A242 /* NativeJournalStore.swift */; };
+		DAD5D64F94346CB04F039B82 /* NativeJournalProjection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24942D0AF478121B1C8DF3CA /* NativeJournalProjection.swift */; };
+		577756B72446DBF885EDCCF3 /* NativeWorkReducer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C263C05614001E51C2052376 /* NativeWorkReducer.swift */; };
+		F538AAFAD50D7DB47BA24C27 /* NativeTaskJournal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64C289B16E5D001DC8770A47 /* NativeTaskJournal.swift */; };
+		6AB1932CB11F21EA620C8A3B /* NativeTaskJournalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76EE3BA27F5BF88C7BEFC5EB /* NativeTaskJournalTests.swift */; };
+		833AE1263A156C861B39C08A /* NativeHistoryWorkOrder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0454238B468906AC9C04FD5A /* NativeHistoryWorkOrder.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -71,6 +78,13 @@
 		F520934653CF4DC7A40EEF10 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		F82081877A8E20091FD78626 /* ClawketApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ClawketApp.swift; sourceTree = "<group>"; };
 		F9DC4D8745DDCA79E2D272D5 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; includeInIndex = 1; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
+		D198A09D2950CA7425089621 /* NativeJournalModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeJournalModels.swift; sourceTree = "<group>"; };
+		94642FE9C8E94C3F5D72A242 /* NativeJournalStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeJournalStore.swift; sourceTree = "<group>"; };
+		24942D0AF478121B1C8DF3CA /* NativeJournalProjection.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeJournalProjection.swift; sourceTree = "<group>"; };
+		C263C05614001E51C2052376 /* NativeWorkReducer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeWorkReducer.swift; sourceTree = "<group>"; };
+		64C289B16E5D001DC8770A47 /* NativeTaskJournal.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeTaskJournal.swift; sourceTree = "<group>"; };
+		76EE3BA27F5BF88C7BEFC5EB /* NativeTaskJournalTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeTaskJournalTests.swift; sourceTree = "<group>"; };
+		0454238B468906AC9C04FD5A /* NativeHistoryWorkOrder.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeHistoryWorkOrder.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -139,6 +153,12 @@
 				4226A597815E0BC70CE657C2 /* NativeQuestionDraftStore.swift */,
 				6D1DA96C0D5461424FA70517 /* NativeTaskPresentation.swift */,
 				42F4E937EB35AD3FCDB52A53 /* NativeTaskRequests.swift */,
+				0454238B468906AC9C04FD5A /* NativeHistoryWorkOrder.swift */,
+				64C289B16E5D001DC8770A47 /* NativeTaskJournal.swift */,
+				C263C05614001E51C2052376 /* NativeWorkReducer.swift */,
+				24942D0AF478121B1C8DF3CA /* NativeJournalProjection.swift */,
+				94642FE9C8E94C3F5D72A242 /* NativeJournalStore.swift */,
+				D198A09D2950CA7425089621 /* NativeJournalModels.swift */,
 			);
 			name = Clawket;
 			path = Clawket;
@@ -167,6 +187,7 @@
 				62CEF4BAC15E5B5B6DD99FD7 /* NativeConversationStoreTests.swift */,
 				8EA8C05BF26248B8F8DA8395 /* NativeQuestionDraftStoreTests.swift */,
 				83E37C1EE73DD7335ED11156 /* NativeTaskRequestsTests.swift */,
+				76EE3BA27F5BF88C7BEFC5EB /* NativeTaskJournalTests.swift */,
 			);
 			name = ClawketTests;
 			path = ClawketTests;
@@ -302,6 +323,7 @@
 				0965FDA079959C9465C271AD /* NativeConversationStoreTests.swift in Sources */,
 				8B15DDB46A3D105034AC29C6 /* NativeQuestionDraftStoreTests.swift in Sources */,
 				72620A6CA1CBC261C9D08231 /* NativeTaskRequestsTests.swift in Sources */,
+				6AB1932CB11F21EA620C8A3B /* NativeTaskJournalTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -321,6 +343,12 @@
 				D31FA392DA1F3DE9035432F5 /* NativeQuestionDraftStore.swift in Sources */,
 				2F91D2478DFB46E4FE62AC72 /* NativeTaskPresentation.swift in Sources */,
 				9F79D7036FFE9CE9857C9A64 /* NativeTaskRequests.swift in Sources */,
+				833AE1263A156C861B39C08A /* NativeHistoryWorkOrder.swift in Sources */,
+				F538AAFAD50D7DB47BA24C27 /* NativeTaskJournal.swift in Sources */,
+				577756B72446DBF885EDCCF3 /* NativeWorkReducer.swift in Sources */,
+				DAD5D64F94346CB04F039B82 /* NativeJournalProjection.swift in Sources */,
+				EF52CE302BC9C5549A5FFC53 /* NativeJournalStore.swift in Sources */,
+				A927BE30932FFD57F745B1FF /* NativeJournalModels.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

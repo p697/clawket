@@ -102,7 +102,7 @@ public enum RuntimeRequestResolution: Sendable, Equatable {
 
 /// Canonical work metadata keeps lineage, review inputs and producer clocks intact.
 public struct RuntimeWorkUpdate: Sendable, Equatable {
-    public enum Kind: String, Sendable { case toolCall, toolUpdate, commentary, compaction, usage, system, error, activity }
+    public enum Kind: String, Sendable { case runStart, toolCall, toolUpdate, commentary, compaction, usage, system, error, activity }
     public enum Status: String, Sendable { case running, success, error, unknown }
     public let kind: Kind
     public let sessionKey: String?
@@ -120,4 +120,19 @@ public struct RuntimeWorkUpdate: Sendable, Equatable {
     public let rawInput: JSONValue?
     public let rawOutput: JSONValue?
     public let raw: JSONValue
+    public var toolName: String? { raw["kind"]?.nonemptyString }
+    /// Locally assigned by the history adapter, never read from an incoming live event.
+    public internal(set) var historyMessageID: String? = nil
+    /// Absence is unknown: some adapters already bound a preview before forwarding it.
+    public var inputIsComplete: Bool? { raw["inputIsComplete"]?.boolValue }
+    public var outputIsComplete: Bool? { raw["outputIsComplete"]?.boolValue }
+}
+
+public struct RuntimeWorkCompletion: Sendable, Equatable {
+    public let turnID: String?
+    public let inputMessageID: String?
+    public let inputMessageKey: String?
+    public let startedAtMs: Int64?
+    public let finishedAtMs: Int64?
+    public let durationMs: Int64?
 }

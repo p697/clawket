@@ -38,7 +38,7 @@ Disconnect or disappearing optional discovery retains a bounded inert review cop
 
 `NativeQuestionDraftStore` stores only Codable answer values in protected local documents: seven days, 32 records and 256,000 encoded bytes, exact connection/backend/session/request hash, read-back verification, bounded retired-key fencing and serialized transactions across actor suspension. Global editing revisions reject late older saves, including evicted keys. Resolution retires the matching draft before a queued save can resurrect it; an already awaited write finishes before the retirement transaction removes it. Debounced editing is flushed on background. Closing a question has no wire action. Corrupt or inaccessible storage fails explicitly and is never treated as an empty document.
 
-Review/answer receipts in this host slice are bounded in-memory presentation copies. Durable completed work/consent history and actual phone consent interaction remain later acceptance work; this slice does not mark those parity rows complete.
+The protected bounded task journal now persists inert review cards and acknowledged receipts with independent render IDs; see [WORK-JOURNAL.md](WORK-JOURNAL.md). The question draft store remains separate. Only a successful exact local answer/confirmation acknowledgement can label a response accepted, including when resolution arrives first; cancellation, expiry and external resolution retain a draft. Actual phone consent interaction and complete task/history parity remain acceptance work.
 
 ## Evidence
 

@@ -202,4 +202,82 @@ final class NativeTaskRequestsTests: XCTestCase, @unchecked Sendable {
         requests.answer(id: value.id.uuidString, response: .init(fields: ["value": .init(selectedOptionIDs: ["One"])]))
         await Task.yield(); let answers = await runtime.answers; XCTAssertTrue(answers.isEmpty)
     }
+
+    @MainActor func testOnlyOwnAcceptedAnswerGetsAcceptedReceiptAndFrozenFields() async throws {
+        let (requests, _, runtime, _) = try fixture(), value = try question(kind: "confirm")
+        requests.apply(.init(connectionID: "c", approvals: [], questions: [value]))
+        requests.answer(id: value.id.uuidString, response: .init(confirmed: false))
+        try await waitUntil { await runtime.answers.count == 1 }
+        requests.resolved(reference: value.reference, resolution: .answered)
+        try await waitUntil {
+            guard case let .question(card) = requests.messages(for: self.route).first?.content.first else { return false }
+            return card.responseIsAccepted
+        }
+        guard case let .question(card) = requests.messages(for: route)[0].content[0] else { return XCTFail("Missing receipt") }
+        XCTAssertTrue(card.responseIsAccepted); XCTAssertFalse(card.canEditFields)
+        XCTAssertEqual(card.resolvedLabel, String(localized: "Answer sent"))
+    }
+
+    @MainActor func testExternalAnswerNeverClaimsDraftWasAccepted() async throws {
+        let (requests, presentation, runtime, _) = try fixture(), value = try question(kind: "confirm")
+        requests.apply(.init(connectionID: "c", approvals: [], questions: [value]))
+        requests.draftChanged(id: value.id.uuidString, response: .init(confirmed: false))
+        requests.resolved(reference: value.reference, resolution: .answered)
+        guard case let .question(card) = requests.messages(for: route)[0].content[0] else { return XCTFail("Missing retained draft") }
+        XCTAssertFalse(card.responseIsAccepted); XCTAssertFalse(card.canEditFields)
+        XCTAssertEqual(presentation.questionResponses[value.id.uuidString]?.confirmed, false)
+        XCTAssertNotEqual(card.resolvedLabel, String(localized: "Answer sent"))
+        // The next exact request resolves before its reserved dispatch gets a MainActor turn.
+        let replacement = try question(kind: "confirm")
+        requests.apply(.init(connectionID: "c", approvals: [], questions: [replacement]))
+        requests.answer(id: replacement.id.uuidString, response: .init(confirmed: true))
+        requests.resolved(reference: replacement.reference, resolution: .answered)
+        await Task.yield()
+        guard case let .question(reserved) = requests.messages(for: route).last?.content.first else { return XCTFail("Missing reserved draft") }
+        XCTAssertFalse(reserved.responseIsAccepted)
+        let answers = await runtime.answers; XCTAssertTrue(answers.isEmpty)
+    }
+
+    @MainActor func testCancelAcknowledgementKeepsDraftWithoutAcceptedAnswer() async throws {
+        let (requests, presentation, runtime, _) = try fixture(), value = try question()
+        requests.apply(.init(connectionID: "c", approvals: [], questions: [value]))
+        let response = QuestionResponse(fields: ["value": .init(text: "Not submitted")])
+        requests.draftChanged(id: value.id.uuidString, response: response)
+        requests.cancelQuestion(id: value.id.uuidString)
+        try await waitUntil { await runtime.answers.count == 1 }
+        requests.resolved(reference: value.reference, resolution: .answered)
+        guard case let .question(card) = requests.messages(for: route)[0].content[0] else { return XCTFail("Missing cancel review") }
+        XCTAssertFalse(card.responseIsAccepted); XCTAssertFalse(card.canEditFields)
+        XCTAssertEqual(presentation.questionResponses[value.id.uuidString], response)
+    }
+
+    @MainActor func testColdReviewRestoresOnlyValuesAndFreshRequestReplacesItsInertCopy() async throws {
+        let presentation = ClientPresentation(), runtime = RequestRuntime(), drafts = try NativeQuestionDraftStore(values: RequestValues())
+        let store = try NativeJournalStore(values: RequestValues())
+        let journal = NativeTaskJournal(store: store, onFailure: { XCTFail("Unexpected journal failure") })
+        await journal.restore()
+        let first = NativeTaskRequests(presentation: presentation, runtime: runtime, drafts: drafts,
+            onChange: {}, onStorageFailure: { XCTFail("Unexpected failure") }, journal: journal)
+        first.update(ready()); let original = try question()
+        first.apply(.init(connectionID: "c", approvals: [], questions: [original]))
+        let response = QuestionResponse(fields: ["value": .init(text: " exact saved draft ")])
+        first.draftChanged(id: original.id.uuidString, response: response)
+        first.invalidate(); journal.flush()
+        try await waitUntil { (try? await store.read())?.value.reviews.count == 1 }
+        let coldJournal = NativeTaskJournal(store: store, onFailure: { XCTFail("Unexpected restore failure") })
+        await coldJournal.restore()
+        let coldPresentation = ClientPresentation()
+        let restored = NativeTaskRequests(presentation: coldPresentation, runtime: runtime, drafts: drafts,
+            onChange: {}, onStorageFailure: { XCTFail("Unexpected failure") }, journal: coldJournal)
+        restored.update(ready())
+        guard case let .question(held) = restored.messages(for: route)[0].content[0] else { return XCTFail("Missing recovered review") }
+        XCTAssertNotEqual(held.id, original.id.uuidString); XCTAssertFalse(held.canSubmit); XCTAssertFalse(held.canEditFields)
+        XCTAssertEqual(coldPresentation.questionResponses[held.id], response)
+        restored.answer(id: held.id, response: response)
+        let fresh = try question()
+        restored.apply(.init(connectionID: "c", approvals: [], questions: [fresh]))
+        XCTAssertEqual(restored.messages(for: route).count, 1)
+        XCTAssertEqual(coldPresentation.questionResponses[fresh.id.uuidString], response)
+        let answers = await runtime.answers; XCTAssertTrue(answers.isEmpty)
+    }
 }

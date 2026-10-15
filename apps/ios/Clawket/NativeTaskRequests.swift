@@ -35,6 +35,7 @@ final class NativeTaskRequests {
     private let presentation: ClientPresentation
     private let runtime: any NativeTaskRuntime
     private let drafts: NativeQuestionDraftStore
+    private let journal: NativeTaskJournal?
     private let onChange: @MainActor () -> Void
     private let onStorageFailure: @MainActor () -> Void
     private var connectionID: String?
@@ -47,6 +48,7 @@ final class NativeTaskRequests {
     private var questions: [String: RuntimeQuestion] = [:]
     private var order: [String] = []
     private var submissions: [String: Submission] = [:]
+    private var acceptedAnswers: Set<String> = []
     private var blocked: Set<String> = []
     private var errors: [String: String] = [:]
     private var draftRevision: UInt64 = 0
@@ -57,16 +59,28 @@ final class NativeTaskRequests {
 
     init(presentation: ClientPresentation, runtime: any NativeTaskRuntime,
          drafts: NativeQuestionDraftStore, onChange: @escaping @MainActor () -> Void,
-         onStorageFailure: @escaping @MainActor () -> Void) {
+         onStorageFailure: @escaping @MainActor () -> Void, journal: NativeTaskJournal? = nil) {
         self.presentation = presentation; self.runtime = runtime; self.drafts = drafts
         self.onChange = onChange; self.onStorageFailure = onStorageFailure
+        self.journal = journal
+        if let journal {
+            for record in journal.reviews {
+                let message = NativeJournalProjection.review(record)
+                let response: QuestionResponse?
+                if case let .question(value) = record.content { response = value.response; presentation.questionResponses[record.id] = value.response }
+                else { response = nil }
+                receipts.append(.init(connectionID: record.connectionID, sessionKey: record.sessionID,
+                    key: record.correlationKey, held: record.held, message: message,
+                    bytes: message.content.first.map { NativeTaskPresentation.byteCount($0, response: response) } ?? 0))
+            }
+        }
     }
 
     func invalidate() {
         flushDrafts()
         ready = false; scope = UUID(); clearConfirmation()
         holdCurrentReviews()
-        approvals = [:]; questions = [:]; order = []; submissions = [:]; blocked = []; errors = [:]; inputRevisions = [:]
+        approvals = [:]; questions = [:]; order = []; submissions = [:]; acceptedAnswers = []; blocked = []; errors = [:]; inputRevisions = [:]
         pruneResponses()
         // Immutable local draft saves and inert review copies survive disconnect, without authority.
         publish()
@@ -104,7 +118,7 @@ final class NativeTaskRequests {
             if let response = presentation.questionResponses[question.id.uuidString] { localDrafts[question.draftKey] = response }
         }
         for receipt in receipts where receipt.held {
-            let id = String(receipt.message.id.dropFirst("request-".count))
+            let id = responseID(receipt)
             if let response = presentation.questionResponses[id] { localDrafts[receipt.key] = response }
         }
         // A disappearing entry may be reauthentication or unsupported discovery, not a decision.
@@ -113,8 +127,9 @@ final class NativeTaskRequests {
         questions = Dictionary(uniqueKeysWithValues: snapshot.questions.map { ($0.id.uuidString, $0) })
         order = snapshot.approvals.map { $0.id.uuidString } + snapshot.questions.map { $0.id.uuidString }
         let current = Set(order), freshKeys = Set(reviewKeys)
-        receipts.removeAll { $0.held && $0.connectionID == snapshot.connectionID && freshKeys.contains($0.key) }
+        receipts.removeAll { $0.connectionID == snapshot.connectionID && freshKeys.contains($0.key) }
         submissions = submissions.filter { current.contains($0.key) }
+        acceptedAnswers.formIntersection(current)
         blocked.formUnion(snapshot.approvals.filter { $0.state == .uncertain }.map { $0.id.uuidString })
         blocked.formUnion(snapshot.questions.filter { $0.state == .uncertain }.map { $0.id.uuidString })
         blocked = blocked.intersection(current); errors = errors.filter { current.contains($0.key) }
@@ -132,18 +147,22 @@ final class NativeTaskRequests {
                     guard let draft = try await drafts.read(key: question.draftKey),
                           questions[id]?.reference == question.reference, inputRevisions[id, default: 0] == input else { return }
                     presentation.questionResponses[id] = NativeTaskPresentation.restore(draft, for: present(question))
+                    saveReview(question)
                 } catch {
                     guard questions[id]?.reference == question.reference else { return }
                     errors[id] = String(localized: "Saved data could not be read safely. Reopen Clawket after unlocking this device."); publish()
                 }
             }
         }
+        for approval in approvals.values { saveReview(approval) }
+        for question in questions.values { saveReview(question) }
         pruneResponses(); publish()
     }
 
     func draftChanged(id: String, response: QuestionResponse) {
         guard let question = questions[id], question.state == .pending, submissions[id] == nil, !blocked.contains(id) else { return }
         presentation.questionResponses[id] = response
+        saveReview(question)
         draftRevision += 1; inputRevisions[id] = draftRevision
         saveDraft(response, question: question, revision: draftRevision, immediate: false)
     }
@@ -250,14 +269,19 @@ final class NativeTaskRequests {
             case .resolved, .answered: nil
             }
             // An external resolution without an exact decision never invents an Allowed receipt.
-            if value.outcome != nil { appendReceipt(reference, key: approvals[id]!.reviewKey, content: .approval(value)) }
+            if value.outcome == nil { value.error = NativeJournalProjection.unavailable }
+            appendReceipt(reference, key: approvals[id]!.reviewKey, content: .approval(value))
+            saveReview(approvals[id]!, held: false, outcome: value.outcome)
             approvals.removeValue(forKey: id)
         }
         if let question = questions.removeValue(forKey: id) {
             var value = present(question); value.canSubmit = false; value.canCancel = false
+            let sentAnswer = acceptedAnswers.contains(id) && resolution == .answered
+            value.canEdit = false; value.responseIsAccepted = sentAnswer
             value.isSubmitting = false; value.submittingAction = nil; value.error = nil
-            value.resolvedLabel = resolution == .answered ? String(localized: "Answer sent")
+            value.resolvedLabel = sentAnswer ? String(localized: "Answer sent")
                 : resolution == .expired ? String(localized: "Expired") : String(localized: "This request is no longer available.")
+            saveReview(question, held: false, accepted: sentAnswer, expired: resolution == .expired)
             appendReceipt(reference, key: question.draftKey, content: .question(value))
             draftRevision += 1; let revision = draftRevision
             saveTasks[question.draftKey]?.cancel(); saveTasks.removeValue(forKey: question.draftKey)
@@ -268,6 +292,7 @@ final class NativeTaskRequests {
             }
         }
         submissions.removeValue(forKey: id); blocked.remove(id); errors.removeValue(forKey: id)
+        acceptedAnswers.remove(id)
         inputRevisions.removeValue(forKey: id)
         if confirmation?.reference == reference { clearConfirmation() }
         order.removeAll { $0 == id }; pruneResponses(); publish()
@@ -296,10 +321,29 @@ final class NativeTaskRequests {
 
     private func submit(_ question: RuntimeQuestion, answer: RuntimeQuestionAnswer, action: QuestionPresentation.Submission) {
         let id = question.id.uuidString, captured = scope
+        let response = presentation.questionResponses[id] ?? .init()
         submissions[id] = .question(action); errors.removeValue(forKey: id); publish()
         Task {
             guard captured == scope, questions[id]?.reference == question.reference, !blocked.contains(id) else { return }
-            do { try await runtime.answer(question.reference, answer: answer) }
+            do {
+                try await runtime.answer(question.reference, answer: answer)
+                guard captured == scope, action != .cancel else { return }
+                if questions[id]?.reference == question.reference {
+                    acceptedAnswers.insert(id)
+                } else if receipts.contains(where: { $0.message.id == "request-" + id && $0.key == question.draftKey }) {
+                    // The authoritative resolution may arrive before the exact local RPC acknowledgement.
+                    // Only that successful acknowledgement can upgrade this frozen response's receipt.
+                    presentation.questionResponses[id] = response
+                    var value = NativeTaskPresentation.question(question, available: false, submitting: nil, error: nil)
+                    value.canEdit = false; value.canCancel = false; value.responseIsAccepted = true
+                    value.resolvedLabel = String(localized: "Answer sent")
+                    appendReceipt(question.reference, key: question.draftKey, content: .question(value))
+                    journal?.upsertReview(key: question.draftKey, connectionID: question.reference.connectionID,
+                        sessionID: question.reference.sessionKey, held: false,
+                        content: .question(NativeJournalProjection.question(question, response: response, accepted: true)))
+                    publish()
+                }
+            }
             catch { fail(error, id: id, scope: captured) }
         }
     }
@@ -341,16 +385,17 @@ final class NativeTaskRequests {
         publish()
     }
     private func publish() {
-        let held: [ApprovalPresentation] = receipts.compactMap { receipt in
-            guard receipt.held, receipt.connectionID == connectionID, receipt.sessionKey == nil,
+        let reviews: [ApprovalPresentation] = receipts.compactMap { receipt in
+            guard receipt.connectionID == connectionID, receipt.sessionKey == nil,
                   case let .approval(value) = receipt.message.content.first else { return nil }
             return value
         }
-        presentation.connectionApprovals = held + order.compactMap { id in
+        let live: [ApprovalPresentation] = order.compactMap { id in
             guard let approval = approvals[id], approval.reference.sessionKey == nil else { return nil }
             return present(approval)
         }
-        presentation.accountAttentionCount = presentation.connectionApprovals.count
+        presentation.connectionApprovals = reviews + live
+        presentation.accountAttentionCount = receipts.filter { $0.held && $0.connectionID == connectionID && $0.sessionKey == nil }.count + live.count
         onChange()
     }
     private func clearConfirmation() {
@@ -362,11 +407,14 @@ final class NativeTaskRequests {
                 var value = present(approval); value.canResolve = false; value.submitting = nil
                 value.error = Self.uncertainText
                 appendReceipt(approval.reference, key: approval.reviewKey, content: .approval(value), held: true)
+                saveReview(approval)
             }
             if let question = questions[id] {
                 var value = present(question); value.canSubmit = false; value.canCancel = false
+                value.canEdit = false
                 value.isSubmitting = false; value.submittingAction = nil; value.error = Self.uncertainText
                 appendReceipt(question.reference, key: question.draftKey, content: .question(value), held: true)
+                saveReview(question)
             }
         }
     }
@@ -382,8 +430,24 @@ final class NativeTaskRequests {
     }
 
     private func pruneResponses() {
-        let retained = Set(questions.keys).union(receipts.map { String($0.message.id.dropFirst("request-".count)) })
+        let retained = Set(questions.keys).union(receipts.map(responseID))
         presentation.questionResponses = presentation.questionResponses.filter { retained.contains($0.key) }
+    }
+    private func responseID(_ receipt: Receipt) -> String {
+        if case let .question(value) = receipt.message.content.first { return value.id }
+        return ""
+    }
+    private func saveReview(_ value: RuntimeApproval, held: Bool = true, outcome: ApprovalPresentation.Outcome? = nil) {
+        journal?.upsertReview(key: value.reviewKey, connectionID: value.reference.connectionID,
+            sessionID: value.reference.sessionKey, held: held,
+            content: .approval(NativeJournalProjection.approval(value, outcome: outcome)))
+    }
+    private func saveReview(_ value: RuntimeQuestion, held: Bool = true, accepted: Bool = false, expired: Bool = false) {
+        journal?.upsertReview(key: value.draftKey, connectionID: value.reference.connectionID,
+            sessionID: value.reference.sessionKey, held: held,
+            content: .question(NativeJournalProjection.question(value,
+                response: presentation.questionResponses[value.id.uuidString] ?? NativeTaskPresentation.initialResponse(value),
+                accepted: accepted, expired: expired)))
     }
     private static var uncertainText: String { String(localized: "The result could not be confirmed. Reconnect to check this request.") }
 }
