@@ -128,7 +128,12 @@ private struct SessionMutationConfirmationPresenter: View {
                 } else { Text("Delete this conversation from the connected agent? This cannot be undone.") }
             }
             .onChange(of: presented) { visible in
-                if !visible { onIntent(.dismissSessionMutationConfirmation(confirmationID: confirmation.id)) }
+                if !visible {
+                    Task { @MainActor in
+                        await Task.yield()
+                        onIntent(.dismissSessionMutationConfirmation(confirmationID: confirmation.id))
+                    }
+                }
             }
     }
 }

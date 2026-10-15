@@ -15,7 +15,7 @@
 - 2026-10-16 Native 会话管理host与原生菜单（独立负责人授权切片，验证继续）。
   - 当前选中会话点击才获取Runtime不持久ref，原生sheet/rename编辑/破坏性确认/归档筛选/只读原生复制均由实际allowedActions决定，默认unsupported。确认在host同步冻结并消费动作+ref；关闭、取消/菜单替换不发后台写入。捕获activation/wire/selection与原physical session ID，旧ACK不导航替代会话。
   - ACK后必须新read，不能用任意迟到roster解除锁；Runtime finish明确退休write pending期间启动的catalogTask，post-ACK刷新不join旧请求。未知写保持目标锁、无spinner/重播；queue在破坏性操作前hold并保存，draft/本地消息身份/未知消息不丢失，不删除整NativeConversation/journal，physical reset reconciliation交独立transcript回调。
-  - 追加协议晚list、表示层字节/UTF16/default门控及13项实际Host故障回归源码；重基media c912b27b保留全部60App方法，追加13项管理方法后门槛73；当前295UI+3权限/19语共5,662语言单元源码检查通过。编译/窄测试/实际App CI/USB与六后端管理验收尚未完成，不宣称完整parity。详见 `docs/native-ios/SESSION-UI.md`。
+  - 追加协议晚list、表示层字节/UTF16/default门控及13项实际Host故障回归源码；重基media/liveness保留全部60App方法，追加13项管理方法后门槛73。无竞争进程/内存预检、heavy/jobs2 下 SessionManagementRecoveryTests 7函数/11参数输入与 SessionManagementPresentationTests 3项逐文件通过；16份真实iOS16.4/Swift6表示源码typecheck、实际App与73方法arm64/x86_64 generic build-for-testing成功，不启动本机模拟器。295UI+3权限/19语共5,662精确编译值逐一匹配，目录6/资源4/测试报告3/文档14指令对及7回归均通过并释放租约。本轮Swift净增742源行/351测试行，TS/TSX167,902/132,119与617测试文件保持，文档189篇。实际App执行、完整CI、USB与六后端管理验收尚未完成，不宣称完整parity。详见 `docs/native-ios/SESSION-UI.md`。
 
 - 2026-10-16 Native work/review host journal（负责人授权，完整parity与设备验收继续）。
   - 实际App接 typed live/history work、工具输入/输出、累计commentary、run/start/final与captured send receipt；原生dock/详情读取只验证当前route/record/step，无RPC写入或composer/focus/scroll副作用。独立持久render UUID，精确run/turn/input归属；复用run时缺失输入的窗口留为未归属，partial final不选错已有执行。早期分页按API规范顺序前插，不按缺失/偏斜时钟排序，也不把旧工具变成最新任务。
