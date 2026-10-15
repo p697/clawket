@@ -5,6 +5,11 @@
   - `docs/native-ios/LOCALIZATION.md` 记录 host 动态状态、默认文案、条件标题及 UI helper 的本地化调用点；用户/后端文本、名称、模型、路径、代码与命令保持原文。host 已接入文案生产者，此分支补齐 UI 固定默认值、私有标签 helper 与无障碍插值，不改变公开 API；用 xcodeproj 增量增加权限目录资源引用，未改变其他工程设置。catalog 使用手工维护项，避免 Swift Package 源文案未被 App 提取时误删。
   - `heavy` 租约下 8 份实际 UIKit/SwiftUI 源码按 Swift6/iOS16.4 typecheck 通过；真实宿主 generic Simulator 无签名开发构建 arm64/x86_64 成功，逐项读回 19 个语言目录、两张表共 3,743 条编译译文，与目录及权限源文案完全一致。单文件 Node 验证 6 项通过，覆盖实际 19 语言目录、权限源文案漂移、缺失/空输入、占位符重排及阿拉伯语六种复数类别；另有 4 项编译资源回归覆盖缺失/损坏/值不符/元数据漂移。默认全 19 语言检查通过并成为原生 CI 门槛，CI 同时构建后验证资源。语言切换/RTL/长文案、VoiceOver 与语言质量的设备验收仍另行验证，不把资源覆盖当成设备语言验收，无分发或发布。
 
+- 2026-10-16 Native host 队列编辑与异步连接范围修复。
+  - 队列项目支持独立原生编辑/移除：先 held，保留当前 composer 草稿与幂等身份，保存不自动发；已派发、结果未知和外部参与者不可编辑/移除。同步预占 sending 消除 Task 首次运行前的移除竞态，编辑写入失败保留原内容并防止覆盖新历史。增加五项恢复/状态/旧编辑器/取消边界测试，App 非空门槛提升为十项。
+  - Host 延迟创建会话、发送、停止、模型选择和异步目录/历史/模型结果均核对 activation UUID；切换回同一个连接也不让旧任务进入新代。切换中的创建保持结果未知，需完整刷新才可再建；切换配对入口/后端清除旧错误。新增编辑文案四条、19语真实译文。
+  - Xcode27.1RC/jobs2 实际 App 与十项测试方法 generic Simulator 编译通过；另项目模拟器仍启动，未叠加本机测试，执行交 CI。字符串五项与199条四语 QA 覆盖、Python 结果检查三项通过。正确 USB WebDriver 重建后连接/settings/输入错误分支通过；实际 OpenClaw direct 在 LAN 允许后被 Gateway 以 token_mismatch 拒绝，凭据来源只读定位中，尚无 ready/推理/双后端稳定性证据。未改服务、生产、版本、商店 App 或发布。
+
 - 2026-10-16 Native 后端认证兼容（OpenClaw bootstrap 与 Hermes direct）。
   - 对齐当前 Mobile：仅 bootstrap 身份的 INVALID_REQUEST/BAD_REQUEST、明确 bootstrapToken 与 unexpected/invalid connect schema 错误、且保留旧 token/password 时，禁用本次连接 bootstrap 并回收一次；本地与 Relay 路径一致，不把认证失败降级为旧身份。等待者与代际围栏保持，第二次错误不循环。
   - heavy 租约、Swift6/jobs2 逐文件通过 BootstrapCompatibilityTests 5 项/9 组输入，含两种拒绝码、Relay 密码、无旧凭据、重复拒绝及认证/无关 schema 拒绝。Hermes direct 将独立 token 只拼入临时 Upgrade URL，保留旧含token QR与Relay独立凭据，其他后端不加query；增量8测试/16组输入通过，文档10对/7项通过。完整 CI 另行记录；未改现有 Mobile、服务协议、生产、版本或发布。
