@@ -102,7 +102,8 @@ private func connection(_ object: [String: Any], legacy: Bool) throws -> Upgrade
         guard let raw = value as? String, let parsed = PairingEnvironment(rawValue: raw) else { throw UpgradeFailure.invalidRegistry }
         environment = parsed
     } else { environment = nil }
-    let url = try upgradeURL(upgradeString(object, "url"), socket: true)
+    let rawURL = try upgradeString(object, "url")
+    let url = try upgradeURL(rawURL, socket: true)
     var token = optionalUpgradeString(object, legacy ? "token" : "__absent"), password = optionalUpgradeString(object, legacy ? "password" : "__absent")
     if let value = object["auth"] {
         guard let auth = value as? [String: Any] else { throw UpgradeFailure.invalidRegistry }
@@ -121,12 +122,15 @@ private func connection(_ object: [String: Any], legacy: Bool) throws -> Upgrade
         bootstrap = PairingBootstrap(token: try upgradeString(value, "token"), strategy: strategy, expiresAtMs: expires, access: access)
     }
     var relay: PairingRelay?
+    var rawRegistryURL: String?
     if let raw = object["relay"] {
         guard let value = raw as? [String: Any] else { throw UpgradeFailure.invalidRegistry }
         let version = upgradeInteger(value, "protocolVersion")
         if value["protocolVersion"] != nil && version == nil { throw UpgradeFailure.invalidRegistry }
         let supportsBootstrap = try optionalUpgradeBool(value, "supportsBootstrap")
-        relay = PairingRelay(serverURL: try upgradeURL(upgradeString(value, "serverUrl"), socket: false), gatewayID: try upgradeString(value, "gatewayId"),
+        let registryURL = try upgradeString(value, "serverUrl")
+        rawRegistryURL = registryURL
+        relay = PairingRelay(serverURL: try upgradeURL(registryURL, socket: false), gatewayID: try upgradeString(value, "gatewayId"),
             clientToken: try strictOptionalString(value, "clientToken"), relayURL: transport == .relay ? url : nil,
             displayName: try strictOptionalString(value, "displayName"), protocolVersion: version.map(Int.init), supportsBootstrap: supportsBootstrap)
     }
@@ -142,7 +146,8 @@ private func connection(_ object: [String: Any], legacy: Bool) throws -> Upgrade
     return UpgradedConnection(id: try upgradeString(object, "id"), backendKind: backend, transportKind: transport,
         label: try upgradeString(object, legacy ? "name" : "label"), url: url, createdAt: createdAt,
         environment: environment, debugMode: try optionalUpgradeBool(object, "debugMode"), token: token, password: password,
-        bootstrap: bootstrap, relay: relay, hermesBridgeURL: bridge)
+        bootstrap: bootstrap, relay: relay, hermesBridgeURL: bridge,
+        legacyTokenScope: .init(gatewayURL: rawURL, registryURL: rawRegistryURL))
 }
 
 func validatePreservedValue(_ id: LegacyValueID, data: Data) throws {

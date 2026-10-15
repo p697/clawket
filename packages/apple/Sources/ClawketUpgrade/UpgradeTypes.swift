@@ -60,6 +60,13 @@ public struct UpgradedConnection: Sendable, Equatable {
     public let bootstrap: PairingBootstrap?
     public let relay: PairingRelay?
     public let hermesBridgeURL: URL?
+    /// Exact saved spellings used by Mobile's credential-key hash, before endpoint normalization.
+    public let legacyTokenScope: UpgradedLegacyTokenScope
+}
+
+public struct UpgradedLegacyTokenScope: Sendable, Equatable {
+    public let gatewayURL: String
+    public let registryURL: String?
 }
 
 public struct UpgradedRegistry: Sendable, Equatable {

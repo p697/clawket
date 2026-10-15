@@ -198,5 +198,39 @@ final class UpgradeImporterTests: XCTestCase, @unchecked Sendable {
         let node = try await importer.deviceToken(connectionID: "connection-0", deviceID: deviceID, role: "node")
         XCTAssertEqual(op?.token, "synthetic-legacy-operator"); XCTAssertEqual(op?.scopes, [])
         XCTAssertNil(node)
+        for index in 1..<6 {
+            let foreign = try await importer.deviceToken(connectionID: "connection-\(index)", deviceID: deviceID)
+            XCTAssertNil(foreign)
+        }
+    }
+
+    func testScopedOnlyTokensRetainRawHTTPAndRegistryURLSpellingsBeforeNormalization() async throws {
+        let (identity, deviceID) = try upgradeTestIdentity()
+        let cases: [(String, Bool)] = [("http://Gateway.Example.invalid:80/base/", false),
+            ("https://Gateway.Example.invalid:443/base/%2f/", false),
+            ("https://REGISTRY.Example.invalid:443/base/", true),
+            ("https://clawket-registry.clawket.workers.dev/", true)]
+        for (rawURL, isRelay) in cases {
+            var row = upgradeTestRecords()[0]
+            var scope = rawURL
+            while scope.hasSuffix("/") { scope.removeLast() }
+            if isRelay {
+                row["relay"] = ["serverUrl": rawURL, "gatewayId": "gateway-0", "clientToken": "synthetic-client"]
+                scope += "::gateway-0"
+            } else {
+                row["url"] = rawURL; row["transportKind"] = "local"; row.removeValue(forKey: "relay")
+            }
+            let key = secure("clawket.deviceToken.\(deviceID)_\(isRelay ? "relay" : "url")_\(upgradeDigest(Data(scope.utf8)))")
+            let source = UpgradeMemorySource(values: [plain(UpgradeKeys.marker): Data("1".utf8),
+                secure(UpgradeKeys.identity): identity, secure(UpgradeKeys.registry): try upgradeTestRegistry([row]),
+                key: Data("synthetic-raw-scope-token".utf8)])
+            let (importer, _, _, _) = try upgradeTestImporter(source)
+            let imported = try await importer.importIfNeeded()
+            let connection = try XCTUnwrap(imported.registry?.connections.first)
+            XCTAssertEqual(isRelay ? connection.legacyTokenScope.registryURL : connection.legacyTokenScope.gatewayURL, rawURL)
+            if !isRelay { XCTAssertEqual(connection.url.scheme, rawURL.hasPrefix("https:") ? "wss" : "ws") }
+            let token = try await importer.deviceToken(connectionID: connection.id, deviceID: deviceID)
+            XCTAssertEqual(token?.token, "synthetic-raw-scope-token")
+        }
     }
 }

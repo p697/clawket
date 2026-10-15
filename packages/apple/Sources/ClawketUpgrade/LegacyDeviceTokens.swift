@@ -13,7 +13,8 @@ extension UpgradeImporter {
     /// The legacy unscoped fallback has operator semantics and is never offered to the node role.
     public func deviceToken(connectionID: String, deviceID: String, role: String = "operator") async throws -> UpgradedDeviceToken? {
         guard let result = try await committedResult(), result.identity?.deviceID == deviceID,
-              let connection = result.registry?.connections.first(where: { $0.id == connectionID }) else { return nil }
+              let connection = result.registry?.connections.first(where: { $0.id == connectionID }),
+              connection.backendKind == .openclaw else { return nil }
         let expectedRole = normalizeLegacyScopePart(role).lowercased()
         guard !expectedRole.isEmpty else { return nil }
         for key in legacyTokenCandidates(connection: connection, deviceID: deviceID, role: expectedRole) {
@@ -31,17 +32,20 @@ func legacyTokenCandidates(connection: UpgradedConnection, deviceID: String, rol
     let suffix = normalizedRole == "operator" || normalizedRole.isEmpty ? "" : "_role_\(upgradeDigest(Data(normalizedRole.utf8)))"
     var keys: [String] = []
     if let relay = connection.relay {
-        var servers = [relay.serverURL]
+        // The saved raw spelling is authoritative for historical key hashes. Socket URL conversion,
+        // URL serialization and official-domain migration must not change that first candidate.
+        var servers = [connection.legacyTokenScope.registryURL ?? relay.serverURL.absoluteString]
+        servers.append(relay.serverURL.absoluteString)
         if let service = OfficialPairingServices.service(for: relay.serverURL), var alias = URLComponents(url: relay.serverURL, resolvingAgainstBaseURL: false) {
             alias.host = service.legacyRegistryHost
-            if let url = alias.url { servers.append(url) }
+            if let url = alias.url { servers.append(url.absoluteString) }
         }
         for server in servers {
-            let identity = normalizeLegacyScopePart(server.absoluteString) + "::" + normalizeLegacyScopePart(relay.gatewayID)
+            let identity = normalizeLegacyScopePart(server) + "::" + normalizeLegacyScopePart(relay.gatewayID)
             keys.append(base + "_relay_" + upgradeDigest(Data(identity.utf8)) + suffix)
         }
     } else {
-        keys.append(base + "_url_" + upgradeDigest(Data(normalizeLegacyScopePart(connection.url.absoluteString).utf8)) + suffix)
+        keys.append(base + "_url_" + upgradeDigest(Data(normalizeLegacyScopePart(connection.legacyTokenScope.gatewayURL).utf8)) + suffix)
     }
     if normalizedRole == "operator" { keys.append(base) }
     var seen = Set<String>()
