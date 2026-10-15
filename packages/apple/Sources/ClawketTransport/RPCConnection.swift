@@ -9,6 +9,13 @@ public enum NativeConnectionState: Sendable, Equatable {
     case idle, connecting, handshaking, ready, offline
 }
 
+/// Keep the outer metadata: OpenClaw Bridge negotiation is not part of the Gateway payload.
+public struct RPCResponse: Sendable, Equatable {
+    public let payload: JSONValue
+    public let metadata: JSONValue?
+    public let envelope: JSONValue
+}
+
 /// Response receipt describes wire evidence, never native execution or permission to replay.
 public struct RPCFailure: Error, Sendable, Equatable, CustomStringConvertible {
     public enum Code: String, Sendable, Equatable {
@@ -103,7 +110,7 @@ public actor RPCConnection {
 
     private struct Pending {
         let generation: ConnectionGeneration
-        let continuation: CheckedContinuation<JSONValue, any Error>
+        let continuation: CheckedContinuation<RPCResponse, any Error>
         let deadline: Duration
         var timeout: Task<Void, Never>?
         var delivery: RPCFailure.Delivery = .notDispatched
@@ -263,8 +270,13 @@ public actor RPCConnection {
 
     public func request(method: String, params: JSONValue = .object([:]),
                         timeout: Duration = .seconds(20), generation: ConnectionGeneration? = nil) async throws -> JSONValue {
+        try await requestEnvelope(method: method, params: params, timeout: timeout, generation: generation).payload
+    }
+
+    public func requestEnvelope(method: String, params: JSONValue = .object([:]),
+                                timeout: Duration = .seconds(20), generation: ConnectionGeneration? = nil) async throws -> RPCResponse {
         guard !Task.isCancelled else { throw RPCFailure(.cancelled) }
-        guard !method.isEmpty, method.utf8.count <= 128, timeout > .zero, timeout <= .seconds(120) else {
+        guard !method.isEmpty, method.utf8.count <= 128, timeout > .zero, timeout <= .seconds(300) else {
             throw RPCFailure(.invalidRequest)
         }
         guard let entry = current, state == .handshaking || state == .ready else { throw RPCFailure(.notConnected) }
@@ -420,7 +432,7 @@ public actor RPCConnection {
             if clock.now() >= request.deadline { expireRequest(id, generation: generation, code: .timeout); return true }
             pending.removeValue(forKey: id)
             request.timeout?.cancel()
-            if ok { request.continuation.resume(returning: value["payload"] ?? .null) }
+            if ok { request.continuation.resume(returning: RPCResponse(payload: value["payload"] ?? .null, metadata: value["meta"], envelope: value)) }
             else { request.continuation.resume(throwing: RPCFailure(.remoteRejection, delivery: .responseReceived, remoteError: value["error"])) }
             return true
         }
