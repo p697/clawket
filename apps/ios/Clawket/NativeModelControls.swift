@@ -174,7 +174,7 @@ final class NativeModelControls {
     private func prepare(_ value: Authority, mode: ModelPermissionMode) {
         let operation = reserve(value, choice: .permissions(mode), pauseInput: false)
         Task {
-            defer { finish(operation); onChange() }
+            defer { finish(operation); resumeReadAfterPreparation(operation); onChange() }
             do {
                 let token = try await runtime.preparePermissions(reference: value.value.reference, mode: Self.runtimeMode(mode))
                 guard current(operation), presentation.modelControls?.id == value.reviewID,
@@ -189,6 +189,20 @@ final class NativeModelControls {
                 operations.removeValue(forKey: value.key)
                 fail(value.reviewID, text: String(localized: "Permissions could not be prepared. Refresh settings and try again."))
             }
+        }
+    }
+
+    /// Only a pure preparation reaches this path. Actual writes retain all existing read fences.
+    private func resumeReadAfterPreparation(_ operation: Operation) {
+        guard let review = presentation.modelControls, review.id != operation.authority.reviewID,
+              review.route == operation.authority.route, review.phase == .loading, !hasOperation(review.route),
+              selectedRoute() == review.route, isCurrent(operation.authority.epoch, operation.authority.host) else { return }
+        let id = review.id, route = review.route, captured = epoch, host = context()
+        Task {
+            guard presentation.modelControls?.id == id, presentation.modelControls?.route == route,
+                  presentation.modelControls?.phase == .loading, !hasOperation(route), selectedRoute() == route,
+                  isCurrent(captured, host), context() == host else { return }
+            await read(route, reviewID: id)
         }
     }
 

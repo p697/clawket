@@ -56,6 +56,7 @@ private actor SettingsRuntime: NativeModelRuntime {
     func setDefault(_ value: RuntimeModelControls) { defaults = value }
     func holdNextRead() { nextReadHeld = true }
     func releaseRead() { readContinuation?.resume(); readContinuation = nil }
+    func isReadHeld() -> Bool { readContinuation != nil }
     func releaseWrite() { writeContinuation?.resume(); writeContinuation = nil; holdWrite = false }
     func releasePrepare() { prepareContinuation?.resume(); prepareContinuation = nil; holdPrepare = false }
     func modelControls(sessionKey: String?) async throws -> RuntimeModelControls {
@@ -198,17 +199,35 @@ final class NativeModelControlsTests: XCTestCase, @unchecked Sendable {
     }
 
     @MainActor func testClosedPermissionPreparationReleasesOnlyItsOwnReservation() async throws {
-        let (controller, model, runtime, _) = fixture()
-        await runtime.configure(holdPrepare: true)
-        let id = try await open(controller, model)
-        controller.choose(id, choice: .permissions(.workspace))
-        try await wait { await runtime.preparations.count == 1 }
-        controller.dismiss(id); await runtime.releasePrepare()
-        let next = try await open(controller, model)
-        try await wait { model.modelControls?.submitting == nil }
-        controller.choose(next, choice: .fastMode(true))
-        try await wait { await runtime.writes.count == 1 }
-        XCTAssertNil(model.modelControls?.confirmation)
+        for order in ["ready", "read-held", "new-write"] {
+            let (controller, model, runtime, _) = fixture()
+            await runtime.configure(holdPrepare: true)
+            let id = try await open(controller, model)
+            controller.choose(id, choice: .permissions(.workspace))
+            try await wait { await runtime.preparations.count == 1 }
+            controller.dismiss(id)
+            let next = UUID()
+            if order != "ready" { await runtime.holdNextRead() }
+            controller.open(route, id: next)
+            if order == "ready" { try await wait { model.modelControls?.phase == .ready } }
+            else { try await wait { await runtime.isReadHeld() } }
+            await runtime.releasePrepare()
+            // A read crossing the pure preparation's retirement must be replaced
+            // with a fresh read, rather than leaving the new review loading forever.
+            try await wait { model.modelControls?.phase == .ready && model.modelControls?.submitting == nil }
+            if order == "new-write" { await runtime.configure(hold: true) }
+            controller.choose(next, choice: .fastMode(true))
+            try await wait { await runtime.writes.count == 1 }
+            await runtime.releaseRead()
+            if order == "new-write" {
+                for _ in 0..<20 { await Task.yield() }
+                XCTAssertEqual(model.modelControls?.submitting, .fastMode(true))
+                XCTAssertFalse(controller.permitsInput(route))
+                await runtime.releaseWrite()
+            }
+            try await wait { model.modelControls?.submitting == nil }
+            XCTAssertNil(model.modelControls?.confirmation)
+        }
     }
 
     @MainActor func testAcknowledgedWriteWithFailedReadRemainsConfirmedWithoutFakeApplication() async throws {

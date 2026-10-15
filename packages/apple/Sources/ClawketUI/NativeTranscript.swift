@@ -53,6 +53,7 @@ struct NativeTranscript: UIViewRepresentable {
         private var pendingRestoration: ConversationReadingContext?
         private var lastPublishedReading: ConversationReadingContext?
         private var appearance: ClientAppearancePresentation?
+        private var retainedAnchor: (id: String, offset: CGFloat)?
         private let historyButton = UIButton(type: .system)
 
         init(parent: NativeTranscript) { self.parent = parent }
@@ -77,12 +78,14 @@ struct NativeTranscript: UIViewRepresentable {
         }
 
         func update(_ parent: NativeTranscript, table: TranscriptTableView) {
-            let anchor = readingAnchor(in: table)
+            var anchor = readingAnchor(in: table)
             self.parent = parent
             let reading = parent.model.readingContexts[parent.conversationID]
             if readingScope != reading?.id {
                 readingScope = reading?.id
+                initialized = false; anchor = nil
                 pendingRestoration = reading?.restoration
+                retainedAnchor = nil
                 followsBottom = pendingRestoration?.followsBottom ?? true
                 lastPublishedReading = nil
             }
@@ -91,7 +94,7 @@ struct NativeTranscript: UIViewRepresentable {
             if parent.scrollRequest != lastScrollRequest {
                 lastScrollRequest = parent.scrollRequest
                 followsBottom = true
-                pendingRestoration = nil
+                pendingRestoration = nil; retainedAnchor = nil
             }
             configureHistory(in: table)
             var next: [String: MessagePresentation] = [:]
@@ -117,14 +120,18 @@ struct NativeTranscript: UIViewRepresentable {
                 table.layoutIfNeeded()
                 if let saved = self.pendingRestoration, let id = saved.messageID,
                    self.dataSource?.indexPath(for: id) != nil {
-                    self.restore((id, CGFloat(saved.offset)), in: table)
+                    let restored = (id, CGFloat(saved.offset))
+                    self.retainedAnchor = restored
+                    self.restore(restored, in: table)
                     self.pendingRestoration = nil
                 } else if self.followsBottom && !table.isDragging && !table.isDecelerating { self.scrollToBottom(table) }
-                else if let anchor { self.restore(anchor, in: table) }
+                else if let anchor { self.retainedAnchor = anchor; self.restore(anchor, in: table) }
                 self.initialized = true
                 self.applying = false
                 self.publishFollowing()
                 self.captureReading()
+                // Self-sizing may finish after the diffable completion callback.
+                self.geometryChanged()
             }
         }
 
@@ -163,13 +170,15 @@ struct NativeTranscript: UIViewRepresentable {
         }
 
         func geometryChanged() {
-            guard initialized, !applying, !geometryScheduled, followsBottom else { return }
+            guard initialized, !applying, !geometryScheduled else { return }
             geometryScheduled = true
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.geometryScheduled = false
-                guard let table = self.table, self.followsBottom, !table.isDragging, !table.isDecelerating else { return }
-                self.scrollToBottom(table)
+                guard let table = self.table, !self.applying, !table.isDragging, !table.isDecelerating else { return }
+                if self.followsBottom { self.scrollToBottom(table) }
+                else if let anchor = self.retainedAnchor { self.restore(anchor, in: table) }
+                self.captureReading()
             }
         }
 
@@ -179,6 +188,7 @@ struct NativeTranscript: UIViewRepresentable {
         private func pauseFollowing() {
             followsBottom = false
             pendingRestoration = nil
+            if let table { retainedAnchor = readingAnchor(in: table) }
             publishFollowing()
             captureReading()
         }
@@ -190,11 +200,15 @@ struct NativeTranscript: UIViewRepresentable {
         private func updateFollowing(_ scrollView: UIScrollView) {
             let distance = scrollView.contentSize.height - scrollView.bounds.height + scrollView.adjustedContentInset.bottom - scrollView.contentOffset.y
             followsBottom = distance < 44
+            retainedAnchor = followsBottom ? nil : table.flatMap { readingAnchor(in: $0) }
             publishFollowing()
             captureReading()
         }
         func scrollViewDidScroll(_ scrollView: UIScrollView) {
-            if scrollView.isDragging || scrollView.isDecelerating { captureReading() }
+            if scrollView.isDragging || scrollView.isDecelerating {
+                if let table { retainedAnchor = readingAnchor(in: table) }
+                captureReading()
+            }
         }
         @objc func captureReading() {
             guard initialized, !applying, pendingRestoration == nil, let readingScope, let table else { return }

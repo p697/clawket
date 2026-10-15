@@ -674,7 +674,8 @@ final class NativeAppModel: ObservableObject {
         retireMediaSelection(); mediaVisibleRoute = route
         presentation.requestedCatalog = nil
         preferences.opened(.init(route))
-        presentation.readingContexts[route] = .init(restoration: preferences.reading(for: route))
+        // Only the mounted route owns an ephemeral scope; saved contexts remain bounded in preferences.
+        presentation.readingContexts = [route: .init(restoration: preferences.reading(for: route))]
         let revision = UUID(); selectionRevision = revision
         Task {
             do {

@@ -234,7 +234,7 @@ final class NativeVoiceHostTests: XCTestCase, @unchecked Sendable {
         let retained = try await controller.store.recording(saved.id); XCTAssertEqual(retained.bytes, 2)
     }
 
-    @MainActor func testComposerVoiceActionsExposeActual44PointAccessibilityButtons() async throws {
+    @MainActor func testComposerVoiceActionsOwnActual44PointNativeHitTargets() async throws {
         let cases: [(String, VoicePresentation, VoiceIntent)] = [
             ("voice-stop", .init(phase: .recording, label: "Recording", canStop: true), .stop),
             ("voice-retry", .init(phase: .failed, label: "Saved", canRetry: true), .retry),
@@ -242,21 +242,25 @@ final class NativeVoiceHostTests: XCTestCase, @unchecked Sendable {
         for (identifier, voice, expected) in cases {
             let draft = ComposerDraft(conversationID: route); draft.voice = voice
             var actions: [VoiceIntent] = []
-            let host = UIHostingController(rootView: NativeComposer(draft: draft,
+            let composer = NativeComposer(draft: draft,
                 conversation: .init(id: route, agentName: "Agent", sessionTitle: "Voice"), expanded: .constant(false),
-                onIntent: { if case let .voice(_, action) = $0 { actions.append(action) } }, showModels: {}))
+                onIntent: { if case let .voice(_, action) = $0 { actions.append(action) } }, showModels: {})
+            let host = UIHostingController(rootView: composer.disabled(false))
             let window = attach(host); defer { window.isHidden = true; window.rootViewController = nil }
             await layout(host)
-            let element = try XCTUnwrap(accessibilityElement(identifier, in: host.view))
-            XCTAssertGreaterThanOrEqual(element.accessibilityFrame.width, 44)
-            XCTAssertGreaterThanOrEqual(element.accessibilityFrame.height, 44)
-            XCTAssertTrue(element.accessibilityTraits.contains(.button))
-            XCTAssertTrue(element.accessibilityActivate())
+            let element = try XCTUnwrap(descendants(host.view, of: UIButton.self).first { $0.accessibilityIdentifier == identifier })
+            assertNativeActionTarget(element, in: window)
+            element.sendActions(for: .touchUpInside)
             XCTAssertEqual(actions, [expected])
+            host.rootView = composer.disabled(true)
+            await layout(host)
+            let disabled = try XCTUnwrap(descendants(host.view, of: UIButton.self).first { $0.accessibilityIdentifier == identifier })
+            XCTAssertFalse(disabled.isEnabled)
+            XCTAssertTrue(disabled.accessibilityTraits.contains(.notEnabled))
         }
     }
 
-    @MainActor func testSavedRecordingRetryAndDeleteHave44PointAccessibilityFrames() async throws {
+    @MainActor func testSavedRecordingRetryAndDeleteOwn44PointNativeHitTargets() async throws {
         let directory = root(); defer { try? FileManager.default.removeItem(at: directory) }
         let controller = try NativeVoiceController(directory: directory, serviceURL: "", driver: VoiceHostDriver()) { throw SpeechFailure(.authentication) }
         _ = try await recording(controller.store); await controller.restore()
@@ -266,34 +270,19 @@ final class NativeVoiceHostTests: XCTestCase, @unchecked Sendable {
         let window = attach(host); defer { window.isHidden = true; window.rootViewController = nil }
         await layout(host)
         for identifier in ["voice-recording-retry", "voice-recording-delete"] {
-            let element = try XCTUnwrap(accessibilityElement(identifier, in: host.view))
-            XCTAssertGreaterThanOrEqual(element.accessibilityFrame.width, 44)
-            XCTAssertGreaterThanOrEqual(element.accessibilityFrame.height, 44)
-            XCTAssertTrue(element.accessibilityTraits.contains(.button))
+            let element = try XCTUnwrap(descendants(host.view, of: UIButton.self).first { $0.accessibilityIdentifier == identifier })
+            assertNativeActionTarget(element, in: window)
         }
     }
 
-    @MainActor private func accessibilityElement(_ identifier: String, in root: NSObject) -> NSObject? {
-        var visited: Set<ObjectIdentifier> = []
-        func find(_ object: NSObject, depth: Int) -> NSObject? {
-            guard depth < 32, visited.insert(ObjectIdentifier(object)).inserted else { return nil }
-            if (object as? any UIAccessibilityIdentification)?.accessibilityIdentifier == identifier { return object }
-            if let children = object.accessibilityElements as? [NSObject] {
-                for child in children { if let match = find(child, depth: depth + 1) { return match } }
-            }
-            let count = object.accessibilityElementCount()
-            if (0...1_024).contains(count) {
-                for index in 0..<count {
-                    if let child = object.accessibilityElement(at: index) as? NSObject,
-                       let match = find(child, depth: depth + 1) { return match }
-                }
-            }
-            if let view = object as? UIView {
-                for child in view.subviews { if let match = find(child, depth: depth + 1) { return match } }
-            }
-            return nil
-        }
-        return find(root, depth: 0)
+    @MainActor private func assertNativeActionTarget(_ button: UIButton, in window: UIWindow) {
+        // This is the actual UIKit control receiving the action, not an outer SwiftUI frame.
+        let frame = button.convert(button.bounds, to: window)
+        XCTAssertGreaterThanOrEqual(frame.width, 44); XCTAssertGreaterThanOrEqual(frame.height, 44)
+        XCTAssertTrue(button.point(inside: CGPoint(x: 1, y: 1), with: nil))
+        XCTAssertTrue(button.point(inside: CGPoint(x: button.bounds.width - 1, y: button.bounds.height - 1), with: nil))
+        XCTAssertTrue(button.isAccessibilityElement); XCTAssertTrue(button.accessibilityTraits.contains(.button))
+        XCTAssertFalse(button.accessibilityLabel?.isEmpty ?? true)
     }
 
     @MainActor private func eventually(_ condition: () async -> Bool) async {

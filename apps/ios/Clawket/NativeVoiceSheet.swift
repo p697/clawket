@@ -1,4 +1,5 @@
 import ClawketSpeech
+import ClawketUI
 import SwiftUI
 import UIKit
 
@@ -41,18 +42,14 @@ struct NativeVoiceSheet: View {
                                 Text(NativeAppModel.voiceDuration(recording.seconds)).monospacedDigit().foregroundStyle(.secondary)
                             }
                             HStack(spacing: 24) {
-                                Button {
+                                NativeTextActionButton(String(localized: "Retry"), accessibilityIdentifier: "voice-recording-retry") {
                                     if let id = client.retryVoice(recording, sheet: request) { ownedAttempt = id }
-                                } label: {
-                                    Text("Retry").frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
                                 }
-                                .accessibilityIdentifier("voice-recording-retry")
                                 .disabled(voice.attempt != nil || recording.bytes == 0 ||
                                     (voice.configuration == nil && !recording.hasCompletedTranscription))
-                                Button(role: .destructive) { deleting = recording } label: {
-                                    Text("Delete").frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
+                                NativeTextActionButton(String(localized: "Delete"), accessibilityIdentifier: "voice-recording-delete", destructive: true) {
+                                    deleting = recording
                                 }
-                                .accessibilityIdentifier("voice-recording-delete")
                                 .disabled(voice.attempt?.recordingID == recording.id)
                             }.buttonStyle(.borderless)
                         }.padding(.vertical, 5)

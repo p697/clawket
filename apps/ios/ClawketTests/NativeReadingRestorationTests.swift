@@ -33,6 +33,11 @@ final class NativeReadingRestorationTests: XCTestCase {
         let preserved = try XCTUnwrap(source.indexPath(for: id))
         XCTAssertTrue(table.indexPathsForVisibleRows?.contains(preserved) == true)
         XCTAssertEqual(table.rectForRow(at: preserved).minY - table.contentOffset.y, offset, accuracy: 3)
+        model.readingContexts[route] = .init(restoration: .init(followsBottom: false, messageID: "m15", offset: -30))
+        host.rootView = transcript()
+        await settle(host)
+        let reopened = try XCTUnwrap(source.indexPath(for: "m15"))
+        XCTAssertEqual(table.rectForRow(at: reopened).minY - table.contentOffset.y, -30, accuracy: 3)
     }
 
     @MainActor
