@@ -15,7 +15,7 @@ private func artifactFile(size: Int = 3) -> JSONValue {
 }
 private func artifactHealth(_ backend: BackendKind, enabled: Bool = true) -> JSONValue {
     if backend == .openclaw {
-        return .object(["features": .object(["methods": .array(enabled ? ["clawket.artifacts.open", "clawket.artifacts.read"].map(JSONValue.string) : [])])])
+        return .object(["server": .object([:]), "features": .object(["methods": .array(enabled ? ["clawket.artifacts.open", "clawket.artifacts.read"].map(JSONValue.string) : [])])])
     }
     if backend == .hermes { return .object(["status": .string("ok"), "hermesApiReachable": .bool(true), "capabilities": .array(enabled ? [.string("bridge.artifacts.v1")] : [])]) }
     return .object(["backend": .string(backend.rawValue), "artifacts": .bool(enabled)])
@@ -97,7 +97,7 @@ struct ArtifactTests {
         let socket = ScriptSocket(initial: [challengeFrame]) { request, socket in
             let payload: JSONValue
             switch request["method"]?.stringValue {
-            case "connect": payload = .object(["features": .object(["methods": .array([.string("artifacts.get"), .string("artifacts.download")])])])
+            case "connect": payload = .object(["server": .object([:]), "features": .object(["methods": .array([.string("artifacts.get"), .string("artifacts.download")])])])
             case "artifacts.get": payload = .object(["artifact": .object(["id": .string("stable-result"), "sizeBytes": .number(3), "download": .object(["mode": .string("url")])])])
             default: payload = .object(["artifact": .object(["id": .string("stable-result"), "sizeBytes": .number(3), "title": .string("result.png"), "mimeType": .string("image/png")]), "url": .string("/ws/api/artifacts/download/ticket")])
             }
@@ -110,7 +110,7 @@ struct ArtifactTests {
         #expect(try await runtime.readArtifact(handle, offset: 0) == body); #expect(await http.calls == 1)
         await runtime.disconnect()
         let relaySocket = ScriptSocket(initial: [challengeFrame]) { request, socket in
-            try await socket.reply(request, payload: .object(["features": .object(["methods": .array([.string("artifacts.get"), .string("artifacts.download")])])]))
+            try await socket.reply(request, payload: .object(["server": .object([:]), "features": .object(["methods": .array([.string("artifacts.get"), .string("artifacts.download")])])]))
         }
         let relay = try RuntimeCoordinator(credentials: Credentials(), socketFactory: ScriptFactory(relaySocket), artifactHTTP: http)
         let relayReader = read(relay, into: Events()); defer { relayReader.cancel() }

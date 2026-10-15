@@ -1,5 +1,11 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-16 Native 媒体与附件协议模块（host 与真机媒体流程另行接入）。
+  - 新增独立 `ClawketMedia`：NSItemProvider 回调内同步复制临时文件、受保护 UUID/原文件名资源与 SHA 校验、ImageIO 顺序缩图/GIF 原字节/透明 PNG/EXIF 比例、16M 像素安全预览。原始输入32 MiB、准备后5 MiB；草稿显式删除，metadata 双代读回、未知提交保留文件并封闭至重开；冷启恢复持久化草稿 ID，孤立暂存可显式回收。实际文件/回滚/预留均计入128项/100 MiB，生成缓存另限单会话16项/30 MiB、24小时，分享 retain/release。
+  - Runtime 增加六后端类型化输入、按现有协商降级的图片/文件/文档能力与五后端输出 artifact handles；local-model 不虚报输出。预检与派发共用完整8 MiB UTF-8 RPC serializer，保留原草稿及未知写入不重放；JSON slash 与 JS 一致，名义5 MiB 图片不会因转义翻倍。稳定引用、inline 显式有界解码和 image-only finals 保留，Pi 仅协商后请求 artifacts history；模型输入 metadata 保留为当前会话的三态图片 gate。
+  - 输出句柄捕获认证/Socket 代际、两分钟失效、能力丢失即回收，严格128 KiB/10 MiB分块验证。OpenClaw direct ticket 45秒绝对预算、同源路径 allowlist、无凭据/cookie/cache/redirect、未知长度也逐块限流；Relay 无 HTTP fallback。仅增加 App package product 编译引用，不改 NativeAppModel/Vault、原 Mobile、服务或协议。
+  - `heavy` 下 Swift6/jobs2 六文件逐一通过：MediaLibrary9函数/11输入、Images3/4、Attachment7/17、Artifact7/22、HTTP3与实际loopbackHTTP2，共31函数/59输入，覆盖实际临时文件删除与重开、三种 atomic 后故障、取消/坏块/旧代际、完整8 MiB/+1、5 MiB slash-heavy、超限GIF对与未知发送不重放。首次修正测试 fixture/类型可见性和真实 Darwin 既存目录 alias 重开后复验；`check:docs`7回归与 diff 通过并释放租约。完整原生/App/旧客户端门禁交 PR CI；系统 picker/混合粘贴/真实媒体收发与预览分享仍待 host/设备验收，未将模块测试称为完整媒体功能，无版本或发布。
+
 - 2026-10-16 Native consent 小数毫秒兼容。
   - Hermes run-control 允许并转发有限的小数 expires_at_ms；原生整数解析会拒绝有效请求并中断连接。现在仅接受非负、有限、JS-safe 范围内的数值并向下取整，最多提前不足1毫秒，绝不延长审批权限；保留原 raw 字段、缺失/null 无到期时间和其他后端契约。负数、非有限、不安全范围及非数值继续拒绝。
   - 空闲进程/内存46%预检、heavy/jobs2 下单文件 ConsentExpiryTests 3项通过，覆盖五种有效数值边界、十种无效输入及真实形状 Hermes 事件继续 ready、单调时钟过期退休与零 resolve 派发；20.72秒首次严格Swift6编译后立即释放租约。文档13对/7项、diff及metrics通过；TS/TSX 167,902/132,119、文档180保持，Swift源行净增0、测试增56行。完整门禁交PR CI，无API、服务/协议、实际凭据、版本或发布变更。

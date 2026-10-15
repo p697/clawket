@@ -62,6 +62,16 @@ private actor ChunkGate {
 
 @Suite(.serialized)
 struct MediaLibraryTests {
+    @Test func stagingReconciliationNeverDeletesKeptReceiptsOrOriginalSources() throws {
+        let fixture = try Fixture(), original = try fixture.source(Data([1]))
+        let stager = try MediaImportStager(directory: fixture.root.appendingPathComponent("stage"))
+        let kept = try stager.stageFile(from: original, name: ".env", mimeType: "text/plain")
+        let removed = try stager.stageData(Data([2]), name: "inline.png", mimeType: "image/png")
+        #expect(try stager.removeUnreferenced(keeping: [kept.id]) == 1)
+        #expect(FileManager.default.fileExists(atPath: original.path))
+        #expect(FileManager.default.fileExists(atPath: kept.url.path)); #expect(!FileManager.default.fileExists(atPath: removed.url.path))
+        try stager.discard(kept)
+    }
     @Test func synchronousStageSurvivesProviderDeletionAndKeepsOriginalNameAcrossRestart() async throws {
         let fixture = try Fixture(), bytes = Data("native attachment 中文".utf8), source = try fixture.source(bytes)
         let stager = try MediaImportStager(directory: fixture.root.appendingPathComponent("staging"))
@@ -90,10 +100,13 @@ struct MediaLibraryTests {
         let alias = fixture.root.appendingPathComponent("alias")
         try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: fixture.root.appendingPathComponent("staging"))
         #expect(throws: MediaFailure.invalidFile) { try MediaImportStager(directory: alias.appendingPathComponent("child")) }
+        for raw in ["https://invalid.example/not-a-file", "file://foreign.invalid/private/tmp/not-owned", "file:///private/tmp/invalid?query=value", "file:///private/tmp/invalid#fragment"] {
+            #expect(throws: MediaFailure.invalidFile) { try MediaImportStager(directory: URL(string: raw)!) }
+        }
     }
 
     @Test(arguments: [FaultIndex.Fault.afterWrite, .protection, .readback])
-    func unknownIndexCommitNeverDeletesPossiblyCommittedBytes(_ fault: FaultIndex.Fault) async throws {
+    private func unknownIndexCommitNeverDeletesPossiblyCommittedBytes(_ fault: FaultIndex.Fault) async throws {
         let fixture = try Fixture(), index = FaultIndex()
         let library = try MediaLibrary(directory: fixture.libraryURL, indexIO: index)
         let original = try await library.adopt(fixture.staged(Data([1, 2, 3])))
@@ -158,7 +171,9 @@ struct MediaLibraryTests {
         }
         let gate = ChunkGate()
         let task = Task { try await library.cacheArtifact(key: key, name: "result.txt", mimeType: "text/plain", size: 2) { _ in try await gate.read() } }
-        while !(await gate.entered) { await Task.yield() }
+        defer { task.cancel() }
+        let deadline = ContinuousClock.now + .seconds(3)
+        while !(await gate.entered) { guard ContinuousClock.now < deadline else { throw MediaFailure.cancelled }; await Task.yield() }
         await library.invalidateArtifacts(connectionID: "a")
         await #expect(throws: CancellationError.self) { try await task.value }
         let replacement = try await library.cacheArtifact(key: key, name: "result.txt", mimeType: "text/plain", size: 2) { _ in Data([1, 2]) }

@@ -43,6 +43,7 @@ public struct PreparedMedia: Sendable {
 public struct StagedMediaFile: Sendable {
     let url: URL
     let resource: MediaResource
+    public var id: UUID { resource.id }
 }
 
 public struct MediaArtifactKey: Codable, Sendable, Hashable {
@@ -55,7 +56,7 @@ public struct MediaArtifactKey: Codable, Sendable, Hashable {
 }
 
 func mediaName(_ name: String) throws -> String {
-    guard !name.isEmpty, name.utf8.count <= 255, !name.hasPrefix("."),
+    guard !name.isEmpty, name.utf8.count <= 255, name != ".", name != "..",
           !name.contains("/"), !name.contains("\\"), !name.unicodeScalars.contains(where: { $0.value < 32 || $0.value == 127 }) else {
         throw MediaFailure.invalidFile
     }

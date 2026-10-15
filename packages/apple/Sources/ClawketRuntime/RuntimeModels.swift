@@ -199,6 +199,11 @@ public struct RuntimeMessage: Codable, Sendable, Equatable, Identifiable {
     public let sentLocally: Bool
     public let raw: JSONValue
     public var attachments: [RuntimeMessageAttachment] { RuntimeAttachmentProjection.extract(raw) }
+    /// Legacy inline images/files are decoded only on explicit consumption,
+    /// never while constructing presentation metadata. Managed IDs win over bytes.
+    public func inlineAttachmentData(at index: Int) throws -> Data? {
+        try RuntimeAttachmentProjection.inlineData(raw, index: index)
+    }
 }
 
 public struct RuntimeHistory: Codable, Sendable, Equatable {
@@ -248,6 +253,12 @@ public struct RuntimeModel: Codable, Sendable, Equatable, Identifiable {
     public let name: String
     public let provider: String?
     public let selected: Bool
+    public let input: [String]?
+    /// Missing/empty metadata is unknown, matching Mobile's composer guard.
+    public var supportsImages: Bool? { guard let input, !input.isEmpty else { return nil }; return input.contains("image") }
+    public init(id: String, name: String, provider: String? = nil, selected: Bool, input: [String]? = nil) {
+        self.id = id; self.name = name; self.provider = provider; self.selected = selected; self.input = input
+    }
 }
 
 public struct RuntimeTextUpdate: Sendable, Equatable {

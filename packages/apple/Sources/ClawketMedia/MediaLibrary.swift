@@ -8,7 +8,11 @@ protocol MediaIndexIO: Sendable {
 }
 struct DiskMediaIndexIO: MediaIndexIO {
     func read(_ url: URL) throws -> Data { try Data(contentsOf: url) }
-    func write(_ data: Data, to url: URL) throws { try data.write(to: url, options: .atomic) }
+    func write(_ data: Data, to url: URL) throws {
+        try data.write(to: url, options: .atomic)
+        let handle = try FileHandle(forWritingTo: url); defer { try? handle.close() }
+        try handle.synchronize()
+    }
     func protect(_ url: URL) throws { try MediaFiles.protect(url) }
 }
 
@@ -222,6 +226,7 @@ public actor MediaLibrary {
     }
     private func save() throws {
         guard !unavailable else { throw MediaFailure.corrupt }
+        try Task.checkCancellation()
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         let bytes = try encoder.encode(entries.values.sorted { $0.resource.id.uuidString < $1.resource.id.uuidString })
         guard bytes.count <= 1_024 * 1_024 else { throw MediaFailure.capacity }

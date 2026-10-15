@@ -69,7 +69,7 @@ final class ArtifactHTTPClientTests: XCTestCase, @unchecked Sendable {
             do {
                 let result = try await client.execute(URLRequest(url: url), maximumBytes: 32)
                 XCTAssertEqual(length, 32); XCTAssertEqual(result.body.count, 32)
-            } catch { XCTAssertEqual(length, 33); XCTAssertEqual(error as? PairingError, .responseTooLarge) }
+            } catch { XCTAssertEqual(length, 33); XCTAssertEqual(error as? RuntimeFailure, RuntimeFailure(.capacity)) }
         }
     }
 
@@ -91,7 +91,7 @@ final class ArtifactHTTPClientTests: XCTestCase, @unchecked Sendable {
                 _ = bounded.register(continuation)
             }
             XCTFail("Must reject before receiving any body bytes")
-        } catch { XCTAssertEqual(error as? PairingError, .responseTooLarge) }
+        } catch { XCTAssertEqual(error as? RuntimeFailure, RuntimeFailure(.capacity)) }
     }
 
     func testCancellationTerminatesAnUnfinishedResponseBody() async throws {

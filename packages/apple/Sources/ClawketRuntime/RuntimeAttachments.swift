@@ -22,12 +22,33 @@ public struct RuntimeMessageAttachment: Codable, Sendable, Equatable {
 }
 
 enum RuntimeAttachmentProjection {
+    static func inlineData(_ value: JSONValue, index: Int) throws -> Data? {
+        let values = (value["attachments"]?.array ?? value["content"]?.array ?? []).prefix(64).filter {
+            !extract(.object(["attachments": .array([$0])])).isEmpty
+        }
+        guard index >= 0, index < values.count else { throw RuntimeFailure(.invalidConnection) }
+        let raw = Array(values)[index], block = raw["type"]?.stringValue == "attachment" ? raw["attachment"] ?? .null : raw
+        if block["artifactId"]?.nonemptyString != nil { return nil }
+        let content = block["content"]?.stringValue ?? block["data"]?.stringValue ?? block["source"]?["data"]?.stringValue
+        if let content { return try artifactBase64(content, length: nil, maximum: 5 * 1_024 * 1_024) }
+        let uri = block["uri"]?.stringValue ?? block["image_url"]?["url"]?.stringValue
+        if let uri, uri.hasPrefix("data:"), let separator = uri.range(of: ";base64,") {
+            let declared = String(uri[uri.index(uri.startIndex, offsetBy: 5)..<separator.lowerBound])
+            guard let mime = mime(declared), extract(.object(["attachments": .array([raw])])).first?.mimeType == mime else { throw RuntimeFailure(.invalidResponse) }
+            return try artifactBase64(String(uri[separator.upperBound...]), length: nil, maximum: 5 * 1_024 * 1_024)
+        }
+        return nil
+    }
     static func extract(_ value: JSONValue) -> [RuntimeMessageAttachment] {
         let values = value["attachments"]?.array ?? value["content"]?.array ?? []
         return values.prefix(64).compactMap { raw in
             let block = raw["type"]?.stringValue == "attachment" ? raw["attachment"] ?? .null : raw
+            let uri = block["uri"]?.stringValue ?? block["image_url"]?["url"]?.stringValue
+            let uriMIME: String?
+            if let uri, uri.hasPrefix("data:"), let separator = uri.range(of: ";base64,") { uriMIME = String(uri[uri.index(uri.startIndex, offsetBy: 5)..<separator.lowerBound]) }
+            else { uriMIME = nil }
             guard ["image", "file", "image_url", "attachment", "audio", "video"].contains(raw["type"]?.stringValue ?? ""),
-                  let mime = mime(block["mimeType"]?.stringValue ?? block["mime_type"]?.stringValue ?? block["source"]?["media_type"]?.stringValue ?? "application/octet-stream") else { return nil }
+                  let mime = mime(block["mimeType"]?.stringValue ?? block["mime_type"]?.stringValue ?? block["source"]?["media_type"]?.stringValue ?? uriMIME ?? "application/octet-stream") else { return nil }
             let artifact = block["artifactId"]?.nonemptyString
             guard artifact?.utf8.count ?? 0 <= 512 else { return nil }
             let name = block["name"]?.stringValue ?? block["fileName"]?.stringValue ?? block["label"]?.stringValue ?? block["alt"]?.stringValue
@@ -90,6 +111,10 @@ extension RuntimeSessionUpdate {
         if case .runFinished(_, _, _, _, let raw) = self { return RuntimeAttachmentProjection.extract(raw["message"] ?? raw) }
         return []
     }
+    public func inlineFinalAttachmentData(at index: Int) throws -> Data? {
+        if case .runFinished(_, _, _, _, let raw) = self { return try RuntimeAttachmentProjection.inlineData(raw["message"] ?? raw, index: index) }
+        throw RuntimeFailure(.invalidConnection)
+    }
 }
 
 extension RuntimeCoordinator {
@@ -124,14 +149,21 @@ extension RuntimeCoordinator {
               input.skillID?.utf8.count ?? 0 <= 1_024, input.thinkingLevel?.utf8.count ?? 0 <= 128,
               !input.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !input.attachments.isEmpty else { throw RuntimeFailure(.invalidConnection) }
         if connection.backendKind == .localModel && sessionKey != "main" { throw RuntimeFailure(.unsupported) }
-        guard input.attachments.count <= 6 else { throw RuntimeFailure(.capacity, delivery: .rejectedBeforeDispatch) }
+        guard input.attachments.count <= 6,
+              input.attachments.allSatisfy({ $0.content.count <= 5 * 1_024 * 1_024 && ($0.name?.utf8.count ?? 0) <= 1_024 }) else {
+            throw RuntimeFailure(.capacity, delivery: .rejectedBeforeDispatch)
+        }
+        // A proven lower bound avoids allocating large base64/JSON intermediates;
+        // the complete serializer below still decides the exact wire boundary.
+        let encodedBytes = input.attachments.reduce(0) { $0 + 4 * (($1.content.count + 2) / 3) }
+        guard input.text.utf8.count <= FrameCodec.maximumFrameBytes,
+              encodedBytes <= FrameCodec.maximumFrameBytes - input.text.utf8.count else { throw RuntimeFailure(.capacity, delivery: .rejectedBeforeDispatch) }
         let documents: Set<String> = ["text/plain", "text/markdown", "text/csv", "application/json", "application/pdf", "application/x-ipynb+json",
                                       "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"]
         let attachments: [JSONValue] = try input.attachments.map { item in
             guard let mime = RuntimeAttachmentProjection.mime(item.mimeType),
                   (item.type == .image) == mime.hasPrefix("image/"), state.capabilities.attachments,
                   item.type == .image || state.capabilities.fileAttachments || (state.capabilities.documentAttachments && documents.contains(mime)) else { throw RuntimeFailure(.unsupported) }
-            guard item.content.count <= 5 * 1_024 * 1_024, item.name?.utf8.count ?? 0 <= 1_024 else { throw RuntimeFailure(.capacity, delivery: .rejectedBeforeDispatch) }
             var result: [String: JSONValue] = ["type": .string(item.type.rawValue), "mimeType": .string(mime), "content": .string(item.content.base64EncodedString())]
             if let name = item.name { result["name"] = .string(name) }
             return .object(result)

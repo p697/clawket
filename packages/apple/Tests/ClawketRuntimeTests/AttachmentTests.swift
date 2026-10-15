@@ -86,6 +86,9 @@ struct AttachmentTests {
     @Test func oldDraftPromptDecodesWithNoAttachments() throws {
         let bytes = Data("{\"text\":\"old draft\",\"idempotencyKey\":\"key\"}".utf8)
         #expect(try JSONDecoder().decode(RuntimePrompt.self, from: bytes).attachments.isEmpty)
+        #expect(RuntimeModel(id: "text", name: "Text", selected: true, input: ["text"]).supportsImages == false)
+        #expect(RuntimeModel(id: "vision", name: "Vision", selected: true, input: ["text", "image"]).supportsImages == true)
+        #expect(RuntimeModel(id: "unknown", name: "Unknown", selected: true).supportsImages == nil)
     }
 
     @Test func unknownNativeSendFailureIsUncertainAndNeverReplayed() async throws {
@@ -113,6 +116,9 @@ struct AttachmentTests {
         let updates = try events.map(event("chat", .object(["runId": .string("r"), "sessionKey": .string("main"), "state": .string("final"),
             "message": .object(["content": .array([artifact])])])), connection: connection(.openclaw), artifactsEnabled: true)
         #expect(updates.count == 1); #expect(updates[0].finalAttachments.count == 1)
+        let inline: JSONValue = .object(["type": .string("image"), "source": .object(["media_type": .string("image/png"), "data": .string("AQID")])])
+        #expect(try RuntimeAttachmentProjection.inlineData(.object(["content": .array([inline])]), index: 0) == Data([1, 2, 3]))
+        #expect(try RuntimeAttachmentProjection.inlineData(.object(["content": .array([artifact])]), index: 0) == nil)
         let text = "Example\n```\nMEDIA: /keep/example.png\n```\nMEDIA: /remove.png\nKeep MEDIA: /prose.png"
         #expect(RuntimeAttachmentProjection.stripMediaDirectives(text) == "Example\n```\nMEDIA: /keep/example.png\n```\nKeep MEDIA: /prose.png")
     }

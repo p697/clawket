@@ -249,7 +249,7 @@ extension RuntimeCoordinator {
             guard let id = value["id"]?.nonemptyString else { throw RuntimeFailure(.invalidResponse) }
             let itemProvider = value["provider"]?.stringValue
             return RuntimeModel(id: id, name: value["name"]?.nonemptyString ?? id, provider: itemProvider,
-                                selected: id == current && (provider.isEmpty || itemProvider == provider))
+                                selected: id == current && (provider.isEmpty || itemProvider == provider), input: value["input"]?.array?.compactMap(\.stringValue))
         }
     }
 
