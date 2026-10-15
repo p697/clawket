@@ -3,6 +3,7 @@ import Photos
 import QuickLook
 import SwiftUI
 import UniformTypeIdentifiers
+import UIKit
 
 actor NativeMediaLease {
     let resourceID: UUID
@@ -32,7 +33,7 @@ struct NativeMediaPreview: Identifiable, Sendable {
     }
     func release() async { await lease.release() }
 
-    var allowsFilePreview: Bool {
+    @MainActor var allowsFilePreview: Bool {
         let mime = display.resource.mimeType, suffix = url.pathExtension.lowercased()
         guard !mime.hasPrefix("image/"), !["text/html", "application/xhtml+xml"].contains(mime),
               !["svg", "svgz", "html", "htm", "xhtml"].contains(suffix),
@@ -41,17 +42,21 @@ struct NativeMediaPreview: Identifiable, Sendable {
     }
 }
 
-@MainActor private final class NativeMediaShare: Identifiable {
+@MainActor final class NativeMediaShare: Identifiable {
+    private enum Phase { case pending, controllerCreated, handedOff, finished }
     let id = UUID()
     let url: URL
     let lease: NativeMediaLease
-    weak var controller: UIActivityViewController?
+    private var phase = Phase.pending
     init(url: URL, lease: NativeMediaLease) { self.url = url; self.lease = lease }
-    func releaseIfUnpresented() {
-        guard controller?.presentingViewController == nil else { return }
-        let lease = lease
-        Task { await lease.release() }
+    func controllerCreated() { if phase == .pending { phase = .controllerCreated } }
+    func appeared() { if phase == .controllerCreated { phase = .handedOff } }
+    func releaseIfUnpresented(controllerDismantled: Bool = false) async {
+        guard phase == .pending || (phase == .controllerCreated && controllerDismantled) else { return }
+        phase = .finished
+        await lease.release()
     }
+    func completed() async { phase = .finished; await lease.release() }
 }
 
 struct NativeMediaViewer: View {
@@ -103,7 +108,8 @@ struct NativeMediaViewer: View {
             .onAppear { visible = true }
             .onDisappear {
                 visible = false; shareRequest = nil
-                share?.releaseIfUnpresented()
+                let abandonedShare = share
+                Task { await abandonedShare?.releaseIfUnpresented() }
                 Task { await preview.release() }
             }
         }
@@ -154,16 +160,31 @@ struct NativeMediaViewer: View {
 
 private struct NativeActivityView: UIViewControllerRepresentable {
     let share: NativeMediaShare
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        let controller = UIActivityViewController(activityItems: [share.url], applicationActivities: nil)
-        share.controller = controller
-        let lease = share.lease
-        controller.completionWithItemsHandler = { _, _, _, _ in Task { await lease.release() } }
-        // The share owns a separate retain through the system completion, even
-        // if the conversation changes and its preview has already disappeared.
+    func makeUIViewController(context: Context) -> NativeActivityController {
+        let controller = NativeActivityController(share: share)
+        share.controllerCreated()
+        controller.completionWithItemsHandler = { _, _, _, _ in Task { await share.completed() } }
         return controller
     }
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+    func updateUIViewController(_ uiViewController: NativeActivityController, context: Context) {}
+    static func dismantleUIViewController(_ controller: NativeActivityController, coordinator: ()) {
+        let share = controller.share
+        // Constructing a controller does not prove that UIKit presented it.
+        // Once it appeared, only system completion may release its file lease.
+        Task { await share.releaseIfUnpresented(controllerDismantled: true) }
+    }
+}
+
+private final class NativeActivityController: UIActivityViewController {
+    let share: NativeMediaShare
+    init(share: NativeMediaShare) {
+        self.share = share
+        super.init(activityItems: [share.url], applicationActivities: nil)
+    }
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        share.appeared()
+    }
 }
 
 private struct NativeFilePreview: UIViewControllerRepresentable {

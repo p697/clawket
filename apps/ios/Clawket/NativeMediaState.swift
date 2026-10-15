@@ -4,6 +4,8 @@ import ClawketRuntime
 import ClawketUI
 import Foundation
 
+enum NativeMediaIssue: Error, Equatable { case textOnly, modelChanging }
+
 /// Display/storage metadata only. Remote references never carry live authority or URLs.
 struct NativeMediaReference: Codable, Sendable, Equatable, Identifiable {
     var id: String
@@ -127,6 +129,10 @@ extension NativeConversation {
             guard message.media.count <= (message.local && message.role == .user ? 6 : 64),
                   Set(message.media.map(\.id)).count == message.media.count else { throw StoreFailure.invalidDocument }
             for reference in message.media { try reference.validate() }
+            if message.local, message.role == .user,
+               [.queued, .held, .sending, .uncertain, .failed].contains(message.delivery) {
+                guard message.media.allSatisfy({ $0.resourceID != nil && $0.artifactID == nil }) else { throw StoreFailure.invalidDocument }
+            }
         }
     }
 }

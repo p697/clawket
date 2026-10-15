@@ -4,8 +4,18 @@ import UniformTypeIdentifiers
 
 enum MediaImages {
     static func preview(url: URL, pixels: Int) throws -> MediaImagePreview {
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary),
-              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary) else { throw MediaFailure.unsupported }
+        return try preview(source: source, pixels: pixels)
+    }
+
+    static func preview(data: Data, pixels: Int) throws -> MediaImagePreview {
+        guard data.count <= MediaLimits.promptBytes,
+              let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary) else { throw MediaFailure.unsupported }
+        return try preview(source: source, pixels: pixels)
+    }
+
+    private static func preview(source: CGImageSource, pixels: Int) throws -> MediaImagePreview {
+        guard let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
               let width = properties[kCGImagePropertyPixelWidth] as? Int,
               let height = properties[kCGImagePropertyPixelHeight] as? Int,
               width > 0, height > 0, width <= MediaLimits.imagePixels / height else { throw MediaFailure.tooLarge }

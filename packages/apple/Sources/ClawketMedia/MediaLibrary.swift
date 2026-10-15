@@ -140,6 +140,15 @@ public actor MediaLibrary {
         return try MediaImages.preview(url: resourceURL(id), pixels: maximumPixels)
     }
 
+    /// Selected camera/HEIC/large-photo sources use the already bounded prompt
+    /// normalization before preview. This never relaxes artifact preview limits.
+    public func previewInput(_ id: UUID, maximumPixels: Int = 1_600) throws -> MediaImagePreview {
+        guard (44...2_048).contains(maximumPixels) else { throw MediaFailure.unsupported }
+        let prepared = try preparePrompt(id)
+        guard prepared.isImage else { throw MediaFailure.unsupported }
+        return try MediaImages.preview(data: prepared.data, pixels: maximumPixels)
+    }
+
     /// One task per stable scope/reference; writes one chunk at a time. `read`
     /// must be backed by a captured RuntimeArtifactHandle, never an arbitrary URL.
     public func cacheArtifact(key: MediaArtifactKey, name: String, mimeType: String, size: Int,

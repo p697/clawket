@@ -3,120 +3,119 @@
   "strings": {
     "NSCameraUsageDescription": {
       "extractionState": "manual",
-      "comment": "System permission purpose. Explain this real capability; do not promise broader access or translate Agent names.",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Scan a pairing QR code to connect your agent."
+            "value": "Scan a pairing QR code or take a photo to attach."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "扫描配对二维码，连接你的 Agent。"
+            "value": "扫描配对二维码，或拍摄照片作为附件。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "掃描配對 QR 碼，連線你的 Agent。"
+            "value": "掃描配對 QR 碼，或拍攝照片作為附件。"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "ペアリング用QRコードをスキャンして、エージェントに接続します。"
+            "value": "ペアリング用のQRコードをスキャンするか、添付する写真を撮影します。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "페어링 QR 코드를 스캔하여 에이전트에 연결합니다."
+            "value": "페어링 QR 코드를 스캔하거나 첨부할 사진을 촬영합니다."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Scanne einen Kopplungs-QR-Code, um deinen Agenten zu verbinden."
+            "value": "Scanne einen Kopplungs-QR-Code oder nimm ein Foto als Anhang auf."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Scanner un code QR de jumelage pour connecter votre Agent."
+            "value": "Scannez un code QR de jumelage ou prenez une photo à joindre."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Escanear un código QR de emparejamiento para conectar tu Agente."
+            "value": "Escanea un código QR de enlace o haz una foto para adjuntarla."
           }
         },
         "es-419": {
           "stringUnit": {
             "state": "translated",
-            "value": "Escanear un código QR de emparejamiento para conectar tu Agente."
+            "value": "Escanea un código QR de vinculación o toma una foto para adjuntarla."
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Scansiona un codice QR di abbinamento per collegare il tuo Agent."
+            "value": "Scansiona un codice QR di abbinamento o scatta una foto da allegare."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ler um código QR de pareamento para conectar seu Agent."
+            "value": "Escaneie um código QR de emparelhamento ou tire uma foto para anexar."
           }
         },
         "pt-PT": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ler um código QR de emparelhamento para ligar o seu Agent."
+            "value": "Leia um código QR de emparelhamento ou tire uma fotografia para anexar."
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Сканировать QR-код сопряжения, чтобы подключить агента."
+            "value": "Отсканируйте QR-код сопряжения или сделайте фото для вложения."
           }
         },
         "uk": {
           "stringUnit": {
             "state": "translated",
-            "value": "Сканувати QR-код з’єднання для підключення агента."
+            "value": "Скануйте QR-код сполучення або зробіть фотографію для вкладення."
           }
         },
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Agent’ınıza bağlanmak için eşleştirme QR kodunu tarayın."
+            "value": "Bir eşleme QR kodunu tarayın veya eklemek için fotoğraf çekin."
           }
         },
         "vi": {
           "stringUnit": {
             "state": "translated",
-            "value": "Quét mã QR ghép nối để kết nối Agent của bạn."
+            "value": "Quét mã QR ghép nối hoặc chụp ảnh để đính kèm."
           }
         },
         "th": {
           "stringUnit": {
             "state": "translated",
-            "value": "สแกน QR จับคู่เพื่อเชื่อมต่อ Agent ของคุณ"
+            "value": "สแกนคิวอาร์โค้ดสำหรับจับคู่ หรือถ่ายรูปเพื่อแนบ"
           }
         },
         "hi": {
           "stringUnit": {
             "state": "translated",
-            "value": "अपने Agent से कनेक्ट करने के लिए पेयरिंग QR कोड स्कैन करें।"
+            "value": "पेयरिंग QR कोड स्कैन करें या अटैच करने के लिए फ़ोटो लें।"
           }
         },
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "مسح رمز QR للاقتران والاتصال بوكيلك."
+            "value": "امسح رمز QR للإقران أو التقط صورة لإرفاقها."
           }
         }
       }
@@ -237,6 +236,125 @@
           "stringUnit": {
             "state": "translated",
             "value": "الاتصال بالوكلاء العاملين على شبكتك المحلية."
+          }
+        }
+      }
+    },
+    "NSPhotoLibraryAddUsageDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save images you choose to your photo library."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将你选择的图像存储到照片图库。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將你選擇的影像儲存到照片圖庫。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択した画像を写真ライブラリに保存します。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "선택한 이미지를 사진 보관함에 저장합니다."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sichere die von dir ausgewählten Bilder in deiner Fotomediathek."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enregistrez les images de votre choix dans votre photothèque."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guarda las imágenes que elijas en tu fototeca."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guarda las imágenes que elijas en tu fototeca."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Salva le immagini che scegli nella tua libreria foto."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Salve as imagens que escolher na sua fototeca."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guarde as imagens que escolher na sua fototeca."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сохранение выбранных вами изображений в медиатеку."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Збереження вибраних вами зображень у фототеці."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seçtiğiniz görüntüleri fotoğraf arşivinize kaydedin."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lưu những hình ảnh bạn chọn vào thư viện ảnh."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "บันทึกภาพที่คุณเลือกลงในคลังรูปภาพ"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "अपनी चुनी हुई इमेज अपनी फ़ोटो लाइब्रेरी में सहेजें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "حفظ الصور التي تختارها في مكتبة الصور."
           }
         }
       }

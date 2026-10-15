@@ -14,7 +14,7 @@ struct NativeMediaDisplay: Sendable {
 /// Every network read still requires the Runtime coordinator's current opaque handle.
 actor NativeMediaController {
     nonisolated let stager: MediaImportStager
-    let library: MediaLibrary
+    nonisolated let library: MediaLibrary
     private let journalStore: DocumentStore
     private var journal = NativeMediaJournal()
     private var unavailable = false
@@ -39,7 +39,8 @@ actor NativeMediaController {
             let resource: MediaResource
             do { resource = try await library.recoverResource(pending.id) }
             catch MediaFailure.missing { resource = try await library.adopt(stager.recover(pending.resource)) }
-            try await cache.recoverImport(pending, isImage: resource.mimeType.hasPrefix("image/") && resource.mimeType != "image/svg+xml")
+            guard resource == pending.resource else { throw StoreFailure.invalidDocument }
+            if try await !cache.recoverImport(pending) { journal.releases.insert(resource.id) }
         }
         journal.pending.removeAll(); try await saveJournal()
         _ = try stager.removeUnreferenced(keeping: [])
@@ -94,8 +95,8 @@ actor NativeMediaController {
         let resource = try await library.resource(id)
         _ = try await library.resourceURL(id)
         if input, resource.mimeType.hasPrefix("image/"), resource.mimeType != "image/svg+xml" {
-            let prepared = try await library.preparePrompt(id)
-            return .init(resource: resource, image: prepared.thumbnail, aspectRatio: prepared.aspectRatio)
+            let preview = try await library.previewInput(id, maximumPixels: pixels)
+            return .init(resource: resource, image: preview.data, aspectRatio: preview.aspectRatio)
         }
         if resource.hasRasterPreview {
             let preview = try await library.previewImage(id, maximumPixels: pixels)
@@ -104,8 +105,10 @@ actor NativeMediaController {
         return .init(resource: resource, image: nil, aspectRatio: nil)
     }
 
-    func stageInline(_ bytes: Data, name: String, mimeType: String) throws -> StagedMediaFile {
-        try available(); return try stager.stageData(bytes, name: name, mimeType: mimeType)
+    func stageInline(_ bytes: @Sendable () throws -> Data?, name: String, mimeType: String) throws -> StagedMediaFile? {
+        try available()
+        guard let data = try bytes() else { return nil }
+        return try stager.stageData(data, name: name, mimeType: mimeType)
     }
 
     func resolve(_ reference: NativeMediaReference, route: ConversationID, runtime: RuntimeCoordinator?) async throws -> MediaResource {
@@ -126,11 +129,15 @@ actor NativeMediaController {
         } catch { await runtime.closeArtifact(handle); throw error }
     }
 
-    func invalidate(connectionID: String) async { await library.invalidateArtifacts(connectionID: connectionID) }
+    func invalidate(connectionID: String, sessionKey: String? = nil) async { await library.invalidateArtifacts(connectionID: connectionID, sessionKey: sessionKey) }
 
     private func available() throws { guard !unavailable else { throw MediaFailure.commitUncertain } }
     private func saveJournal() async throws {
         do { try await journalStore.write(journal, key: "media.v1"); try available() }
-        catch { unavailable = true; throw error }
+        catch is CancellationError {
+            // Our concrete FileValueStore never emits CancellationError after
+            // mutation; DocumentStore checks it before its first write.
+            throw CancellationError()
+        } catch { unavailable = true; throw error }
     }
 }

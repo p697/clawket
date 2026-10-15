@@ -74,6 +74,8 @@ actor NativeConversationStore {
     private let documents: DocumentStore
     private let directory: URL
     private var latestRevision: [String: Int64] = [:]
+    private var mediaSnapshotLocked = false
+    private var mediaSnapshotWaiters: [CheckedContinuation<Void, Never>] = []
 
     init(directory: URL? = nil) throws {
         let root: URL
@@ -83,7 +85,7 @@ actor NativeConversationStore {
                                                      appropriateFor: nil, create: true)
             root = support.appendingPathComponent("NativeConversations", isDirectory: true)
         }
-        directory = root
+        self.directory = root
         documents = try DocumentStore(values: FileValueStore(directory: root),
                                       maximumBytes: 8 * 1024 * 1024)
     }
@@ -117,6 +119,8 @@ actor NativeConversationStore {
 
     func write(_ conversation: NativeConversation, connectionID: String, agentID: String, sessionID: String) async throws {
         try conversation.validateMedia()
+        await acquireMediaSnapshot()
+        defer { releaseMediaSnapshot() }
         let key = try scopedKey(connectionID, agentID, sessionID)
         guard conversation.revision >= latestRevision[key, default: 0] else { return }
         latestRevision[key] = conversation.revision
@@ -125,7 +129,12 @@ actor NativeConversationStore {
 
     /// Include both verified document generations before releasing any owned file.
     /// An unreadable source disables reclamation; it never means an empty registry.
-    func allMediaResourceIDs() throws -> Set<UUID> {
+    func allMediaResourceIDs() async throws -> Set<UUID> {
+        // DocumentStore/FileValueStore are separate actors. Keep this snapshot
+        // outside every current→rollback replacement, including across awaits.
+        await acquireMediaSnapshot()
+        defer { releaseMediaSnapshot() }
+        try Task.checkCancellation()
         let files = try FileManager.default.contentsOfDirectory(at: directory,
             includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
         guard files.count <= 4_096 else { throw StoreFailure.tooLarge }
@@ -149,12 +158,22 @@ actor NativeConversationStore {
         return result
     }
 
-    func recoverImport(_ pending: NativePendingMediaImport, isImage: Bool) async throws {
+    private func acquireMediaSnapshot() async {
+        if !mediaSnapshotLocked { mediaSnapshotLocked = true; return }
+        await withCheckedContinuation { mediaSnapshotWaiters.append($0) }
+    }
+
+    private func releaseMediaSnapshot() {
+        if mediaSnapshotWaiters.isEmpty { mediaSnapshotLocked = false }
+        else { mediaSnapshotWaiters.removeFirst().resume() }
+    }
+
+    func recoverImport(_ pending: NativePendingMediaImport) async throws -> Bool {
         var conversation = try await read(connectionID: pending.connectionID, agentID: pending.agentID, sessionID: pending.sessionID)
-        if conversation.mediaResourceIDs.contains(pending.id) { return }
+        if conversation.mediaResourceIDs.contains(pending.id) { return true }
         if let messageID = pending.messageID, let referenceID = pending.referenceID {
             guard let message = conversation.messages.firstIndex(where: { $0.id == messageID }),
-                  let reference = conversation.messages[message].media.firstIndex(where: { $0.id == referenceID }) else { return }
+                  let reference = conversation.messages[message].media.firstIndex(where: { $0.id == referenceID }) else { return false }
             conversation.messages[message].media[reference].resourceID = pending.id
         } else {
             guard conversation.draftResourceIDs.count < 6 else { throw StoreFailure.tooLarge }
@@ -162,6 +181,7 @@ actor NativeConversationStore {
         }
         conversation.revision += 1
         try await write(conversation, connectionID: pending.connectionID, agentID: pending.agentID, sessionID: pending.sessionID)
+        return true
     }
 
     private func scopedKey(_ connectionID: String, _ agentID: String, _ sessionID: String) throws -> String {

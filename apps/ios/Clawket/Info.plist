@@ -12,7 +12,8 @@
     <key>CFBundleShortVersionString</key><string>$(MARKETING_VERSION)</string>
     <key>CFBundleVersion</key><string>$(CURRENT_PROJECT_VERSION)</string>
     <key>LSRequiresIPhoneOS</key><true/>
-    <key>NSCameraUsageDescription</key><string>Scan a pairing QR code to connect your agent.</string>
+    <key>NSCameraUsageDescription</key><string>Scan a pairing QR code or take a photo to attach.</string>
+    <key>NSPhotoLibraryAddUsageDescription</key><string>Save images you choose to your photo library.</string>
     <key>NSLocalNetworkUsageDescription</key><string>Connect to agents running on your local network.</string>
     <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
     <key>UILaunchScreen</key><dict/>

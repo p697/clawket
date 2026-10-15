@@ -7,7 +7,7 @@ import UniformTypeIdentifiers
 
 enum NativeMediaNames {
     static func safe(_ value: String, type: UTType? = nil) -> String {
-        var value = value.replacingOccurrences(of: "\\", with: "_").replacingOccurrences(of: "/", with: "_")
+        var value = (value.replacingOccurrences(of: "\\", with: "/") as NSString).lastPathComponent
         value = String(value.unicodeScalars.filter { $0.value >= 32 && $0.value != 127 })
         if value.isEmpty || value == "." || value == ".." { value = String(localized: "Attachment") }
         while value.utf8.count > 200 { value.removeLast() }
@@ -20,6 +20,7 @@ enum NativeMediaNames {
 enum NativeMediaPickerAdapter {
     static func providers(_ providers: [NSItemProvider], client: NativeAppModel, scope: NativeMediaScope) {
         guard let stager = client.media?.stager, client.ownsMedia(scope) else { return }
+        if providers.count > 6 { client.presentation.draft(for: scope.route).hint = String(localized: "Add up to six attachments.") }
         for provider in providers.prefix(6) {
             let identifier = provider.registeredTypeIdentifiers.first { identifier in
                 guard let type = UTType(identifier) else { return false }
@@ -57,6 +58,7 @@ enum NativeMediaPickerAdapter {
 
     static func documents(_ urls: [URL], client: NativeAppModel, scope: NativeMediaScope) {
         guard let stager = client.media?.stager, client.ownsMedia(scope) else { return }
+        if urls.count > 6 { client.presentation.draft(for: scope.route).hint = String(localized: "Add up to six attachments.") }
         for url in urls.prefix(6) {
             guard url.isFileURL else { continue }
             let type = UTType(filenameExtension: url.pathExtension)
@@ -65,20 +67,13 @@ enum NativeMediaPickerAdapter {
             let mime = type?.preferredMIMEType ?? "application/octet-stream"
             client.mediaImportTasks[request.id] = Task {
                 do {
-                    let staged = try await Task.detached(priority: .userInitiated) {
-                        let access = url.startAccessingSecurityScopedResource()
-                        defer { if access { url.stopAccessingSecurityScopedResource() } }
-                        let coordinator = NSFileCoordinator(filePresenter: nil)
-                        var coordinationError: NSError?
-                        var result: Result<StagedMediaFile, MediaFailure> = .failure(.invalidFile)
-                        coordinator.coordinate(readingItemAt: url, options: .withoutChanges, error: &coordinationError) { coordinated in
-                            do { result = .success(try stager.stageFile(from: coordinated, name: name, mimeType: mime)) }
-                            catch let failure as MediaFailure { result = .failure(failure) }
-                            catch { result = .failure(.invalidFile) }
-                        }
-                        guard coordinationError == nil else { throw MediaFailure.invalidFile }
-                        return try result.get()
-                    }.value
+                    let access = NativeCoordinatedMediaImport()
+                    let copy = Task.detached(priority: .userInitiated) {
+                        try access.stage(url, stager: stager, name: name, mimeType: mime)
+                    }
+                    let staged = try await withTaskCancellationHandler {
+                        try await copy.value
+                    } onCancel: { copy.cancel(); access.cancel() }
                     guard !Task.isCancelled else { try? stager.discard(staged); return }
                     client.mediaImportTasks.removeValue(forKey: request.id)
                     client.acceptMedia(staged, request: request)
@@ -131,7 +126,7 @@ struct NativeMediaPicker: View {
                                 .multilineTextAlignment(.center).foregroundStyle(.secondary)
                             Button("Open Settings") { if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) } }
                         }.padding(28)
-                        .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { client.mediaPicker = nil } } }
+                        .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { if client.mediaPicker?.id == request.id { client.mediaPicker = nil } } } }
                     }
                 } else { ProgressView().task { cameraAllowed = await AVCaptureDevice.requestAccess(for: .video) } }
             case .paste: EmptyView()
@@ -156,6 +151,7 @@ private struct PhotoPicker: UIViewControllerRepresentable {
         let client: NativeAppModel; let request: NativeMediaPickerRequest
         init(client: NativeAppModel, request: NativeMediaPickerRequest) { self.client = client; self.request = request }
         func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+            guard client.mediaPicker?.id == request.id, client.ownsMedia(request.scope) else { return }
             client.mediaPicker = nil
             NativeMediaPickerAdapter.providers(results.map(\.itemProvider), client: client, scope: request.scope)
         }
@@ -176,9 +172,12 @@ private struct DocumentPicker: UIViewControllerRepresentable {
         let client: NativeAppModel; let request: NativeMediaPickerRequest
         init(client: NativeAppModel, request: NativeMediaPickerRequest) { self.client = client; self.request = request }
         func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+            guard client.mediaPicker?.id == request.id, client.ownsMedia(request.scope) else { return }
             client.mediaPicker = nil; NativeMediaPickerAdapter.documents(urls, client: client, scope: request.scope)
         }
-        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) { client.mediaPicker = nil }
+        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+            if client.mediaPicker?.id == request.id { client.mediaPicker = nil }
+        }
     }
 }
 
@@ -195,8 +194,11 @@ private struct CameraPicker: UIViewControllerRepresentable {
     @MainActor final class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
         let client: NativeAppModel; let request: NativeMediaPickerRequest
         init(client: NativeAppModel, request: NativeMediaPickerRequest) { self.client = client; self.request = request }
-        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) { client.mediaPicker = nil }
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            if client.mediaPicker?.id == request.id { client.mediaPicker = nil }
+        }
         func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            guard client.mediaPicker?.id == request.id, client.ownsMedia(request.scope) else { return }
             client.mediaPicker = nil
             guard let stager = client.media?.stager,
                   let job = client.reserveMediaImport(request.scope, name: "Photo.jpg") else { return }
@@ -211,5 +213,28 @@ private struct CameraPicker: UIViewControllerRepresentable {
                 client.acceptMedia(staged, request: job)
             } catch { client.failMediaImport(job, error: error) }
         }
+    }
+}
+
+/// NSFileCoordinator.cancel is explicitly thread-safe. Cancellation does not
+/// prove that its accessor did not run: await the captured copy before cleanup.
+private final class NativeCoordinatedMediaImport: @unchecked Sendable {
+    private let coordinator = NSFileCoordinator(filePresenter: nil)
+    func cancel() { coordinator.cancel() }
+    func stage(_ url: URL, stager: MediaImportStager, name: String, mimeType: String) throws -> StagedMediaFile {
+        try Task.checkCancellation()
+        let access = url.startAccessingSecurityScopedResource()
+        defer { if access { url.stopAccessingSecurityScopedResource() } }
+        var coordinationError: NSError?
+        var result: Result<StagedMediaFile, MediaFailure> = .failure(.invalidFile)
+        coordinator.coordinate(readingItemAt: url, options: .withoutChanges, error: &coordinationError) { coordinated in
+            do { try Task.checkCancellation(); result = .success(try stager.stageFile(from: coordinated, name: name, mimeType: mimeType)) }
+            catch let failure as MediaFailure { result = .failure(failure) }
+            catch { result = .failure(.cancelled) }
+        }
+        guard coordinationError == nil else { throw MediaFailure.cancelled }
+        let staged = try result.get()
+        if Task.isCancelled { try? stager.discard(staged); throw MediaFailure.cancelled }
+        return staged
     }
 }

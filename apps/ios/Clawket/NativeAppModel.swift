@@ -66,7 +66,7 @@ final class NativeAppModel: ObservableObject {
     private var networkHintTask: Task<Void, Never>?
     private var lastNetworkHint: ContinuousClock.Instant?
     private var running: [ConversationID: String] = [:]
-    private var saveTasks: [ConversationID: Task<Void, Never>] = [:]
+    var saveTasks: [ConversationID: Task<Void, Never>] = [:]
     private var sendTasks: [ConversationID: Task<Void, Never>] = [:]
     private var finishedRuns: [ConversationID: [String]] = [:]
     private var liveRevisions: [ConversationID: Int64] = [:]
@@ -74,16 +74,21 @@ final class NativeAppModel: ObservableObject {
     @Published var mediaPicker: NativeMediaPickerRequest?
     @Published var mediaPreview: NativeMediaPreview?
     var mediaImports: [UUID: NativeMediaImport] = [:]
+    var mediaImportReceipts: [UUID: StagedMediaFile] = [:]
     var mediaImportResources: [UUID: UUID] = [:]
     var mediaImportTasks: [UUID: Task<Void, Never>] = [:]
     var mediaProviderProgress: [UUID: Progress] = [:]
+    var mediaInvalidationTask: Task<Void, Never>?
+    var mediaVisibleRoute: ConversationID?
+    var mediaPreviewRequest: (id: String, token: UUID)?
     var mediaLoadRevisions: [String: UUID] = [:]
     var mediaLoads: [String: Task<Void, Never>] = [:]
     var mediaDisplays: [String: AttachmentPresentation] = [:]
     var mediaDraftRevisions: [ConversationID: UUID] = [:]
     var mediaSendPreparations: Set<ConversationID> = []
     var mediaModelRevisions: [ConversationID: UUID] = [:]
-    var mediaChangingModels: Set<ConversationID> = []
+    var mediaChangingModelTokens: [ConversationID: UUID] = [:]
+    var mediaChangingModels: Set<ConversationID> { Set(mediaChangingModelTokens.keys) }
     var mediaGlobalModel: (wire: UUID, supportsImages: Bool?)?
     /// A successful single-use claim is retained if saving fails; retry never claims it again.
     @Published private(set) var pendingPairing: PairingPayload?
@@ -160,7 +165,7 @@ final class NativeAppModel: ObservableObject {
             destination = .deviceApproval(connectionID: connectionID)
         case .refresh: refresh()
         case let .openConversation(route): open(route)
-        case .closeConversation: selectionRevision = UUID(); cancelMediaImports()
+        case .closeConversation: selectionRevision = UUID(); retireMediaSelection()
         case let .openAgentCatalog(id), let .refreshCatalog(id): showCatalog(id)
         case let .selectCatalogProject(id, projectID):
             guard id.connectionID == activeConnectionID else { return }
@@ -544,7 +549,7 @@ final class NativeAppModel: ObservableObject {
 
     private func open(_ route: ConversationID) {
         guard route.isConcrete, route.connectionID == activeConnectionID, let cache else { return }
-        cancelMediaImports()
+        retireMediaSelection(); mediaVisibleRoute = route
         let revision = UUID(); selectionRevision = revision
         Task {
             do {
@@ -642,9 +647,9 @@ final class NativeAppModel: ObservableObject {
         guard route.connectionID == activeConnectionID, let model = modelChoices[route]?[id], let runtime,
               !mediaChangingModels.contains(route), state.capabilities.modelPerSession || mediaChangingModels.isEmpty else { return }
         let activation = activationRevision, wire = wireRevision
-        mediaChangingModels.insert(route); updatePresentation(route)
+        let modelChange = UUID(); mediaChangingModelTokens[route] = modelChange; updatePresentation(route)
         Task {
-            defer { mediaChangingModels.remove(route); updatePresentation(route) }
+            defer { if mediaChangingModelTokens[route] == modelChange { mediaChangingModelTokens.removeValue(forKey: route); updatePresentation(route) } }
             guard activation == activationRevision, wire == wireRevision, route.connectionID == activeConnectionID else { return }
             do {
                 try await runtime.selectModel(id: model.id, provider: model.provider,

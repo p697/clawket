@@ -88,6 +88,14 @@
       "mobileTerm": null
     },
     {
+      "key": "Add up to six attachments.",
+      "sources": [
+        "apps/ios/Clawket/NativeAppMedia.swift:80",
+        "apps/ios/Clawket/NativeAppMedia.swift:87"
+      ],
+      "mobileTerm": null
+    },
+    {
       "key": "Address",
       "sources": [
         "apps/ios/Clawket/ConnectAgentView.swift:68"
@@ -143,6 +151,13 @@
       "key": "Allow once",
       "sources": [
         "packages/apple/Sources/ClawketUI/MessageContentView.swift:265"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Allow photo access in Settings to save this image.",
+      "sources": [
+        "apps/ios/Clawket/NativeMediaViewer.swift:142"
       ],
       "mobileTerm": null
     },
@@ -228,6 +243,39 @@
       "mobileTerm": null
     },
     {
+      "key": "Attachment",
+      "sources": [
+        "apps/ios/Clawket/NativeMediaState.swift:23",
+        "apps/ios/Clawket/NativeMediaPickers.swift:12",
+        "apps/ios/Clawket/NativeMediaPickers.swift:32",
+        "apps/ios/Clawket/NativeAppMedia.swift:185",
+        "apps/ios/Clawket/NativeAppMedia.swift:230",
+        "apps/ios/Clawket/NativeAppMedia.swift:291",
+        "apps/ios/Clawket/NativeAppMedia.swift:313",
+        "apps/ios/Clawket/NativeMediaViewer.swift:93"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Attachment could not be added. Try again.",
+      "sources": [
+        "apps/ios/Clawket/NativeAppMedia.swift:143"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Attachment could not be loaded. Try again.",
+      "sources": [
+        "apps/ios/Clawket/NativeAppMedia.swift:231",
+        "apps/ios/Clawket/NativeAppMedia.swift:270",
+        "apps/ios/Clawket/NativeAppMedia.swift:314",
+        "apps/ios/Clawket/NativeAppMedia.swift:387",
+        "apps/ios/Clawket/NativeMediaViewer.swift:125",
+        "apps/ios/Clawket/NativeMediaViewer.swift:138"
+      ],
+      "mobileTerm": null
+    },
+    {
       "key": "Attachment failed",
       "sources": [
         "packages/apple/Sources/ClawketUI/NativeComposer.swift:259"
@@ -249,6 +297,13 @@
       "mobileTerm": "chat.Camera"
     },
     {
+      "key": "Camera access is unavailable. Check Settings or choose a photo.",
+      "sources": [
+        "apps/ios/Clawket/NativeMediaPickers.swift:130"
+      ],
+      "mobileTerm": null
+    },
+    {
       "key": "Camera access is unavailable. You can use a pairing code instead.",
       "sources": [
         "apps/ios/Clawket/PairingScanner.swift:41"
@@ -266,6 +321,13 @@
       "key": "Camera scanning unavailable",
       "sources": [
         "apps/ios/Clawket/PairingScanner.swift:18"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Camera unavailable",
+      "sources": [
+        "apps/ios/Clawket/NativeMediaPickers.swift:129"
       ],
       "mobileTerm": null
     },
@@ -325,6 +387,13 @@
       "key": "Choose one answer",
       "sources": [
         "packages/apple/Sources/ClawketUI/QuestionContentView.swift:59"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Choose smaller attachments before sending.",
+      "sources": [
+        "apps/ios/Clawket/NativeAppMedia.swift:397"
       ],
       "mobileTerm": null
     },
@@ -520,6 +589,13 @@
       "mobileTerm": null
     },
     {
+      "key": "Copy image",
+      "sources": [
+        "apps/ios/Clawket/NativeMediaViewer.swift:89"
+      ],
+      "mobileTerm": null
+    },
+    {
       "key": "Could not complete pairing. Check the details and try again.",
       "sources": [
         "apps/ios/Clawket/NativeAppModel.swift:943"
@@ -636,6 +712,13 @@
       "mobileTerm": "common.Done"
     },
     {
+      "key": "Download",
+      "sources": [
+        "apps/ios/Clawket/NativeAppMedia.swift:240"
+      ],
+      "mobileTerm": null
+    },
+    {
       "key": "Draft answer",
       "sources": [
         "packages/apple/Sources/ClawketUI/QuestionContentView.swift:198"
@@ -735,6 +818,13 @@
         "packages/apple/Sources/ClawketUI/NativeWorkInspector.swift:259"
       ],
       "mobileTerm": "chat.Finished"
+    },
+    {
+      "key": "Image saved.",
+      "sources": [
+        "apps/ios/Clawket/NativeMediaViewer.swift:149"
+      ],
+      "mobileTerm": null
     },
     {
       "key": "Input",
@@ -935,6 +1025,13 @@
       "mobileTerm": null
     },
     {
+      "key": "No supported attachments on the clipboard.",
+      "sources": [
+        "apps/ios/Clawket/NativeMediaPickers.swift:109"
+      ],
+      "mobileTerm": null
+    },
+    {
       "key": "Not sent. Your message is saved.",
       "sources": [
         "apps/ios/Clawket/NativeAppModel.swift:806"
@@ -959,6 +1056,13 @@
       "key": "Open OpenClaw on your computer and approve the device whose ID matches this one.",
       "sources": [
         "apps/ios/Clawket/DeviceApprovalView.swift:38"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Open Settings",
+      "sources": [
+        "apps/ios/Clawket/NativeMediaPickers.swift:132"
       ],
       "mobileTerm": null
     },
@@ -1041,9 +1145,23 @@
       "mobileTerm": null
     },
     {
+      "key": "Preparing attachments…",
+      "sources": [
+        "apps/ios/Clawket/NativeAppMedia.swift:46"
+      ],
+      "mobileTerm": null
+    },
+    {
       "key": "Preview %@",
       "sources": [
         "packages/apple/Sources/ClawketUI/NativeComposer.swift:285"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Preview unavailable",
+      "sources": [
+        "apps/ios/Clawket/NativeMediaViewer.swift:75"
       ],
       "mobileTerm": null
     },
@@ -1128,6 +1246,13 @@
       "key": "Reconnect to stop this run.",
       "sources": [
         "apps/ios/Clawket/NativeAppModel.swift:770"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Reconnect to use attachments.",
+      "sources": [
+        "apps/ios/Clawket/NativeAppMedia.swift:34"
       ],
       "mobileTerm": null
     },
@@ -1239,6 +1364,14 @@
       "mobileTerm": "chat.Retry"
     },
     {
+      "key": "Review these attachments.",
+      "sources": [
+        "apps/ios/Clawket/NativeAppMedia.swift:56",
+        "apps/ios/Clawket/NativeAppMedia.swift:113"
+      ],
+      "mobileTerm": null
+    },
+    {
       "key": "Review this device’s requested access in OpenClaw before approving.",
       "sources": [
         "apps/ios/Clawket/DeviceApprovalView.swift:41"
@@ -1263,6 +1396,13 @@
       "key": "Save connection",
       "sources": [
         "apps/ios/Clawket/ConnectAgentView.swift:93"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Save to Photos",
+      "sources": [
+        "apps/ios/Clawket/NativeMediaViewer.swift:90"
       ],
       "mobileTerm": null
     },
@@ -1434,6 +1574,13 @@
       "mobileTerm": "settings.Skills"
     },
     {
+      "key": "Some attachments could not be recovered. Your files have been kept.",
+      "sources": [
+        "apps/ios/Clawket/NativeAppModel.swift:104"
+      ],
+      "mobileTerm": null
+    },
+    {
       "key": "Start a conversation",
       "sources": [
         "packages/apple/Sources/ClawketUI/NativeClientView.swift:376"
@@ -1575,6 +1722,11 @@
       "mobileTerm": null
     },
     {
+      "key": "This agent does not support this attachment.",
+      "sources": [],
+      "mobileTerm": null
+    },
+    {
       "key": "This answer is too long.",
       "sources": [
         "packages/apple/Sources/ClawketUI/QuestionContentView.swift:33"
@@ -1644,6 +1796,14 @@
       "key": "This message could not be saved. Close the editor and try again.",
       "sources": [
         "apps/ios/Clawket/PendingMessageEditor.swift:42"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "This model accepts text only.",
+      "sources": [
+        "apps/ios/Clawket/NativeAppMedia.swift:37",
+        "apps/ios/Clawket/NativeAppMedia.swift:399"
       ],
       "mobileTerm": null
     },
@@ -1854,7 +2014,7 @@
   "infoPlistStrings": [
     {
       "key": "NSCameraUsageDescription",
-      "sourceValue": "Scan a pairing QR code to connect your agent.",
+      "sourceValue": "Scan a pairing QR code or take a photo to attach.",
       "sources": [
         "apps/ios/Clawket/Info.plist:15"
       ]
@@ -1862,6 +2022,13 @@
     {
       "key": "NSLocalNetworkUsageDescription",
       "sourceValue": "Connect to agents running on your local network.",
+      "sources": [
+        "apps/ios/Clawket/Info.plist:16"
+      ]
+    },
+    {
+      "key": "NSPhotoLibraryAddUsageDescription",
+      "sourceValue": "Save images you choose to your photo library.",
       "sources": [
         "apps/ios/Clawket/Info.plist:16"
       ]

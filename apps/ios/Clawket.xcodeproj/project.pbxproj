@@ -14,12 +14,14 @@
 		2247135D3C8C70511420729B /* PairingScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D291C423374289C8E540A39 /* PairingScanner.swift */; };
 		2EFA14A6E0BD75518CA9B696 /* DeviceApprovalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97DA58B8030AC479B4610849 /* DeviceApprovalView.swift */; };
 		2F91D2478DFB46E4FE62AC72 /* NativeTaskPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D1DA96C0D5461424FA70517 /* NativeTaskPresentation.swift */; };
+		3A4DC2B5F3F1F5EAABF4FA29 /* NativeMediaHostTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4EC25AD0042FDF3973AE588 /* NativeMediaHostTests.swift */; };
 		3CC3E055379A87DCF34B5A9D /* NativeCatalogStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E47B4B0906605C4BAE48CF90 /* NativeCatalogStore.swift */; };
 		4111A823020D58A2C9AE3CED /* ClawketTransport in Frameworks */ = {isa = PBXBuildFile; productRef = FB889001F1244000EC725E25 /* ClawketTransport */; };
 		44DD38E10C3292EF4F89CD64 /* ClawketRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = B354D017C96AC77858BE7A91 /* ClawketRuntime */; };
 		475F5B966EAA0E954DEFBCDB /* ClawketUI in Frameworks */ = {isa = PBXBuildFile; productRef = EE43E43C07082D0E9B174E3F /* ClawketUI */; };
 		525AC5AA6876B193A893CA1C /* ClawketPersistence in Frameworks */ = {isa = PBXBuildFile; productRef = F5775CE4CCE6F16F9D1400CE /* ClawketPersistence */; };
 		71FE8BB4E98A63D874F1F9CD /* NativeDeviceApprovalPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EE8DA28492E208D65D074FC /* NativeDeviceApprovalPolicyTests.swift */; };
+		6023E9AB20021B8FB7F5E049 /* ClawketMedia in Frameworks */ = {isa = PBXBuildFile; productRef = 1EE0AEE4BF493835E5982FAD /* ClawketMedia */; };
 		72620A6CA1CBC261C9D08231 /* NativeTaskRequestsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83E37C1EE73DD7335ED11156 /* NativeTaskRequestsTests.swift */; };
 		7A694C62FB9D749CD18EE6C6 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = F9DC4D8745DDCA79E2D272D5 /* InfoPlist.xcstrings */; };
 		7FA2632EF83D1302AC0C0FE3 /* ConnectionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06C52C439D7B014576D9687E /* ConnectionsView.swift */; };
@@ -29,11 +31,15 @@
 		A7376BF94645E91C6749B0C6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B14E842129D8941746AC76AC /* Assets.xcassets */; };
 		A981AF688DA1876182E7C515 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 305D6E7D33031255FC087A1D /* Foundation.framework */; };
 		C426985C465AE071721F25E7 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 4A674C0333CD433EA1589533 /* Localizable.xcstrings */; };
+		C909C692B880BCDCD12DAF3C /* NativeMediaViewer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5E7F8D1BDDB5417DB86F19F /* NativeMediaViewer.swift */; };
+		C9BE06150740B966DBBB6066 /* NativeAppMedia.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EF3215A1CAE435EDE30813C /* NativeAppMedia.swift */; };
 		CBFC1E150EA9AA900620C6B5 /* NativeAppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0F468FDE5E27A277EF1DC29 /* NativeAppModel.swift */; };
 		CCBE62272C230BFE2C964EA1 /* NativeVault.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1425ABDA3CA558320898A191 /* NativeVault.swift */; };
 		D31FA392DA1F3DE9035432F5 /* NativeQuestionDraftStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4226A597815E0BC70CE657C2 /* NativeQuestionDraftStore.swift */; };
+		E0AA32E6D2CFDD720823835F /* NativeMediaPickers.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB2D7D26DC51C869EAC1D6BC /* NativeMediaPickers.swift */; };
 		E3EF23E922BC183B80037647 /* ClawketRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = 17D4C878DFA9BEACD825E778 /* ClawketRuntime */; };
 		E467366C8E9F56FF927B7BA0 /* ClawketApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F82081877A8E20091FD78626 /* ClawketApp.swift */; };
+		EE419B3702A23181FEDCA927 /* NativeMediaState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30B8D95D65F3C074C88F3947 /* NativeMediaState.swift */; };
 		F198A05A5D7D86C890E9264C /* ClawketPersistence in Frameworks */ = {isa = PBXBuildFile; productRef = CC7E6FCD762618577595D7D1 /* ClawketPersistence */; };
 		F54CB52E76F08F39810B272A /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 305D6E7D33031255FC087A1D /* Foundation.framework */; };
 		F9CEDDB86DC3D8DC8B99A105 /* ClawketPairing in Frameworks */ = {isa = PBXBuildFile; productRef = E2A7336EB6B1F9F998B0351B /* ClawketPairing */; };
@@ -45,6 +51,7 @@
 		F538AAFAD50D7DB47BA24C27 /* NativeTaskJournal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64C289B16E5D001DC8770A47 /* NativeTaskJournal.swift */; };
 		6AB1932CB11F21EA620C8A3B /* NativeTaskJournalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76EE3BA27F5BF88C7BEFC5EB /* NativeTaskJournalTests.swift */; };
 		833AE1263A156C861B39C08A /* NativeHistoryWorkOrder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0454238B468906AC9C04FD5A /* NativeHistoryWorkOrder.swift */; };
+		FFEC089FBF61EAE1AFED818F /* NativeMediaController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A163A3B7B0C823A72CF0F2E /* NativeMediaController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -60,10 +67,12 @@
 /* Begin PBXFileReference section */
 		06C52C439D7B014576D9687E /* ConnectionsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConnectionsView.swift; sourceTree = "<group>"; };
 		1425ABDA3CA558320898A191 /* NativeVault.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeVault.swift; sourceTree = "<group>"; };
+		1A163A3B7B0C823A72CF0F2E /* NativeMediaController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeMediaController.swift; sourceTree = "<group>"; };
 		1A8D8F99FE6BF72DD9B9F8AF /* ConnectAgentView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConnectAgentView.swift; sourceTree = "<group>"; };
 		1EE8DA28492E208D65D074FC /* NativeDeviceApprovalPolicyTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeDeviceApprovalPolicyTests.swift; sourceTree = "<group>"; };
 		2474FDEDA96EC763B092AFA6 /* Clawket.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Clawket.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		305D6E7D33031255FC087A1D /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		30B8D95D65F3C074C88F3947 /* NativeMediaState.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeMediaState.swift; sourceTree = "<group>"; };
 		4226A597815E0BC70CE657C2 /* NativeQuestionDraftStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeQuestionDraftStore.swift; sourceTree = "<group>"; };
 		42F4E937EB35AD3FCDB52A53 /* NativeTaskRequests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeTaskRequests.swift; sourceTree = "<group>"; };
 		49C7A8ABB20415EEB075F0C7 /* PendingMessageEditor.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PendingMessageEditor.swift; sourceTree = "<group>"; };
@@ -75,10 +84,14 @@
 		83E37C1EE73DD7335ED11156 /* NativeTaskRequestsTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeTaskRequestsTests.swift; sourceTree = "<group>"; };
 		8EA8C05BF26248B8F8DA8395 /* NativeQuestionDraftStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeQuestionDraftStoreTests.swift; sourceTree = "<group>"; };
 		97DA58B8030AC479B4610849 /* DeviceApprovalView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DeviceApprovalView.swift; sourceTree = "<group>"; };
+		8EF3215A1CAE435EDE30813C /* NativeAppMedia.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeAppMedia.swift; sourceTree = "<group>"; };
 		A0F468FDE5E27A277EF1DC29 /* NativeAppModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeAppModel.swift; sourceTree = "<group>"; };
 		B14E842129D8941746AC76AC /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		CB2D7D26DC51C869EAC1D6BC /* NativeMediaPickers.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeMediaPickers.swift; sourceTree = "<group>"; };
 		D2163EB819C0F5C468B4F05B /* ClawketTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ClawketTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E47B4B0906605C4BAE48CF90 /* NativeCatalogStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeCatalogStore.swift; sourceTree = "<group>"; };
+		E5E7F8D1BDDB5417DB86F19F /* NativeMediaViewer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeMediaViewer.swift; sourceTree = "<group>"; };
+		F4EC25AD0042FDF3973AE588 /* NativeMediaHostTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeMediaHostTests.swift; sourceTree = "<group>"; };
 		F520934653CF4DC7A40EEF10 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		F82081877A8E20091FD78626 /* ClawketApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ClawketApp.swift; sourceTree = "<group>"; };
 		F9DC4D8745DDCA79E2D272D5 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; includeInIndex = 1; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
@@ -114,6 +127,7 @@
 				525AC5AA6876B193A893CA1C /* ClawketPersistence in Frameworks */,
 				44DD38E10C3292EF4F89CD64 /* ClawketRuntime in Frameworks */,
 				475F5B966EAA0E954DEFBCDB /* ClawketUI in Frameworks */,
+				6023E9AB20021B8FB7F5E049 /* ClawketMedia in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -164,6 +178,11 @@
 				94642FE9C8E94C3F5D72A242 /* NativeJournalStore.swift */,
 				D198A09D2950CA7425089621 /* NativeJournalModels.swift */,
 				97DA58B8030AC479B4610849 /* DeviceApprovalView.swift */,
+				8EF3215A1CAE435EDE30813C /* NativeAppMedia.swift */,
+				1A163A3B7B0C823A72CF0F2E /* NativeMediaController.swift */,
+				30B8D95D65F3C074C88F3947 /* NativeMediaState.swift */,
+				CB2D7D26DC51C869EAC1D6BC /* NativeMediaPickers.swift */,
+				E5E7F8D1BDDB5417DB86F19F /* NativeMediaViewer.swift */,
 			);
 			name = Clawket;
 			path = Clawket;
@@ -194,6 +213,7 @@
 				83E37C1EE73DD7335ED11156 /* NativeTaskRequestsTests.swift */,
 				76EE3BA27F5BF88C7BEFC5EB /* NativeTaskJournalTests.swift */,
 				1EE8DA28492E208D65D074FC /* NativeDeviceApprovalPolicyTests.swift */,
+				F4EC25AD0042FDF3973AE588 /* NativeMediaHostTests.swift */,
 			);
 			name = ClawketTests;
 			path = ClawketTests;
@@ -245,6 +265,7 @@
 				F5775CE4CCE6F16F9D1400CE /* ClawketPersistence */,
 				B354D017C96AC77858BE7A91 /* ClawketRuntime */,
 				EE43E43C07082D0E9B174E3F /* ClawketUI */,
+				1EE0AEE4BF493835E5982FAD /* ClawketMedia */,
 			);
 			productName = ClawketTests;
 			productReference = D2163EB819C0F5C468B4F05B /* ClawketTests.xctest */;
@@ -331,6 +352,7 @@
 				72620A6CA1CBC261C9D08231 /* NativeTaskRequestsTests.swift in Sources */,
 				6AB1932CB11F21EA620C8A3B /* NativeTaskJournalTests.swift in Sources */,
 				71FE8BB4E98A63D874F1F9CD /* NativeDeviceApprovalPolicyTests.swift in Sources */,
+				3A4DC2B5F3F1F5EAABF4FA29 /* NativeMediaHostTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -357,6 +379,11 @@
 				EF52CE302BC9C5549A5FFC53 /* NativeJournalStore.swift in Sources */,
 				A927BE30932FFD57F745B1FF /* NativeJournalModels.swift in Sources */,
 				2EFA14A6E0BD75518CA9B696 /* DeviceApprovalView.swift in Sources */,
+				C9BE06150740B966DBBB6066 /* NativeAppMedia.swift in Sources */,
+				FFEC089FBF61EAE1AFED818F /* NativeMediaController.swift in Sources */,
+				EE419B3702A23181FEDCA927 /* NativeMediaState.swift in Sources */,
+				E0AA32E6D2CFDD720823835F /* NativeMediaPickers.swift in Sources */,
+				C909C692B880BCDCD12DAF3C /* NativeMediaViewer.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -617,20 +644,25 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		B6A6C2405DAB4BAA85179F4E /* ClawketMedia */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = CD7AB3640BEDF49787C304FD /* XCLocalSwiftPackageReference "apple" */;
-			productName = ClawketMedia;
-		};
 		17D4C878DFA9BEACD825E778 /* ClawketRuntime */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = CD7AB3640BEDF49787C304FD /* XCLocalSwiftPackageReference "apple" */;
 			productName = ClawketRuntime;
 		};
+		1EE0AEE4BF493835E5982FAD /* ClawketMedia */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CD7AB3640BEDF49787C304FD /* XCLocalSwiftPackageReference "apple" */;
+			productName = ClawketMedia;
+		};
 		B354D017C96AC77858BE7A91 /* ClawketRuntime */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = CD7AB3640BEDF49787C304FD /* XCLocalSwiftPackageReference "apple" */;
 			productName = ClawketRuntime;
+		};
+		B6A6C2405DAB4BAA85179F4E /* ClawketMedia */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CD7AB3640BEDF49787C304FD /* XCLocalSwiftPackageReference "apple" */;
+			productName = ClawketMedia;
 		};
 		CC7E6FCD762618577595D7D1 /* ClawketPersistence */ = {
 			isa = XCSwiftPackageProductDependency;
