@@ -133,7 +133,10 @@ final class NativeAppModel: ObservableObject {
         case let .openURL(url):
             guard ["https", "http", "mailto"].contains(url.scheme?.lowercased() ?? "") else { return }
             UIApplication.shared.open(url)
-        case .pickAttachment, .removeAttachment, .openAttachment, .voice, .resolveApproval, .answerQuestion: break
+        case .pickAttachment, .removeAttachment, .openAttachment, .voice,
+             .resolveApproval, .prepareApprovalConfirmation, .confirmApproval, .dismissApprovalConfirmation,
+             .questionDraftChanged, .answerQuestion, .cancelQuestion:
+            break // These request capabilities stay hidden until the host binds real runtime references.
         }
     }
 

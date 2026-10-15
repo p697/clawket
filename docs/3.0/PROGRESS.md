@@ -1,5 +1,10 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-16 Native 审批/问题表示边界（负责人授权，真实 host 绑定另行推进）。
+  - Always 菜单仅请求 host 准备确认；host 持有 runtime reference/token 后发布唯一不可变确认，匹配卡片内的独立原生 presenter 按冻结 confirmationID 确认/关闭，不读取后来替换的审批作为权限。审批默认无决定/不可操作；配对独立 approve/reject，plugin 保持只读，未知结果可禁用而不伪造提交动画。
+  - 问题按 select/confirm/input/editor/form 保留原生单选、多选、自定义、说明、必填与无障碍；选择/输入仅发显式草稿事件，宿主同步状态后异步持久化，关闭/消失不回答、不取消。取消能力独立，原生 form 仍以 Stop task 明确显示；仅被点动作转圈。
+  - 新增纯 response 校验，覆盖已知字段/选项、重复项拒绝、单/多选、自定义互斥、必填及 64,000 UTF16 边界；input/editor 精确保留空值/空白，confirm false 是明确回答。heavy 下 10 份实际 iOS16.4/Swift6 UI 源码 typecheck 及单文件 9 项 Swift 测试（含两种输入参数）通过；6 项本地化回归通过。新增 9 条文案各 19 语，当前 204 UI/2权限，共 3,914 条语言单元。真实 App 编译/恢复/资源检查交 CI；未启动本机模拟器、绑定生产操作或发布。详见 `docs/native-ios/CONSENT-UI.md`。
+
 - 2026-10-16 Native iOS 问题与审批运行时（负责人授权原生重构，iOS 优先）。
   - `ClawketRuntime` 增加类型化问题、执行授权和 device/node 连接审批：实际请求/声明方法/成功的受支持只读列表提供能力证据，缺失默认关闭；Hermes 保留 `hermes.run-approval.v1` 的显式降级，空列表不证明支持。严格使用真实选项，Codex/Claude 表单与 Pi select/confirm/input/editor 维持各自协议；plugin 元数据保留但无虚构 resolver。
   - 操作只接受当前连接/Socket/认证代际的 opaque reference；问题另有仅用于本地草稿的稳定作用域 hash。Always 需要单次、三十秒且再次验证的确认令牌；关闭表单无副作用，主动取消可中断任务但 ACK 不伪造问题完成。重复点击、过期和旧代际拒绝；未知写入与异常回复保持锁定，列表元数据更新不解锁、不自动重发。列表响应完整验证后应用，真实事件与后发读取均阻止旧响应复活请求；状态/字节/墓碑/并发/读超时有界。

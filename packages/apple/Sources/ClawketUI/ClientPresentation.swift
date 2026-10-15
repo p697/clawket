@@ -252,11 +252,23 @@ public struct WorkPresentation: Identifiable, Hashable, Sendable {
     }
 }
 
-public enum ApprovalDecision: String, Hashable, Sendable { case allowOnce, allowAlways, deny }
+public enum ApprovalDecision: String, Hashable, Sendable { case allowOnce, allowAlways, deny, approve, reject }
+
+/// The host maps this unique identity to an already prepared, frozen runtime reference/token.
+/// It is ephemeral presentation state and grants no authority on its own.
+public struct ApprovalConfirmationPresentation: Identifiable, Hashable, Sendable {
+    public let id: String
+    public let approvalID: String
+    public let title: String
+    public let detail: String?
+    public init(id: String, approvalID: String, title: String, detail: String? = nil) {
+        self.id = id; self.approvalID = approvalID; self.title = title; self.detail = detail
+    }
+}
 
 public struct ApprovalPresentation: Identifiable, Hashable, Sendable {
     public enum Kind: String, Hashable, Sendable { case execution, plugin, pairing }
-    public enum Outcome: String, Hashable, Sendable { case allowed, denied, expired }
+    public enum Outcome: String, Hashable, Sendable { case allowed, denied, approved, rejected, expired }
     /// Host-wide unique presentation identity, scoped to its connection/request generation.
     /// The host maps this back to the backend request; it is never an unscoped wire request ID.
     public var id: String
@@ -267,6 +279,7 @@ public struct ApprovalPresentation: Identifiable, Hashable, Sendable {
     public var scope: String?
     public var symbol: String
     public var decisions: [ApprovalDecision]
+    public var canResolve: Bool
     public var submitting: ApprovalDecision?
     public var outcome: Outcome?
     public var error: String?
@@ -275,11 +288,27 @@ public struct ApprovalPresentation: Identifiable, Hashable, Sendable {
 
     public init(id: String, kind: Kind = .execution, title: String, reason: String? = nil,
                 command: String? = nil, scope: String? = nil, symbol: String = "hand.raised",
-                decisions: [ApprovalDecision] = [.deny, .allowOnce], submitting: ApprovalDecision? = nil,
-                outcome: Outcome? = nil, error: String? = nil, expiryLabel: String? = nil) {
+                decisions: [ApprovalDecision] = [], submitting: ApprovalDecision? = nil,
+                outcome: Outcome? = nil, error: String? = nil, expiryLabel: String? = nil, canResolve: Bool = false) {
         self.id = id; self.kind = kind; self.title = title; self.reason = reason
-        self.command = command; self.scope = scope; self.symbol = symbol; self.decisions = decisions
+        self.command = command; self.scope = scope; self.symbol = symbol
+        self.decisions = decisions; self.canResolve = canResolve
         self.submitting = submitting; self.outcome = outcome; self.error = error; self.expiryLabel = expiryLabel
+    }
+
+    /// Pairing never borrows execution permission semantics, even if a stale host supplies them.
+    public var visibleDecisions: [ApprovalDecision] {
+        switch kind {
+        case .pairing: decisions.filter { [.approve, .reject].contains($0) }
+        case .execution: decisions.filter { [.allowOnce, .allowAlways, .deny].contains($0) }
+        case .plugin: [] // None of the current adapters implements a plugin resolver.
+        }
+    }
+
+    func intent(for decision: ApprovalDecision) -> ClientIntent? {
+        guard canResolve, outcome == nil, submitting == nil, visibleDecisions.contains(decision) else { return nil }
+        if decision == .allowAlways { return .prepareApprovalConfirmation(approvalID: id) }
+        return .resolveApproval(approvalID: id, decision: decision)
     }
 }
 
@@ -295,6 +324,7 @@ public struct QuestionOption: Identifiable, Hashable, Sendable {
 public struct QuestionField: Identifiable, Hashable, Sendable {
     public var id: String
     public var title: String
+    public var header: String?
     public var options: [QuestionOption]
     public var allowsMultiple: Bool
     public var allowsCustom: Bool
@@ -302,43 +332,57 @@ public struct QuestionField: Identifiable, Hashable, Sendable {
     public var isRequired: Bool
 
     public init(id: String, title: String, options: [QuestionOption] = [], allowsMultiple: Bool = false,
-                allowsCustom: Bool = false, placeholder: String? = nil, isRequired: Bool = true) {
+                allowsCustom: Bool = false, placeholder: String? = nil, isRequired: Bool = true, header: String? = nil) {
         self.id = id; self.title = title; self.options = options; self.allowsMultiple = allowsMultiple
-        self.allowsCustom = allowsCustom; self.placeholder = placeholder; self.isRequired = isRequired
+        self.allowsCustom = allowsCustom; self.placeholder = placeholder; self.isRequired = isRequired; self.header = header
     }
 }
 
 public struct QuestionPresentation: Identifiable, Hashable, Sendable {
+    public enum Kind: String, Hashable, Sendable { case select, confirm, input, editor, form }
+    public enum Submission: Hashable, Sendable { case answer, confirm(Bool), cancel }
     /// Host-wide unique presentation identity, scoped to its conversation/request generation.
     /// Response drafts and answer intents use this identity, not an unscoped wire request ID.
     public var id: String
     public var title: String
+    /// Select/input/editor use exactly one field; confirm uses none. Form fields retain their IDs.
+    public var kind: Kind
     public var detail: String?
     public var fields: [QuestionField]
     public var isSubmitting: Bool
     public var resolvedLabel: String?
     public var error: String?
     public var canSubmit: Bool
+    public var canCancel: Bool
+    /// Only the pressed action spins. Unknown delivery must disable actions without claiming a submission.
+    public var submittingAction: Submission?
 
     public init(id: String, title: String, detail: String? = nil, fields: [QuestionField],
                 isSubmitting: Bool = false, resolvedLabel: String? = nil,
-                error: String? = nil, canSubmit: Bool = true) {
+                error: String? = nil, canSubmit: Bool = true, kind: Kind = .form,
+                canCancel: Bool = false, submittingAction: Submission? = nil) {
         self.id = id; self.title = title; self.detail = detail; self.fields = fields
         self.isSubmitting = isSubmitting; self.resolvedLabel = resolvedLabel; self.error = error; self.canSubmit = canSubmit
+        self.kind = kind; self.canCancel = canCancel; self.submittingAction = submittingAction
     }
 }
 
 public struct QuestionFieldAnswer: Equatable, Sendable {
     public var selectedOptionIDs: [String]
     public var text: String
-    public init(selectedOptionIDs: [String] = [], text: String = "") {
-        self.selectedOptionIDs = selectedOptionIDs; self.text = text
+    /// Custom is an explicit alternative to listed options, including for multiple-choice fields.
+    public var isCustom: Bool
+    public init(selectedOptionIDs: [String] = [], text: String = "", isCustom: Bool = false) {
+        self.selectedOptionIDs = selectedOptionIDs; self.text = text; self.isCustom = isCustom
     }
 }
 
 public struct QuestionResponse: Equatable, Sendable {
     public var fields: [String: QuestionFieldAnswer]
-    public init(fields: [String: QuestionFieldAnswer] = [:]) { self.fields = fields }
+    public var confirmed: Bool?
+    public init(fields: [String: QuestionFieldAnswer] = [:], confirmed: Bool? = nil) {
+        self.fields = fields; self.confirmed = confirmed
+    }
 }
 
 public enum MessageContent: Hashable, Sendable {
@@ -452,6 +496,7 @@ public final class ClientPresentation: ObservableObject {
     @Published public var expandedContentIDs: Set<String>
     /// Connection-wide consents remain separate from transcript-owned approvals.
     @Published public var connectionApprovals: [ApprovalPresentation]
+    @Published public var approvalConfirmation: ApprovalConfirmationPresentation?
 
     public init(title: String = String(localized: "Agents"), agents: [AgentPresentation] = [],
                 selectedConversation: ConversationID? = nil,
@@ -463,7 +508,7 @@ public final class ClientPresentation: ObservableObject {
                 accountAttentionCount: Int = 0, features: [ClientFeature: ActionAvailability] = [:],
                 drafts: [ConversationID: ComposerDraft] = [:], questionResponses: [String: QuestionResponse] = [:],
                 expandedContentIDs: Set<String> = [],
-                connectionApprovals: [ApprovalPresentation] = []) {
+                connectionApprovals: [ApprovalPresentation] = [], approvalConfirmation: ApprovalConfirmationPresentation? = nil) {
         self.title = title; self.agents = agents; self.selectedConversation = selectedConversation
         self.conversations = conversations; self.connection = connection; self.isLoading = isLoading
         self.catalogs = catalogs
@@ -471,6 +516,7 @@ public final class ClientPresentation: ObservableObject {
         self.features = features; self.drafts = drafts; self.questionResponses = questionResponses
         self.expandedContentIDs = expandedContentIDs
         self.connectionApprovals = connectionApprovals
+        self.approvalConfirmation = approvalConfirmation
     }
 
     public func availability(_ feature: ClientFeature) -> ActionAvailability { features[feature] ?? .unsupported }
@@ -509,6 +555,12 @@ public enum ClientIntent: Sendable {
     case loadEarlier(ConversationID)
     case messageAction(ConversationID, messageID: String, action: MessageAction)
     case resolveApproval(approvalID: String, decision: ApprovalDecision)
+    /// The host obtains a frozen one-use runtime confirmation before showing its own dialog.
+    case prepareApprovalConfirmation(approvalID: String)
+    case confirmApproval(confirmationID: String)
+    case dismissApprovalConfirmation(confirmationID: String)
+    case questionDraftChanged(questionID: String, response: QuestionResponse)
     case answerQuestion(questionID: String, response: QuestionResponse)
+    case cancelQuestion(questionID: String)
     case openURL(URL)
 }

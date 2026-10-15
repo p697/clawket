@@ -197,7 +197,6 @@ struct ApprovalContentView: View {
     let onIntent: @MainActor (ClientIntent) -> Void
     var onReadingInteraction: () -> Void = {}
     @State private var localExpanded = false
-    @State private var confirmingAlways = false
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
@@ -219,8 +218,7 @@ struct ApprovalContentView: View {
                 .background(Color(uiColor: .tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
             if let outcome = approval.outcome {
-                Label(outcome == .allowed ? String(localized: "Allowed") : outcome == .denied ? String(localized: "Denied") : String(localized: "Expired"),
-                      systemImage: outcome == .allowed ? "checkmark.circle" : outcome == .denied ? "xmark.circle" : "clock")
+                Label(outcome.label, systemImage: outcome.symbol)
                     .font(.subheadline).foregroundStyle(.secondary)
             } else {
                 if let reason = approval.reason { Text(reason).font(.subheadline).foregroundStyle(.secondary) }
@@ -236,10 +234,10 @@ struct ApprovalContentView: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .confirmationDialog("Always allow this action?", isPresented: $confirmingAlways, titleVisibility: .visible) {
-            Button("Always allow") { onIntent(.resolveApproval(approvalID: approval.id, decision: .allowAlways)) }
-        } message: {
-            Text(approval.scope ?? String(localized: "This permission applies beyond this single request."))
+        .background {
+            if let confirmation = model?.approvalConfirmation, confirmation.approvalID == approval.id {
+                ApprovalConfirmationPresenter(confirmation: confirmation, onIntent: onIntent).id(confirmation.id)
+            }
         }
         .accessibilityIdentifier("approval-\(approval.id)")
     }
@@ -254,121 +252,87 @@ struct ApprovalContentView: View {
     }
 
     @ViewBuilder private var decisionButtons: some View {
-        if approval.decisions.contains(.deny) {
+        if approval.visibleDecisions.contains(.reject) {
+            decisionButton(.reject, title: "Reject").buttonStyle(.bordered)
+        }
+        if approval.visibleDecisions.contains(.approve) {
+            decisionButton(.approve, title: "Approve").buttonStyle(.borderedProminent).tint(.primary)
+        }
+        if approval.visibleDecisions.contains(.deny) {
             decisionButton(.deny, title: "Reject").buttonStyle(.bordered)
         }
-        if approval.decisions.contains(.allowOnce) {
+        if approval.visibleDecisions.contains(.allowOnce) {
             decisionButton(.allowOnce, title: "Allow once").buttonStyle(.borderedProminent).tint(.primary)
         }
-        if approval.decisions.contains(.allowAlways) {
+        if approval.visibleDecisions.contains(.allowAlways) {
             Menu {
-                Button("Always allow…") { confirmingAlways = true }
+                Button("Always allow…") {
+                    if let intent = approval.intent(for: .allowAlways) { onIntent(intent) }
+                }
             } label: {
-                Image(systemName: "ellipsis").frame(minWidth: 44, minHeight: 44)
-            }.disabled(approval.submitting != nil).accessibilityLabel("More permission options")
+                Group {
+                    if approval.submitting == .allowAlways { ProgressView().controlSize(.small) }
+                    else { Image(systemName: "ellipsis") }
+                }.frame(minWidth: 44, minHeight: 44)
+            }.disabled(approval.submitting != nil || !approval.canResolve).accessibilityLabel("More permission options")
         }
     }
 
     private func decisionButton(_ decision: ApprovalDecision, title: LocalizedStringKey) -> some View {
         Button {
-            onIntent(.resolveApproval(approvalID: approval.id, decision: decision))
+            if let intent = approval.intent(for: decision) { onIntent(intent) }
         } label: {
             HStack(spacing: 7) {
                 if approval.submitting == decision { ProgressView().controlSize(.small) }
                 Text(title).font(.subheadline.weight(.medium))
             }.frame(minWidth: 76, minHeight: 44)
         }
-        .disabled(approval.submitting != nil)
+        .disabled(approval.submitting != nil || !approval.canResolve)
         .accessibilityIdentifier("approval-\(approval.id)-\(decision.rawValue)")
     }
 }
 
+/// A separate keyed presenter keeps the immutable confirmation snapshot with the system dialog.
+/// Replacing the review destroys this presenter instead of retargeting its action to a new card.
 @MainActor
-private struct QuestionContentView: View {
-    let question: QuestionPresentation
-    @ObservedObject var model: ClientPresentation
+private struct ApprovalConfirmationPresenter: View {
+    let confirmation: ApprovalConfirmationPresentation
     let onIntent: @MainActor (ClientIntent) -> Void
-    let onReadingInteraction: () -> Void
-    private var response: QuestionResponse { model.questionResponses[question.id] ?? .init() }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Label(question.title, systemImage: "text.bubble").font(.headline)
-            if let detail = question.detail { Text(detail).font(.subheadline).foregroundStyle(.secondary) }
-            if let resolved = question.resolvedLabel {
-                Label(resolved, systemImage: "checkmark.circle").font(.subheadline).foregroundStyle(.secondary)
-            } else {
-                ForEach(question.fields) { field in
-                    VStack(alignment: .leading, spacing: 8) {
-                        if !field.title.isEmpty { Text(field.title).font(.subheadline.weight(.medium)) }
-                        ForEach(field.options) { option in
-                            Button {
-                                var value = answer(for: field)
-                                if field.allowsMultiple {
-                                    if value.selectedOptionIDs.contains(option.id) { value.selectedOptionIDs.removeAll { $0 == option.id } }
-                                    else { value.selectedOptionIDs.append(option.id) }
-                                } else { value.selectedOptionIDs = [option.id]; value.text = "" }
-                                setAnswer(value, for: field)
-                            } label: {
-                                HStack(alignment: .top, spacing: 10) {
-                                    Image(systemName: answer(for: field).selectedOptionIDs.contains(option.id) ? "checkmark.circle.fill" : "circle")
-                                        .font(.body).padding(.top, 2)
-                                    VStack(alignment: .leading, spacing: 3) {
-                                        Text(option.label).font(.subheadline).foregroundStyle(.primary)
-                                        if let detail = option.detail { Text(detail).font(.caption).foregroundStyle(.secondary) }
-                                    }
-                                    Spacer(minLength: 0)
-                                }.padding(12).frame(minHeight: 44)
-                                    .background(Color(uiColor: .tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(question.isSubmitting)
-                            .accessibilityAddTraits(answer(for: field).selectedOptionIDs.contains(option.id) ? .isSelected : [])
-                        }
-                        if field.options.isEmpty || field.allowsCustom {
-                            TextField(field.placeholder ?? String(localized: "Your answer"), text: Binding(get: {
-                                answer(for: field).text
-                            }, set: { text in
-                                var value = answer(for: field); value.text = text
-                                if !field.allowsMultiple && !text.isEmpty { value.selectedOptionIDs = [] }
-                                setAnswer(value, for: field)
-                            }), axis: .vertical)
-                            .textFieldStyle(.roundedBorder).lineLimit(1...8)
-                            .disabled(question.isSubmitting)
-                            .accessibilityLabel(field.title.isEmpty ? String(localized: "Your answer") : field.title)
-                        }
+        Color.clear.frame(width: 0, height: 0)
+            .confirmationDialog(confirmation.title, isPresented: Binding(get: { true }, set: { visible in
+                if !visible {
+                    // A button also dismisses the system dialog. Let its explicit action consume
+                    // the host snapshot first; the later dismissal is harmless and identity-scoped.
+                    Task { @MainActor in
+                        await Task.yield()
+                        onIntent(.dismissApprovalConfirmation(confirmationID: confirmation.id))
                     }
                 }
-                if let error = question.error { Label(error, systemImage: "exclamationmark.circle").font(.footnote).foregroundStyle(.orange) }
-                if question.canSubmit {
-                    Button {
-                        onIntent(.answerQuestion(questionID: question.id, response: response))
-                    } label: {
-                        HStack(spacing: 8) {
-                            if question.isSubmitting { ProgressView().controlSize(.small) }
-                            Text("Send answer").font(.subheadline.weight(.medium))
-                        }.frame(minHeight: 44)
-                    }
-                    .buttonStyle(.borderedProminent).tint(.primary)
-                    .disabled(question.isSubmitting || !isValid)
-                }
+            }), titleVisibility: .visible, presenting: confirmation) { frozen in
+                Button("Always allow") { onIntent(.confirmApproval(confirmationID: frozen.id)) }
+            } message: { frozen in
+                if let detail = frozen.detail { Text(detail) }
             }
-        }
-        .padding(16).frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .accessibilityIdentifier("question-\(question.id)")
     }
+}
 
-    private var isValid: Bool {
-        question.fields.allSatisfy { field in
-            !field.isRequired || !answer(for: field).selectedOptionIDs.isEmpty || !answer(for: field).text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+private extension ApprovalPresentation.Outcome {
+    var label: String {
+        switch self {
+        case .allowed: String(localized: "Allowed")
+        case .denied: String(localized: "Denied")
+        case .approved: String(localized: "Approved")
+        case .rejected: String(localized: "Rejected")
+        case .expired: String(localized: "Expired")
         }
     }
-    private func answer(for field: QuestionField) -> QuestionFieldAnswer { response.fields[field.id] ?? .init() }
-    private func setAnswer(_ answer: QuestionFieldAnswer, for field: QuestionField) {
-        onReadingInteraction()
-        var changed = response; changed.fields[field.id] = answer
-        model.questionResponses[question.id] = changed
+    var symbol: String {
+        switch self {
+        case .allowed, .approved: "checkmark.circle"
+        case .denied, .rejected: "xmark.circle"
+        case .expired: "clock"
+        }
     }
 }
 
