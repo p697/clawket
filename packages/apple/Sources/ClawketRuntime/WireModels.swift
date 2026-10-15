@@ -118,10 +118,16 @@ enum WireModels {
             }
             var clock = timestamp(value["timestampMs"] ?? value["timestamp"] ?? value["ts"] ?? value["createdAt"])
             if gateway, let number = clock, number > 0, number < 10_000_000_000 { clock = number * 1_000 }
+            var sendKey = value["idempotencyKey"]?.stringValue ?? value["__openclaw"]?["idempotencyKey"]?.stringValue
+            if backend == .openclaw, role == .user, value["__openclaw"]?.object != nil, let raw = sendKey, raw.hasSuffix(":user") {
+                let original = String(raw.dropLast(5))
+                let knownLegacy = original.range(of: "^[0-9]{13}_[a-z0-9]{1,8}$", options: .regularExpression) != nil
+                if knownLegacy || UUID(uuidString: original) != nil { sendKey = original }
+            }
             return RuntimeMessage(id: id, role: role, text: value["text"]?.stringValue ?? protocolText(value["content"]),
                                   timestampMs: clock,
                                   runID: value["runId"]?.stringValue, turnID: value["turnId"]?.stringValue,
-                                  idempotencyKey: value["idempotencyKey"]?.stringValue ?? value["__openclaw"]?["idempotencyKey"]?.stringValue,
+                                  idempotencyKey: sendKey,
                                   sentLocally: false, raw: value)
         }
         let profile = BackendProfile.profile(for: backend)

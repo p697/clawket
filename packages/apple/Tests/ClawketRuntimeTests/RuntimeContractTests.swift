@@ -92,6 +92,17 @@ struct RuntimeContractTests {
         #expect(history.messages[1].id == "native-id"); #expect(history.messages[1].idempotencyKey == "exact-send")
     }
 
+    @Test func openClawKnownUserKeyFormatsReconcileWithoutRewritingOpaqueKeys() throws {
+        let uuid = "e03e4999-6cc9-42ce-b09f-774597d1e51b"
+        let keys = ["1789650197142_ku5tbzv3:user", uuid + ":user", "external-opaque:user"]
+        let payload: JSONValue = .object(["messages": .array(keys.map { .object(["role": .string("user"), "content": .string("same content"),
+            "idempotencyKey": .string($0), "__openclaw": .object(["senderIsOwner": .bool(true)])]) })])
+        let messages = try WireModels.history(payload, key: "s", backend: .openclaw).messages
+        #expect(messages.map(\.idempotencyKey) == ["1789650197142_ku5tbzv3", uuid, "external-opaque:user"])
+        #expect(try WireModels.history(payload, key: "s", backend: .hermes).messages.map(\.idempotencyKey) == keys.map(Optional.some))
+        #expect(messages.allSatisfy { !$0.sentLocally })
+    }
+
     @Test(arguments: ["relay-openclaw/openclaw-v1.json", "relay-hermes/hermes-v1.json"])
     func realHistoricalContractFramesDecode(_ path: String) throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
