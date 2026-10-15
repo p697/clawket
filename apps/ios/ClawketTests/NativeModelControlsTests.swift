@@ -122,14 +122,14 @@ private actor SettingsRuntime: NativeModelRuntime {
 
 final class NativeModelControlsTests: XCTestCase, @unchecked Sendable {
     private var route: ConversationID { .init(connectionID: "c", agentID: "a", sessionID: "s") }
-    @MainActor private func fixture(_ value: RuntimeModelControls = controlsValue()) -> (NativeModelControls, ClientPresentation, SettingsRuntime, SettingsHost) {
+    @MainActor private func fixture(_ value: RuntimeModelControls = controlsValue(), permits: @escaping @MainActor (ConversationID) -> Bool = { _ in true }) -> (NativeModelControls, ClientPresentation, SettingsRuntime, SettingsHost) {
         let model = ClientPresentation(), runtime = SettingsRuntime(value), host = SettingsHost()
         let controller = NativeModelControls(presentation: model, runtime: runtime, context: { host.context }, selectedRoute: { host.selected },
             queue: { _, plan in
                 host.plans.append(plan)
                 if host.queueFailure { throw StoreFailure.unavailable }
                 try host.draft.enqueueSettingCommand(plan.text, id: UUID().uuidString, timestampMs: 1)
-            }, onSnapshot: { _, value, _ in host.snapshots.append(value) }, onChange: { host.changes += 1 })
+            }, onSnapshot: { _, value, _ in host.snapshots.append(value) }, onChange: { host.changes += 1 }, permitsMutation: permits)
         controller.update(.init(connectionID: "c", phase: .ready, backendKind: value.backendKind))
         return (controller, model, runtime, host)
     }
@@ -171,6 +171,25 @@ final class NativeModelControlsTests: XCTestCase, @unchecked Sendable {
         try await wait { host.snapshots.count > before }
         XCTAssertTrue(controller.permitsInput(route))
         let writes = await runtime.writes; XCTAssertEqual(writes.count, 1)
+    }
+
+    @MainActor func testAccessLossBeforeDispatchAndPermissionConfirmationCannotUseOldReview() async throws {
+        var allowed = true
+        let (controller, model, runtime, _) = fixture(permits: { _ in allowed })
+        let id = try await open(controller, model)
+        controller.choose(id, choice: .fastMode(true))
+        allowed = false
+        try await wait { model.modelControls?.submitting == nil }
+        let undispatched = await runtime.writes; XCTAssertTrue(undispatched.isEmpty)
+        allowed = true
+        controller.choose(id, choice: .permissions(.fullAccess))
+        try await wait { model.modelControls?.confirmation != nil }
+        let confirmation = try XCTUnwrap(model.modelControls?.confirmation?.id)
+        allowed = false; controller.confirm(confirmation)
+        let writes = await runtime.writes; XCTAssertTrue(writes.isEmpty)
+        controller.dismiss(id)
+        allowed = true; controller.confirm(confirmation)
+        let after = await runtime.writes; XCTAssertTrue(after.isEmpty)
     }
 
     @MainActor func testMissingActionsAndForeignChoicesCannotReachNativeWrites() async throws {

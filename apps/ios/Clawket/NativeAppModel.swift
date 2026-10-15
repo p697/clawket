@@ -49,6 +49,7 @@ final class NativeAppModel: ObservableObject {
     var proAllowanceReading = false
     var proAllowancePending = false
     var proStorageFailed = false
+    var proAttached = false
     var manualSessions: NativeManualSessions?
     var proManualSessions: [NativeManualSession] = []
     var proContinuations: [UUID: NativeProContinuation] = [:]
@@ -76,7 +77,7 @@ final class NativeAppModel: ObservableObject {
     private var conversationVisibility = NativeConversationVisibility()
     var runtime: RuntimeCoordinator?
     private var taskRequests: NativeTaskRequests?
-    private var sessionManager: NativeSessionManagement?
+    var sessionManager: NativeSessionManagement?
     var modelControls: NativeModelControls?
     private var archivedSessions: [String: [RuntimeSession]] = [:]
     private var archiveReads: [String: UUID] = [:]
@@ -193,7 +194,8 @@ final class NativeAppModel: ObservableObject {
                     guard let self else { throw RuntimeFailure(.superseded) }
                     try await self.queueModelCommand(route, plan: plan)
                 }, onSnapshot: { [weak self] route, value, rows in self?.applyModelSnapshot(route, value: value, rows: rows) },
-                onChange: { [weak self] in self?.modelSettingsChanged() })
+                onChange: { [weak self] in self?.modelSettingsChanged() },
+                permitsMutation: { [weak self] route in self?.proPermitsInput(route) == true })
             if let saved = try await vault.readRegistry() {
                 registry = saved.value
                 if saved.recoveredFromRollback { notice = String(localized: "Recovered your saved connections from the last verified copy.") }
@@ -251,7 +253,7 @@ final class NativeAppModel: ObservableObject {
             rosterReading.update(route, viewID: viewID, scope: scope, visible: visible,
                 currentView: conversationVisibility.isShowing(route, viewID: viewID)); markVisibleRosterRead()
         case let .reviewProAgent(id):
-            guard let agent = agents.first(where: { $0.connectionID == id.connectionID && $0.agentID == id.agentID }) else { return }
+            guard let agent = agents.first(where: { $0.connectionID.utf8.elementsEqual(id.connectionID.utf8) && $0.agentID.utf8.elementsEqual(id.agentID.utf8) }) else { return }
             let action: NativeProContinuation.Action = agent.entryMode == .sessions ? .catalog(id)
                 : .conversation(.init(connectionID: id.connectionID, agentID: id.agentID, sessionID: agent.mainSessionKey))
             showPro(.agents, continuing: action)
@@ -615,7 +617,7 @@ final class NativeAppModel: ObservableObject {
         return sessions.first { NativeRosterProjection.route($0) == route }
     }
     private func canUseRosterActions(_ agent: RuntimeAgent) -> Bool {
-        rosterState.canSave && NativeRosterProjection.canUseLocalActions(agent, freeConnectionID: registry.freeConnectionID,
+        rosterState.canSave && (!proAttached || proAgentAccess(.init(connectionID: agent.connectionID, agentID: agent.agentID)) == .allowed) && NativeRosterProjection.canUseLocalActions(agent, freeConnectionID: registry.freeConnectionID,
             explicitAccess: rosterExplicitAccess)
     }
     private func markVisibleRosterRead() {
@@ -777,25 +779,25 @@ final class NativeAppModel: ObservableObject {
               !creatingCatalogs.contains(id), !unconfirmedCreations.contains(id), let runtime else { return }
         if let projectID, projects[id.connectionID]?.first(where: { $0.id == projectID })?.available != true { return }
         creatingCatalogs.insert(id); updateCatalog(id)
-        let activation = activationRevision, wire = wireRevision
+        let activation = activationRevision, wire = wireRevision, selection = selectionRevision
         Task {
             defer {
                 if activation == activationRevision, wire == wireRevision { creatingCatalogs.remove(id); updateCatalog(id) }
             }
-            guard activation == activationRevision, wire == wireRevision, id.connectionID == activeConnectionID else { return }
+            guard activation == activationRevision, wire == wireRevision, selection == selectionRevision, id.connectionID == activeConnectionID else { return }
             do {
                 guard let manualSessions else { throw StoreFailure.unavailable }
                 try await manualSessions.checkCapacity()
-                guard activation == activationRevision, wire == wireRevision, proAgentAccess(id) == .allowed else { return }
+                guard activation == activationRevision, wire == wireRevision, selection == selectionRevision, proAgentAccess(id) == .allowed else { return }
                 let session = try await runtime.createSession(agentID: id.agentID, projectID: projectID)
                 let createdRoute = ConversationID(connectionID: id.connectionID, agentID: id.agentID, sessionID: session.key)
                 proManualSessions = try await manualSessions.rememberCreated(createdRoute)
-                guard activation == activationRevision, wire == wireRevision, id.connectionID == activeConnectionID else { return }
+                guard activation == activationRevision, wire == wireRevision, selection == selectionRevision, id.connectionID == activeConnectionID else { return }
                 sessions.removeAll { $0.connectionID == id.connectionID && $0.key == session.key }; sessions.append(session)
                 presentation.selectedConversation = .init(connectionID: id.connectionID, agentID: id.agentID, sessionID: session.key)
                 rebuildRoster()
             } catch {
-                guard activation == activationRevision, wire == wireRevision, id.connectionID == activeConnectionID else { return }
+                guard activation == activationRevision, wire == wireRevision, selection == selectionRevision, id.connectionID == activeConnectionID else { return }
                 unconfirmedCreations.insert(id)
                 presentation.catalogs[id]?.error = String(localized: "Creation could not be confirmed. Refresh conversations before trying again.")
             }
@@ -1610,7 +1612,7 @@ final class NativeAppModel: ObservableObject {
 
     private func prepareSessionMutation(_ target: NativeSessionMutationTarget) async throws {
         guard target.host.sameConnection(as: sessionHostContext), target.route.connectionID == activeConnectionID,
-              state.phase == .ready else { throw RuntimeFailure(.superseded) }
+              state.phase == .ready, proPermitsInput(target.route) else { throw RuntimeFailure(.superseded) }
         let route = target.route, destructive = [.reset, .delete].contains(target.action)
         historyRevisions[route] = UUID()
         presentation.conversations[route]?.isLoadingHistory = false
@@ -1635,7 +1637,7 @@ final class NativeAppModel: ObservableObject {
                 documents[route] = document; saveTasks[route]?.cancel(); try await persist(route)
             }
         }
-        guard target.host.sameConnection(as: sessionHostContext), state.phase == .ready,
+        guard target.host.sameConnection(as: sessionHostContext), state.phase == .ready, proPermitsInput(target.route),
               !destructive || physicalOperations[NativeHistoryScope(route)] == target.id else { throw RuntimeFailure(.superseded) }
     }
 

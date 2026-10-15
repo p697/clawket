@@ -13,7 +13,7 @@ extension NativeAppModel {
                     return context.activation == self.activationRevision && context.wire == self.wireRevision &&
                         context.selection == self.selectionRevision &&
                         historySame(context.route.connectionID, self.activeConnectionID) && self.state.phase == .ready &&
-                        context.epoch == self.documents[context.route]?.historyEpoch
+                        context.epoch == self.documents[context.route]?.historyEpoch && self.proConversationAccess(context.route) == .full
                 }, access: { [weak self] in
                     guard let self else { return .init() }
                     return .init(search: pro.access.feature(.messageHistory, at: pro.now) == .allowed,
@@ -42,6 +42,7 @@ extension NativeAppModel {
             guard let route, route.isConcrete else { return }
             self.destination = .previousTranscripts(.init(route), UUID())
         case .exportConversation:
+            if let route, !proPermitsInput(route) { showPro(.sessionHistory, continuing: .conversation(route)); return }
             guard let route, route.isConcrete, route == presentation.selectedConversation, route.connectionID == activeConnectionID,
                   state.phase == .ready, state.capabilities.history else { return }
             let context = NativeHistoryExportContext(route: route, activation: activationRevision, wire: wireRevision,

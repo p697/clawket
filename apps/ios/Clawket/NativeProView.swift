@@ -133,8 +133,12 @@ struct NativeProView: View {
     }
     private var unavailable: some View {
         VStack(spacing: 12) {
-            Text("Unable to load subscription options right now.").foregroundStyle(.secondary).multilineTextAlignment(.center)
-            Button("Try again") { Task { await controller.refresh(reviewID: review.id) } }.frame(minHeight: 44)
+            if controller.configured {
+                Text("Unable to load subscription options right now.").foregroundStyle(.secondary).multilineTextAlignment(.center)
+                Button("Try again") { Task { await controller.refresh(reviewID: review.id) } }.frame(minHeight: 44)
+            } else {
+                Text("Purchases are unavailable in this build.").foregroundStyle(.secondary).multilineTextAlignment(.center)
+            }
         }.padding(.vertical, 12)
     }
     private var result: some View {
@@ -198,7 +202,7 @@ struct NativeProView: View {
         switch value {
         case .pending: String(localized: "Your purchase is pending approval.")
         case .unconfirmed: String(localized: "No new Pro access confirmed yet. If you redeemed a code, tap Restore.")
-        case .unavailable: String(localized: "Purchases are unavailable in this build.")
+        case .unavailable: String(localized: "Unable to complete your purchase right now.")
         case .invalid, .changed, .failed: String(localized: "Your Pro status could not be verified. Try again when you’re online.")
         case .cancelled: ""
         }

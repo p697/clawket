@@ -83,10 +83,32 @@ private final class ProDelay: @unchecked Sendable {
         peer.nextPurchase?.resume(returning: (ProPeer.customer(true), "year")); peer.nextPurchase = nil
         await settled { controller.phase == .success && timer.count >= 1 }
         #expect(controller.paid); #expect(completed.isEmpty)
+        peer.value = ProPeer.customer(true)
+        await controller.refresh(reviewID: review.id)
+        #expect(controller.phase == .success); #expect(!controller.canCheckout)
+        controller.restore(reviewID: review.id); controller.redeem(reviewID: review.id)
+        #expect(peer.restores == 0); #expect(peer.redemptions == 0)
         timer.advance(2); await settled { controller.review == nil }
         controller.didDismiss(UUID()); #expect(completed.isEmpty)
         controller.didDismiss(review.id); controller.didDismiss(review.id)
         #expect(completed == [review.id]); #expect(peer.purchases == 1)
+    }
+    @Test func revokedAccessBeforeActualDismissalCannotContinueOldPurchaseIntent() async throws {
+        let peer = ProPeer(), timer = ProDelay()
+        let controller = ProController(mode: .store, source: peer, clock: { 100 }, delay: { try await timer.sleep($0) })
+        var completed = false, closed = false
+        controller.onSuccessfulDismissal = { _ in completed = true }
+        controller.onClosed = { _ in closed = true }
+        let review = try #require(controller.open(presenterID: UUID()))
+        await settled { controller.phase == .ready }
+        controller.purchase(reviewID: review.id); await settled { peer.nextPurchase != nil }
+        peer.nextPurchase?.resume(returning: (ProPeer.customer(true), "year")); peer.nextPurchase = nil
+        await settled { controller.phase == .success && timer.count >= 1 }
+        timer.advance(2); await settled { controller.review == nil }
+        peer.value = ProPeer.customer(false, request: 110)
+        await controller.refreshCustomer(); #expect(!controller.paid)
+        controller.didDismiss(review.id)
+        #expect(!completed); #expect(closed)
     }
     @Test func closingDuringBaselineCannotStartCheckoutAndLateTransactionOnlyReconcilesAccess() async throws {
         let peer = ProPeer(), controller = ProController(mode: .store, source: peer, clock: { 100 })
@@ -113,6 +135,10 @@ private final class ProDelay: @unchecked Sendable {
         peer.purchaseError = .pending; controller.purchase(reviewID: review.id)
         await settled { controller.phase == .unconfirmed }
         controller.purchase(reviewID: review.id); #expect(peer.purchases == 1)
+        await controller.refresh(reviewID: review.id)
+        #expect(controller.phase == .unconfirmed); #expect(!controller.canCheckout)
+        peer.readFailure = true; await controller.refresh(reviewID: review.id); peer.readFailure = false
+        #expect(controller.phase == .unconfirmed)
         peer.continuation.yield(ProPeer.customer(true, request: 110))
         await settled { controller.paid }; #expect(controller.phase == .unconfirmed); #expect(controller.review?.id == review.id)
         controller.close(review.id)
@@ -123,6 +149,8 @@ private final class ProDelay: @unchecked Sendable {
         peer.nextPurchase?.resume(returning: (peer.value, "year")); peer.nextPurchase = nil
         await settled { controller.phase == .scheduled }
         #expect(controller.review?.id == next.id); #expect(peer.purchases == 2)
+        await controller.refresh(reviewID: next.id)
+        #expect(controller.phase == .scheduled); #expect(!controller.canCheckout)
     }
     @Test func redemptionPresentationIsNotSuccessAndPollsAreBoundedRetiredAndForegroundOnly() async throws {
         let peer = ProPeer(), timer = ProDelay()

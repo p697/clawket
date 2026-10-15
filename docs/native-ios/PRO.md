@@ -28,7 +28,7 @@ The custom native paywall uses the existing companion vector, the Mobile silver 
 
 Each checkout refreshes customer evidence first and synchronously reserves one operation before awaiting. Cancellation stays quiet. Pending/unknown payment, a scheduled recurring change and a presentation-only redemption never count as newly activated entitlement or replay checkout. Lifetime purchase does not cancel an existing renewing subscription and directs the owner to the system management surface. Restore and code redemption are explicit actions. Redemption uses Apple's native sheet, never collects a code, and performs at most twelve five-second foreground reads; closing retires that continuation.
 
-A genuine success may update global access even if its old view closes. Continuing the prior action requires the same review, presenter, route, activation, wire, selection and physical epoch, followed by the actual paywall dismissal callback. A later view cannot adopt it. StoreKit receipts, transaction IDs, customer IDs and native error text are not diagnostics; SDK logging is suppressed.
+A genuine success may update global access even if its old view closes. Refreshing or foregrounding a result view preserves its pending/scheduled/success state and cannot re-enable checkout. Continuing the prior action requires the same review, presenter, route, activation, wire, selection and physical epoch, followed by the actual paywall dismissal callback and a current access check. A later view cannot adopt it. StoreKit receipts, transaction IDs, customer IDs and native error text are not diagnostics; SDK logging is suppressed.
 
 ## Verification and remaining acceptance
 

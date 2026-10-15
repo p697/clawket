@@ -34,6 +34,7 @@ final class NativeModelControls {
     private let runtime: any NativeModelRuntime
     private let context: @MainActor () -> NativeSessionHostContext
     private let selectedRoute: @MainActor () -> ConversationID?
+    private let permitsMutation: @MainActor (ConversationID) -> Bool
     private let queue: @MainActor (ConversationID, RuntimeSettingCommand) async throws -> Void
     private let onSnapshot: @MainActor (ConversationID, RuntimeModelControls, [ModelPresentation]) -> Void
     private let onChange: @MainActor () -> Void
@@ -58,10 +59,11 @@ final class NativeModelControls {
          selectedRoute: @escaping @MainActor () -> ConversationID?,
          queue: @escaping @MainActor (ConversationID, RuntimeSettingCommand) async throws -> Void,
          onSnapshot: @escaping @MainActor (ConversationID, RuntimeModelControls, [ModelPresentation]) -> Void,
-         onChange: @escaping @MainActor () -> Void) {
+         onChange: @escaping @MainActor () -> Void,
+         permitsMutation: @escaping @MainActor (ConversationID) -> Bool = { _ in true }) {
         self.presentation = presentation; self.runtime = runtime; self.preferences = preferences
         self.context = context; self.selectedRoute = selectedRoute; self.queue = queue
-        self.onSnapshot = onSnapshot; self.onChange = onChange
+        self.onSnapshot = onSnapshot; self.onChange = onChange; self.permitsMutation = permitsMutation
     }
 
     func update(_ state: RuntimeConnectionState) {
@@ -158,7 +160,7 @@ final class NativeModelControls {
     }
     /// Legacy catalog events still need a fresh, scoped descriptor; they never call the old wire API.
     func chooseLegacy(_ route: ConversationID, modelID: String) {
-        guard ready, route == selectedRoute(), !hasOperation(route), confirmation == nil,
+        guard permitsMutation(route), ready, route == selectedRoute(), !hasOperation(route), confirmation == nil,
               legacyReads[route] == nil, legacyReads.count < 8 else { return }
         if let current = authority, current.route == route, presentation.modelControls?.id == current.reviewID {
             choose(current.reviewID, choice: .model(modelID)); return
@@ -199,7 +201,7 @@ final class NativeModelControls {
             defer { finish(operation); resumeReadAfterPreparation(operation); onChange() }
             do {
                 let token = try await runtime.preparePermissions(reference: value.value.reference, mode: Self.runtimeMode(mode))
-                guard current(operation), presentation.modelControls?.id == value.reviewID,
+                guard current(operation), permitsMutation(value.route), presentation.modelControls?.id == value.reviewID,
                       authority?.value.reference == value.value.reference,
                       token.reference == value.value.reference, Self.mode(token.mode) == mode else { return }
                 finish(operation)
@@ -229,7 +231,7 @@ final class NativeModelControls {
     }
 
     private func submit(_ value: Authority, choice: ModelControlChoice, permission: RuntimeModelPermissionConfirmation?, legacy: Bool = false) {
-        guard isCurrent(value.epoch, value.host), operations[value.key] == nil else { return }
+        guard permitsMutation(value.route), isCurrent(value.epoch, value.host), operations[value.key] == nil else { return }
         if !legacy { guard actionable(value.reviewID, choice) != nil else { return } }
         if case .model = choice, unconfirmedModels.count >= 128, !unconfirmedModels.contains(value.key) {
             fail(value.reviewID, text: String(localized: "These settings cannot be changed right now.")); return
@@ -241,10 +243,10 @@ final class NativeModelControls {
             defer { finish(operation); onChange() }
             var acknowledged = false
             do {
-                guard current(operation) else { return }
+                guard current(operation), permitsMutation(value.route) else { return }
                 if command, case let .thinking(level) = choice {
                     let plan = try await runtime.prepareThinkingCommand(reference: value.value.reference, level: level)
-                    guard current(operation), plan.connectionID == value.route.connectionID,
+                    guard current(operation), permitsMutation(value.route), plan.connectionID == value.route.connectionID,
                           plan.sessionKey == value.route.sessionID, plan.settingsScope == value.value.scope else {
                         throw RuntimeFailure(.superseded)
                     }
@@ -442,7 +444,7 @@ final class NativeModelControls {
     private func actionable(_ id: UUID, _ choice: ModelControlChoice) -> Authority? {
         guard let value = authority, value.reviewID == id, isCurrent(value.epoch, value.host),
               presentation.modelControls?.id == id, presentation.modelControls?.permits(choice) == true,
-              operations[value.key] == nil else { return nil }
+              operations[value.key] == nil, permitsMutation(value.route) else { return nil }
         return value
     }
     private func fail(_ id: UUID?, text: String, uncertain: Bool = false) {

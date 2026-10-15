@@ -12,6 +12,7 @@ public struct ProReview: Identifiable, Sendable {
 public enum ProPhase: Sendable, Equatable {
     case loading, ready, unavailable, purchasing, restoring, redeeming, success, scheduled, unconfirmed, manageRenewal
     public var isWorking: Bool { self == .purchasing || self == .restoring || self == .redeeming }
+    var retainsOutcome: Bool { self == .success || self == .scheduled || self == .unconfirmed || self == .manageRenewal }
 }
 
 /// Single purchase coordinator. Closing a presentation never cancels or repeats a
@@ -102,7 +103,8 @@ public final class ProController: ObservableObject {
         guard let success = pendingSuccess, success.id == id else { return }
         pendingSuccess = nil
         guard review == nil else { return }
-        onSuccessfulDismissal?(success); onClosed?(id)
+        if allFeatures { onSuccessfulDismissal?(success) }
+        onClosed?(id)
     }
     public func select(_ id: UUID, reviewID: UUID) {
         guard review?.id == reviewID, phase == .ready, operation == nil,
@@ -124,10 +126,10 @@ public final class ProController: ObservableObject {
             let preferred = ProPlans.preferred(packages, defaultKind: offering.defaultKind)
             let available = packages.first { !ProPlans.locked($0, packages: packages, customer: customer, now: now) }
             selectedID = (preferred.flatMap { ProPlans.locked($0, packages: packages, customer: customer, now: now) ? nil : $0 } ?? available ?? owned ?? preferred)?.id
-            if reviewID == review?.id { phase = packages.isEmpty ? .unavailable : .ready; failure = nil }
+            if reviewID == review?.id, !phase.retainsOutcome { phase = packages.isEmpty ? .unavailable : .ready; failure = nil }
         } catch {
             guard readRevision == revision, operation == nil else { return }
-            if reviewID == review?.id { phase = .unavailable; failure = classify(error) }
+            if reviewID == review?.id, !phase.retainsOutcome { phase = .unavailable; failure = classify(error) }
         }
     }
     public func refreshCustomer() async {
@@ -158,7 +160,7 @@ public final class ProController: ObservableObject {
         }
     }
     public func restore(reviewID: UUID) {
-        guard review?.id == reviewID, operation == nil, let source else { return }
+        guard review?.id == reviewID, operation == nil, phase != .success, let source else { return }
         let id = reserve(.restoring)
         Task {
             defer { release(id) }
@@ -171,7 +173,7 @@ public final class ProController: ObservableObject {
         }
     }
     public func redeem(reviewID: UUID) {
-        guard review?.id == reviewID, operation == nil, let source else { return }
+        guard review?.id == reviewID, operation == nil, phase != .success, let source else { return }
         let id = reserve(.redeeming), delay = delay
         Task {
             defer { release(id) }
@@ -197,7 +199,7 @@ public final class ProController: ObservableObject {
         }
     }
     public func manage(reviewID: UUID) async {
-        guard review?.id == reviewID, operation == nil, let source else { return }
+        guard review?.id == reviewID, operation == nil, phase != .success, let source else { return }
         do { try await source.manageSubscription(); await refreshCustomer() }
         catch { if review?.id == reviewID { failure = classify(error) } }
     }

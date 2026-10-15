@@ -3568,6 +3568,13 @@
         "apps/ios/Clawket/NativeProView.swift:144"
       ],
       "mobileTerm": null
+    },
+    {
+      "key": "Unable to complete your purchase right now.",
+      "sources": [
+        "apps/ios/Clawket/NativeProView.swift:205"
+      ],
+      "mobileTerm": "Unable to complete your purchase right now."
     }
   ],
   "infoPlistStrings": [

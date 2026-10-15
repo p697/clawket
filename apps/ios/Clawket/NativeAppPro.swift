@@ -14,7 +14,7 @@ extension NativeAppModel {
             source = try? NativeRevenueCatSource(config: configuration, identity: identity)
         }
         pro = ProController(mode: configuration.mode, source: source)
-        rosterExplicitAccess = []
+        proAttached = true; rosterExplicitAccess = []
         pro.onAccessChanged = { [weak self] in self?.proAccessChanged() }
         pro.onClosed = { [weak self] id in self?.proContinuations.removeValue(forKey: id) }
         pro.onSuccessfulDismissal = { [weak self] review in self?.completeProReview(review) }
@@ -65,6 +65,8 @@ extension NativeAppModel {
         // to the registry's historical free-connection mirror.
         publishProRosterAccess()
         historyController?.accessChanged()
+        if let review = presentation.modelControls, !proPermitsInput(review.route) { modelControls?.dismiss(review.id) }
+        if let review = presentation.sessionManagement, !proPermitsInput(review.route) { sessionManager?.dismiss(review.id) }
         for route in documents.keys {
             if !proPermitsInput(route) {
                 var changed = false
@@ -78,8 +80,10 @@ extension NativeAppModel {
         rebuildRoster()
     }
     func publishProRosterAccess() {
-        rosterExplicitAccess = Set(agents.filter { proAgentAccess(.init(connectionID: $0.connectionID, agentID: $0.agentID)) == .allowed }
+        guard proAttached else { return }
+        let scopes = Set(agents.filter { proAgentAccess(.init(connectionID: $0.connectionID, agentID: $0.agentID)) == .allowed }
             .map { AgentCatalogID(connectionID: $0.connectionID, agentID: $0.agentID) })
+        if rosterExplicitAccess != scopes { rosterExplicitAccess = scopes }
     }
     func showPro(_ feature: ProFeature? = nil, presenterID: UUID? = nil, continuing action: NativeProContinuation.Action? = nil) {
         guard mediaPicker == nil, mediaPreview == nil, voiceSheet == nil else { return }
@@ -117,7 +121,13 @@ extension NativeAppModel {
     func proPreview(_ route: ConversationID, messages: [MessagePresentation]) -> [MessagePresentation] {
         let access = proConversationAccess(route)
         guard access != .full else { proPreviews.removeValue(forKey: route); return messages }
-        guard access == .preview else { return [] }
+        let pendingIDs = Set((documents[route]?.messages ?? []).filter {
+            $0.local && [.queued, .held, .failed, .sending, .uncertain].contains($0.delivery)
+        }.map(\.id))
+        let preserved = messages.filter { item in pendingIDs.contains(item.id) || item.content.contains { content in
+            switch content { case .approval, .question: true; default: false }
+        } }
+        guard access == .preview else { return preserved }
         let body = documents[route]?.messages.filter { ($0.role == .user || $0.role == .assistant) && (!$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !$0.media.isEmpty) } ?? []
         let epoch = documents[route]?.historyEpoch
         let old = proPreviews[route]
@@ -127,19 +137,14 @@ extension NativeAppModel {
         if route == presentation.selectedConversation {
             proPreviews = [route: .init(epoch: epoch, selection: selectionRevision, messages: refreshed)]
         }
-        let pendingIDs = Set((documents[route]?.messages ?? []).filter {
-            $0.local && [.queued, .held, .failed, .sending, .uncertain].contains($0.delivery)
-        }.map(\.id))
-        let selectedIDs = Set(refreshed.map(\.id))
-        let preserved = messages.filter { item in !selectedIDs.contains(item.id) && (pendingIDs.contains(item.id) || item.content.contains { content in
-            switch content { case .approval, .question: true; default: false }
-        }) }
-        return refreshed + preserved
+        let selectedIDs = Set(refreshed.map(\.id)), preservedIDs = Set(preserved.map(\.id)), currentIDs = Set(messages.map(\.id))
+        let missing = refreshed.filter { !currentIDs.contains($0.id) }
+        return missing + messages.filter { selectedIDs.contains($0.id) || preservedIDs.contains($0.id) }
     }
     func applyProFeatures(_ route: ConversationID, features: inout [ClientFeature: ActionAvailability]) {
         guard !proPermitsInput(route) else { return }
         let reason = proConversationAccess(route) == .unresolved ? String(localized: "Checking access…") : String(localized: "Latest messages · read-only preview")
-        for feature in [ClientFeature.send, .voice, .photos, .camera, .files, .paste, .newSession, .models, .modelControls, .sessionManagement, .loadEarlier] {
+        for feature in [ClientFeature.send, .voice, .photos, .camera, .files, .paste, .newSession, .models, .modelControls, .sessionManagement, .loadEarlier, .exportConversation] {
             if features[feature]?.isVisible == true { features[feature] = .temporarilyUnavailable(reason) }
         }
         features[.pro] = .available

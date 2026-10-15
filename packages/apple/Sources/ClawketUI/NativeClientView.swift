@@ -283,6 +283,7 @@ private struct AgentRow: View {
                     Text(agent.name).font(.body.weight(.semibold)).foregroundStyle(.primary)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                     Spacer(minLength: 0)
+                    if agent.requiresUpgrade { Image(systemName: "lock").font(.caption).foregroundStyle(.secondary).accessibilityLabel("Upgrade to Pro") }
                     if agent.isPinned && agent.kind == .agent { Image(systemName: "pin.fill").font(.caption2).foregroundStyle(.secondary).accessibilityLabel("Pinned") }
                     if !dynamicTypeSize.isAccessibilitySize, let time = agent.timeLabel {
                         Text(time).font(.caption).foregroundStyle(.tertiary).lineLimit(1)

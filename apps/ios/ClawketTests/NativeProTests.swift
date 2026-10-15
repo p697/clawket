@@ -145,6 +145,20 @@ final class NativeProTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(model.documents[route]?.draft, "draft"); XCTAssertEqual(model.documents[route]?.draftResourceIDs, [resource])
         model.saveTasks.values.forEach { $0.cancel() }
     }
+    @MainActor func testLockedAccessKeepsOwnedUnsentQueueVisibleAndCannotHideStop() async throws {
+        let model = NativeAppModel(); model.pro = ProController(mode: .store, source: ProHostSource(), clock: { 100 })
+        await model.pro.refreshCustomer()
+        var document = NativeConversation()
+        document.messages = [.init(id: "mine", role: .user, local: true, text: "kept", idempotencyKey: "mine", delivery: .held),
+            .init(id: "remote", role: .assistant, text: "remote")]
+        model.documents[route] = document
+        let projected = model.proPreview(route, messages: document.messages.map { model.present($0, agentName: "Agent") })
+        XCTAssertEqual(projected.map(\.id), ["mine"])
+        var features: [ClientFeature: ActionAvailability] = [.send: .available, .stop: .available, .exportConversation: .available]
+        model.applyProFeatures(route, features: &features)
+        XCTAssertFalse(features[.send]?.isEnabled == true); XCTAssertTrue(features[.stop]?.isEnabled == true)
+        XCTAssertFalse(features[.exportConversation]?.isEnabled == true)
+    }
     func testPurchaseContinuationNeedsExactOriginalRouteActivationSelectionAndPhysicalEpoch() {
         let activation = UUID(), wire = UUID(), selection = UUID(), epoch = UUID()
         let frozen = NativeProContinuation(action: .conversation(route), activation: activation, wire: wire, selection: selection, route: route, epoch: epoch)
