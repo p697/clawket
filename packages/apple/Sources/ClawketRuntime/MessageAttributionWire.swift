@@ -20,11 +20,15 @@ enum MessageAttributionWire {
             return normalize(.object(["channel": .string("webchat"), "sender": .object(sender)]))
         }
         guard channel != nil || fallback != nil || truthy(meta?["senderId"]) || name != nil || truthy(meta?["senderUsername"]) else { return nil }
-        return normalize(.object(["channel": .string(channel ?? fallback?.channel ?? "webchat"),
-            "accountId": nilish(identity?["accountId"]) ?? transport?["accountId"] ?? .null,
-            "conversationId": nilish(transport?["conversationRef"]) ?? fallback?.conversationID.map(JSONValue.string) ?? .null,
-            "threadId": nilish(transport?["threadId"]) ?? fallback?.threadID.map(JSONValue.string) ?? .null,
-            "messageId": transport?["messageId"] ?? .null, "sender": .object(sender)]))
+        var raw: [String: JSONValue] = ["channel": .string(channel ?? fallback?.channel ?? "webchat")]
+        raw["accountId"] = nilish(identity?["accountId"]) ?? transport?["accountId"] ?? .null
+        if let value = nilish(transport?["conversationRef"]) { raw["conversationId"] = value }
+        else if let value = fallback?.conversationID { raw["conversationId"] = .string(value) }
+        if let value = nilish(transport?["threadId"]) { raw["threadId"] = value }
+        else if let value = fallback?.threadID { raw["threadId"] = .string(value) }
+        raw["messageId"] = transport?["messageId"] ?? .null
+        raw["sender"] = .object(sender)
+        return normalize(.object(raw))
     }
 
     static func normalize(_ value: JSONValue?) -> RuntimeMessageAttribution? {
