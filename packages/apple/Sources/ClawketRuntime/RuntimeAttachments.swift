@@ -95,10 +95,13 @@ enum RuntimeAttachmentProjection {
                 } else { identity = nil }
                 let replacement = RuntimeMessage(id: message.id, role: message.role, text: text, timestampMs: message.timestampMs,
                                                  runID: message.runID, turnID: message.turnID, idempotencyKey: message.idempotencyKey,
-                                                 sentLocally: message.sentLocally, raw: message.raw)
-                if let identity, let previous = managed[identity] { output[previous] = replacement; continue }
-                if let identity { managed[identity] = output.count }
-                if text == message.text || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !message.attachments.isEmpty { output.append(replacement) }
+                                                 sentLocally: message.sentLocally, raw: message.raw, providedID: message.providedID,
+                                                 idSource: message.idSource, attribution: message.attribution,
+                                                 transcriptPosition: message.transcriptPosition, transcriptBoundary: message.transcriptBoundary)
+                let ambiguous = message.idSource == .ambiguousProvided
+                if !ambiguous, let identity, let previous = managed[identity] { output[previous] = replacement; continue }
+                if !ambiguous, let identity { managed[identity] = output.count }
+                if ambiguous || text == message.text || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !message.attachments.isEmpty { output.append(replacement) }
             }
             start = end
         }

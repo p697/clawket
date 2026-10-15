@@ -1,5 +1,4 @@
 import Foundation
-import CryptoKit
 import ClawketTransport
 
 enum WireModels {
@@ -131,7 +130,7 @@ enum WireModels {
         guard payload.object != nil, let values = payload["messages"]?.array, values.count <= 10_000 else {
             throw RuntimeFailure(.invalidResponse)
         }
-        var syntheticCounts: [String: Int] = [:]
+        var identity = HistoryMessageIdentity(values)
         let gateway = backend == .openclaw || backend == .hermes
         var messages = try values.compactMap { value -> RuntimeMessage? in
             if value.object == nil && gateway { return nil }
@@ -139,16 +138,7 @@ enum WireModels {
             guard value.object != nil, let role = RuntimeMessage.Role(rawValue: rawRole == "toolResult" ? "tool" : rawRole ?? "") ?? (gateway ? .system : nil) else {
                 throw RuntimeFailure(.invalidResponse)
             }
-            let suppliedID = value["id"]?.nonemptyString ?? value["messageId"]?.nonemptyString ?? value["__openclaw"]?["id"]?.nonemptyString
-            let id: String
-            if let suppliedID { id = suppliedID }
-            else {
-                // Presentation fallback only. Never use synthetic IDs to reconcile send receipts.
-                let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
-                let digest = SHA256.hash(data: try encoder.encode(value)).map { String(format: "%02x", $0) }.joined()
-                let count = syntheticCounts[digest, default: 0]; syntheticCounts[digest] = count + 1
-                id = "native-history:\(digest):\(count)"
-            }
+            let projection = try identity.project(value)
             var clock = timestamp(value["timestampMs"] ?? value["timestamp"] ?? value["ts"] ?? value["createdAt"])
             if gateway, let number = clock, number > 0, number < 10_000_000_000 { clock = number * 1_000 }
             var sendKey = value["idempotencyKey"]?.stringValue ?? value["__openclaw"]?["idempotencyKey"]?.stringValue
@@ -159,11 +149,14 @@ enum WireModels {
             }
             let rawText = value["text"]?.stringValue ?? protocolText(value["content"])
             let text = role == .assistant ? RuntimeAttachmentProjection.displayText(value, fallback: rawText, enabled: artifactsEnabled) : rawText
-            return RuntimeMessage(id: id, role: role, text: text,
+            return RuntimeMessage(id: projection.id, role: role, text: text,
                                   timestampMs: clock,
                                   runID: value["runId"]?.stringValue, turnID: value["turnId"]?.stringValue,
                                   idempotencyKey: sendKey,
-                                  sentLocally: false, raw: value)
+                                  sentLocally: false, raw: value, providedID: projection.providedID, idSource: projection.source,
+                                  attribution: MessageAttributionWire.read(value, key: key, backend: backend, role: role),
+                                  transcriptPosition: HistoryMessageIdentity.position(value, backend: backend),
+                                  transcriptBoundary: HistoryMessageIdentity.boundary(value, backend: backend, role: role))
         }
         if backend == .openclaw && artifactsEnabled { messages = RuntimeAttachmentProjection.reconcileOpenClaw(messages) }
         let profile = BackendProfile.profile(for: backend)
@@ -177,7 +170,9 @@ enum WireModels {
                               hasMore: payload["hasMore"]?.boolValue, pagination: profile.cursorHistory ? .cursor : .limit,
                               hasActiveRun: payload["sessionInfo"]?["hasActiveRun"]?.boolValue ?? payload["hasActiveRun"]?.boolValue ?? false,
                               activeRun: payload["activeRun"] ?? payload["inFlightRun"],
-                              thinkingLevel: payload["thinkingLevel"]?.stringValue.flatMap { ModelControlsWire.levels.contains($0) ? $0 : nil })
+                              thinkingLevel: payload["thinkingLevel"]?.stringValue.flatMap { ModelControlsWire.levels.contains($0) ? $0 : nil },
+                              sessionID: MessageAttributionWire.identifier(payload["sessionId"], maximum: 1_024)
+                                .flatMap { $0.utf8.count <= 1_024 ? $0 : nil })
     }
 
     private static func avatar(_ value: JSONValue?, base: URL) -> URL? {

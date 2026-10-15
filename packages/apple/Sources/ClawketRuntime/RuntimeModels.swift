@@ -207,6 +207,22 @@ public struct RuntimeMessage: Codable, Sendable, Equatable, Identifiable {
     /// Local provenance is never trusted from a backend frame.
     public let sentLocally: Bool
     public let raw: JSONValue
+    /// Exact producer ID; duplicates stay visible but grant no reconciliation authority.
+    public let providedID: String?
+    /// Nil on legacy caches: never infer identity provenance from an ID's spelling.
+    public let idSource: RuntimeMessageIDSource?
+    public let attribution: RuntimeMessageAttribution?
+    public let transcriptPosition: RuntimeTranscriptPosition?
+    public let transcriptBoundary: RuntimeTranscriptBoundary?
+    public init(id: String, role: Role, text: String, timestampMs: Int64?, runID: String?, turnID: String?,
+                idempotencyKey: String?, sentLocally: Bool, raw: JSONValue, providedID: String? = nil,
+                idSource: RuntimeMessageIDSource? = nil, attribution: RuntimeMessageAttribution? = nil,
+                transcriptPosition: RuntimeTranscriptPosition? = nil, transcriptBoundary: RuntimeTranscriptBoundary? = nil) {
+        self.id = id; self.role = role; self.text = text; self.timestampMs = timestampMs
+        self.runID = runID; self.turnID = turnID; self.idempotencyKey = idempotencyKey
+        self.sentLocally = sentLocally; self.raw = raw; self.providedID = providedID; self.idSource = idSource
+        self.attribution = attribution; self.transcriptPosition = transcriptPosition; self.transcriptBoundary = transcriptBoundary
+    }
     public var attachments: [RuntimeMessageAttachment] { RuntimeAttachmentProjection.extract(raw) }
     public func workUpdates(sessionKey: String) -> [RuntimeWorkUpdate] { WorkEvents.history(self, sessionKey: sessionKey) }
     /// Legacy inline images/files are decoded only on explicit consumption,
@@ -227,10 +243,13 @@ public struct RuntimeHistory: Codable, Sendable, Equatable {
     public let activeRun: JSONValue?
     /// Actual backend history metadata, never inferred from a command or message text.
     public let thinkingLevel: String?
+    /// Physical history identity only when the producer actually supplies sessionId.
+    public let sessionID: String?
     public init(key: String, messages: [RuntimeMessage], nextCursor: String?, hasMore: Bool?, pagination: Pagination,
-                hasActiveRun: Bool, activeRun: JSONValue?, thinkingLevel: String? = nil) {
+                hasActiveRun: Bool, activeRun: JSONValue?, thinkingLevel: String? = nil, sessionID: String? = nil) {
         self.key = key; self.messages = messages; self.nextCursor = nextCursor; self.hasMore = hasMore
         self.pagination = pagination; self.hasActiveRun = hasActiveRun; self.activeRun = activeRun; self.thinkingLevel = thinkingLevel
+        self.sessionID = sessionID
     }
 }
 

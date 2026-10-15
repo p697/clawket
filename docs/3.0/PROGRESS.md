@@ -1,5 +1,10 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-16 Native 参与者与消息来源契约（source就绪，验证/host整合继续）。
+  - RuntimeMessage区分真实providedID与provided/synthetic/ambiguousProvided来源，重复真实ID保留全部消息并使用独立显示fallback；旧cache缺字段保持nil，不靠前缀、正文hash、page index、时钟或角色猜真实身份。RuntimeHistory仅保留真实top-level sessionId及既有thinkingLevel；OpenClaw exact transcriptPosition(source/rawSeq)与system reset/compaction kind独立typed保存，不改wire顺序/时钟，不凭“Reset”正文断定变更。
+  - 作者读取沿现Mobile/25-message-participants：六后端explicit attribution，Gateway native sender/transport与识别的渠道route fallback；web/client覆盖Slack fallback，owner/sentLocally wire标记不授本机身份。渠道/account/sender与backend/transport分开；有界文字净化、公共无凭据HTTPS头像且拒绝本地/相对/歧义numeric host，不发目录/头像网络请求。媒体投影保留新增字段，重复真实ID不走managed镜像丢行。
+  - 新增两份纯Runtime回归源码，直接读取既有匿名Mobile reset fixture（精确path接Native CI），不复制/改oracle。当前尚未编译或执行，等待USB资源释放或独立远端CI；完整history reducer/显示UUID/physicalEpoch/参与者UI由host独立接入，不能把本契约称为设备或完整历史验收。前一模型契约#248已全13绿/current-main合并ae5f3ce2并finish：59 XCTest+305 SwiftTesting=364、actual App92、19语6156精确编译值，Windows首轮通过；本轮保留全部模型、语音与连接边界。
+
 - 2026-10-16 Native 模型设置 Host 与系统交互（独立切片，真实六后端/设备验收另行进行）。
   - 原生 settings sheet 保留 current/recent/default 简表、provider 搜索目录、真实 thinking/fast/permissions scope与未知值；不把缺失 fast 当 off、不替换 alias write ID，推荐行在 review 内稳定。最近项仅本地每连接6个/128连接/256KiB display 偏好，unknown atomic write 不能从旧内存覆盖；OC default badge 独立可失败读，不退休 session 选择权限。
   - 新旧模型入口共用当前 Runtime descriptor、同步预占和精确 receipt；冻结真实权限 ref/token 后展示 native dialog，confirm 同步消费唯一 ID，dismiss inert。unknown 权限仅允许实际 advertised preset 显式修复，其他未知写不重试；ACK+读失败与 unknown outcome 分开。原生发送屏障在 prepare/persist 后重新核对，Stop 独立；模型改变同步退休图片能力直到 fresh current-model 读回，Runtime 最终 image-only hold 另由对应契约切片收口，普通 OC/Hermes text 不被泛化阻塞。
