@@ -34,6 +34,8 @@ public actor RuntimeCoordinator {
     var supportedMethods: Set<String> = []
     var backendHealth: JSONValue = .null
     var sessionEvents = SessionEvents()
+    var consents = ConsentRegistry()
+    var consentExpiryTask: Task<Void, Never>?
     var hasHumanActivityClock = false
     var reconnect = ReconnectPolicy()
     var previouslyReady = false
@@ -204,6 +206,7 @@ public actor RuntimeCoordinator {
                 } catch { attemptFailed(runtimeFailure(error), epoch: epoch, attempt: attempt, unavailable: true) }
             } else if state.phase == .ready {
                 do {
+                    if try receiveConsent(frame, scope: scope()) { return }
                     for update in try sessionEvents.map(frame, connection: connection) {
                         emit(.update(connectionID: connection.id, update), weight: (try? FrameCodec.encode(frame).utf8.count) ?? 128)
                     }
@@ -252,6 +255,8 @@ public actor RuntimeCoordinator {
         handshakeTask = nil
         backendHealth = health
         if connection?.backendKind != .openclaw { bridgeCapabilities = health["capabilities"]?.strings ?? [] }
+        if connection?.backendKind == .hermes && !bridgeCapabilities.contains("hermes.run-approval.v1") { consents.evidence.remove("execution") }
+        updateConsentCapabilities()
         reconnect.confirmedBackendReady(); previouslyReady = true; unavailableAttempts = 0; deviceRepairAttempted = false
         publishState(.ready)
         let pending = waiters; waiters.removeAll()
@@ -358,6 +363,7 @@ public actor RuntimeCoordinator {
 
     func retireAttempt() -> RPCConnection? {
         attempt = UUID(); authentication = UUID()
+        resetConsents()
         readerTask?.cancel(); readerTask = nil; openTask?.cancel(); openTask = nil
         handshakeTask?.cancel(); handshakeTask = nil; retryTask?.cancel(); retryTask = nil
         periodicProbeTask?.cancel(); periodicProbeTask = nil; probeTask?.cancel(); probeTask = nil
@@ -386,6 +392,9 @@ public actor RuntimeCoordinator {
             capabilities.sessionCreate = capabilities.sessions
             capabilities.projects = [.codex, .claudeCode].contains(connection.backendKind) && backendHealth["projects"]?.boolValue == true
             capabilities.modelPerSession = BackendProfile.profile(for: connection.backendKind).modelsPerSession
+            capabilities.questions = [.codex, .claudeCode, .pi].contains(connection.backendKind) && consents.evidence.contains("questions")
+            capabilities.executionApprovals = [.openclaw, .hermes, .codex, .claudeCode].contains(connection.backendKind) && consents.evidence.contains("execution")
+            capabilities.pairingApprovals = connection.backendKind == .openclaw && consents.evidence.contains("pairing")
         }
         state = RuntimeConnectionState(connectionID: connection?.id, phase: phase, capabilities: capabilities,
                                        backendKind: connection?.backendKind, bridgeVersion: backendHealth["bridgeVersion"]?.stringValue,
@@ -411,6 +420,7 @@ public actor RuntimeCoordinator {
     deinit {
         readerTask?.cancel(); openTask?.cancel(); handshakeTask?.cancel(); retryTask?.cancel()
         periodicProbeTask?.cancel(); probeTask?.cancel(); catalogTask?.cancel(); controlWaiter?.timeout.cancel()
+        consentExpiryTask?.cancel()
         for task in controlDispatches.values { task.cancel() }
         controlWaiter?.continuation.resume(throwing: RuntimeFailure(.superseded))
         for waiter in waiters.values { waiter.resume(throwing: RuntimeFailure(.superseded)) }

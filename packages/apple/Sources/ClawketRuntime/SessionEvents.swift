@@ -46,6 +46,13 @@ struct SessionEvents: Sendable {
            session["title"]?.stringValue != nil, session["allowedActions"]?.object != nil {
             return [.sessionMetadata(try WireModels.session(session, connection: connection, legacyActivity: true))]
         }
+        if let work = try WorkEvents.canonical(payload) {
+            if let runID = work.runID, let sessionKey = work.sessionKey {
+                try register(runID: runID, sessionKey: sessionKey)
+                if work.kind == .toolCall { try boundary(runID: runID, toolID: work.itemID) }
+            }
+            return [.work(work)]
+        }
         guard let runID = payload["runId"]?.nonemptyString,
               let sessionKey = payload["sessionKey"]?.nonemptyString else { return [.other(payload)] }
         try register(runID: runID, sessionKey: sessionKey)
@@ -56,10 +63,6 @@ struct SessionEvents: Sendable {
             return textEvent(text, runID: runID, mode: payload["textMode"]?.stringValue == "delta" ? .delta : .snapshot, raw: payload)
         case "agent_thought_chunk":
             return [.thought(sessionKey: sessionKey, runID: runID, text: payload["text"]?.stringValue ?? "")]
-        case "tool_call":
-            try boundary(runID: runID, toolID: payload["toolCallId"]?.nonemptyString)
-            return [.tool(sessionKey: sessionKey, runID: runID, payload: payload)]
-        case "tool_call_update": return [.tool(sessionKey: sessionKey, runID: runID, payload: payload)]
         case "run_finished": return complete(runID: runID, reason: payload["stopReason"]?.stringValue ?? "end_turn", raw: payload)
         default: return [.other(payload)]
         }

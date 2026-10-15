@@ -102,6 +102,9 @@ public struct RuntimeCapabilities: Codable, Sendable, Equatable {
     public var projects = false
     public var models = false
     public var modelPerSession = false
+    public var questions = false
+    public var executionApprovals = false
+    public var pairingApprovals = false
     public init() {}
 }
 
@@ -124,6 +127,7 @@ public struct RuntimeFailure: Error, Sendable, Equatable, CustomStringConvertibl
     public enum Code: String, Codable, Sendable {
         case invalidConnection, invalidResponse, wrongBackend, authenticationRequired, pairingRequired
         case credentialStorage, permissionsRequired, superseded, unsupported, notConnected, timeout, network, capacity
+        case requestExpired, requestUnavailable, confirmationRequired, invalidAnswer, requestBusy
     }
     public enum Delivery: String, Codable, Sendable { case notDispatched, uncertain, rejectedBeforeDispatch, responseReceived }
     public let code: Code
@@ -251,6 +255,7 @@ public enum RuntimeSessionUpdate: Sendable, Equatable {
     case tool(sessionKey: String?, runID: String?, payload: JSONValue)
     case runFinished(sessionKey: String, runID: String, reason: String, segmentID: String, raw: JSONValue)
     case sessionMetadata(RuntimeSession)
+    case work(RuntimeWorkUpdate)
     /// Preserves unimplemented task/consent metadata without advertising an action.
     case other(JSONValue)
 }
@@ -260,4 +265,6 @@ public enum RuntimeEvent: Sendable, Equatable {
     case roster(RuntimeRoster)
     case update(connectionID: String, RuntimeSessionUpdate)
     case failure(connectionID: String?, RuntimeFailure)
+    case pendingRequests(RuntimePendingRequests)
+    case requestResolved(connectionID: String, reference: RuntimeRequestReference, resolution: RuntimeRequestResolution)
 }
