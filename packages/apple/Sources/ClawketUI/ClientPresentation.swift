@@ -313,6 +313,7 @@ public struct ApprovalPresentation: Identifiable, Hashable, Sendable {
 }
 
 public struct QuestionOption: Identifiable, Hashable, Sendable {
+    /// Stable for the actual option value; an array position must not retarget a restored draft.
     public var id: String
     public var label: String
     public var detail: String?
@@ -367,7 +368,7 @@ public struct QuestionPresentation: Identifiable, Hashable, Sendable {
     }
 }
 
-public struct QuestionFieldAnswer: Equatable, Sendable {
+public struct QuestionFieldAnswer: Codable, Equatable, Sendable {
     public var selectedOptionIDs: [String]
     public var text: String
     /// Custom is an explicit alternative to listed options, including for multiple-choice fields.
@@ -377,7 +378,8 @@ public struct QuestionFieldAnswer: Equatable, Sendable {
     }
 }
 
-public struct QuestionResponse: Equatable, Sendable {
+/// Draft-only values may be persisted by the host; no request reference or authority is encoded.
+public struct QuestionResponse: Codable, Equatable, Sendable {
     public var fields: [String: QuestionFieldAnswer]
     public var confirmed: Bool?
     public init(fields: [String: QuestionFieldAnswer] = [:], confirmed: Bool? = nil) {

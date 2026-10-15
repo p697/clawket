@@ -12,7 +12,7 @@ The dialog emits `confirmApproval(confirmationID:)`, never an updated card's app
 
 ## Question drafts and answers
 
-`questionDraftChanged(questionID:response:)` is the only view event for draft edits. The host updates `questionResponses` synchronously, then persists its scoped draft asynchronously. Views do not write the draft store, submit on selection, or perform any answer/cancellation on disappearance. Stable field IDs preserve native input identity. A custom answer is an explicit alternative to listed selections, even in a multiple-choice field; switching to it clears the listed selections, and selecting an option leaves custom mode.
+`questionDraftChanged(questionID:response:)` is the only view event for draft edits. The host updates `questionResponses` synchronously, then persists its scoped draft asynchronously. `QuestionResponse` and `QuestionFieldAnswer` are Codable draft values; request references and approval confirmations are not persisted. Views do not write the draft store, submit on selection, or perform any answer/cancellation on disappearance. Stable field IDs preserve native input identity. Option IDs must represent their actual value, not an array position that could select a different label after restore. A custom answer is an explicit alternative to listed selections, even in a multiple-choice field; switching to it clears the listed selections, and selecting an option leaves custom mode.
 
 | Kind | Presentation fields and response | Validation |
 | --- | --- | --- |
@@ -28,4 +28,4 @@ All current runtime form fields are required; the host must map `isRequired=true
 
 ## Evidence
 
-The focused `QuestionValidationTests.swift` contains nine tests (including parameterized input/editor cases) for invalid/restored selections, required answers, multiple/custom semantics, custom-only fields, exact empty/whitespace values, the UTF-16 boundary, explicit false, fail-closed approval choices and Always preparation. All ten actual UI sources typecheck for Swift 6/iOS 16.4. No local simulator or phone was started for this task; native CI builds the real app, runs its tests and checks the compiled 19-language catalogs. Actual host request binding and device consent interaction remain separate acceptance work.
+The focused `QuestionValidationTests.swift` contains ten tests (including parameterized input/editor cases) for draft encoding, invalid/restored selections, required answers, multiple/custom semantics, custom-only fields, exact empty/whitespace values, the UTF-16 boundary, explicit false, fail-closed approval choices and Always preparation. All ten actual UI sources typecheck for Swift 6/iOS 16.4. No local simulator or phone was started for this task; native CI builds the real app, runs its tests and checks the compiled 19-language catalogs. Actual host request binding and device consent interaction remain separate acceptance work.

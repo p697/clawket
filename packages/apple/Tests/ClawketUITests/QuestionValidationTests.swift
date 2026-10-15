@@ -1,8 +1,17 @@
+import Foundation
 import Testing
 @testable import ClawketUI
 
 @Suite(.serialized)
 struct QuestionValidationTests {
+    @Test func persistedDraftRetainsExactCustomTextAndExplicitFalse() throws {
+        for draft in [QuestionResponse(fields: ["field": .init(text: "  exact draft\n", isCustom: true)]),
+                      QuestionResponse(confirmed: false)] {
+            let bytes = try JSONEncoder().encode(draft)
+            #expect(try JSONDecoder().decode(QuestionResponse.self, from: bytes) == draft)
+        }
+    }
+
     private func question(_ fields: [QuestionField], kind: QuestionPresentation.Kind = .form) -> QuestionPresentation {
         .init(id: "scoped-request", title: "Question", fields: fields, kind: kind)
     }
