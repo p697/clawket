@@ -143,15 +143,18 @@ final class NativePreferencesTests: XCTestCase, @unchecked Sendable {
         try doc.validate(); XCTAssertEqual(doc.readings.count, 2)
     }
     @MainActor func testCachedOpenRemainsPendingUntilFreshMissingArchivedOrExactCatalogEvidence() async throws {
-        for freshHasSession in [false, true] {
+        for evidence in ["missing", "present", "missing-agent"] {
             let values = PreferenceValues(), store = try NativePreferencesStore(values: values)
             var document = try await store.navigation(); try document.record(.init(route)); try await store.write(document)
             let controller = NativePreferences(store: store); await controller.load(); controller.activate("c")
             XCTAssertEqual(controller.restoration(connectionID: "c", agents: ["a"], sessions: [route], fresh: false), .conversation(route))
             // This is the real open hook that follows programmatic selection.
             controller.opened(.init(route))
-            let decision = controller.restoration(connectionID: "c", agents: ["a"], sessions: freshHasSession ? [route] : [], fresh: true)
-            XCTAssertEqual(decision, freshHasSession ? .conversation(route) : .catalog(.init(connectionID: "c", agentID: "a")))
+            let decision = controller.restoration(connectionID: "c", agents: evidence == "missing-agent" ? [] : ["a"],
+                sessions: evidence == "present" ? [route] : [], fresh: true)
+            let expected: NativeNavigationRestoration.Decision = evidence == "missing-agent" ? .home
+                : evidence == "present" ? .conversation(route) : .catalog(.init(connectionID: "c", agentID: "a"))
+            XCTAssertEqual(decision, expected)
             XCTAssertEqual(controller.restoration(connectionID: "c", agents: ["a"], sessions: [route], fresh: true), .wait)
         }
     }

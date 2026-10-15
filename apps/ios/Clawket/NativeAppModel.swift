@@ -564,7 +564,9 @@ final class NativeAppModel: ObservableObject {
         case let .catalog(id):
             presentation.selectedConversation = nil
             preferences.opened(.init(id)); updateCatalog(id); presentation.requestedCatalog = id
-        case .wait, .home: break
+        case .home:
+            presentation.selectedConversation = nil; presentation.requestedCatalog = nil
+        case .wait: break
         }
     }
 
