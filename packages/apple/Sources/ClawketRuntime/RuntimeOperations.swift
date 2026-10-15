@@ -251,6 +251,7 @@ extension RuntimeCoordinator {
     }
 
     public func models(sessionKey: String? = nil) async throws -> [RuntimeModel] {
+        _ = try scope()
         if sessionKey != nil && !state.capabilities.modelPerSession { throw RuntimeFailure(.unsupported) }
         return try await modelControls(sessionKey: sessionKey).models
     }
