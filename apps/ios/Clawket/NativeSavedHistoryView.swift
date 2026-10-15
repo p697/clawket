@@ -11,7 +11,8 @@ struct NativeSavedHistoryView: View {
     @State private var loading = true
     @State private var notice: String?
     @State private var share: NativeMediaShare?
-    @State private var sharing = false
+    @State private var operationState = NativeHistoryOperation()
+    private var sharing: Bool { operationState.isBusy }
     @State private var visible = true
     var body: some View {
         NavigationStack {
@@ -28,15 +29,14 @@ struct NativeSavedHistoryView: View {
                 }
                 ForEach(entries) { entry in
                     NavigationLink {
-                        NativeSavedDetailView(controller: controller, id: entry.id) { refresh = UUID() }
+                        NativeSavedDetailView(controller: controller, id: entry.id) { refresh = UUID() }.id(entry.id)
                     } label: {
                         VStack(alignment: .leading, spacing: 5) {
                             HStack {
                                 Text(entry.title.isEmpty ? String(localized: "Conversation") : entry.title).lineLimit(2)
                                 if entry.pinned { Image(systemName: "pin.fill").font(.caption).foregroundStyle(.secondary) }
                             }
-                            Text(Date(timeIntervalSince1970: entry.savedAt / 1_000), style: .date)
-                                .font(.caption).foregroundStyle(.secondary)
+                            if let date = historyDate(entry.savedAt) { Text(date, style: .date).font(.caption).foregroundStyle(.secondary) }
                         }.padding(.vertical, 3)
                     }
                 }
@@ -55,7 +55,7 @@ struct NativeSavedHistoryView: View {
             .sheet(item: $share) { NativeActivityView(share: $0) }
             .onAppear { visible = true }
             .onDisappear {
-                visible = false
+                visible = false; operationState.retire()
                 let abandoned = share
                 Task { await abandoned?.releaseIfUnpresented() }
             }
@@ -74,15 +74,15 @@ struct NativeSavedHistoryView: View {
     }
     private func exportAll() {
         guard !sharing, visible, share == nil, controller.access().bulkExport else { return }
-        sharing = true
+        guard let operation = operationState.begin() else { return }
         let ids = entries.map(\.id)
         Task {
-            defer { sharing = false }
+            defer { operationState.finish(operation) }
             do {
                 let prepared = try await controller.shareAll(ids)
-                guard visible else { await prepared.releaseIfUnpresented(); return }
+                guard visible, operationState.owns(operation) else { await prepared.releaseIfUnpresented(); return }
                 share = prepared
-            } catch { if visible { notice = NativeHistoryController.failureText(error) } }
+            } catch { if visible && operationState.owns(operation) { notice = NativeHistoryController.failureText(error) } }
         }
     }
 }
@@ -107,9 +107,10 @@ private struct NativeSavedDetailView: View {
     @State private var rename = false
     @State private var name = ""
     @State private var delete = false
-    @State private var busy = false
+    private var busy: Bool { operationState.isBusy }
     @State private var visible = true
     @State private var share: NativeMediaShare?
+    @State private var operationState = NativeHistoryOperation()
     var body: some View {
         Group {
             if let value {
@@ -150,33 +151,38 @@ private struct NativeSavedDetailView: View {
         } message: { Text(notice ?? "") }
         .sheet(item: $share) { NativeActivityView(share: $0) }
         .onAppear { visible = true }
-        .onDisappear { visible = false; let abandoned = share; Task { await abandoned?.releaseIfUnpresented() } }
+        .onDisappear {
+            visible = false; operationState.retire()
+            let abandoned = share; Task { await abandoned?.releaseIfUnpresented() }
+        }
     }
     private func reload() async {
         do { let entry = try await controller.saved.conversation(id); try Task.checkCancellation(); value = entry }
         catch { if !Task.isCancelled { notice = NativeHistoryController.failureText(error) } }
     }
     private func mutate(removing: Bool = false, operation: @escaping @MainActor () async throws -> Void) {
-        guard !busy, visible else { return }; busy = true
+        guard !busy, visible else { return }
+        guard let token = operationState.begin() else { return }
         Task {
-            defer { busy = false }
+            defer { operationState.finish(token) }
             do {
                 try await operation(); onChange()
-                guard visible else { return }
+                guard visible, operationState.owns(token) else { return }
                 if removing { dismiss() } else { await reload() }
-            } catch { if visible { notice = NativeHistoryController.failureText(error) } }
+            } catch { if visible && operationState.owns(token) { notice = NativeHistoryController.failureText(error) } }
         }
     }
     private func export(_ format: NativeHistoryExportFormat) {
-        guard !busy, visible, share == nil, let value else { return }; busy = true
+        guard !busy, visible, share == nil, let value else { return }
+        guard let token = operationState.begin() else { return }
         let transcript = NativePublicTranscript(title: value.title, messages: value.transcript.messages)
         Task {
-            defer { busy = false }
+            defer { operationState.finish(token) }
             do {
                 let prepared = try await controller.share(transcript, format: format)
-                guard visible else { await prepared.releaseIfUnpresented(); return }
+                guard visible, operationState.owns(token) else { await prepared.releaseIfUnpresented(); return }
                 share = prepared
-            } catch { if visible { notice = NativeHistoryController.failureText(error) } }
+            } catch { if visible && operationState.owns(token) { notice = NativeHistoryController.failureText(error) } }
         }
     }
 }
@@ -192,8 +198,8 @@ struct NativeReadOnlyTranscript: View {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             Text(message.role == .user ? String(localized: "User") : String(localized: "Assistant")).font(.caption.weight(.semibold))
-                            if let ms = message.timestampMs, ms <= 253_402_300_799_999 {
-                                Text(Date(timeIntervalSince1970: ms / 1_000), style: .date).font(.caption).foregroundStyle(.secondary)
+                            if let ms = message.timestampMs, let date = historyDate(ms) {
+                                Text(date, style: .date).font(.caption).foregroundStyle(.secondary)
                             }
                         }
                         if !message.text.isEmpty { NativeReadOnlyMessageText(message.text) }

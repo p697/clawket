@@ -113,6 +113,11 @@ final class NativeHistoryExportTests: XCTestCase, @unchecked Sendable {
 
     func testCancellingAClosedExportCancelsItsBlockedReadImmediately() async throws {
         let gate = HistoryBlockedRead()
+        do {
+            _ = try await NativeHistoryExportLoader.load(key: "logical", title: "Title", deadline: ContinuousClock.now - .seconds(1)) { _, _, _ in try await gate.read() }
+            XCTFail("An already expired absolute deadline cannot enter a read")
+        } catch { XCTAssertEqual(error as? NativeHistoryExportFailure, .timedOut) }
+        let notEntered = await gate.entered; XCTAssertFalse(notEntered)
         let pending = Task { try await NativeHistoryExportLoader.load(key: "logical", title: "Title") { _, _, _ in try await gate.read() } }
         let deadline = ContinuousClock.now + .seconds(3)
         while !(await gate.entered), ContinuousClock.now < deadline { await Task.yield() }

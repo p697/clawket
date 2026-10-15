@@ -17,12 +17,12 @@ struct ClawketApp: App {
                     case .connections: ConnectionsView(client: client)
                     case .settings: NativeSettingsView(client: client, preferences: client.preferences)
                     case let .deviceApproval(connectionID): DeviceApprovalView(client: client, connectionID: connectionID)
-                    case .savedHistory:
-                        if let history = client.historyController { NativeSavedHistoryView(controller: history) }
-                    case let .previousTranscripts(scope, _):
-                        if let history = client.historyController { NativePreviousTranscriptsView(controller: history, scope: scope) }
+                    case let .savedHistory(id):
+                        if let history = client.historyController { NativeSavedHistoryView(controller: history).id(id) }
+                    case let .previousTranscripts(scope, id):
+                        if let history = client.historyController { NativePreviousTranscriptsView(controller: history, scope: scope).id(id) }
                     case let .exportConversation(request):
-                        if let history = client.historyController { NativeConversationExportView(controller: history, request: request) }
+                        if let history = client.historyController { NativeConversationExportView(controller: history, request: request).id(request.id) }
                     case let .editPending(route, edit, activation):
                         PendingMessageEditor(client: client, route: route, edit: edit, activation: activation)
                     }

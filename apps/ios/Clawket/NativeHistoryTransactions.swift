@@ -9,7 +9,7 @@ extension NativeConversationStore {
                                physicalSessionID: String?) async throws -> NativeConversation {
         await acquireMediaSnapshot(); defer { releaseMediaSnapshot() }
         try await recoverHistory(); try scope.validate()
-        guard expectedRevision >= 0, expectedRevision < 9_007_199_254_740_991,
+        guard expectedRevision >= 0, expectedRevision < 9_007_199_254_740_990,
               physicalSessionID == nil || (!physicalSessionID!.isEmpty && physicalSessionID!.utf8.count <= 2_048) else { throw NativeHistoryFailure.invalid }
         let key = try scopedKey(scope.connectionID, scope.agentID, scope.sessionID)
         let raw = try await historyCurrentBytes(key)
@@ -46,7 +46,7 @@ extension NativeConversationStore {
         await acquireMediaSnapshot(); defer { releaseMediaSnapshot() }
         try await recoverHistory()
         try scope.validate()
-        guard expectedRevision >= 0, expectedRevision < 9_007_199_254_740_991, toEpoch != fromEpoch,
+        guard expectedRevision >= 0, expectedRevision < 9_007_199_254_740_990, toEpoch != fromEpoch,
               expectedCurrentHash == nil || historyDigest(expectedCurrentHash!),
               physicalSessionID == nil || (!physicalSessionID!.isEmpty && physicalSessionID!.utf8.count <= 2_048) else { throw NativeHistoryFailure.invalid }
         let key = try scopedKey(scope.connectionID, scope.agentID, scope.sessionID)

@@ -50,7 +50,8 @@ struct NativeMediaPreview: Identifiable, Sendable {
     let url: URL
     let lease: any NativeShareLease
     private var phase = Phase.pending
-    init(url: URL, lease: any NativeShareLease) { self.url = url; self.lease = lease }
+    init(url: URL, lease: NativeMediaLease) { self.url = url; self.lease = lease }
+    init(url: URL, shareLease: any NativeShareLease) { self.url = url; self.lease = shareLease }
     func controllerCreated() { if phase == .pending { phase = .controllerCreated } }
     func appeared() { if phase == .controllerCreated { phase = .handedOff } }
     func releaseIfUnpresented(controllerDismantled: Bool = false) async {
@@ -58,7 +59,10 @@ struct NativeMediaPreview: Identifiable, Sendable {
         phase = .finished
         await lease.release()
     }
-    func completed() async { phase = .finished; await lease.release() }
+    func completed() async {
+        guard phase != .finished else { return }
+        phase = .finished; await lease.release()
+    }
 }
 
 struct NativeMediaViewer: View {

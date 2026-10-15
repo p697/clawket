@@ -144,11 +144,27 @@ actor NativeConversationStore {
     private func writeLocked(_ conversation: NativeConversation, connectionID: String, agentID: String, sessionID: String) async throws {
         try conversation.validateMedia()
         let key = try scopedKey(connectionID, agentID, sessionID)
-        guard conversation.revision >= latestRevision[key, default: 0] else { return }
-        if let previous = try await documents.read(NativeConversation.self, key: key)?.value {
-            guard previous.historyEpoch == conversation.historyEpoch,
-                  historySame(previous.physicalSessionID, conversation.physicalSessionID) else { throw NativeHistoryFailure.changed }
+        let previous = try await documents.read(NativeConversation.self, key: key)
+        if let previous {
+            guard previous.value.historyEpoch == conversation.historyEpoch,
+                  historySame(previous.value.physicalSessionID, conversation.physicalSessionID) else { throw NativeHistoryFailure.changed }
         }
+        guard conversation.revision >= latestRevision[key, default: 0] else { return }
+        let replacement = try historyEncode(conversation)
+        guard replacement.count <= NativeHistoryLimits.recordBytes else { throw NativeHistoryFailure.full }
+        let currentSize = try await values.read(key)?.count ?? 0
+        let rollbackSize = try await values.read(key + ".rollback")?.count ?? 0
+        let historySize = try historyFiles.inventory().values.reduce(0, +)
+        // FileValueStore replaces rollback before current. Count the actual
+        // largest atomic temporary, including a preserved recovery rollback.
+        let footprint: Int
+        if previous?.recoveredFromRollback == false {
+            footprint = historySize + 2 * currentSize + max(rollbackSize, replacement.count)
+        } else {
+            footprint = historySize + currentSize + rollbackSize + replacement.count
+        }
+        guard footprint <= NativeHistoryLimits.physicalBytes else { throw NativeHistoryFailure.full }
+        try Task.checkCancellation()
         latestRevision[key] = conversation.revision
         try await documents.write(conversation, key: key)
     }

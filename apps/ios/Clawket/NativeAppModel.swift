@@ -1268,6 +1268,7 @@ final class NativeAppModel: ObservableObject {
 
     func showFailure(_ error: Error) {
         deviceApprovalNotice = false
+        if error is NativeHistoryFailure { notice = NativeHistoryController.failureText(error); return }
         if error is StoreFailure { notice = String(localized: "Your data could not be saved safely. Keep Clawket open and try again."); return }
         guard let failure = error as? RuntimeFailure else { notice = String(localized: "The operation could not be completed. Please try again."); return }
         switch failure.code {

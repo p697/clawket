@@ -14,11 +14,14 @@ struct NativeHistoryExportLoader {
     }
 
     /// Never label an incomplete or changing history window as a complete portable snapshot.
-    static func load(key: String, title: String, read: @escaping Read) async throws -> NativePublicTranscript {
-        try await withThrowingTaskGroup(of: NativePublicTranscript.self) { group in
-            group.addTask { try await pages(key: key, title: title, read: read) }
+    static func load(key: String, title: String, deadline supplied: ContinuousClock.Instant? = nil,
+                     read: @escaping Read) async throws -> NativePublicTranscript {
+        let maximum = ContinuousClock.now.advanced(by: .seconds(90))
+        let deadline = min(supplied ?? maximum, maximum)
+        return try await withThrowingTaskGroup(of: NativePublicTranscript.self) { group in
+            group.addTask { try await pages(key: key, title: title, deadline: deadline, read: read) }
             group.addTask {
-                try await Task.sleep(for: .seconds(90))
+                try await Task.sleep(until: deadline, clock: .continuous)
                 throw NativeHistoryExportFailure.timedOut
             }
             defer { group.cancelAll() }
@@ -27,8 +30,7 @@ struct NativeHistoryExportLoader {
         }
     }
 
-    private static func pages(key: String, title: String, read: Read) async throws -> NativePublicTranscript {
-        let deadline = ContinuousClock.now.advanced(by: .seconds(90))
+    private static func pages(key: String, title: String, deadline: ContinuousClock.Instant, read: Read) async throws -> NativePublicTranscript {
         var cursor: String?, cursors: Set<Data> = [], seen: [Data: String] = [:]
         var messages: [NativePublicTranscript.Message] = [], physicalID: String?, firstHash = "", textUnits = 0, limit = 100
         for page in 0..<100 {
@@ -42,6 +44,7 @@ struct NativeHistoryExportLoader {
             if growingLimit { seen = [:]; messages = []; textUnits = 0 }
             var additions: [NativePublicTranscript.Message] = []
             for message in snapshot.messages {
+                try check(deadline)
                 let signature = try fingerprint([message])
                 let identity = Data(message.id.utf8)
                 if let prior = seen[identity] {
@@ -67,12 +70,14 @@ struct NativeHistoryExportLoader {
                 guard snapshot.pagination == .limit, limit < 1_000 else { throw NativeHistoryExportFailure.tooLarge }
                 limit += 100; cursor = nil; continue
             }
+            try check(deadline)
             let latest = try await read(key, 100, nil)
             try check(deadline)
             guard historySame(latest.key, key), historySame(latest.sessionID, physicalID), !latest.hasActiveRun,
                   try fingerprint(latest.messages) == firstHash else { throw NativeHistoryExportFailure.changed }
+            try check(deadline)
             let result = NativePublicTranscript(title: historyUTF16Prefix(title.trimmingCharacters(in: .whitespacesAndNewlines), maximum: 200), messages: messages)
-            try result.validate(); return result
+            try result.validate(); try check(deadline); return result
         }
         throw NativeHistoryExportFailure.tooLarge
     }

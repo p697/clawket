@@ -54,6 +54,8 @@ final class NativeSavedHistoryTests: XCTestCase, @unchecked Sendable {
     }
 
     func testUTF16SingleAndTotalLimitsRejectWithoutEvictionOrTruncation() async throws {
+        XCTAssertNil(historyDate(.infinity)); XCTAssertNil(historyDate(Double.greatestFiniteMagnitude))
+        XCTAssertNotNil(historyDate(1_234))
         let values = SavedHistoryValues(), store = try NativeSavedConversations(values: values)
         let original = try await store.save(scope: scope, transcript: transcript())
         do {
@@ -79,6 +81,16 @@ final class NativeSavedHistoryTests: XCTestCase, @unchecked Sendable {
         do { _ = try await store.rename(originals[0].id, name: String(repeating: "x", count: 201)); XCTFail("No truncation") }
         catch { XCTAssertEqual(error as? NativeHistoryFailure, .invalid) }
         let list = try await store.list(); XCTAssertEqual(Set(list.entries.map(\.id)), Set(originals.map(\.id)))
+    }
+
+    func testEscapedJSONBudgetIsIndependentOfTheUTF16TextBudget() async throws {
+        let store = try NativeSavedConversations(values: SavedHistoryValues())
+        let first = try await store.save(scope: scope, transcript: transcript(String(repeating: "\u{1}", count: 350_000)))
+        do {
+            _ = try await store.save(scope: scope, transcript: transcript(String(repeating: "\u{2}", count: 350_000)))
+            XCTFail("JSON escaping can exceed 4m even while total text is below 1m")
+        } catch { XCTAssertEqual(error as? NativeHistoryFailure, .full) }
+        let retained = try await store.list(); XCTAssertEqual(retained.entries.map(\.id), [first.id])
     }
 
     func testSemanticCorruptionUsesVerifiedRollbackAndNeverBecomesAnEmptyLibrary() async throws {

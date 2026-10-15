@@ -109,13 +109,17 @@ final class NativePhysicalHistoryTests: XCTestCase, @unchecked Sendable {
         let entries = try await cache.physicalArchives(); XCTAssertTrue(entries.isEmpty)
     }
 
-    func testLateOrdinaryWriteCannotRestoreAnOldPhysicalScopeAtTheSameRevision() async throws {
+    func testLateOrdinaryWriteCannotRestoreAnOldPhysicalScope() async throws {
         let root = directory(); defer { try? FileManager.default.removeItem(at: root) }
         let cache = try NativeConversationStore(directory: root), old = seed(); try await write(old, cache: cache)
         let result = try await rollover(cache, old: old)
-        var late = old; late.revision = result.current.revision; late.draft = "stale overwrite"
-        do { try await write(late, cache: cache); XCTFail("Old equal revisions must not overwrite a new epoch") }
-        catch { XCTAssertEqual(error as? NativeHistoryFailure, .changed) }
+        for revision in [old.revision, result.current.revision] {
+            var late = old; late.revision = revision; late.draft = "stale overwrite"
+            do { try await write(late, cache: cache); XCTFail("Old physical identity must reject even a lower revision") }
+            catch { XCTAssertEqual(error as? NativeHistoryFailure, .changed) }
+        }
+        var sameScope = result.current; sameScope.revision -= 1; sameScope.draft = "stale same-epoch draft"
+        try await write(sameScope, cache: cache)
         let retained = try await read(cache); XCTAssertEqual(retained.historyEpoch, result.current.historyEpoch); XCTAssertEqual(retained.draft, old.draft)
     }
 

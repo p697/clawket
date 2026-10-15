@@ -84,7 +84,10 @@ actor NativeHistoryExportCache {
         do {
             try Self.protect(directory, directory: true)
             let url = directory.appendingPathComponent(format == .markdown ? "Clawket.md" : "Clawket.json")
-            try data.write(to: url, options: [.atomic, .completeFileProtection])
+            // This unique unpublished directory is already the staging boundary.
+            // A killed write leaves only the known bounded filename, not an
+            // implementation-generated atomic temporary name that poisons recovery.
+            try data.write(to: url, options: [.withoutOverwriting, .completeFileProtection])
             try Self.protect(url, directory: false)
             let readback = try Data(contentsOf: url, options: .mappedIfSafe)
             guard readback == data else { throw NativeHistoryFailure.commitUncertain }

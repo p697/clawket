@@ -93,4 +93,53 @@ final class NativeHistoryLimitsTests: XCTestCase, @unchecked Sendable {
         } catch { XCTAssertEqual(error as? NativeHistoryFailure, .changed) }
         let other = try await cache.physicalArchives(scope: second); XCTAssertTrue(other.isEmpty)
     }
+
+    func testNormalTemporaryDirectoryAliasesWorkButOwnedSymlinkFilesCannotEscape() throws {
+        let directory = root(); defer { try? FileManager.default.removeItem(at: directory) }
+        let files = try NativeHistoryFiles(directory: directory.appendingPathComponent("History"))
+        let name = NativeHistoryFiles.name(UUID(), "body"), bytes = Data("owned".utf8)
+        try files.put(bytes, name: name)
+        XCTAssertEqual(try files.read(name), bytes)
+        XCTAssertThrowsError(try files.put(bytes, name: "../outside.json"))
+        let outside = directory.appendingPathComponent("outside.json"); try bytes.write(to: outside)
+        let linked = directory.appendingPathComponent("History/" + NativeHistoryFiles.name(UUID(), "body"))
+        try FileManager.default.createSymbolicLink(at: linked, withDestinationURL: outside)
+        XCTAssertThrowsError(try files.inventory())
+        XCTAssertEqual(try Data(contentsOf: outside), bytes)
+    }
+
+    func testRevisionExhaustionRejectsBeforePublishingAnUnrecoverableIntent() async throws {
+        let directory = root(); defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = try NativeConversationStore(directory: directory)
+        let old = NativeConversation(revision: 9_007_199_254_740_990, historyEpoch: UUID())
+        try await cache.write(old, connectionID: scope.connectionID, agentID: scope.agentID, sessionID: scope.sessionID)
+        do {
+            _ = try await cache.rollover(scope: scope, expectedRevision: old.revision, fromEpoch: old.historyEpoch,
+                toEpoch: UUID(), physicalSessionID: nil, retainingMessageIDs: [])
+            XCTFail("Do not stage a revision that the recovery decoder rejects")
+        } catch { XCTAssertEqual(error as? NativeHistoryFailure, .invalid) }
+        let current = try await cache.read(connectionID: scope.connectionID, agentID: scope.agentID, sessionID: scope.sessionID)
+        XCTAssertEqual(current.revision, old.revision)
+        let inventory = try NativeHistoryFiles(directory: directory.appendingPathComponent("History")).inventory()
+        XCTAssertTrue(inventory.isEmpty)
+        var malformed = old; malformed.revision = Int64.max
+        XCTAssertThrowsError(try malformed.validateMedia())
+    }
+
+    func testLaterOrdinaryCurrentWritesAlsoRespectArchiveAndAtomicTemporaryQuota() async throws {
+        let directory = root(); defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = try NativeConversationStore(directory: directory), old = NativeConversation(revision: 2, draft: "preserved", historyEpoch: UUID())
+        try await cache.write(old, connectionID: scope.connectionID, agentID: scope.agentID, sessionID: scope.sessionID)
+        let files = try NativeHistoryFiles(directory: directory.appendingPathComponent("History")), body = try bytes()
+        for _ in 0..<7 { try archive(files, body: body, scope: scope) }
+        var next = old; next.revision += 1
+        next.messages = [.init(id: "large", role: .assistant, text: String(repeating: "x", count: 8 * 1_024 * 1_024 - 1_000))]
+        XCTAssertLessThanOrEqual(try historyEncode(next).count, 8 * 1_024 * 1_024)
+        do {
+            try await cache.write(next, connectionID: scope.connectionID, agentID: scope.agentID, sessionID: scope.sessionID)
+            XCTFail("Ordinary cache growth cannot escape the affected-scope quota")
+        } catch { XCTAssertEqual(error as? NativeHistoryFailure, .full) }
+        let retained = try await cache.read(connectionID: scope.connectionID, agentID: scope.agentID, sessionID: scope.sessionID)
+        XCTAssertEqual(try historyEncode(retained), try historyEncode(old))
+    }
 }

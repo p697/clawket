@@ -6,11 +6,12 @@ struct NativeConversationExportView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var transcript: NativePublicTranscript?
     @State private var loading = true
-    @State private var saving = false
+    private var saving: Bool { operationState.isBusy }
     @State private var saved = false
     @State private var notice: String?
     @State private var share: NativeMediaShare?
     @State private var visible = true
+    @State private var operationState = NativeHistoryOperation()
     var body: some View {
         NavigationStack {
             Form {
@@ -32,6 +33,7 @@ struct NativeConversationExportView: View {
             .navigationTitle("Export conversation").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }
             .task(id: request.id) {
+                transcript = nil; saved = false; loading = true
                 do {
                     let value = try await controller.load(request)
                     try Task.checkCancellation(); transcript = value
@@ -40,28 +42,33 @@ struct NativeConversationExportView: View {
             }
             .sheet(item: $share) { NativeActivityView(share: $0) }
             .onAppear { visible = true }
-            .onDisappear { visible = false; let abandoned = share; Task { await abandoned?.releaseIfUnpresented() } }
+            .onDisappear {
+                visible = false; operationState.retire()
+                let abandoned = share; Task { await abandoned?.releaseIfUnpresented() }
+            }
         }
     }
     private func save() {
-        guard visible, !saving, !saved, let transcript else { return }; saving = true
+        guard visible, !saving, !saved, let transcript else { return }
+        guard let operation = operationState.begin() else { return }
         Task {
-            defer { saving = false }
+            defer { operationState.finish(operation) }
             do {
                 _ = try await controller.save(transcript, request: request)
-                if visible { saved = true; notice = nil }
-            } catch { if visible { notice = NativeHistoryController.failureText(error) } }
+                if visible && operationState.owns(operation) { saved = true; notice = nil }
+            } catch { if visible && operationState.owns(operation) { notice = NativeHistoryController.failureText(error) } }
         }
     }
     private func export(_ format: NativeHistoryExportFormat) {
-        guard visible, !saving, share == nil, let transcript else { return }; saving = true
+        guard visible, !saving, share == nil, let transcript else { return }
+        guard let operation = operationState.begin() else { return }
         Task {
-            defer { saving = false }
+            defer { operationState.finish(operation) }
             do {
                 let prepared = try await controller.share(transcript, format: format)
-                guard visible else { await prepared.releaseIfUnpresented(); return }
+                guard visible, operationState.owns(operation) else { await prepared.releaseIfUnpresented(); return }
                 share = prepared
-            } catch { if visible { notice = NativeHistoryController.failureText(error) } }
+            } catch { if visible && operationState.owns(operation) { notice = NativeHistoryController.failureText(error) } }
         }
     }
 }

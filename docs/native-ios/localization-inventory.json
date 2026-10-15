@@ -46,13 +46,14 @@
     {
       "key": "A pairing attempt is already in progress.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:1293"
+        "apps/ios/Clawket/NativeAppModel.swift:1303"
       ],
       "mobileTerm": null
     },
     {
       "key": "Account settings",
       "sources": [
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:164",
         "packages/apple/Sources/ClawketUI/NativeClientView.swift:168"
       ],
       "mobileTerm": "common.Account settings"
@@ -60,7 +61,7 @@
     {
       "key": "Add",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:201"
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:209"
       ],
       "mobileTerm": "config.Add"
     },
@@ -75,15 +76,15 @@
       "key": "Add connection",
       "sources": [
         "apps/ios/Clawket/ConnectionsView.swift:46",
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:194"
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:202"
       ],
       "mobileTerm": "config.Add Connection"
     },
     {
       "key": "Add to queue",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:1036",
-        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:481"
+        "apps/ios/Clawket/NativeAppModel.swift:1045",
+        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:483"
       ],
       "mobileTerm": null
     },
@@ -115,29 +116,29 @@
       "key": "Agent",
       "sources": [
         "apps/ios/Clawket/ConnectAgentView.swift:52",
-        "apps/ios/Clawket/NativeAppModel.swift:987"
+        "apps/ios/Clawket/NativeAppModel.swift:995"
       ],
       "mobileTerm": "common.Agent"
     },
     {
       "key": "Agent settings",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:453"
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:461"
       ],
       "mobileTerm": "chat.Agent settings"
     },
     {
       "key": "Agent unavailable",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:1253"
+        "apps/ios/Clawket/NativeAppModel.swift:1262"
       ],
       "mobileTerm": "common.Agent unavailable"
     },
     {
       "key": "Agents",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:33",
-        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:592"
+        "apps/ios/Clawket/NativeAppModel.swift:37",
+        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:594"
       ],
       "mobileTerm": "settings.Agents"
     },
@@ -159,7 +160,7 @@
     {
       "key": "Allow photo access in Settings to save this image.",
       "sources": [
-        "apps/ios/Clawket/NativeMediaViewer.swift:148"
+        "apps/ios/Clawket/NativeMediaViewer.swift:154"
       ],
       "mobileTerm": null
     },
@@ -203,7 +204,7 @@
     {
       "key": "Applies to all conversations",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:779",
+        "apps/ios/Clawket/NativeAppModel.swift:787",
         "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:21"
       ],
       "mobileTerm": null
@@ -213,7 +214,7 @@
       "sources": [
         "apps/ios/Clawket/NativeJournalProjection.swift:66",
         "apps/ios/Clawket/NativeTaskPresentation.swift:14",
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:263"
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:271"
       ],
       "mobileTerm": null
     },
@@ -270,7 +271,7 @@
         "apps/ios/Clawket/NativeMediaPickers.swift:12",
         "apps/ios/Clawket/NativeMediaPickers.swift:33",
         "apps/ios/Clawket/NativeMediaState.swift:25",
-        "apps/ios/Clawket/NativeMediaViewer.swift:98"
+        "apps/ios/Clawket/NativeMediaViewer.swift:104"
       ],
       "mobileTerm": null
     },
@@ -289,8 +290,9 @@
         "apps/ios/Clawket/NativeAppMedia.swift:332",
         "apps/ios/Clawket/NativeAppMedia.swift:389",
         "apps/ios/Clawket/NativeAppMedia.swift:464",
-        "apps/ios/Clawket/NativeMediaViewer.swift:131",
-        "apps/ios/Clawket/NativeMediaViewer.swift:144"
+        "apps/ios/Clawket/NativeMediaViewer.swift:137",
+        "apps/ios/Clawket/NativeMediaViewer.swift:150",
+        "apps/ios/Clawket/NativePreviousTranscriptsView.swift:131"
       ],
       "mobileTerm": null
     },
@@ -355,6 +357,8 @@
       "sources": [
         "apps/ios/Clawket/ConnectAgentView.swift:103",
         "apps/ios/Clawket/NativeMediaPickers.swift:129",
+        "apps/ios/Clawket/NativeSavedHistoryView.swift:141",
+        "apps/ios/Clawket/NativeSavedHistoryView.swift:147",
         "apps/ios/Clawket/NativeVoiceSheet.swift:73",
         "apps/ios/Clawket/PairingScanner.swift:25",
         "apps/ios/Clawket/PendingMessageEditor.swift:50",
@@ -397,7 +401,7 @@
     {
       "key": "Checking your agent…",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:1250"
+        "apps/ios/Clawket/NativeAppModel.swift:1259"
       ],
       "mobileTerm": null
     },
@@ -411,7 +415,7 @@
     {
       "key": "Choose model",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:773"
+        "apps/ios/Clawket/NativeAppModel.swift:781"
       ],
       "mobileTerm": null
     },
@@ -483,8 +487,8 @@
     {
       "key": "Connect an agent to continue conversations and keep work moving.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:35",
-        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:598"
+        "apps/ios/Clawket/NativeAppModel.swift:39",
+        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:600"
       ],
       "mobileTerm": null
     },
@@ -506,7 +510,7 @@
       "key": "Connected",
       "sources": [
         "apps/ios/Clawket/DeviceApprovalView.swift:75",
-        "apps/ios/Clawket/NativeAppModel.swift:1251"
+        "apps/ios/Clawket/NativeAppModel.swift:1260"
       ],
       "mobileTerm": "settings.Connected"
     },
@@ -514,7 +518,7 @@
       "key": "Connecting…",
       "sources": [
         "apps/ios/Clawket/ConnectAgentView.swift:93",
-        "apps/ios/Clawket/NativeAppModel.swift:1249"
+        "apps/ios/Clawket/NativeAppModel.swift:1258"
       ],
       "mobileTerm": "config.Connecting…"
     },
@@ -542,14 +546,14 @@
     {
       "key": "Connection needs attention",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:1254"
+        "apps/ios/Clawket/NativeAppModel.swift:1263"
       ],
       "mobileTerm": null
     },
     {
       "key": "Connection settings",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:458"
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:466"
       ],
       "mobileTerm": "settings.Connection settings"
     },
@@ -580,6 +584,9 @@
     {
       "key": "Conversation",
       "sources": [
+        "apps/ios/Clawket/NativeAppHistory.swift:45",
+        "apps/ios/Clawket/NativeConversationExportView.swift:19",
+        "apps/ios/Clawket/NativeSavedHistoryView.swift:36",
         "apps/ios/Clawket/NativeSessionManagement.swift:129"
       ],
       "mobileTerm": "config.Conversation"
@@ -588,7 +595,7 @@
       "key": "Conversation actions",
       "sources": [
         "packages/apple/Sources/ClawketUI/ClientSheets.swift:199",
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:467",
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:478",
         "packages/apple/Sources/ClawketUI/NativeSessionManagementView.swift:45"
       ],
       "mobileTerm": null
@@ -636,7 +643,7 @@
     {
       "key": "Conversations could not be refreshed. Check your connection and try again.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:599"
+        "apps/ios/Clawket/NativeAppModel.swift:607"
       ],
       "mobileTerm": null
     },
@@ -665,42 +672,42 @@
     {
       "key": "Copy image",
       "sources": [
-        "apps/ios/Clawket/NativeMediaViewer.swift:94"
+        "apps/ios/Clawket/NativeMediaViewer.swift:100"
       ],
       "mobileTerm": null
     },
     {
       "key": "Could not complete pairing. Check the details and try again.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:1285"
+        "apps/ios/Clawket/NativeAppModel.swift:1295"
       ],
       "mobileTerm": null
     },
     {
       "key": "Could not load archived conversations.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:1168"
+        "apps/ios/Clawket/NativeAppModel.swift:1177"
       ],
       "mobileTerm": null
     },
     {
       "key": "Could not use this pairing code or link. Check it or generate a new invitation.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:1294"
+        "apps/ios/Clawket/NativeAppModel.swift:1304"
       ],
       "mobileTerm": null
     },
     {
       "key": "Creating conversation…",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:618"
+        "apps/ios/Clawket/NativeAppModel.swift:626"
       ],
       "mobileTerm": null
     },
     {
       "key": "Creation could not be confirmed. Refresh conversations before trying again.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:651"
+        "apps/ios/Clawket/NativeAppModel.swift:659"
       ],
       "mobileTerm": null
     },
@@ -728,14 +735,14 @@
     {
       "key": "Delivery could not be confirmed. Check the conversation before sending again.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:1051"
+        "apps/ios/Clawket/NativeAppModel.swift:1060"
       ],
       "mobileTerm": null
     },
     {
       "key": "Delivery could not be confirmed. Your original message is saved. Check the conversation before sending again.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:1275"
+        "apps/ios/Clawket/NativeAppModel.swift:1285"
       ],
       "mobileTerm": null
     },
@@ -765,7 +772,7 @@
       "key": "Device approval required",
       "sources": [
         "apps/ios/Clawket/ConnectionsView.swift:21",
-        "apps/ios/Clawket/NativeAppModel.swift:1236"
+        "apps/ios/Clawket/NativeAppModel.swift:1245"
       ],
       "mobileTerm": null
     },
@@ -786,14 +793,14 @@
     {
       "key": "Disconnected",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:1248"
+        "apps/ios/Clawket/NativeAppModel.swift:1257"
       ],
       "mobileTerm": null
     },
     {
       "key": "Disconnected. This preference could not be saved.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:353"
+        "apps/ios/Clawket/NativeAppModel.swift:361"
       ],
       "mobileTerm": null
     },
@@ -802,7 +809,10 @@
       "sources": [
         "apps/ios/Clawket/ConnectionsView.swift:60",
         "apps/ios/Clawket/DeviceApprovalView.swift:82",
-        "apps/ios/Clawket/NativeMediaViewer.swift:89",
+        "apps/ios/Clawket/NativeConversationExportView.swift:34",
+        "apps/ios/Clawket/NativeMediaViewer.swift:95",
+        "apps/ios/Clawket/NativePreviousTranscriptsView.swift:33",
+        "apps/ios/Clawket/NativeSavedHistoryView.swift:47",
         "apps/ios/Clawket/NativeSettingsView.swift:46",
         "apps/ios/Clawket/NativeVoiceSheet.swift:65",
         "packages/apple/Sources/ClawketUI/ClientSheets.swift:33",
@@ -907,7 +917,7 @@
     {
       "key": "Files",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:457",
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:465",
         "packages/apple/Sources/ClawketUI/NativeComposer.swift:122"
       ],
       "mobileTerm": "common.Files"
@@ -922,7 +932,7 @@
     {
       "key": "Image saved.",
       "sources": [
-        "apps/ios/Clawket/NativeMediaViewer.swift:155"
+        "apps/ios/Clawket/NativeMediaViewer.swift:161"
       ],
       "mobileTerm": null
     },
@@ -936,21 +946,21 @@
     {
       "key": "Input needed",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:264"
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:272"
       ],
       "mobileTerm": null
     },
     {
       "key": "Latest messages",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:397"
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:405"
       ],
       "mobileTerm": null
     },
     {
       "key": "Load earlier messages",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:462"
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:473"
       ],
       "mobileTerm": "chat.Load earlier messages"
     },
@@ -978,7 +988,7 @@
     {
       "key": "Loading conversation…",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:378"
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:386"
       ],
       "mobileTerm": null
     },
@@ -1006,14 +1016,14 @@
     {
       "key": "Manage conversation",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:450"
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:458"
       ],
       "mobileTerm": null
     },
     {
       "key": "Memory",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:454"
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:462"
       ],
       "mobileTerm": "settings.Memory"
     },
@@ -1073,7 +1083,7 @@
     {
       "key": "New agent",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:188"
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:196"
       ],
       "mobileTerm": "chat.New Agent"
     },
@@ -1159,15 +1169,17 @@
     {
       "key": "Not sent. Your message is saved.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:1052"
+        "apps/ios/Clawket/NativeAppModel.swift:1061"
       ],
       "mobileTerm": null
     },
     {
       "key": "OK",
       "sources": [
-        "apps/ios/Clawket/ClawketApp.swift:30",
-        "apps/ios/Clawket/NativeMediaViewer.swift:106"
+        "apps/ios/Clawket/ClawketApp.swift:36",
+        "apps/ios/Clawket/NativeMediaViewer.swift:112",
+        "apps/ios/Clawket/NativePreviousTranscriptsView.swift:105",
+        "apps/ios/Clawket/NativeSavedHistoryView.swift:150"
       ],
       "mobileTerm": "common.OK"
     },
@@ -1225,14 +1237,14 @@
     {
       "key": "Pairing data could not be saved. Try Connect again to save the existing result.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:1284"
+        "apps/ios/Clawket/NativeAppModel.swift:1294"
       ],
       "mobileTerm": null
     },
     {
       "key": "Participant",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:1042"
+        "apps/ios/Clawket/NativeAppModel.swift:1051"
       ],
       "mobileTerm": null
     },
@@ -1290,7 +1302,7 @@
     {
       "key": "Preview unavailable",
       "sources": [
-        "apps/ios/Clawket/NativeMediaViewer.swift:80"
+        "apps/ios/Clawket/NativeMediaViewer.swift:86"
       ],
       "mobileTerm": null
     },
@@ -1325,15 +1337,15 @@
     {
       "key": "Ready when you are. Send this message when the connection is available.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:1047"
+        "apps/ios/Clawket/NativeAppModel.swift:1056"
       ],
       "mobileTerm": null
     },
     {
       "key": "Reconnect and reopen conversation actions.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:1008",
-        "apps/ios/Clawket/NativeAppModel.swift:1143",
+        "apps/ios/Clawket/NativeAppModel.swift:1016",
+        "apps/ios/Clawket/NativeAppModel.swift:1152",
         "apps/ios/Clawket/NativeSessionManagement.swift:88"
       ],
       "mobileTerm": null
@@ -1341,50 +1353,51 @@
     {
       "key": "Reconnect or refresh conversations before creating another.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:1015"
+        "apps/ios/Clawket/NativeAppModel.swift:1023"
       ],
       "mobileTerm": null
     },
     {
       "key": "Reconnect to change models.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:1019"
+        "apps/ios/Clawket/NativeAppModel.swift:1027"
       ],
       "mobileTerm": null
     },
     {
       "key": "Reconnect to create a conversation.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:618"
+        "apps/ios/Clawket/NativeAppModel.swift:626"
       ],
       "mobileTerm": null
     },
     {
       "key": "Reconnect to load earlier messages.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:1022"
+        "apps/ios/Clawket/NativeAppHistory.swift:28",
+        "apps/ios/Clawket/NativeAppModel.swift:1030"
       ],
       "mobileTerm": null
     },
     {
       "key": "Reconnect to refresh conversations.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:625",
-        "apps/ios/Clawket/NativeAppModel.swift:627"
+        "apps/ios/Clawket/NativeAppModel.swift:633",
+        "apps/ios/Clawket/NativeAppModel.swift:635"
       ],
       "mobileTerm": null
     },
     {
       "key": "Reconnect to send. Your draft is saved.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:993"
+        "apps/ios/Clawket/NativeAppModel.swift:1001"
       ],
       "mobileTerm": null
     },
     {
       "key": "Reconnect to stop this run.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:1010"
+        "apps/ios/Clawket/NativeAppModel.swift:1018"
       ],
       "mobileTerm": null
     },
@@ -1398,21 +1411,21 @@
     {
       "key": "Reconnecting…",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:1252"
+        "apps/ios/Clawket/NativeAppModel.swift:1261"
       ],
       "mobileTerm": "common.Reconnecting…"
     },
     {
       "key": "Recovered your saved connections from the last verified copy.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:161"
+        "apps/ios/Clawket/NativeAppModel.swift:167"
       ],
       "mobileTerm": null
     },
     {
       "key": "Refresh",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:175",
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:183",
         "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:78"
       ],
       "mobileTerm": "common.Refresh"
@@ -1420,7 +1433,7 @@
     {
       "key": "Refresh conversations before creating another.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:619"
+        "apps/ios/Clawket/NativeAppModel.swift:627"
       ],
       "mobileTerm": null
     },
@@ -1536,7 +1549,7 @@
     {
       "key": "Review the conversation update before sending.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:997"
+        "apps/ios/Clawket/NativeAppModel.swift:1005"
       ],
       "mobileTerm": null
     },
@@ -1581,7 +1594,7 @@
     {
       "key": "Save to Photos",
       "sources": [
-        "apps/ios/Clawket/NativeMediaViewer.swift:95"
+        "apps/ios/Clawket/NativeMediaViewer.swift:101"
       ],
       "mobileTerm": null
     },
@@ -1595,9 +1608,9 @@
     {
       "key": "Saved data could not be read safely. Reopen Clawket after unlocking this device.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:127",
-        "apps/ios/Clawket/NativeAppModel.swift:131",
-        "apps/ios/Clawket/NativeAppModel.swift:190",
+        "apps/ios/Clawket/NativeAppModel.swift:132",
+        "apps/ios/Clawket/NativeAppModel.swift:136",
+        "apps/ios/Clawket/NativeAppModel.swift:196",
         "apps/ios/Clawket/NativeTaskRequests.swift:153"
       ],
       "mobileTerm": null
@@ -1605,7 +1618,9 @@
     {
       "key": "Saved on this device",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:539"
+        "apps/ios/Clawket/NativeAppModel.swift:547",
+        "apps/ios/Clawket/NativeConversationExportView.swift:25",
+        "apps/ios/Clawket/NativePreviousTranscriptsView.swift:23"
       ],
       "mobileTerm": "chat.Saved on this device"
     },
@@ -1640,7 +1655,7 @@
     {
       "key": "Scheduled tasks",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:456"
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:464"
       ],
       "mobileTerm": "chat.Scheduled tasks"
     },
@@ -1670,7 +1685,7 @@
     {
       "key": "Secure storage is unavailable.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:189"
+        "apps/ios/Clawket/NativeAppModel.swift:195"
       ],
       "mobileTerm": null
     },
@@ -1684,9 +1699,9 @@
     {
       "key": "Send",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:1036",
-        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:481",
-        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:491"
+        "apps/ios/Clawket/NativeAppModel.swift:1045",
+        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:483",
+        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:493"
       ],
       "mobileTerm": "chat.Send"
     },
@@ -1736,8 +1751,8 @@
     {
       "key": "Share",
       "sources": [
-        "apps/ios/Clawket/NativeMediaViewer.swift:101",
-        "apps/ios/Clawket/NativeMediaViewer.swift:83",
+        "apps/ios/Clawket/NativeMediaViewer.swift:107",
+        "apps/ios/Clawket/NativeMediaViewer.swift:89",
         "packages/apple/Sources/ClawketUI/MessageContentView.swift:394"
       ],
       "mobileTerm": "chat.Share"
@@ -1752,7 +1767,7 @@
     {
       "key": "Skills",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:455"
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:463"
       ],
       "mobileTerm": "settings.Skills"
     },
@@ -1761,14 +1776,14 @@
       "sources": [
         "apps/ios/Clawket/NativeAppMedia.swift:220",
         "apps/ios/Clawket/NativeAppMedia.swift:285",
-        "apps/ios/Clawket/NativeAppModel.swift:142"
+        "apps/ios/Clawket/NativeAppModel.swift:147"
       ],
       "mobileTerm": null
     },
     {
       "key": "Start a conversation",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:383"
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:391"
       ],
       "mobileTerm": null
     },
@@ -1825,7 +1840,7 @@
     {
       "key": "Storage unavailable",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:187"
+        "apps/ios/Clawket/NativeAppModel.swift:193"
       ],
       "mobileTerm": null
     },
@@ -1855,14 +1870,14 @@
     {
       "key": "The connection could not be removed. Your saved data is unchanged.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:377"
+        "apps/ios/Clawket/NativeAppModel.swift:385"
       ],
       "mobileTerm": null
     },
     {
       "key": "The connection selection could not be saved. Please try again.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:337"
+        "apps/ios/Clawket/NativeAppModel.swift:345"
       ],
       "mobileTerm": null
     },
@@ -1876,22 +1891,23 @@
     {
       "key": "The operation could not be completed. Check your connection and try again.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:1278"
+        "apps/ios/Clawket/NativeAppModel.swift:1288"
       ],
       "mobileTerm": null
     },
     {
       "key": "The operation could not be completed. Please try again.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:1263",
-        "apps/ios/Clawket/NativeMediaViewer.swift:156"
+        "apps/ios/Clawket/NativeAppModel.swift:1273",
+        "apps/ios/Clawket/NativeHistoryController.swift:106",
+        "apps/ios/Clawket/NativeMediaViewer.swift:162"
       ],
       "mobileTerm": null
     },
     {
       "key": "The pairing service could not be reached. Check your computer before trying this invitation again.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:1292"
+        "apps/ios/Clawket/NativeAppModel.swift:1302"
       ],
       "mobileTerm": null
     },
@@ -1905,7 +1921,7 @@
     {
       "key": "There are 32 pending messages. Finish or remove one before adding another.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:820"
+        "apps/ios/Clawket/NativeAppModel.swift:828"
       ],
       "mobileTerm": null
     },
@@ -1919,7 +1935,7 @@
     {
       "key": "This action is unavailable for this connection.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:1277"
+        "apps/ios/Clawket/NativeAppModel.swift:1287"
       ],
       "mobileTerm": null
     },
@@ -1940,21 +1956,21 @@
     {
       "key": "This code belongs to a different agent. Choose the matching agent and try again.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:1290"
+        "apps/ios/Clawket/NativeAppModel.swift:1300"
       ],
       "mobileTerm": null
     },
     {
       "key": "This connection does not have permission for that action.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:1272"
+        "apps/ios/Clawket/NativeAppModel.swift:1282"
       ],
       "mobileTerm": null
     },
     {
       "key": "This conversation",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:779",
+        "apps/ios/Clawket/NativeAppModel.swift:787",
         "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:21"
       ],
       "mobileTerm": null
@@ -1970,8 +1986,8 @@
     {
       "key": "This conversation is read-only here.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:1020",
-        "apps/ios/Clawket/NativeAppModel.swift:994"
+        "apps/ios/Clawket/NativeAppModel.swift:1002",
+        "apps/ios/Clawket/NativeAppModel.swift:1028"
       ],
       "mobileTerm": null
     },
@@ -1986,8 +2002,8 @@
     {
       "key": "This draft could not be saved. Keep Clawket open and try again.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:1127",
-        "apps/ios/Clawket/NativeAppModel.swift:136",
+        "apps/ios/Clawket/NativeAppModel.swift:1136",
+        "apps/ios/Clawket/NativeAppModel.swift:141",
         "apps/ios/Clawket/NativeAppVoice.swift:156",
         "apps/ios/Clawket/NativeTaskRequests.swift:192"
       ],
@@ -1996,14 +2012,14 @@
     {
       "key": "This invitation has expired or was already used. Get a new code from your computer.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:1288"
+        "apps/ios/Clawket/NativeAppModel.swift:1298"
       ],
       "mobileTerm": null
     },
     {
       "key": "This invitation uses a different service environment.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:1291"
+        "apps/ios/Clawket/NativeAppModel.swift:1301"
       ],
       "mobileTerm": null
     },
@@ -2032,7 +2048,7 @@
     {
       "key": "This project is unavailable.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:618"
+        "apps/ios/Clawket/NativeAppModel.swift:626"
       ],
       "mobileTerm": null
     },
@@ -2070,7 +2086,7 @@
     {
       "key": "Too many attempts. Wait a little before trying again.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:1289"
+        "apps/ios/Clawket/NativeAppModel.swift:1299"
       ],
       "mobileTerm": null
     },
@@ -2116,14 +2132,14 @@
     {
       "key": "Unlock this device and reopen Clawket to access your saved connections.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:188"
+        "apps/ios/Clawket/NativeAppModel.swift:194"
       ],
       "mobileTerm": null
     },
     {
       "key": "Unread messages",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeClientView.swift:262"
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:270"
       ],
       "mobileTerm": "common.Unread messages"
     },
@@ -2190,7 +2206,7 @@
     {
       "key": "Your agent could not be reached. Your draft is saved.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:1276"
+        "apps/ios/Clawket/NativeAppModel.swift:1286"
       ],
       "mobileTerm": null
     },
@@ -2204,9 +2220,9 @@
     {
       "key": "Your agents, within reach",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:34",
+        "apps/ios/Clawket/NativeAppModel.swift:38",
         "apps/ios/Clawket/NativeSettingsView.swift:79",
-        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:597"
+        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:599"
       ],
       "mobileTerm": null
     },
@@ -2227,7 +2243,7 @@
       "key": "Your data could not be saved safely. Keep Clawket open and try again.",
       "sources": [
         "apps/ios/Clawket/NativeAppMedia.swift:251",
-        "apps/ios/Clawket/NativeAppModel.swift:1262"
+        "apps/ios/Clawket/NativeAppModel.swift:1272"
       ],
       "mobileTerm": null
     },
@@ -2243,6 +2259,8 @@
     {
       "key": "Delete",
       "sources": [
+        "apps/ios/Clawket/NativeSavedHistoryView.swift:132",
+        "apps/ios/Clawket/NativeSavedHistoryView.swift:146",
         "apps/ios/Clawket/NativeVoiceSheet.swift:50",
         "apps/ios/Clawket/NativeVoiceSheet.swift:69"
       ],
@@ -2433,7 +2451,7 @@
     {
       "key": "Choose permissions again before sending.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:1001",
+        "apps/ios/Clawket/NativeAppModel.swift:1009",
         "packages/apple/Sources/ClawketUI/NativeModelControlsView.swift:174"
       ],
       "mobileTerm": "chat.Choose permissions again before sending."
@@ -2587,7 +2605,7 @@
     {
       "key": "Reconnect to review model settings.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:1018",
+        "apps/ios/Clawket/NativeAppModel.swift:1026",
         "apps/ios/Clawket/NativeModelControls.swift:77"
       ],
       "mobileTerm": null
@@ -2602,8 +2620,8 @@
     {
       "key": "Review model settings before sending.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:1002",
-        "apps/ios/Clawket/NativeAppModel.swift:1004"
+        "apps/ios/Clawket/NativeAppModel.swift:1010",
+        "apps/ios/Clawket/NativeAppModel.swift:1012"
       ],
       "mobileTerm": null
     },
@@ -2717,6 +2735,7 @@
     {
       "key": "System",
       "sources": [
+        "apps/ios/Clawket/NativePreviousTranscriptsView.swift:118",
         "apps/ios/Clawket/NativeSettingsView.swift:142"
       ],
       "mobileTerm": "config.System"
@@ -2795,6 +2814,7 @@
     {
       "key": "Save",
       "sources": [
+        "apps/ios/Clawket/NativeSavedHistoryView.swift:142",
         "apps/ios/Clawket/NativeSettingsView.swift:122"
       ],
       "mobileTerm": "common.Save"
@@ -2847,6 +2867,261 @@
         "apps/ios/Clawket/NativePreferences.swift:92"
       ],
       "mobileTerm": null
+    },
+    {
+      "key": "All",
+      "sources": [
+        "apps/ios/Clawket/NativeSavedHistoryView.swift:21"
+      ],
+      "mobileTerm": "chat.All"
+    },
+    {
+      "key": "Archive actions",
+      "sources": [
+        "apps/ios/Clawket/NativeSavedHistoryView.swift:134"
+      ],
+      "mobileTerm": "chat.Archive actions"
+    },
+    {
+      "key": "Assistant",
+      "sources": [
+        "apps/ios/Clawket/NativeHistoryController.swift:66",
+        "apps/ios/Clawket/NativeHistoryController.swift:73",
+        "apps/ios/Clawket/NativePreviousTranscriptsView.swift:117",
+        "apps/ios/Clawket/NativeSavedHistoryView.swift:200"
+      ],
+      "mobileTerm": "chat.Assistant"
+    },
+    {
+      "key": "Clawket",
+      "sources": [
+        "apps/ios/Clawket/ClawketApp.swift:35",
+        "apps/ios/Clawket/NativeMediaViewer.swift:111",
+        "apps/ios/Clawket/NativePreviousTranscriptsView.swift:104",
+        "apps/ios/Clawket/NativeSavedHistoryView.swift:149",
+        "apps/ios/Clawket/NativeSettingsView.swift:129",
+        "apps/ios/Clawket/NativeSettingsView.swift:135"
+      ],
+      "mobileTerm": "config.Clawket"
+    },
+    {
+      "key": "Conversation changed. Try again.",
+      "sources": [
+        "apps/ios/Clawket/NativeHistoryController.swift:103"
+      ],
+      "mobileTerm": "chat.Conversation changed. Try again."
+    },
+    {
+      "key": "Conversation is too large to export.",
+      "sources": [
+        "apps/ios/Clawket/NativeHistoryController.swift:105"
+      ],
+      "mobileTerm": "chat.Conversation is too large to export."
+    },
+    {
+      "key": "Delete this saved copy?",
+      "sources": [
+        "apps/ios/Clawket/NativeSavedHistoryView.swift:145"
+      ],
+      "mobileTerm": "chat.Delete this saved copy?"
+    },
+    {
+      "key": "Export all",
+      "sources": [
+        "apps/ios/Clawket/NativeSavedHistoryView.swift:50"
+      ],
+      "mobileTerm": "chat.Export all"
+    },
+    {
+      "key": "Export conversation",
+      "sources": [
+        "apps/ios/Clawket/NativeConversationExportView.swift:33",
+        "apps/ios/Clawket/NativePreviousTranscriptsView.swift:91",
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:467"
+      ],
+      "mobileTerm": "chat.Export conversation"
+    },
+    {
+      "key": "History storage is full. Your current conversation has been kept.",
+      "sources": [
+        "apps/ios/Clawket/NativeHistoryController.swift:110"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Name",
+      "sources": [
+        "apps/ios/Clawket/NativeSavedHistoryView.swift:140"
+      ],
+      "mobileTerm": "chat.Name"
+    },
+    {
+      "key": "No previous transcripts",
+      "sources": [
+        "apps/ios/Clawket/NativePreviousTranscriptsView.swift:16"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "No saved conversations",
+      "sources": [
+        "apps/ios/Clawket/NativeSavedHistoryView.swift:28"
+      ],
+      "mobileTerm": "chat.No saved conversations"
+    },
+    {
+      "key": "Pin",
+      "sources": [
+        "apps/ios/Clawket/NativeSavedHistoryView.swift:127"
+      ],
+      "mobileTerm": "common.Pin"
+    },
+    {
+      "key": "Pinned",
+      "sources": [
+        "apps/ios/Clawket/NativeSavedHistoryView.swift:22"
+      ],
+      "mobileTerm": "chat.Pinned archives"
+    },
+    {
+      "key": "Previous transcripts",
+      "sources": [
+        "apps/ios/Clawket/NativePreviousTranscriptsView.swift:140",
+        "apps/ios/Clawket/NativePreviousTranscriptsView.swift:32",
+        "apps/ios/Clawket/NativePreviousTranscriptsView.swift:84",
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:469"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Previous transcripts use cached attachments only.",
+      "sources": [
+        "apps/ios/Clawket/NativePreviousTranscriptsView.swift:65"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Read-only copy on this device.",
+      "sources": [
+        "apps/ios/Clawket/NativePreviousTranscriptsView.swift:29",
+        "apps/ios/Clawket/NativeSavedHistoryView.swift:117"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Rename",
+      "sources": [
+        "apps/ios/Clawket/NativeSavedHistoryView.swift:126",
+        "apps/ios/Clawket/NativeSavedHistoryView.swift:139"
+      ],
+      "mobileTerm": "settings.Rename"
+    },
+    {
+      "key": "Save conversation",
+      "sources": [
+        "apps/ios/Clawket/NativeConversationExportView.swift:25"
+      ],
+      "mobileTerm": "chat.Save conversation"
+    },
+    {
+      "key": "Saved conversations",
+      "sources": [
+        "apps/ios/Clawket/NativeSavedHistoryView.swift:121",
+        "apps/ios/Clawket/NativeSavedHistoryView.swift:20",
+        "apps/ios/Clawket/NativeSavedHistoryView.swift:45",
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:176",
+        "packages/apple/Sources/ClawketUI/NativeClientView.swift:468"
+      ],
+      "mobileTerm": "chat.Saved conversations"
+    },
+    {
+      "key": "Saved conversations are full.",
+      "sources": [
+        "apps/ios/Clawket/NativeHistoryController.swift:100"
+      ],
+      "mobileTerm": "chat.Saved conversations are full."
+    },
+    {
+      "key": "Saved conversations were recovered from the last verified copy.",
+      "sources": [
+        "apps/ios/Clawket/NativeSavedHistoryView.swift:71"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Saved history could not be opened. Your stored data has been preserved.",
+      "sources": [
+        "apps/ios/Clawket/NativeHistoryController.swift:112"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Search saved conversations",
+      "sources": [
+        "apps/ios/Clawket/NativeSavedHistoryView.swift:95"
+      ],
+      "mobileTerm": "chat.Search saved conversations"
+    },
+    {
+      "key": "Text and attachment names",
+      "sources": [
+        "apps/ios/Clawket/NativeConversationExportView.swift:20"
+      ],
+      "mobileTerm": "chat.Text and attachment names"
+    },
+    {
+      "key": "The saved copy could not be confirmed. Reopen the app before trying again.",
+      "sources": [
+        "apps/ios/Clawket/NativeHistoryController.swift:111"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "This copy includes only history loaded on this device.",
+      "sources": [
+        "apps/ios/Clawket/NativeHistoryController.swift:67",
+        "apps/ios/Clawket/NativeHistoryController.swift:74",
+        "apps/ios/Clawket/NativePreviousTranscriptsView.swift:64"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Tool",
+      "sources": [
+        "apps/ios/Clawket/NativePreviousTranscriptsView.swift:119"
+      ],
+      "mobileTerm": "chat.Tool"
+    },
+    {
+      "key": "Unpin",
+      "sources": [
+        "apps/ios/Clawket/NativeSavedHistoryView.swift:127"
+      ],
+      "mobileTerm": "common.Unpin"
+    },
+    {
+      "key": "User",
+      "sources": [
+        "apps/ios/Clawket/NativeHistoryController.swift:66",
+        "apps/ios/Clawket/NativeHistoryController.swift:73",
+        "apps/ios/Clawket/NativePreviousTranscriptsView.swift:116",
+        "apps/ios/Clawket/NativeSavedHistoryView.swift:200"
+      ],
+      "mobileTerm": "chat.User"
+    },
+    {
+      "key": "Wait until the task finishes.",
+      "sources": [
+        "apps/ios/Clawket/NativeHistoryController.swift:104"
+      ],
+      "mobileTerm": "chat.Wait until the task finishes."
+    },
+    {
+      "key": "With files",
+      "sources": [
+        "apps/ios/Clawket/NativeSavedHistoryView.swift:23"
+      ],
+      "mobileTerm": "chat.With files"
     }
   ],
   "infoPlistStrings": [

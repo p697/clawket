@@ -13,6 +13,10 @@ struct NativeHistoryExportContext: Equatable, Sendable {
     let wire: UUID
     let selection: UUID
     let epoch: UUID?
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        NativeHistoryScope(lhs.route) == NativeHistoryScope(rhs.route) && lhs.activation == rhs.activation &&
+            lhs.wire == rhs.wire && lhs.selection == rhs.selection && lhs.epoch == rhs.epoch
+    }
 }
 
 struct NativeHistoryExportRequest: Identifiable, Sendable {
@@ -53,21 +57,22 @@ final class NativeHistoryController {
 
     func save(_ value: NativePublicTranscript, request: NativeHistoryExportRequest) async throws -> NativeSavedConversation {
         guard isCurrent(request.context) else { throw NativeHistoryExportFailure.changed }
-        return try await saved.save(scope: .init(request.context.route), transcript: value)
+        do { return try await saved.save(scope: .init(request.context.route), transcript: value) }
+        catch NativeHistoryFailure.full { throw NativeSavedHistoryFailure.full }
     }
 
     func share(_ value: NativePublicTranscript, format: NativeHistoryExportFormat, loadedOnly: Bool = false) async throws -> NativeMediaShare {
         let file = try await exports.prepare(value, format: format,
             userLabel: String(localized: "User"), assistantLabel: String(localized: "Assistant"),
             loadedOnlyLabel: loadedOnly ? String(localized: "This copy includes only history loaded on this device.") : nil)
-        return .init(url: file.url, lease: file.lease)
+        return .init(url: file.url, shareLease: file.lease)
     }
 
     func sharePhysical(_ conversation: NativeConversation, title: String, format: NativeHistoryExportFormat) async throws -> NativeMediaShare {
         let file = try await exports.preparePhysical(conversation, title: title, format: format,
             userLabel: String(localized: "User"), assistantLabel: String(localized: "Assistant"),
             loadedOnlyLabel: String(localized: "This copy includes only history loaded on this device."))
-        return .init(url: file.url, lease: file.lease)
+        return .init(url: file.url, shareLease: file.lease)
     }
 
     func shareAll(_ ids: [String]) async throws -> NativeMediaShare {
@@ -76,7 +81,7 @@ final class NativeHistoryController {
         try Task.checkCancellation()
         guard access().bulkExport else { throw NativeHistoryFailure.unavailable }
         let file = try await exports.prepareBulk(values)
-        return .init(url: file.url, lease: file.lease)
+        return .init(url: file.url, shareLease: file.lease)
     }
 
     func cachedPreview(_ reference: NativeMediaReference, scope: NativeHistoryScope) async throws -> NativeMediaPreview {
@@ -92,6 +97,7 @@ final class NativeHistoryController {
     private func isCurrent(_ context: NativeHistoryExportContext) -> Bool { !Task.isCancelled && current(context) }
 
     static func failureText(_ error: Error) -> String {
+        if error is NativeSavedHistoryFailure { return String(localized: "Saved conversations are full.") }
         if let failure = error as? NativeHistoryExportFailure {
             switch failure {
             case .changed: return String(localized: "Conversation changed. Try again.")

@@ -17,7 +17,14 @@ struct NativePublicTranscript: Codable, Equatable, Sendable {
     let messages: [Message]
     static func == (lhs: Self, rhs: Self) -> Bool { historySame(lhs.title, rhs.title) && lhs.messages == rhs.messages }
 
-    var textUnits: Int { title.utf16.count + messages.reduce(0) { $0 + $1.text.utf16.count + $1.attachments.reduce(0) { $0 + $1.utf16.count } } }
+    var textUnits: Int {
+        var units = title.utf16.count
+        for message in messages {
+            units += message.text.utf16.count
+            for name in message.attachments { units += name.utf16.count }
+        }
+        return units
+    }
     var hasFiles: Bool { messages.contains { !$0.attachments.isEmpty } }
     func validate() throws {
         guard title.utf16.count <= 200, messages.count <= 10_000 else { throw NativeHistoryFailure.invalid }
@@ -58,6 +65,7 @@ struct NativeSavedListing: Sendable {
 }
 
 enum NativeSavedFilter: String, CaseIterable, Hashable, Sendable { case all, pinned, files }
+enum NativeSavedHistoryFailure: Error { case full }
 
 /// Public text/name snapshots only. Full native frames, local URLs, attachment bytes and action tokens have no representation here.
 actor NativeSavedConversations {
@@ -114,11 +122,18 @@ actor NativeSavedConversations {
     func search(_ query: String, filter: NativeSavedFilter) async throws -> [NativeSavedMetadata] {
         await acquire(); defer { release() }
         let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        return Self.order(try await read().0.filter { entry in
-            (filter != .pinned || entry.pinned == true) && (filter != .files || entry.transcript.hasFiles) &&
-            (needle.isEmpty || entry.title.localizedStandardContains(needle) || entry.transcript.title.localizedStandardContains(needle) ||
-                entry.transcript.messages.contains { $0.text.localizedStandardContains(needle) || $0.attachments.contains { $0.localizedStandardContains(needle) } })
-        }).map(\.metadata)
+        let values = try await read().0
+        let matches = values.filter { entry in
+            if filter == .pinned && entry.pinned != true { return false }
+            if filter == .files && !entry.transcript.hasFiles { return false }
+            if needle.isEmpty || entry.title.localizedStandardContains(needle) || entry.transcript.title.localizedStandardContains(needle) { return true }
+            for message in entry.transcript.messages {
+                if message.text.localizedStandardContains(needle) { return true }
+                if message.attachments.contains(where: { $0.localizedStandardContains(needle) }) { return true }
+            }
+            return false
+        }
+        return Self.order(matches).map(\.metadata)
     }
 
     func save(scope: NativeHistoryScope, transcript: NativePublicTranscript) async throws -> NativeSavedConversation {

@@ -16,10 +16,11 @@ struct NativePreviousTranscriptsView: View {
                     else if entries.isEmpty && notice == nil { Text("No previous transcripts").foregroundStyle(.secondary) }
                     ForEach(entries) { entry in
                         NavigationLink {
-                            NativePhysicalTranscriptView(controller: controller, id: entry.id, expectedScope: scope)
+                            NativePhysicalTranscriptView(controller: controller, id: entry.id, expectedScope: scope).id(entry.id)
                         } label: {
                             VStack(alignment: .leading, spacing: 5) {
-                                Text(Date(timeIntervalSince1970: Double(entry.savedAt) / 1_000), style: .date)
+                                if let date = historyDate(Double(entry.savedAt)) { Text(date, style: .date) }
+                                else { Text("Saved on this device") }
                                 Text(ByteCountFormatter.string(fromByteCount: Int64(entry.byteCount), countStyle: .file))
                                     .font(.caption).foregroundStyle(.secondary)
                             }.padding(.vertical, 3)
@@ -47,9 +48,10 @@ private struct NativePhysicalTranscriptView: View {
     let expectedScope: NativeHistoryScope
     @State private var value: NativeConversation?
     @State private var notice: String?
-    @State private var busy = false
+    private var busy: Bool { operationState.isBusy }
     @State private var visible = true
     @State private var share: NativeMediaShare?
+    @State private var operationState = NativeHistoryOperation()
     @State private var preview: NativeMediaPreview?
     @State private var previewRequest: UUID?
     @State private var loadTask: Task<Void, Never>?
@@ -104,7 +106,7 @@ private struct NativePhysicalTranscriptView: View {
         } message: { Text(notice ?? "") }
         .onAppear { visible = true }
         .onDisappear {
-            visible = false; previewRequest = nil; loadTask?.cancel(); loadTask = nil
+            visible = false; operationState.retire(); previewRequest = nil; loadTask?.cancel(); loadTask = nil
             let abandoned = share
             Task { await abandoned?.releaseIfUnpresented() }
         }
@@ -130,14 +132,15 @@ private struct NativePhysicalTranscriptView: View {
         }
     }
     private func export(_ format: NativeHistoryExportFormat) {
-        guard visible, !busy, share == nil, let value else { return }; busy = true
+        guard visible, !busy, share == nil, let value else { return }
+        guard let operation = operationState.begin() else { return }
         Task {
-            defer { busy = false }
+            defer { operationState.finish(operation) }
             do {
                 let prepared = try await controller.sharePhysical(value, title: String(localized: "Previous transcripts"), format: format)
-                guard visible else { await prepared.releaseIfUnpresented(); return }
+                guard visible, operationState.owns(operation) else { await prepared.releaseIfUnpresented(); return }
                 share = prepared
-            } catch { if visible { notice = NativeHistoryController.failureText(error) } }
+            } catch { if visible && operationState.owns(operation) { notice = NativeHistoryController.failureText(error) } }
         }
     }
 }

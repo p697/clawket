@@ -124,7 +124,7 @@ extension NativeConversation {
     }
 
     func validateMedia() throws {
-        guard version == 1, revision >= 0, draftResourceIDs.count <= 6,
+        guard version == 1, revision >= 0, revision < 9_007_199_254_740_991, draftResourceIDs.count <= 6,
               Set(draftResourceIDs).count == draftResourceIDs.count,
               physicalSessionID == nil || (!physicalSessionID!.isEmpty && physicalSessionID!.utf8.count <= 2_048),
               Set(messages.map(\.id)).count == messages.count else { throw StoreFailure.invalidDocument }

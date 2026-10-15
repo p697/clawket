@@ -8,10 +8,11 @@ extension NativeAppModel {
         do {
             historyController = try NativeHistoryController(saved: NativeSavedConversations(), conversations: cache,
                 media: media, runtime: runtime, exports: NativeHistoryExportCache(), current: { [weak self] context in
-                    guard let self else { return false }
+                    guard let self, let selected = self.presentation.selectedConversation else { return false }
+                    guard NativeHistoryScope(selected) == NativeHistoryScope(context.route) else { return false }
                     return context.activation == self.activationRevision && context.wire == self.wireRevision &&
-                        context.selection == self.selectionRevision && context.route == self.presentation.selectedConversation &&
-                        context.route.connectionID == self.activeConnectionID && self.state.phase == .ready &&
+                        context.selection == self.selectionRevision &&
+                        historySame(context.route.connectionID, self.activeConnectionID) && self.state.phase == .ready &&
                         context.epoch == self.documents[context.route]?.historyEpoch
                 })
             presentation.features[.savedHistory] = .available

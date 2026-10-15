@@ -4,6 +4,20 @@ import Foundation
 
 enum NativeHistoryFailure: Error, Equatable { case invalid, full, changed, missing, unavailable, commitUncertain }
 
+/// Presentation ownership only. A disappearing/reappearing view cannot adopt an
+/// earlier preparation or let its old defer unlock a replacement operation.
+struct NativeHistoryOperation: Sendable {
+    private var id: UUID?
+    var isBusy: Bool { id != nil }
+    mutating func begin() -> UUID? {
+        guard id == nil else { return nil }
+        let value = UUID(); id = value; return value
+    }
+    func owns(_ value: UUID) -> Bool { id == value }
+    mutating func finish(_ value: UUID) { if owns(value) { id = nil } }
+    mutating func retire() { id = nil }
+}
+
 struct NativeHistoryScope: Codable, Hashable, Sendable {
     let connectionID: String
     let agentID: String
@@ -84,6 +98,10 @@ func historySame(_ lhs: String?, _ rhs: String?) -> Bool {
     case let (lhs?, rhs?): Data(lhs.utf8) == Data(rhs.utf8)
     default: false
     }
+}
+func historyDate(_ milliseconds: Double) -> Date? {
+    guard milliseconds.isFinite, milliseconds > 0, milliseconds <= 253_402_300_799_999 else { return nil }
+    return Date(timeIntervalSince1970: milliseconds / 1_000)
 }
 func historyDigest(_ value: String) -> Bool {
     value.utf8.count == 64 && value.utf8.allSatisfy { (48...57).contains($0) || (97...102).contains($0) }

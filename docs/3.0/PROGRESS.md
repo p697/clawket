@@ -1,5 +1,11 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-16 Native 保存会话、惰性物理档案与显式导出（实际 physical rollover caller/设备验收另行接入）。
+  - NativeConversation v1 兼容增加本地 historyEpoch/实际 physicalSessionID；missing/empty 首次绑定与 exact revision/epoch/hash rollover 共用现有串行存储。原文单独不可变8 MiB body、小 manifest、持久 intent 与 old/replacement SHA恢复；第三版本/腐败/未知提交拒绝覆盖，草稿、原 outbox ID/key/delivery/输入资源保持。普通写也核 identity与64 MiB最坏受影响 current/rollback/temp峰值，128份满额明确失败、无静默淘汰；current/rollback/archive/pending资源并集后才允许回收。Root 后续绑定真实 reset/physical变化，不把存储 API 称为 reset 已验收。
+  - 真实原生 Saved conversations 列表/惰性只读详情、pin/rename/delete/filter、单份 Markdown/JSON与完整会话 Save/export 接实际 consumer；保持 Mobile 100份/单500k UTF16/总1m/JSON4m预算及原公开 schema。search/bulk 默认关闭直到权威 Pro consumer，缓存不授购买或 wire 权限；Previous transcripts 只读本机原文，附件仅 runtime:nil 已有缓存，导出明确 device-loaded partial。共享文件独立受保护临时副本、操作 UUID 退休与 actual system-completion lease，关闭/重入不复活旧分享、不删源。
+  - Runtime 完整导出使用独立 caller-owned current-scope 只读 RPC，不加入 UI history/thinking链；90秒绝对截止、100页/10k身份/2m UTF16、真实provided-ID重叠/physical scope/最终fresh head复验，不完整limit窗口拒绝。纯读三方法/八输入严格 Swift6/jobs2通过；host本机逐文件 Physical8、Limits7、Saved7、Export7共29项真实macOS核心测试通过（含八crash点、原文精确8MiB、第三版本、NFC/NFD、普通写quota与迟到旧epoch），五项UIKit分享回归实际执行交CI。
+  - heavy/ios 下实际 iOS16.4双架构generic build-for-testing最终146 App方法编译成功，无本机Simulator启动/执行；19语393 UI+4用途共7,543精确编译值一致。35条history文案含26条复用Mobile/9条真译，源码6、资源4、报告3、文档15指令对/7回归与diff全部通过后释放租约。完整仓库/实际App门禁随后PR CI执行，未改服务/凭据/版本/发布；真实系统分享/大文本/physical rollover/同bundle旧Saved采用与Pro仍单独验收。实现边界见 `docs/native-ios/HISTORY.md`。
+
 - 2026-10-16 Native Settings/免费外观与导航恢复（独立切片，完整外观/升级/真机验收另行进行）。
   - 原生Settings首页复用真实连接操作、系统App设置与安装包版本；实际Mobile外观均免费、仅AppIcon需Pro，因此接入system/light/dark、六真实双scheme accent、12…20字号+DynamicType、默认关闭Agent头像签名。主题验证保存后立即生效；聊天外观编辑隔离draft/Reset/Save，Back不提交；不伪造Pro、壁纸/图标资产或语言控件。作者归属/participant与Agent上下文badge不由偏好改变。
   - 独立受保护双代文档各限256KiB/JS-safe revision，导航最多128连接目标/128阅读上下文；串行忽略迟到旧快照，只取消debounce、不取消原子写，unknown提交封闭至重开，失败不抹旧数据或阻断连接库。仅存字节精确route/catalog/render anchor，不存Runtime ref/run/consent/dispatch权限。缓存命中保留pending至fresh catalog验证，fresh缺失/归档回同Agent picker，不猜main；暂停连接可读缓存而不自动重连。
