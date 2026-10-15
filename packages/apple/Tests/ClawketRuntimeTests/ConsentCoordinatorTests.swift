@@ -123,4 +123,24 @@ struct ConsentCoordinatorTests {
         #expect(await socket.requests("exec.approval.resolve").isEmpty)
         await runtime.disconnect(); reader.cancel()
     }
+
+    @Test func currentGatewayExecutionEventRetainsItsAdvertisedDecisionBoundary() async throws {
+        let socket = ScriptSocket(initial: [challengeFrame]) { request, socket in
+            try await socket.reply(request, payload: request["method"]?.stringValue == "connect" ? hello : .object(["ok": .bool(true)]))
+        }
+        let runtime = try RuntimeCoordinator(credentials: Credentials(), socketFactory: ScriptFactory(socket))
+        let reader = read(runtime, into: Events())
+        try await runtime.activate(connection(.openclaw))
+        try await socket.emit(event("exec.approval.requested", .object(["id": .string("current"), "expiresAtMs": .null,
+            "request": .object(["sessionKey": .string("s"), "command": .string("git status"),
+                "allowedDecisions": .array([.string("allow-once"), .string("deny")])])])))
+        try await eventually { (try? await runtime.pendingRequests().approvals.count) == 1 }
+        let approval = try await runtime.pendingRequests().approvals[0]
+        #expect(approval.reference.sessionKey == "s"); #expect(approval.decisions == [.allowOnce, .deny])
+        do { try await runtime.resolve(approval.reference, decision: .allowAlways); Issue.record("Unadvertised Always accepted") }
+        catch let failure as RuntimeFailure { #expect(failure.code == .unsupported) }
+        try await runtime.resolve(approval.reference, decision: .allowOnce)
+        #expect(await socket.requests("exec.approval.resolve")[0]["params"] == .object(["id": .string("current"), "decision": .string("allow-once")]))
+        await runtime.disconnect(); reader.cancel()
+    }
 }

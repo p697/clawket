@@ -60,6 +60,22 @@ struct ConsentContractTests {
         #expect(throws: RuntimeFailure.self) { try ConsentWire.answer(.form(["q0": ["Unknown"]]), question: single) }
     }
 
+    @Test func currentGatewayAllowedDecisionsAreExplicitEvidenceWithoutBroadeningOtherBackends() throws {
+        // OpenClaw 2026.10.2 exec-approval request advertises allowedDecisions on its request.
+        var raw = execution(decisions: nil).object!
+        raw["allowedDecisions"] = .array([.string("allow-once"), .string("deny")])
+        let (_, parsed) = try ConsentWire.approval(.object(raw), sessionKey: "s", connection: connection(.openclaw))
+        guard case .approval(let approval) = parsed else { Issue.record("Missing current Gateway approval"); return }
+        #expect(approval.decisions == [.allowOnce, .deny])
+        let (_, hermes) = try ConsentWire.approval(.object(raw), sessionKey: "s", connection: connection(.hermes))
+        guard case .approval(let other) = hermes else { return }
+        #expect(other.decisions.isEmpty)
+        raw["decisions"] = .array([.string("allow-always"), .string("deny")])
+        #expect(throws: RuntimeFailure.self) { try ConsentWire.approval(.object(raw), sessionKey: "s", connection: connection(.openclaw)) }
+        raw["decisions"] = raw["allowedDecisions"]
+        #expect(try ConsentWire.approval(.object(raw), sessionKey: "s", connection: connection(.openclaw)).0.wireID == "approval")
+    }
+
     @Test func piConfirmAndSelectionHaveSeparateWireShapes() throws {
         for kind in ["confirm", "select", "input", "editor"] {
             let (_, parsed) = try ConsentWire.question(inputQuestion(kind: kind), sessionKey: "s", connection: connection(.pi))

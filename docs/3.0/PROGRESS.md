@@ -6,7 +6,8 @@
   - canonical work 保留工具输入/输出、producer 时间/状态、turn/input lineage 与独立 commentary item；unknown 不证明执行。Host 绑定与真机问答/审批验收仍待后续，不以库测试代替完整功能验收。
   - 重基认证兼容主线后，原生 CI 捕获真实 URLSession Upgrade 取消竞态：native cancel 的 completion 先把 open 置为 failed。改为先完成 closed 再取消原生 Task，并将已取消 open 的抛错统一为 closed；保留真实 stalled-Upgrade 测试及原断言。空闲进程预检、heavy/jobs2 下逐文件 URLSessionSocketTests 4项/6输入通过，随后立即释放租约。
   - UI 联查修正 custom-only 表单边界：没有预设选项的多选字段仍允许单个明确支持的自定义回答，多条自定义或混合自定义/预设选择继续拒绝；heavy/jobs2 单文件 ConsentContractTests 6项复验通过并释放租约。
-  - `heavy` 下 jobs=2 逐文件通过 `ConsentContractTests`6、`ConsentCoordinatorTests`6（额外六/两后端参数输入）、`ConsentLifecycleTests`8，共20项/26输入。首轮修正测试 await/autoclosure 编译问题及嵌套字典修改的 Swift exclusivity 冲突后复验通过；补并发读取、草稿键和异常 ACK 回归后相关文件再次通过。首轮 Native CI 发现98项并全通过（77 Swift Testing、21 XCTest），8份UI源码 iOS16.4 类型检查通过；原仓库各门禁通过但 Windows 既有 supervisor 进程测试107行超时，保留证据后仅重跑该作业。重基新 host 后仅补显式新枚举分支并维持动作隐藏，完整门禁继续 CI。文档10对指令/7回归与 diff 检查通过。本轮新增 Swift 源757行、测试422行；原 TS/TSX 统计167,902/132,119不变。无版本变更或发布。
+  - 对照本机安装的 OpenClaw 2026.10.2 源码，兼容执行请求明确声明的 allowedDecisions，双字段冲突拒绝且不扩展 Hermes/SDK；新增纯解析与真实事件到 resolve 的两项回归交完整原生 CI，本机遵守正在进行的真机开发构建租约，不并行编译。
+  - `heavy` 下 jobs=2 逐文件通过 `ConsentContractTests`6、`ConsentCoordinatorTests`6（额外六/两后端参数输入）、`ConsentLifecycleTests`8，共20项/26输入。首轮修正测试 await/autoclosure 编译问题及嵌套字典修改的 Swift exclusivity 冲突后复验通过；补并发读取、草稿键和异常 ACK 回归后相关文件再次通过。首轮 Native CI 发现98项并全通过（77 Swift Testing、21 XCTest），8份UI源码 iOS16.4 类型检查通过；原仓库各门禁通过但 Windows 既有 supervisor 进程测试107行超时，保留证据后仅重跑该作业。重基新 host 后仅补显式新枚举分支并维持动作隐藏，完整门禁继续 CI。文档10对指令/7回归与 diff 检查通过。本轮新增 Swift 源762行、测试458行；原 TS/TSX 统计167,902/132,119不变。无版本变更或发布。
 
 - 2026-10-16 原生 iOS 本地化源码（负责人授权，完整设备语言验收仍为最终迁移门槛）。
   - 按真实 `ClawketUI` 八份源码与 native host 清点 195 条界面/无障碍文案（含新增会话/未知创建恢复提示），新增主 App bundle 字符串目录及逐项来源清单。64 条术语复用现有 Mobile 19 语言译文，其余 131 条逐语言翻译；当前全部 19 语言各 195/195，并增加相机/本地网络两条系统权限用途各 19 语言，共 3,743 条语言单元，无英文占位填充的伪完成。西班牙/拉美、巴西/葡萄牙保留区域术语差异。

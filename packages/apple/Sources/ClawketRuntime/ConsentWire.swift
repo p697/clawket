@@ -47,7 +47,12 @@ enum ConsentWire {
         case "exec":
             keyKind = .execution; approvalKind = .execution
             _ = try string(raw["command"], max: 128_000, required: true, nonempty: false)
-            if let advertised = raw["decisions"] {
+            var advertised = raw["decisions"]
+            if connection.backendKind == .openclaw, let allowed = raw["allowedDecisions"] {
+                guard advertised == nil || advertised == allowed else { throw RuntimeFailure(.invalidResponse) }
+                advertised = allowed
+            }
+            if let advertised {
                 guard let values = advertised.array, values.count <= 3 else { throw RuntimeFailure(.invalidResponse) }
                 var seen = Set<String>()
                 for value in values {
