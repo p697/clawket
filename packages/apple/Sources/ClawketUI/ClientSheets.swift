@@ -70,7 +70,7 @@ struct ClientSheetView: View {
                     .accessibilityIdentifier("session-\(session.id)")
                 }
                 if rows.isEmpty {
-                    Text(search.isEmpty ? "No conversations yet" : "No matching conversations")
+                    Text(search.isEmpty ? String(localized: "No conversations yet") : String(localized: "No matching conversations"))
                         .foregroundStyle(.secondary).frame(minHeight: 60)
                 }
             }
@@ -100,7 +100,7 @@ struct ClientSheetView: View {
                         }
                     } label: {
                         HStack {
-                            Label(catalog.projects.first(where: { $0.id == catalog.selectedProjectID })?.title ?? "All projects", systemImage: "folder")
+                            Label(catalog.projects.first(where: { $0.id == catalog.selectedProjectID })?.title ?? String(localized: "All projects"), systemImage: "folder")
                             Spacer()
                             Image(systemName: "chevron.up.chevron.down").font(.caption)
                         }.frame(minHeight: 44)
@@ -141,12 +141,12 @@ struct ClientSheetView: View {
                         }
                     }.padding(.vertical, 12)
                 } else if rows.isEmpty {
-                    Text(search.isEmpty ? "No conversations yet" : "No matching conversations")
+                    Text(search.isEmpty ? String(localized: "No conversations yet") : String(localized: "No matching conversations"))
                         .foregroundStyle(.secondary).frame(minHeight: 60)
                 }
             }
         }
-        .navigationTitle(catalog?.title ?? "Conversations")
+        .navigationTitle(catalog?.title ?? String(localized: "Conversations"))
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $search, prompt: "Search conversations")
     }

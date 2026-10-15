@@ -38,15 +38,15 @@ Host changes required at the current source snapshot:
 | `ConnectionsView` | Use the catalog format `%@ · Native development` for the version value, with the version as an untranslated argument. Keep saved connection labels unchanged. |
 | App resource setup | Add the catalog to the app's Resources phase and declare the same 19 known regions. The package has no separate localization resource bundle. |
 
-Presentation-library follow-up required after its first merge (no public API change needed):
+Presentation-library binding applied in this branch (public types unchanged; app integration and iOS compilation are separate checks):
 
 | Source | Dynamic defaults/helper arguments requiring explicit localization |
 | --- | --- |
-| `ClientPresentation` | Default `Agents`, empty-state heading/detail and `Send` are stored as `String`, so the host must supply localized values or the defaults must resolve at initialization. |
-| `NativeClientView` | The detail welcome sentence passed to `WelcomeContent`; the app-owned fragments composing roster accessibility labels; conditional accessibility values. Names/previews stay verbatim. |
-| `NativeComposer` | Titles passed through `attachmentAction`/`destinationAction`; conditional collapse/expand and stop accessibility labels; preview/remove/preparing accessibility interpolation. The host provides an already localized `sendLabel`. |
-| `ClientSheets` | Conditional empty-state strings, `All projects`/`Conversations` fallbacks beside real project/catalog names. |
-| `MessageContentView` | `Code`, question-placeholder and permission-scope fallback sentences; outcome labels; titles passed to `decisionButton`. Existing `MessageAction.title` and default `MessageDelivery.label` already use localization APIs. |
+| `ClientPresentation` | Default `Agents`, empty-state heading/detail and `Send` resolve at initialization. Caller-supplied presentation strings stay verbatim. |
+| `NativeClientView` | The detail welcome sentence and app-owned roster accessibility fragments resolve explicitly. Private action labels accept `LocalizedStringKey`; names/previews stay verbatim. |
+| `NativeComposer` | Private action helpers accept localizable label keys. Conditional editor/stop labels resolve before becoming runtime strings; preview/remove/preparing accessibility values use localized `Text` interpolation. The host supplies an already localized `sendLabel`. |
+| `ClientSheets` | Conditional empty-state strings and `All projects`/`Conversations` fallbacks resolve explicitly beside real project/catalog names. |
+| `MessageContentView` | Only `Code`, question-placeholder and permission-scope fallbacks are translated; outcomes and decision labels are localizable. Backend question/approval text remains verbatim. Existing action/delivery labels already used localization APIs. |
 
 These changes localize fixed app text, not arbitrary strings received over the wire. Source additions after this inventory must add an actual catalog entry and update the inventory rather than relying on English fallback.
 

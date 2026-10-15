@@ -107,7 +107,7 @@ struct NativeTranscript: UIViewRepresentable {
 
         private func configureHistory(in table: UITableView) {
             guard parent.historyAvailability.isVisible else { table.tableHeaderView = nil; return }
-            historyButton.setTitle(String(localized: parent.isLoadingHistory ? "Loading earlier messages…" : "Earlier messages"), for: .normal)
+            historyButton.setTitle(parent.isLoadingHistory ? String(localized: "Loading earlier messages…") : String(localized: "Earlier messages"), for: .normal)
             historyButton.titleLabel?.font = UIFont.preferredFont(forTextStyle: .footnote)
             historyButton.titleLabel?.adjustsFontForContentSizeCategory = true
             historyButton.isEnabled = parent.historyAvailability.isEnabled && !parent.isLoadingHistory

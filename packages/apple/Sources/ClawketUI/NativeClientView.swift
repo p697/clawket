@@ -30,7 +30,7 @@ public struct NativeClientView: View {
                         .background(Color(uiColor: .systemBackground))
                 }
             } else {
-                WelcomeContent(title: model.emptyTitle, detail: "Choose an agent to continue a conversation.")
+                WelcomeContent(title: model.emptyTitle, detail: String(localized: "Choose an agent to continue a conversation."))
             }
         }
         .navigationSplitViewStyle(.balanced)
@@ -149,7 +149,7 @@ public struct NativeClientView: View {
                     .frame(minWidth: 44, minHeight: 44)
                     .disabled(!model.availability(.account).isEnabled)
                     .accessibilityLabel("Account settings")
-                    .accessibilityValue(model.accountAttentionCount > 0 ? "Needs attention" : "")
+                    .accessibilityValue(model.accountAttentionCount > 0 ? String(localized: "Needs attention") : "")
                 }
             }
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -232,9 +232,9 @@ private struct AgentRow: View {
         }
         .padding(.vertical, 2)
         .accessibilityElement(children: .combine)
-        .accessibilityValue([agent.backendLabel, agent.timeLabel, agent.unread ? "Unread messages" : nil,
-                             agent.attention == .approval ? "Approval needed" : nil,
-                             agent.attention == .input ? "Input needed" : nil].compactMap { $0 }.joined(separator: ", "))
+        .accessibilityValue([agent.backendLabel, agent.timeLabel, agent.unread ? String(localized: "Unread messages") : nil,
+                             agent.attention == .approval ? String(localized: "Approval needed") : nil,
+                             agent.attention == .input ? String(localized: "Input needed") : nil].compactMap { $0 }.joined(separator: ", "))
     }
 
     private var avatar: some View {
@@ -394,7 +394,7 @@ private struct NativeConversationView: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(!conversation.availability(.sessions).isEnabled)
-                    .accessibilityLabel("\(conversation.agentName), \(conversation.sessionTitle), conversations")
+                    .accessibilityLabel(Text("\(conversation.agentName), \(conversation.sessionTitle), conversations"))
                     .accessibilityIdentifier("conversation-sessions")
                 } else { headerTitle(showChevron: false) }
             }
@@ -448,7 +448,7 @@ private struct NativeConversationView: View {
     }
 
     @ViewBuilder
-    private func destinationButton(_ title: String, symbol: String, feature: ClientFeature, destination: ClientDestination) -> some View {
+    private func destinationButton(_ title: LocalizedStringKey, symbol: String, feature: ClientFeature, destination: ClientDestination) -> some View {
         if conversation.availability(feature).isVisible {
             Button {
                 onIntent(.openDestination(destination, conversation: conversation.id))

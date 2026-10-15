@@ -77,7 +77,7 @@ struct NativeMessageRow: View {
         case let .code(language, text):
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Text(language ?? "Code").font(.caption.weight(.medium)).foregroundStyle(.secondary)
+                    Text(language ?? String(localized: "Code")).font(.caption.weight(.medium)).foregroundStyle(.secondary)
                     Spacer()
                     Button {
                         UIPasteboard.general.string = text
@@ -219,7 +219,7 @@ struct ApprovalContentView: View {
                 .background(Color(uiColor: .tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
             if let outcome = approval.outcome {
-                Label(outcome == .allowed ? "Allowed" : outcome == .denied ? "Denied" : "Expired",
+                Label(outcome == .allowed ? String(localized: "Allowed") : outcome == .denied ? String(localized: "Denied") : String(localized: "Expired"),
                       systemImage: outcome == .allowed ? "checkmark.circle" : outcome == .denied ? "xmark.circle" : "clock")
                     .font(.subheadline).foregroundStyle(.secondary)
             } else {
@@ -239,7 +239,7 @@ struct ApprovalContentView: View {
         .confirmationDialog("Always allow this action?", isPresented: $confirmingAlways, titleVisibility: .visible) {
             Button("Always allow") { onIntent(.resolveApproval(approvalID: approval.id, decision: .allowAlways)) }
         } message: {
-            Text(approval.scope ?? "This permission applies beyond this single request.")
+            Text(approval.scope ?? String(localized: "This permission applies beyond this single request."))
         }
         .accessibilityIdentifier("approval-\(approval.id)")
     }
@@ -269,7 +269,7 @@ struct ApprovalContentView: View {
         }
     }
 
-    private func decisionButton(_ decision: ApprovalDecision, title: String) -> some View {
+    private func decisionButton(_ decision: ApprovalDecision, title: LocalizedStringKey) -> some View {
         Button {
             onIntent(.resolveApproval(approvalID: approval.id, decision: decision))
         } label: {
@@ -326,7 +326,7 @@ private struct QuestionContentView: View {
                             .accessibilityAddTraits(answer(for: field).selectedOptionIDs.contains(option.id) ? .isSelected : [])
                         }
                         if field.options.isEmpty || field.allowsCustom {
-                            TextField(field.placeholder ?? "Your answer", text: Binding(get: {
+                            TextField(field.placeholder ?? String(localized: "Your answer"), text: Binding(get: {
                                 answer(for: field).text
                             }, set: { text in
                                 var value = answer(for: field); value.text = text
@@ -335,7 +335,7 @@ private struct QuestionContentView: View {
                             }), axis: .vertical)
                             .textFieldStyle(.roundedBorder).lineLimit(1...8)
                             .disabled(question.isSubmitting)
-                            .accessibilityLabel(field.title.isEmpty ? "Your answer" : field.title)
+                            .accessibilityLabel(field.title.isEmpty ? String(localized: "Your answer") : field.title)
                         }
                     }
                 }

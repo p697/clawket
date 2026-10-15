@@ -58,7 +58,7 @@ struct NativeComposer: View {
                                     .contentShape(Rectangle())
                             }
                             .disabled(!conversation.availability(.models).isEnabled)
-                            .accessibilityLabel("Model: \(modelTitle)")
+                            .accessibilityLabel(Text("Model: \(modelTitle)"))
                             .accessibilityHint(conversation.modelScopeLabel ?? "")
                             .accessibilityIdentifier("composer-model")
                         }
@@ -68,7 +68,7 @@ struct NativeComposer: View {
                                 Image(systemName: expanded ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
                                     .font(.caption).foregroundStyle(.secondary).frame(minWidth: 44, minHeight: 36)
                             }
-                            .accessibilityLabel(expanded ? "Collapse editor" : "Expand editor")
+                            .accessibilityLabel(expanded ? String(localized: "Collapse editor") : String(localized: "Expand editor"))
                             .accessibilityIdentifier("composer-expand")
                         }
                     }
@@ -149,7 +149,7 @@ struct NativeComposer: View {
                 .background(hasContent ? Color(uiColor: .secondarySystemBackground) : Color.primary, in: Circle())
         }
         .disabled(!conversation.availability(.stop).isEnabled)
-        .accessibilityLabel(conversation.availability(.stop).isEnabled ? "Stop task" : "Stopping task")
+        .accessibilityLabel(conversation.availability(.stop).isEnabled ? String(localized: "Stop task") : String(localized: "Stopping task"))
         .accessibilityIdentifier("composer-stop")
     }
 
@@ -210,7 +210,7 @@ struct NativeComposer: View {
     }
 
     @ViewBuilder
-    private func attachmentAction(_ title: String, symbol: String, feature: ClientFeature, source: AttachmentSource) -> some View {
+    private func attachmentAction(_ title: LocalizedStringKey, symbol: String, feature: ClientFeature, source: AttachmentSource) -> some View {
         if conversation.availability(feature).isVisible {
             Button { onIntent(.pickAttachment(conversation.id, source: source)) } label: {
                 Label(title, systemImage: symbol)
@@ -219,7 +219,7 @@ struct NativeComposer: View {
     }
 
     @ViewBuilder
-    private func destinationAction(_ title: String, symbol: String, feature: ClientFeature, destination: ClientDestination) -> some View {
+    private func destinationAction(_ title: LocalizedStringKey, symbol: String, feature: ClientFeature, destination: ClientDestination) -> some View {
         if conversation.availability(feature).isVisible {
             Button { onIntent(.openDestination(destination, conversation: conversation.id)) } label: {
                 Label(title, systemImage: symbol)
@@ -255,7 +255,7 @@ private struct ComposerAttachmentView: View {
                 }.frame(maxWidth: 160, alignment: .leading)
             }
             switch attachment.phase {
-            case .preparing: ProgressView().accessibilityLabel("Preparing \(attachment.name)")
+            case .preparing: ProgressView().accessibilityLabel(Text("Preparing \(attachment.name)"))
             case .failed: Image(systemName: "exclamationmark.circle").foregroundStyle(.orange).accessibilityLabel("Attachment failed")
             case .ready: EmptyView()
             }
@@ -263,7 +263,7 @@ private struct ComposerAttachmentView: View {
                 Button(action: onRemove) {
                     Image(systemName: "xmark.circle.fill").font(.body).foregroundStyle(.secondary)
                         .frame(width: 44, height: 56).contentShape(Rectangle())
-                }.accessibilityLabel("Remove \(attachment.name)")
+                }.accessibilityLabel(Text("Remove \(attachment.name)"))
             }
         }
         .padding(4)
@@ -282,7 +282,7 @@ private struct AttachmentPreviewInteraction: ViewModifier {
         if canOpen {
             Button(action: open) { content }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Preview \(name)")
+                .accessibilityLabel(Text("Preview \(name)"))
         } else { content }
     }
 }
@@ -380,7 +380,7 @@ private struct VoiceCaptureControl: UIViewRepresentable {
         button.action = action
         button.setImage(UIImage(systemName: isRecording ? "stop.circle" : "mic"), for: .normal)
         button.tintColor = .label
-        button.accessibilityLabel = String(localized: isRecording ? "Stop recording" : "Start voice input")
+        button.accessibilityLabel = isRecording ? String(localized: "Stop recording") : String(localized: "Start voice input")
         button.accessibilityHint = String(localized: "Tap to record. Hold and release to send. Slide up to cancel.")
     }
 }

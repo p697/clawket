@@ -388,7 +388,7 @@ public struct ConversationPresentation: Identifiable, Hashable, Sendable {
     public init(id: ConversationID, agentName: String, sessionTitle: String, subtitle: String? = nil,
                 messages: [MessagePresentation] = [], connection: ConnectionPresentation = .init(),
                 sessions: [SessionPresentation] = [], models: [ModelPresentation] = [],
-                modelTitle: String? = nil, modelScopeLabel: String? = nil, sendLabel: String = "Send",
+                modelTitle: String? = nil, modelScopeLabel: String? = nil, sendLabel: String = String(localized: "Send"),
                 isLoading: Bool = false, isLoadingHistory: Bool = false,
                 features: [ClientFeature: ActionAvailability] = [:]) {
         self.id = id; self.agentName = agentName; self.sessionTitle = sessionTitle; self.subtitle = subtitle
@@ -453,12 +453,13 @@ public final class ClientPresentation: ObservableObject {
     /// Connection-wide consents remain separate from transcript-owned approvals.
     @Published public var connectionApprovals: [ApprovalPresentation]
 
-    public init(title: String = "Agents", agents: [AgentPresentation] = [],
+    public init(title: String = String(localized: "Agents"), agents: [AgentPresentation] = [],
                 selectedConversation: ConversationID? = nil,
                 conversations: [ConversationID: ConversationPresentation] = [:],
                 catalogs: [AgentCatalogID: AgentCatalogPresentation] = [:],
                 connection: ConnectionPresentation = .init(), isLoading: Bool = false,
-                emptyTitle: String = "Your agents, within reach", emptyDetail: String = "Connect an agent to continue conversations and keep work moving.",
+                emptyTitle: String = String(localized: "Your agents, within reach"),
+                emptyDetail: String = String(localized: "Connect an agent to continue conversations and keep work moving."),
                 accountAttentionCount: Int = 0, features: [ClientFeature: ActionAvailability] = [:],
                 drafts: [ConversationID: ComposerDraft] = [:], questionResponses: [String: QuestionResponse] = [:],
                 expandedContentIDs: Set<String> = [],
