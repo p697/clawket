@@ -111,7 +111,7 @@ public enum PairingParser {
                 port = parsed
             } else { port = 18789 }
             guard (1...65535).contains(port) else { throw PairingError.invalidPayload }
-            var parts = URLComponents(); parts.scheme = object["tls"] as? Bool == true ? "wss" : "ws"; parts.host = host; parts.port = port
+            var parts = URLComponents(); parts.scheme = object["tls"] as? Bool == true ? "wss" : "ws"; parts.host = host.contains(":") && !host.hasPrefix("[") ? "[\(host)]" : host; parts.port = port
             guard let raw = parts.url else { throw PairingError.invalidPayload }; url = try pairingSocketURL(raw.absoluteString)
         } else { throw PairingError.invalidPayload }
         var bootstrap: PairingBootstrap?

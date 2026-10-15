@@ -74,10 +74,24 @@ final class PairingHTTPClientTests: XCTestCase, @unchecked Sendable {
     }
 
     func testDeclaredOversizedBodyIsRejectedBeforeWaitingForBody() async throws {
-        let url = PairingURLProtocol.fixtures.install(.init(body: Data(), headers: ["Content-Length": "1000"], hold: true))
-        let client = client()
-        do { _ = try await client.execute(URLRequest(url: url), maximumBytes: 32); XCTFail("Must reject") }
-        catch { XCTAssertEqual(error as? PairingError, .responseTooLarge) }
+        // Drive the header callback directly: URLProtocol can defer held-header callbacks until completion.
+        let session = URLSession(configuration: .ephemeral)
+        defer { session.invalidateAndCancel() }
+        let url = URL(string: "https://pairing-tests.invalid/")!
+        let task = session.dataTask(with: url) // Never resumed; no network request.
+        let bounded = BoundedPairingResponse(maximumBytes: 32)
+        let response = try XCTUnwrap(HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: ["Content-Length": "1000"]))
+        bounded.urlSession(session, dataTask: task, didReceive: response) { disposition in
+            XCTAssertEqual(disposition, .cancel)
+        }
+        // A late native cancellation must not replace the earlier precise size failure.
+        bounded.urlSession(session, task: task, didCompleteWithError: URLError(.cancelled))
+        do {
+            let _: PairingHTTPResponse = try await withCheckedThrowingContinuation { continuation in
+                _ = bounded.register(continuation)
+            }
+            XCTFail("Must reject before receiving any body bytes")
+        } catch { XCTAssertEqual(error as? PairingError, .responseTooLarge) }
     }
 
     func testCancellationTerminatesAnUnfinishedResponseBody() async throws {

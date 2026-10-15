@@ -25,7 +25,7 @@ final class PairingParserTests: XCTestCase, @unchecked Sendable {
         let stringPort = try PairingParser.parseQR("{\"host\":\"192.168.1.2\",\"port\":\"4000\",\"token\":\"test\"}")
         XCTAssertEqual(stringPort.url?.port, 4000)
         let ipv6 = try PairingParser.parseQR("{\"host\":\"::1\",\"port\":18789,\"password\":\"test\"}")
-        XCTAssertEqual(ipv6.url?.host, "::1")
+        XCTAssertEqual(ipv6.url?.absoluteString, "ws://[::1]:18789")
         let bootstrap = try PairingParser.parseQR("{\"url\":\"wss://gateway.invalid\",\"bootstrap\":{\"token\":\"temporary\",\"strategy\":\"mobile-setup\",\"access\":\"limited\"}}")
         XCTAssertEqual(bootstrap.bootstrap?.strategy, .mobileSetup); XCTAssertEqual(bootstrap.bootstrap?.access, .limited)
         let saved = try PairingParser.parseQR("{\"url\":\"wss://custom.invalid/ws\",\"relay\":{\"serverUrl\":\"https://custom.invalid\",\"gatewayId\":\"g\",\"clientToken\":\"synthetic\"}}")

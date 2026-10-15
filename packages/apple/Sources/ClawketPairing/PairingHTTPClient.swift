@@ -11,55 +11,123 @@ public protocol PairingHTTPClient: Sendable {
     func execute(_ request: URLRequest, maximumBytes: Int) async throws -> PairingHTTPResponse
 }
 
-private final class NoPairingRedirects: NSObject, URLSessionTaskDelegate, Sendable {
+/// URLSession callbacks and caller cancellation share one locked, exactly-once completion.
+final class BoundedPairingResponse: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+    private let lock = NSLock()
+    private let maximumBytes: Int
+    private var status: Int?
+    private var body = Data()
+    private var result: Result<PairingHTTPResponse, any Error>?
+    private var continuation: CheckedContinuation<PairingHTTPResponse, any Error>?
+
+    init(maximumBytes: Int) { self.maximumBytes = maximumBytes }
+
+    func register(_ continuation: CheckedContinuation<PairingHTTPResponse, any Error>) -> Bool {
+        lock.lock()
+        if let result {
+            lock.unlock()
+            continuation.resume(with: result)
+            return false
+        }
+        self.continuation = continuation
+        lock.unlock()
+        return true
+    }
+
+    func finish(_ result: Result<PairingHTTPResponse, any Error>) {
+        lock.lock()
+        guard self.result == nil else { lock.unlock(); return }
+        self.result = result
+        body = Data()
+        let continuation = continuation
+        self.continuation = nil
+        lock.unlock()
+        continuation?.resume(with: result)
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,
+                    completionHandler: @escaping @Sendable (URLSession.ResponseDisposition) -> Void) {
+        guard let http = response as? HTTPURLResponse else {
+            finish(.failure(PairingError.invalidResponse)); completionHandler(.cancel); return
+        }
+        guard response.expectedContentLength <= Int64(maximumBytes) else {
+            finish(.failure(PairingError.responseTooLarge)); completionHandler(.cancel); return
+        }
+        lock.lock()
+        let active = result == nil
+        if active { status = http.statusCode }
+        lock.unlock()
+        completionHandler(active ? .allow : .cancel)
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        lock.lock()
+        guard result == nil else { lock.unlock(); return }
+        guard data.count <= maximumBytes - body.count else {
+            lock.unlock()
+            finish(.failure(PairingError.responseTooLarge)); dataTask.cancel(); return
+        }
+        body.append(data)
+        lock.unlock()
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: (any Error)?) {
+        if let error {
+            let failure: any Error
+            if (error as? URLError)?.code == .cancelled { failure = CancellationError() }
+            else if (error as? URLError)?.code == .timedOut { failure = PairingError.timeout }
+            else { failure = PairingError.network }
+            finish(.failure(failure)); return
+        }
+        lock.lock()
+        let response = status.map { PairingHTTPResponse(status: $0, body: body) }
+        lock.unlock()
+        if let response { finish(.success(response)) }
+        else { finish(.failure(PairingError.invalidResponse)) }
+    }
+
     func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
                     newRequest request: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void) {
         completionHandler(nil)
     }
 }
 
-/// Ephemeral session, no cookies/cache, no redirects, streaming size enforcement (including chunked bodies).
+/// Per-request ephemeral session: no cookies/credentials/cache/redirects; bound headers and every data callback.
 public final class URLSessionPairingHTTPClient: PairingHTTPClient {
-    private let session: URLSession
+    private let configuration: URLSessionConfiguration
     public convenience init() { self.init(configuration: .ephemeral) }
 
     init(configuration: URLSessionConfiguration) {
-        configuration.httpCookieStorage = nil
-        configuration.urlCredentialStorage = nil
-        configuration.httpShouldSetCookies = false
-        configuration.urlCache = nil
-        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-        configuration.timeoutIntervalForRequest = PairingLimits.requestSeconds
-        configuration.timeoutIntervalForResource = PairingLimits.requestSeconds
-        session = URLSession(configuration: configuration, delegate: NoPairingRedirects(), delegateQueue: nil)
+        let copy = configuration.copy() as! URLSessionConfiguration
+        copy.httpCookieStorage = nil
+        copy.urlCredentialStorage = nil
+        copy.httpShouldSetCookies = false
+        copy.urlCache = nil
+        copy.requestCachePolicy = .reloadIgnoringLocalCacheData
+        copy.timeoutIntervalForRequest = PairingLimits.requestSeconds
+        copy.timeoutIntervalForResource = PairingLimits.requestSeconds
+        self.configuration = copy
     }
-
-    deinit { session.invalidateAndCancel() }
 
     public func execute(_ request: URLRequest, maximumBytes: Int) async throws -> PairingHTTPResponse {
         guard maximumBytes > 0, maximumBytes <= PairingLimits.responseBytes else { throw PairingError.responseTooLarge }
-        let session = self.session
-        do {
-            return try await pairingDeadline(seconds: PairingLimits.requestSeconds) {
-                let (bytes, response) = try await session.bytes(for: request)
-                defer { bytes.task.cancel() }
-                guard let http = response as? HTTPURLResponse else { throw PairingError.invalidResponse }
-                guard response.expectedContentLength <= Int64(maximumBytes) else { throw PairingError.responseTooLarge }
-                return try await withTaskCancellationHandler {
-                    var body = Data()
-                    for try await byte in bytes {
-                        try Task.checkCancellation()
-                        guard body.count < maximumBytes else { throw PairingError.responseTooLarge }
-                        body.append(byte)
-                    }
-                    return PairingHTTPResponse(status: http.statusCode, body: body)
-                } onCancel: { bytes.task.cancel() }
+        let response = BoundedPairingResponse(maximumBytes: maximumBytes)
+        let session = URLSession(configuration: configuration, delegate: response, delegateQueue: nil)
+        let task = session.dataTask(with: request)
+        defer { session.invalidateAndCancel() }
+        return try await withTaskCancellationHandler {
+            try Task.checkCancellation()
+            return try await pairingDeadline(seconds: PairingLimits.requestSeconds, onTimeout: {
+                response.finish(.failure(PairingError.timeout)); task.cancel()
+            }) {
+                try Task.checkCancellation()
+                return try await withCheckedThrowingContinuation { continuation in
+                    if response.register(continuation) { task.resume() }
+                }
             }
-        } catch is CancellationError { throw CancellationError() }
-        catch let error as PairingError { throw error }
-        catch let error as URLError where error.code == .cancelled { throw CancellationError() }
-        catch let error as URLError where error.code == .timedOut { throw PairingError.timeout }
-        catch { throw PairingError.network }
+        } onCancel: {
+            response.finish(.failure(CancellationError())); task.cancel()
+        }
     }
 }
 

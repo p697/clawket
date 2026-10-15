@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import Sodium
 import XCTest
 @testable import ClawketPairing
 
@@ -57,7 +58,13 @@ final class PairingContractTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(try PairingCryptography.deviceID(publicKey: publicKey), vector.deviceID)
         XCTAssertEqual(PairingCryptography.deviceAuthPayload(deviceID: vector.deviceID, clientID: "openclaw-ios", clientMode: "ui", role: "operator",
             scopes: ["operator.read", "operator.write"], signedAtMs: 1_700_000_000_123, token: "synthetic-token", nonce: "synthetic-nonce", platform: "ios", deviceFamily: "iphone"), vector.signedPayload)
-        XCTAssertEqual(PairingCryptography.hex(try key.signature(for: Data(vector.signedPayload.utf8))), vector.signature)
+        let message = Data(vector.signedPayload.utf8)
+        let signature = try key.signature(for: message)
+        let sodiumSignature = try XCTUnwrap(Sodium().sign.signature(message: Array(message), secretKey: Array(secret)))
+        XCTAssertEqual(PairingCryptography.hex(Data(sodiumSignature)), vector.signature)
+        // CryptoKit does not promise deterministic signing output. Verify both implementations across keys.
+        XCTAssertTrue(Sodium().sign.verify(message: Array(message), publicKey: Array(publicKey), signature: Array(signature)))
+        XCTAssertTrue(key.publicKey.isValidSignature(try PairingCryptography.decodeHex(vector.signature), for: message))
         XCTAssertThrowsError(try PairingCryptography.importSigningKey(tweetNaClSecret: secret.prefix(32), publicKey: publicKey))
         XCTAssertThrowsError(try PairingCryptography.importSigningKey(tweetNaClSecret: secret, publicKey: Data(repeating: 0, count: 32)))
         var corrupted = secret; corrupted[63] ^= 1
