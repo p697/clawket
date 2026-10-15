@@ -6,7 +6,7 @@ The initial source inventory contains 195 user-facing and accessibility keys fro
 
 Current source coverage: all 19 supported locales contain 195/195 UI translations plus both camera/local-network permission purposes (3,743 string units, including the English source). The UI catalog reuses 64 existing Mobile terms; the other 131 native strings were translated for each locale. Regional Spanish and Portuguese retain their existing terminology, including Settings, pairing and connection labels. Permission descriptions use the separate `InfoPlist` table because `Localizable` does not localize system permission prompts.
 
-No missing translation was filled with English and marked complete. Completing this source catalog does not complete the native language parity gate: resource integration, language selection, device rendering and linguistic acceptance remain separate checks. New source strings must still add real translations before the all-19 validation passes.
+No missing translation was filled with English and marked complete. Both catalogs are in the real app's Resources phase with all 19 known regions. A local unsigned Simulator app build compiled both arm64 and x86_64 successfully; the resource validator read all 19 compiled locale bundles and matched their 3,743 values exactly to the catalogs, including the permission purposes. Language selection, device rendering and linguistic acceptance remain separate checks. New source strings must still add real translations before the all-19 validation passes.
 
 ## Binding text to the catalog
 
@@ -23,17 +23,17 @@ let placeholder = String(localized: "Message \(agentName)")
 
 If a helper is useful, accept a `LocalizedStringResource` and resolve it to `String` with `String(localized: resource)`. Keep the main-bundle resource owner explicit. Never construct a localized key by concatenating words or inserting the final user value into a dynamic lookup key. For SwiftUI accessibility interpolation, `Text("Model: \(modelTitle)")` preserves the catalog key `Model: %@` and the untranslated argument. See [String's localized initializer](https://developer.apple.com/documentation/swift/string/init(localized:options:table:bundle:locale:comment:)).
 
-Host changes required at the current source snapshot:
+Host producer bindings integrated in the native app:
 
 | Source | Strings that need localization at their producer |
 | --- | --- |
-| `NativeAppModel` | All app-authored connection phase labels, retry/read-only explanations, model scope labels, save/recovery notices, pairing errors, delivery warnings, `Participant`, `Tool output`, and send/queue labels. Initialize the presentation's title/empty title/empty detail with localized defaults. |
-| `ConnectAgentView` | Give each connection method a localized display title instead of showing its English raw value. Localize the `Local model` backend label, conditional section headers and conditional connect/save button titles. Keep the five backend product names unchanged. |
-| `PairingScanner` | Localize the strings passed to `onFailure`, and localize the fallback explanation before placing it in a runtime `String`. |
-| `ConnectionsView` | Use the catalog format `%@ · Native development` for the version value, with the version as an untranslated argument. Keep saved connection labels unchanged. |
-| App resource setup | Both catalogs belong in the app's Resources phase with the same 19 known regions. The package has no separate localization resource bundle. |
+| `NativeAppModel` | App-authored connection phase labels, retry/read-only explanations, model scope labels, save/recovery notices, pairing errors, delivery warnings, `Participant`, `Tool output`, send/queue labels and presentation defaults use localized producers. |
+| `ConnectAgentView` | Connection methods have localized display titles; the `Local model` label, conditional section headers and connect/save titles are localized. The five backend product names remain unchanged. |
+| `PairingScanner` | App-authored `onFailure` strings and fallback explanations are localized before becoming runtime strings. |
+| `ConnectionsView` | `%@ · Native development` localizes the complete format and preserves the version argument. Saved connection labels remain verbatim. |
+| App resource setup | Both catalogs are app resources with the same 19 known regions. The package has no separate localization resource bundle. |
 
-Presentation-library binding applied in this branch (public types unchanged; app integration and iOS compilation are separate checks):
+Presentation-library bindings (public types unchanged; compiled in the real app):
 
 | Source | Dynamic defaults/helper arguments requiring explicit localization |
 | --- | --- |
@@ -57,8 +57,11 @@ Use system leading/trailing layout and native navigation mirroring for Arabic; k
 
 ```sh
 node --test scripts/native-ios/localization.test.mjs
-node scripts/native-ios/localization.mjs --initial-qa
 node scripts/native-ios/localization.mjs
+python3 -m unittest discover -s scripts/native-ios -p test_localization_resources.py
+python3 scripts/native-ios/localization_resources.py /path/to/Clawket.app
 ```
 
-The first command checks both real catalogs in all 19 locales plus corrupted/missing text, changed permission purposes, empty input, mismatched/reordered placeholders and incomplete Arabic plurals. The second retains an explicit four-locale initial-QA scope and prints coverage for all 19. The final command requires all 19 and currently passes for all 195 UI keys and both permission purposes; any missing translation fails it. None substitutes for compiling the catalogs in the real app and testing English, Chinese IME, Japanese, long German text, Arabic/RTL, Dynamic Type and VoiceOver on the simulator/device.
+The Node tests cover both real catalogs in all 19 locales plus corrupted/missing text, changed permission purposes, empty input, mismatched/reordered placeholders and incomplete Arabic plurals. The source CLI requires all 19 and currently passes for all 195 UI keys and both permission purposes; any missing translation fails it. The optional `--initial-qa` mode retains the earlier explicit four-locale scope for development and prints all 19 counts; CI uses the full default scope.
+
+The four Python resource regressions reject missing locale tables, changed/empty/malformed compiled values, changed permission source text and malformed catalog input. The resource CLI reads the actual app's compiled `Localizable.strings` and `InfoPlist.strings`, comparing every current direct string unit to its catalog and checking the English permission sources in the built `Info.plist`. It rejects unsupported variant structures rather than claiming coverage; future plurals must extend the compiled-resource check before use. Native iOS CI runs it after the real app test build. This verifies resource integration; testing English, Chinese IME, Japanese, long German text, Arabic/RTL, Dynamic Type and VoiceOver on the simulator/device remains necessary.

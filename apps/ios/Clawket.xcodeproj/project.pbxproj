@@ -15,6 +15,7 @@
 		4111A823020D58A2C9AE3CED /* ClawketTransport in Frameworks */ = {isa = PBXBuildFile; productRef = FB889001F1244000EC725E25 /* ClawketTransport */; };
 		44DD38E10C3292EF4F89CD64 /* ClawketRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = B354D017C96AC77858BE7A91 /* ClawketRuntime */; };
 		525AC5AA6876B193A893CA1C /* ClawketPersistence in Frameworks */ = {isa = PBXBuildFile; productRef = F5775CE4CCE6F16F9D1400CE /* ClawketPersistence */; };
+		7A694C62FB9D749CD18EE6C6 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = F9DC4D8745DDCA79E2D272D5 /* InfoPlist.xcstrings */; };
 		7FA2632EF83D1302AC0C0FE3 /* ConnectionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06C52C439D7B014576D9687E /* ConnectionsView.swift */; };
 		A7376BF94645E91C6749B0C6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B14E842129D8941746AC76AC /* Assets.xcassets */; };
 		A981AF688DA1876182E7C515 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 305D6E7D33031255FC087A1D /* Foundation.framework */; };
@@ -55,6 +56,7 @@
 		E47B4B0906605C4BAE48CF90 /* NativeCatalogStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeCatalogStore.swift; sourceTree = "<group>"; };
 		F520934653CF4DC7A40EEF10 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		F82081877A8E20091FD78626 /* ClawketApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ClawketApp.swift; sourceTree = "<group>"; };
+		F9DC4D8745DDCA79E2D272D5 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; includeInIndex = 1; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -116,6 +118,7 @@
 				5B9A7097C7DD4ABA36FBB7A1 /* NativeConversationStore.swift */,
 				E47B4B0906605C4BAE48CF90 /* NativeCatalogStore.swift */,
 				4A674C0333CD433EA1589533 /* Localizable.xcstrings */,
+				F9DC4D8745DDCA79E2D272D5 /* InfoPlist.xcstrings */,
 			);
 			name = Clawket;
 			path = Clawket;
@@ -254,6 +257,7 @@
 			files = (
 				A7376BF94645E91C6749B0C6 /* Assets.xcassets in Resources */,
 				C426985C465AE071721F25E7 /* Localizable.xcstrings in Resources */,
+				7A694C62FB9D749CD18EE6C6 /* InfoPlist.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

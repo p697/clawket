@@ -7,6 +7,8 @@ on:
       - apps/ios/**
       - tests/native-contract/**
       - tests/compat/fixtures/v1/**
+      - scripts/native-ios/**
+      - docs/native-ios/localization-inventory.json
       - .github/workflows/native-apple.yml
   push:
     branches: [main]
@@ -15,6 +17,8 @@ on:
       - apps/ios/**
       - tests/native-contract/**
       - tests/compat/fixtures/v1/**
+      - scripts/native-ios/**
+      - docs/native-ios/localization-inventory.json
       - .github/workflows/native-apple.yml
   workflow_dispatch:
 
@@ -78,10 +82,11 @@ jobs:
       - name: Check native test result validator
         working-directory: apps/ios/scripts
         run: python3 -m unittest test_validate_xctest_result.py
-      - name: Check initial native localization coverage and validation
+      - name: Check all 19 native localizations and resource validation
         run: |
           node --test scripts/native-ios/localization.test.mjs
-          node scripts/native-ios/localization.mjs --initial-qa
+          node scripts/native-ios/localization.mjs
+          python3 -m unittest discover -s scripts/native-ios -p test_localization_resources.py
       - name: Create a simulator matching the selected SDK
         shell: bash
         run: |
@@ -118,3 +123,7 @@ jobs:
           xcrun xcresulttool get test-results summary \
             --path "$RUNNER_TEMP/clawket-native-tests.xcresult" > "$RUNNER_TEMP/clawket-native-summary.json"
           python3 apps/ios/scripts/validate_xctest_result.py "$RUNNER_TEMP/clawket-native-summary.json"
+      - name: Verify exact translations in the compiled app bundle
+        run: |
+          python3 scripts/native-ios/localization_resources.py \
+            "$RUNNER_TEMP/clawket-native-derived/Build/Products/Debug-iphonesimulator/Clawket.app"
