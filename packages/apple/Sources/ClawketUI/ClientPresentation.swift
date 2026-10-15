@@ -81,7 +81,7 @@ public enum ClientFeature: String, Hashable, Sendable {
     case account, addConnection, createAgent, refresh, reconnect
     case sessions, newSession, models, send, stop, voice
     case photos, camera, files, paste, skills, commands, schedule, tools, sessionFiles
-    case agentSettings, memory, connectionSettings, loadEarlier, sessionManagement
+    case agentSettings, memory, connectionSettings, loadEarlier, sessionManagement, modelControls
 }
 
 public enum ClientDestination: String, Hashable, Sendable {
@@ -209,11 +209,16 @@ public struct ModelPresentation: Identifiable, Hashable, Sendable {
     public var isSelected: Bool
     public var isSubmitting: Bool
     public var availability: ActionAvailability
+    public var catalogOrder: Double?
+    public var searchTerms: [String]
+    public var isConfiguredDefault: Bool
 
     public init(id: String, title: String, subtitle: String? = nil, group: String? = nil,
-                isSelected: Bool = false, isSubmitting: Bool = false, availability: ActionAvailability = .available) {
+                isSelected: Bool = false, isSubmitting: Bool = false, availability: ActionAvailability = .available,
+                catalogOrder: Double? = nil, searchTerms: [String] = [], isConfiguredDefault: Bool = false) {
         self.id = id; self.title = title; self.subtitle = subtitle; self.group = group
         self.isSelected = isSelected; self.isSubmitting = isSubmitting; self.availability = availability
+        self.catalogOrder = catalogOrder; self.searchTerms = searchTerms; self.isConfiguredDefault = isConfiguredDefault
     }
 }
 
@@ -578,6 +583,7 @@ public final class ClientPresentation: ObservableObject {
     @Published public var connectionApprovals: [ApprovalPresentation]
     @Published public var approvalConfirmation: ApprovalConfirmationPresentation?
     @Published public var sessionManagement: SessionManagementPresentation?
+    @Published public var modelControls: ModelControlsPresentation?
 
     public init(title: String = String(localized: "Agents"), agents: [AgentPresentation] = [],
                 selectedConversation: ConversationID? = nil,
@@ -590,7 +596,7 @@ public final class ClientPresentation: ObservableObject {
                 drafts: [ConversationID: ComposerDraft] = [:], questionResponses: [String: QuestionResponse] = [:],
                 expandedContentIDs: Set<String> = [],
                 connectionApprovals: [ApprovalPresentation] = [], approvalConfirmation: ApprovalConfirmationPresentation? = nil,
-                sessionManagement: SessionManagementPresentation? = nil) {
+                sessionManagement: SessionManagementPresentation? = nil, modelControls: ModelControlsPresentation? = nil) {
         self.title = title; self.agents = agents; self.selectedConversation = selectedConversation
         self.conversations = conversations; self.connection = connection; self.isLoading = isLoading
         self.catalogs = catalogs
@@ -600,6 +606,7 @@ public final class ClientPresentation: ObservableObject {
         self.connectionApprovals = connectionApprovals
         self.approvalConfirmation = approvalConfirmation
         self.sessionManagement = sessionManagement
+        self.modelControls = modelControls
     }
 
     public func availability(_ feature: ClientFeature) -> ActionAvailability { features[feature] ?? .unsupported }
@@ -640,6 +647,12 @@ public enum ClientIntent: Sendable {
     case send(ConversationID)
     case stop(ConversationID)
     case selectModel(ConversationID, modelID: String)
+    case prepareModelControls(ConversationID, requestID: UUID)
+    case dismissModelControls(reviewID: UUID)
+    case refreshModelControls(reviewID: UUID)
+    case chooseModelControl(reviewID: UUID, choice: ModelControlChoice)
+    case confirmModelPermissions(confirmationID: UUID)
+    case dismissModelPermissions(confirmationID: UUID)
     case pickAttachment(ConversationID, source: AttachmentSource)
     case removeAttachment(ConversationID, attachmentID: String)
     case openAttachment(attachmentID: String)

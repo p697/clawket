@@ -9,13 +9,17 @@ struct ClientSheetView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var search = ""
     @State private var management: ManagementSheetRequest?
+    @State private var modelReviewID = UUID()
 
     var body: some View {
         NavigationStack {
             Group {
                 switch item {
                 case let .sessions(route): sessions(route)
-                case let .models(route): models(route)
+                case let .models(route):
+                    if model.conversations[route]?.availability(.modelControls).isVisible == true || model.modelControls?.id == modelReviewID {
+                        NativeModelControlsView(model: model, route: route, reviewID: modelReviewID, onIntent: onIntent)
+                    } else { models(route) }
                 case let .catalog(id): catalog(id)
                 case .connectionApprovals: connectionApprovals
                 case let .management(route, reviewID):
@@ -43,6 +47,7 @@ struct ClientSheetView: View {
         }
         .onDisappear {
             if case let .management(_, id) = item { onIntent(.dismissSessionManagement(reviewID: id)) }
+            if case .models = item { onIntent(.dismissModelControls(reviewID: modelReviewID)) }
         }
         .onChange(of: model.sessionManagement?.id) { id in
             if case .management = item, id == nil { dismiss() }
@@ -58,6 +63,7 @@ struct ClientSheetView: View {
     private var dismissalPlacement: ToolbarItemPlacement {
         // Work details push into this stack; keep Done opposite the native Back button.
         if case .work = item { return .confirmationAction }
+        if case .models = item { return .confirmationAction }
         return .cancellationAction
     }
 

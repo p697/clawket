@@ -345,7 +345,7 @@ enum ClientSheet: Identifiable {
     var id: String {
         switch self {
         case let .sessions(route): "sessions-\(route.connectionID)-\(route.agentID)"
-        case let .models(route): "models-\(route.connectionID)-\(route.agentID)"
+        case let .models(route): "models-\(route.connectionID)-\(route.agentID)-\(route.sessionID)"
         case let .catalog(id): "catalog-\(id.connectionID)-\(id.agentID)"
         case .connectionApprovals: "connection-approvals"
         case let .management(_, reviewID): "management-\(reviewID)"

@@ -64,6 +64,10 @@
 		F9CEDDB86DC3D8DC8B99A105 /* ClawketPairing in Frameworks */ = {isa = PBXBuildFile; productRef = E2A7336EB6B1F9F998B0351B /* ClawketPairing */; };
 		FE4BA71818051CEDD9C7204A /* ClawketUI in Frameworks */ = {isa = PBXBuildFile; productRef = E4FCEFB36539FD378035E5F5 /* ClawketUI */; };
 		FFEC089FBF61EAE1AFED818F /* NativeMediaController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A163A3B7B0C823A72CF0F2E /* NativeMediaController.swift */; };
+		67A303F723B780D5BB1EAC43 /* NativeModelControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66E63916FB529FDDF763F8E7 /* NativeModelControls.swift */; };
+		D916719F65B0A699579DF3A5 /* NativeModelPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AFEFFB85EF18F1FE89359F6 /* NativeModelPreferences.swift */; };
+		367A5790C5CDA6DAA969E678 /* NativeModelControlsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93FF817FB18D2D6DE5735749 /* NativeModelControlsTests.swift */; };
+		FC97262FAE513625C28FE893 /* NativeModelPreferencesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79FDD4876580D84DDCBD865B /* NativeModelPreferencesTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -124,6 +128,10 @@
 		F520934653CF4DC7A40EEF10 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		F82081877A8E20091FD78626 /* ClawketApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ClawketApp.swift; sourceTree = "<group>"; };
 		F9DC4D8745DDCA79E2D272D5 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; includeInIndex = 1; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
+		66E63916FB529FDDF763F8E7 /* NativeModelControls.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeModelControls.swift; sourceTree = "<group>"; };
+		1AFEFFB85EF18F1FE89359F6 /* NativeModelPreferences.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeModelPreferences.swift; sourceTree = "<group>"; };
+		93FF817FB18D2D6DE5735749 /* NativeModelControlsTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeModelControlsTests.swift; sourceTree = "<group>"; };
+		79FDD4876580D84DDCBD865B /* NativeModelPreferencesTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeModelPreferencesTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -179,6 +187,8 @@
 		AB5B0D297DF889E90A91F6CD /* Clawket */ = {
 			isa = PBXGroup;
 			children = (
+				1AFEFFB85EF18F1FE89359F6 /* NativeModelPreferences.swift */,
+				66E63916FB529FDDF763F8E7 /* NativeModelControls.swift */,
 				F82081877A8E20091FD78626 /* ClawketApp.swift */,
 				1A8D8F99FE6BF72DD9B9F8AF /* ConnectAgentView.swift */,
 				06C52C439D7B014576D9687E /* ConnectionsView.swift */,
@@ -238,6 +248,8 @@
 		F8EE034C70E7F18A15468525 /* ClawketTests */ = {
 			isa = PBXGroup;
 			children = (
+				79FDD4876580D84DDCBD865B /* NativeModelPreferencesTests.swift */,
+				93FF817FB18D2D6DE5735749 /* NativeModelControlsTests.swift */,
 				62CEF4BAC15E5B5B6DD99FD7 /* NativeConversationStoreTests.swift */,
 				8EA8C05BF26248B8F8DA8395 /* NativeQuestionDraftStoreTests.swift */,
 				83E37C1EE73DD7335ED11156 /* NativeTaskRequestsTests.swift */,
@@ -383,6 +395,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				FC97262FAE513625C28FE893 /* NativeModelPreferencesTests.swift in Sources */,
+				367A5790C5CDA6DAA969E678 /* NativeModelControlsTests.swift in Sources */,
 				0965FDA079959C9465C271AD /* NativeConversationStoreTests.swift in Sources */,
 				8B15DDB46A3D105034AC29C6 /* NativeQuestionDraftStoreTests.swift in Sources */,
 				72620A6CA1CBC261C9D08231 /* NativeTaskRequestsTests.swift in Sources */,
@@ -400,6 +414,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D916719F65B0A699579DF3A5 /* NativeModelPreferences.swift in Sources */,
+				67A303F723B780D5BB1EAC43 /* NativeModelControls.swift in Sources */,
 				E467366C8E9F56FF927B7BA0 /* ClawketApp.swift in Sources */,
 				120EF71EFB3EA1E9173A565B /* ConnectAgentView.swift in Sources */,
 				7FA2632EF83D1302AC0C0FE3 /* ConnectionsView.swift in Sources */,

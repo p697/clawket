@@ -47,6 +47,7 @@ final class NativeAppModel: ObservableObject {
     var runtime: RuntimeCoordinator?
     private var taskRequests: NativeTaskRequests?
     private var sessionManager: NativeSessionManagement?
+    var modelControls: NativeModelControls?
     private var archivedSessions: [String: [RuntimeSession]] = [:]
     private var archiveReads: [String: UUID] = [:]
     private var taskJournal: NativeTaskJournal?
@@ -138,6 +139,15 @@ final class NativeAppModel: ObservableObject {
                     try await self.prepareSessionMutation(target)
                 }, outcome: { [weak self] outcome in self?.sessionMutationFinished(outcome) },
                 onChange: { [weak self] in self?.rebuildRoster() })
+            self.modelControls = NativeModelControls(presentation: presentation, runtime: runtime,
+                preferences: try? NativeModelPreferences(),
+                context: { [weak self] in self?.sessionHostContext ?? .init(activation: UUID(), wire: UUID(), selection: UUID()) },
+                selectedRoute: { [weak self] in self?.presentation.selectedConversation },
+                queue: { [weak self] route, plan in
+                    guard let self else { throw RuntimeFailure(.superseded) }
+                    try await self.queueModelCommand(route, plan: plan)
+                }, onSnapshot: { [weak self] route, value, rows in self?.applyModelSnapshot(route, value: value, rows: rows) },
+                onChange: { [weak self] in self?.modelSettingsChanged() })
             if let saved = try await vault.readRegistry() {
                 registry = saved.value
                 if saved.recoveredFromRollback { notice = String(localized: "Recovered your saved connections from the last verified copy.") }
@@ -206,7 +216,13 @@ final class NativeAppModel: ObservableObject {
             documents[route]?.draft = text; changed(route); scheduleSave(route)
         case let .send(route): send(route)
         case let .stop(route): stop(route)
-        case let .selectModel(route, modelID): selectModel(route, id: modelID)
+        case let .selectModel(route, modelID): modelControls?.chooseLegacy(route, modelID: modelID)
+        case let .prepareModelControls(route, id): modelControls?.open(route, id: id)
+        case let .dismissModelControls(id): modelControls?.dismiss(id)
+        case let .refreshModelControls(id): modelControls?.refresh(id)
+        case let .chooseModelControl(id, choice): modelControls?.choose(id, choice: choice)
+        case let .confirmModelPermissions(id): modelControls?.confirm(id)
+        case let .dismissModelPermissions(id): modelControls?.dismissConfirmation(id)
         case let .loadEarlier(route): loadEarlier(route)
         case let .messageAction(route, messageID, action): messageAction(route, messageID: messageID, action: action)
         case let .openURL(url):
@@ -300,7 +316,7 @@ final class NativeAppModel: ObservableObject {
         changingConnections = true
         retireMedia(); activationTask?.cancel()
         selectionRevision = UUID(); activationRevision = UUID(); wireRevision = UUID()
-        taskRequests?.invalidate(); sessionManager?.invalidate(); archiveReads = [:]; deviceApproval = nil
+        taskRequests?.invalidate(); sessionManager?.invalidate(); modelControls?.invalidate(); archiveReads = [:]; deviceApproval = nil
         unconfirmedCreations.formUnion(creatingCatalogs); creatingCatalogs = []
         Task {
             defer { changingConnections = false }
@@ -362,7 +378,7 @@ final class NativeAppModel: ObservableObject {
     private func connectSaved(_ id: String) {
         guard let connection = connections.first(where: { $0.id == id }), let runtime else { return }
         retireMedia(); activationTask?.cancel(); selectionRevision = UUID(); activationRevision = UUID(); wireRevision = UUID()
-        taskRequests?.invalidate(); sessionManager?.invalidate(); archiveReads = [:]; deviceApproval = nil
+        taskRequests?.invalidate(); sessionManager?.invalidate(); modelControls?.invalidate(); archiveReads = [:]; deviceApproval = nil
         unconfirmedCreations.formUnion(creatingCatalogs); creatingCatalogs = []
         let activation = activationRevision
         let alreadyReady = state.phase == .ready && state.connectionID == id
@@ -378,7 +394,7 @@ final class NativeAppModel: ObservableObject {
             do {
                 try await runtime.activate(connection)
                 if alreadyReady, activation == activationRevision, activeConnectionID == id {
-                    taskRequests?.update(state); sessionManager?.update(state); refresh()
+                    taskRequests?.update(state); sessionManager?.update(state); modelControls?.update(state); refresh()
                 }
             }
             catch is CancellationError { }
@@ -412,7 +428,7 @@ final class NativeAppModel: ObservableObject {
             presentation.connection = connectionPresentation(state)
             deviceApproval = state.deviceApproval
             if deviceApproval != nil, deviceApprovalNotice { notice = nil; deviceApprovalNotice = false }
-            taskRequests?.update(state); sessionManager?.update(state)
+            taskRequests?.update(state); sessionManager?.update(state); modelControls?.update(state)
             presentation.isLoading = [.connecting, .handshaking].contains(state.phase) && agents.isEmpty
             presentation.features[.refresh] = state.phase == .ready ? .available : .unsupported
             for route in presentation.conversations.keys { updatePresentation(route) }
@@ -669,48 +685,68 @@ final class NativeAppModel: ObservableObject {
     }
 
     private func loadModels(_ route: ConversationID) async {
-        guard route.connectionID == activeConnectionID, state.capabilities.models, let runtime else { return }
-        let activation = activationRevision, wire = wireRevision
-        do {
-            let models = try await runtime.models(sessionKey: state.capabilities.modelPerSession ? route.sessionID : nil)
-            guard activation == activationRevision, wire == wireRevision, route.connectionID == activeConnectionID else { return }
-            var choices: [String: RuntimeModel] = [:]
-            let display = try models.map { model -> ModelPresentation in
-                let key = try DocumentStore.scopedKey(namespace: "model", parts: [model.provider ?? "", model.id])
-                choices[key] = model
-                return .init(id: key, title: model.name, subtitle: model.provider, isSelected: model.selected)
-            }
-            modelChoices[route] = choices
-            mediaModelRevisions[route] = wire
-            if !state.capabilities.modelPerSession { mediaGlobalModel = (wire, models.first(where: \.selected)?.supportsImages) }
-            presentation.conversations[route]?.models = display
-            presentation.conversations[route]?.modelTitle = models.first(where: \.selected)?.name ?? String(localized: "Choose model")
-            presentation.conversations[route]?.modelScopeLabel = state.capabilities.modelPerSession ? String(localized: "This conversation") : String(localized: "Applies to all conversations")
-            updatePresentation(route)
-        } catch { if activation == activationRevision, wire == wireRevision, route == presentation.selectedConversation { showFailure(error) } }
+        guard route.connectionID == activeConnectionID, state.capabilities.models else { return }
+        await modelControls?.refreshSummary(route)
     }
 
-    private func selectModel(_ route: ConversationID, id: String) {
-        guard route.connectionID == activeConnectionID, let model = modelChoices[route]?[id], let runtime,
-              !mediaChangingModels.contains(route), state.capabilities.modelPerSession || mediaChangingModels.isEmpty else { return }
-        let activation = activationRevision, wire = wireRevision
-        let modelChange = UUID(); mediaChangingModelTokens[route] = modelChange; updatePresentation(route)
-        Task {
-            defer { if mediaChangingModelTokens[route] == modelChange { mediaChangingModelTokens.removeValue(forKey: route); updatePresentation(route) } }
-            guard activation == activationRevision, wire == wireRevision, route.connectionID == activeConnectionID else { return }
-            do {
-                try await runtime.selectModel(id: model.id, provider: model.provider,
-                                              sessionKey: state.capabilities.modelPerSession ? route.sessionID : nil)
-                guard activation == activationRevision, wire == wireRevision else { return }
-                await loadModels(route)
-            } catch { if activation == activationRevision, wire == wireRevision, route.connectionID == activeConnectionID { showFailure(error) } }
+    private func modelSettingsChanged() {
+        rebuildRoster()
+        // Resume only previously authorized, undispatched queue entries. Held
+        // and uncertain messages always remain an explicit user decision.
+        for route in documents.keys where route.connectionID == activeConnectionID && modelControls?.permitsInput(route) != false {
+            drainQueue(route)
         }
+    }
+
+    private func applyModelSnapshot(_ route: ConversationID, value: RuntimeModelControls, rows: [ModelPresentation]) {
+        guard route.connectionID == activeConnectionID, state.phase == .ready else { return }
+        var choices: [String: RuntimeModel] = [:]
+        for model in value.models {
+            guard let id = try? NativeModelControls.modelKey(model) else { return }; choices[id] = model
+        }
+        modelChoices[route] = choices; mediaModelRevisions[route] = wireRevision
+        if value.scope == .global { mediaGlobalModel = (wireRevision, value.models.first(where: \.selected)?.supportsImages) }
+        let title = value.models.first(where: \.selected)?.name ?? value.currentModel ?? String(localized: "Choose model")
+        let routes = value.scope == .global ? Array(presentation.conversations.keys).filter { $0.connectionID == route.connectionID } : [route]
+        for target in routes {
+            presentation.conversations[target]?.models = rows
+            presentation.conversations[target]?.modelTitle = title
+            presentation.conversations[target]?.modelScopeLabel = value.scope == .global
+                ? String(localized: "Applies to all conversations") : String(localized: "This conversation")
+            updatePresentation(target)
+        }
+    }
+
+    private func queueModelCommand(_ route: ConversationID, plan: RuntimeSettingCommand) async throws {
+        guard route.isConcrete, route.connectionID == activeConnectionID, state.phase == .ready,
+              plan.connectionID == route.connectionID, plan.sessionKey == route.sessionID,
+              plan.thinkingLevel == nil, let runtime, var document = documents[route],
+              sessionManager?.permitsInput(route) != false,
+              document.messages.filter({ [.queued, .held, .sending].contains($0.delivery) }).count < 32 else {
+            throw RuntimeFailure(.requestBusy)
+        }
+        let host = sessionHostContext
+        let id = UUID().uuidString.lowercased()
+        try await runtime.validatePrompt(sessionKey: route.sessionID, input: .init(text: plan.text, idempotencyKey: id))
+        guard host.sameConnection(as: sessionHostContext), state.phase == .ready,
+              sessionManager?.permitsInput(route) != false, let latest = documents[route],
+              latest.revision == document.revision else { throw RuntimeFailure(.superseded) }
+        try document.enqueueSettingCommand(plan.text, id: id, timestampMs: Int64(Date().timeIntervalSince1970 * 1_000))
+        documents[route] = document; updatePresentation(route)
+        do { try await persist(route) }
+        catch { updateSend(route, id: id, delivery: .held); updatePresentation(route); throw error }
+        guard host.sameConnection(as: sessionHostContext), state.phase == .ready,
+              sessionManager?.permitsInput(route) != false else {
+            updateSend(route, id: id, delivery: .held); updatePresentation(route)
+            scheduleSave(route, immediate: true); throw RuntimeFailure(.superseded)
+        }
+        drainQueue(route)
     }
 
     private func send(_ route: ConversationID) {
         guard voice?.attempt?.context.route != route else { return }
         guard route.connectionID == activeConnectionID, state.phase == .ready, state.capabilities.chat,
-              sessionManager?.permitsInput(route) != false,
+              sessionManager?.permitsInput(route) != false, modelControls?.permitsInput(route) != false,
               let document = documents[route], !mediaSendPreparations.contains(route),
               !mediaImports.values.contains(where: { $0.scope.route == route }) else { return }
         guard sessions.first(where: { $0.connectionID == route.connectionID && $0.key == route.sessionID })?.canContinue != false else { return }
@@ -731,9 +767,11 @@ final class NativeAppModel: ObservableObject {
                       presentation.draft(for: route).text == text, var current = documents[route],
                       current.draftResourceIDs == ids, state.phase == .ready, sessionManager?.permitsInput(route) != false else { return }
                 let references = try await mediaReferences(ids)
+                try await modelControls?.verifyInput(route)
+                try validateMediaModel(route, hasImages: references.contains { $0.kind == .image })
                 guard activation == activationRevision, wire == wireRevision, scope == mediaScope(route),
                       presentation.draft(for: route).text == text, documents[route]?.revision == current.revision,
-                      sessionManager?.permitsInput(route) != false else { return }
+                      sessionManager?.permitsInput(route) != false, modelControls?.permitsInput(route) != false else { return }
                 current.messages.append(.init(id: id, role: .user, local: true, text: text, idempotencyKey: id,
                     timestampMs: Int64(Date().timeIntervalSince1970 * 1000), delivery: .queued, media: references))
                 current.draft = ""; current.draftResourceIDs = []; current.revision += 1
@@ -749,7 +787,7 @@ final class NativeAppModel: ObservableObject {
 
     private func drainQueue(_ route: ConversationID) {
         guard route.connectionID == activeConnectionID, state.phase == .ready, state.capabilities.chat,
-              sessionManager?.permitsInput(route) != false,
+              sessionManager?.permitsInput(route) != false, modelControls?.permitsInput(route) != false,
               running[route] == nil, sendTasks[route] == nil, let runtime,
               let queued = documents[route]?.messages.first(where: { $0.local && $0.delivery == .queued }),
               let id = queued.idempotencyKey else { return }
@@ -772,6 +810,12 @@ final class NativeAppModel: ObservableObject {
                     updateSend(route, id: queued.id, delivery: .held)
                     sendTasks.removeValue(forKey: route); scheduleSave(route, immediate: true); return
                 }
+                try await modelControls?.verifyInput(route)
+                guard activation == activationRevision, wire == wireRevision, state.phase == .ready,
+                      sessionManager?.permitsInput(route) != false, modelControls?.permitsInput(route) != false else {
+                    updateSend(route, id: queued.id, delivery: .held)
+                    sendTasks.removeValue(forKey: route); scheduleSave(route, immediate: true); return
+                }
                 try validateMediaModel(route, hasImages: input.attachments.contains { $0.type == .image })
                 let receipt = try await runtime.send(sessionKey: route.sessionID, input: input)
                 if activation == activationRevision, wire == wireRevision {
@@ -782,8 +826,10 @@ final class NativeAppModel: ObservableObject {
             } catch {
                 let current = documents[route]?.messages.first(where: { $0.id == queued.id })
                 if reserved || (current?.delivery == .queued && current?.text == queued.text && current?.media == queued.media) {
-                    let delivery = (error as? RuntimeFailure)?.delivery
-                    updateSend(route, id: queued.id, delivery: delivery == .uncertain || delivery == .responseReceived ? .uncertain : .failed)
+                    let failure = error as? RuntimeFailure
+                    let delivery = failure?.delivery
+                    let paused = modelControls?.permitsInput(route) == false && (delivery == .notDispatched || delivery == .rejectedBeforeDispatch)
+                    updateSend(route, id: queued.id, delivery: delivery == .uncertain || delivery == .responseReceived ? .uncertain : paused ? .held : .failed)
                     if activation == activationRevision, wire == wireRevision, route == presentation.selectedConversation { showMediaFailure(error, route: route) }
                 }
             }
@@ -886,6 +932,13 @@ final class NativeAppModel: ObservableObject {
         if sessionManager?.permitsInput(route) == false {
             features[.send] = .temporarilyUnavailable(String(localized: "Review the conversation update before sending."))
         }
+        if let barrier = modelControls?.barrier(route) {
+            features[.send] = .temporarilyUnavailable(barrier == .permissionsRequired
+                ? String(localized: "Choose permissions again before sending.")
+                : String(localized: "Review model settings before sending."))
+        } else if modelControls?.permitsInput(route) == false {
+            features[.send] = .temporarilyUnavailable(String(localized: "Review model settings before sending."))
+        }
         if managementAvailability.isVisible { features[.sessionManagement] = managementAvailability }
         if state.capabilities.abort && sessionManager?.permitsInput(route) != false && running[route] != nil && session?.canContinue != false { features[.stop] = connected ? .available : .temporarilyUnavailable(String(localized: "Reconnect to stop this run.")) }
         if state.capabilities.sessions { features[.sessions] = .available }
@@ -895,6 +948,7 @@ final class NativeAppModel: ObservableObject {
                 : .temporarilyUnavailable(String(localized: "Reconnect or refresh conversations before creating another."))
         }
         if state.capabilities.models {
+            features[.modelControls] = connected ? .available : .temporarilyUnavailable(String(localized: "Reconnect to review model settings."))
             features[.models] = connected ? .available : .temporarilyUnavailable(String(localized: "Reconnect to change models."))
             if state.capabilities.modelPerSession && session?.canContinue == false { features[.models] = .temporarilyUnavailable(String(localized: "This conversation is read-only here.")) }
         }
@@ -935,7 +989,8 @@ final class NativeAppModel: ObservableObject {
         let ownedPending = message.local && message.role == .user && message.idempotencyKey?.isEmpty == false
         if ownedPending && [.queued, .held, .failed].contains(message.delivery) { actions += [.edit, .remove] }
         if ownedPending && message.delivery == .held, let route, route.connectionID == activeConnectionID,
-           state.phase == .ready, sessionManager?.permitsInput(route) != false { actions.append(.sendNow) }
+           state.phase == .ready, sessionManager?.permitsInput(route) != false,
+           modelControls?.permitsInput(route) != false { actions.append(.sendNow) }
         return .init(id: message.id, author: author, content: content, delivery: delivery, isStreaming: message.streaming, actions: actions)
     }
 
@@ -951,7 +1006,7 @@ final class NativeAppModel: ObservableObject {
         case .sendNow:
             guard message.local, message.role == .user, message.idempotencyKey?.isEmpty == false,
                   message.delivery == .held, route.connectionID == activeConnectionID, state.phase == .ready,
-                  sessionManager?.permitsInput(route) != false,
+                  sessionManager?.permitsInput(route) != false, modelControls?.permitsInput(route) != false,
                   let index = documents[route]?.messages.firstIndex(where: { $0.id == messageID }) else { return }
             documents[route]?.messages[index].delivery = .queued; changed(route)
             updatePresentation(route); scheduleSave(route, immediate: true); drainQueue(route)

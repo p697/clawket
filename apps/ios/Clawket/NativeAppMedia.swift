@@ -19,7 +19,7 @@ extension NativeAppModel {
 
     func validateMediaModel(_ route: ConversationID, hasImages: Bool) throws {
         guard hasImages else { return }
-        guard !mediaChangingModels.contains(route),
+        guard modelControls?.isImageModelUnconfirmed(route) != true, modelControls?.isChangingModel(route) != true, !mediaChangingModels.contains(route),
               state.capabilities.modelPerSession || mediaChangingModels.isEmpty else { throw NativeMediaIssue.modelChanging }
         let supportsImages: Bool?
         if state.capabilities.modelPerSession {
@@ -35,8 +35,9 @@ extension NativeAppModel {
         if state.capabilities.attachments {
             var imageAccess: ActionAvailability = (try? validateMediaModel(route, hasImages: true)) != nil
                 ? available : .temporarilyUnavailable(String(localized: "This model accepts text only."))
-            if mediaChangingModels.contains(route) || !state.capabilities.modelPerSession && !mediaChangingModels.isEmpty {
-                imageAccess = .temporarilyUnavailable(String(localized: "Preparing attachments…"))
+            if modelControls?.isImageModelUnconfirmed(route) == true || modelControls?.isChangingModel(route) == true || mediaChangingModels.contains(route) || !state.capabilities.modelPerSession && !mediaChangingModels.isEmpty {
+                imageAccess = .temporarilyUnavailable(modelControls?.isImageModelUnconfirmed(route) == true
+                    ? String(localized: "Review model settings before adding images.") : String(localized: "Preparing attachments…"))
             }
             features[.photos] = imageAccess
             features[.camera] = UIImagePickerController.isSourceTypeAvailable(.camera) ? imageAccess : .unsupported
@@ -52,13 +53,19 @@ extension NativeAppModel {
 
     func mediaPrompt(_ route: ConversationID, text: String, ids: [UUID], idempotencyKey: String) async throws -> RuntimePrompt {
         guard let runtime else { throw StoreFailure.unavailable }
+        let activation = activationRevision, wire = wireRevision
+        try await modelControls?.verifyInput(route)
         let prepared = try await media?.prepare(ids) ?? []
+        try await modelControls?.verifyInput(route)
+        guard activation == activationRevision, wire == wireRevision else { throw RuntimeFailure(.superseded) }
         guard prepared.count == ids.count else { throw MediaFailure.missing }
         try validateMediaModel(route, hasImages: prepared.contains(where: \.isImage))
         let input = RuntimePrompt(text: text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !prepared.isEmpty
             ? String(localized: "Review these attachments.") : text, idempotencyKey: idempotencyKey,
             attachments: prepared.map { .init(type: $0.isImage ? .image : .file, mimeType: $0.mimeType, content: $0.data, name: $0.resource.name) })
         try await runtime.validatePrompt(sessionKey: route.sessionID, input: input)
+        try await modelControls?.verifyInput(route)
+        guard activation == activationRevision, wire == wireRevision else { throw RuntimeFailure(.superseded) }
         return input
     }
 
