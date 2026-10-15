@@ -54,13 +54,14 @@ private func normalizeLegacyScopePart(_ value: String) -> String {
     return result
 }
 
-private func decodeLegacyToken(_ data: Data) throws -> UpgradedDeviceToken {
+func decodeLegacyToken(_ data: Data) throws -> UpgradedDeviceToken {
     guard let raw = String(data: data, encoding: .utf8), !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw UpgradeFailure.malformedSource }
-    if let parsed = try? JSONSerialization.jsonObject(with: data) {
+    if let parsed = try? JSONSerialization.jsonObject(with: data, options: .fragmentsAllowed) {
         guard let value = parsed as? [String: Any], upgradeInteger(value, "version") == 1 else { throw UpgradeFailure.malformedSource }
         let token = try upgradeString(value, "token").trimmingCharacters(in: .whitespacesAndNewlines)
         let role = try upgradeString(value, "role").trimmingCharacters(in: .whitespacesAndNewlines)
-        let scopes = (value["scopes"] as? [String] ?? []).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        let scopes = (value["scopes"] as? [Any] ?? []).compactMap { $0 as? String }
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
         return UpgradedDeviceToken(token: token, role: role, scopes: Set(scopes).sorted(), updatedAtMs: upgradeInteger(value, "updatedAtMs") ?? 0)
     }
     return UpgradedDeviceToken(token: raw.trimmingCharacters(in: .whitespacesAndNewlines), role: "operator", scopes: [], updatedAtMs: 0)

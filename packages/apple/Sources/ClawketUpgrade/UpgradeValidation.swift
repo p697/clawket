@@ -148,12 +148,7 @@ private func connection(_ object: [String: Any], legacy: Bool) throws -> Upgrade
 func validatePreservedValue(_ id: LegacyValueID, data: Data) throws {
     guard String(data: data, encoding: .utf8) != nil || id.domain == .userDefaults else { throw UpgradeFailure.malformedSource }
     if id.domain == .secure && id.key.hasPrefix("clawket.deviceToken.") {
-        guard let text = String(data: data, encoding: .utf8), !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw UpgradeFailure.malformedSource }
-        if let parsed = try? JSONSerialization.jsonObject(with: data) {
-            guard let value = parsed as? [String: Any], upgradeInteger(value, "version") == 1,
-                  optionalUpgradeString(value, "token") != nil, optionalUpgradeString(value, "role") != nil,
-                  let scopes = value["scopes"] as? [String], scopes.allSatisfy({ !$0.isEmpty }) else { throw UpgradeFailure.malformedSource }
-        } // A non-JSON token is the shipped legacy operator-only representation.
+        _ = try decodeLegacyToken(data)
     }
     if id.domain == .secure && id.key.hasPrefix("clawket.proEntitlement.v1") {
         let value = try upgradeObject(data)

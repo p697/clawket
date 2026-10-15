@@ -101,6 +101,23 @@ final class UpgradeValidationTests: XCTestCase, @unchecked Sendable {
         XCTAssertThrowsError(try purchaseString(try PropertyListSerialization.data(fromPropertyList: "", format: .binary, options: 0)))
     }
 
+    func testTokenNormalizationMatchesMobileForOlderScopeRecordsAndJSONFragments() throws {
+        let id = LegacyValueID(domain: .secure, key: "clawket.deviceToken.synthetic")
+        let missing = try upgradeTestJSON(["version": 1, "token": " synthetic-token ", "role": " operator "])
+        XCTAssertNoThrow(try validatePreservedValue(id, data: missing))
+        let decoded = try decodeLegacyToken(missing)
+        XCTAssertEqual(decoded.token, "synthetic-token"); XCTAssertEqual(decoded.role, "operator"); XCTAssertEqual(decoded.scopes, [])
+        let mixed = try upgradeTestJSON(["version": 1, "token": "synthetic-token", "role": "operator",
+            "scopes": [" operator.write ", NSNull(), 17, "", "operator.read", "operator.write"]])
+        XCTAssertNoThrow(try validatePreservedValue(id, data: mixed))
+        XCTAssertEqual(try decodeLegacyToken(mixed).scopes, ["operator.read", "operator.write"])
+        for text in ["123", "true", "null", "\"not-an-object-token\"", "[]", "{}",
+                     "{\"version\":1,\"token\":\" \",\"role\":\"operator\"}"] {
+            XCTAssertThrowsError(try validatePreservedValue(id, data: Data(text.utf8)))
+        }
+        XCTAssertEqual(try decodeLegacyToken(Data(" legacy-not-json ".utf8)).token, "legacy-not-json")
+    }
+
     func testResourcePathsRejectTraversalAbsoluteURLsUnknownLeavesAndControlCharacters() throws {
         let id = String(repeating: "a", count: 32)
         XCTAssertNoThrow(try validateResourcePath("Documents/incoming-share/\(id)/0.jpg"))
