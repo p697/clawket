@@ -8,7 +8,7 @@
 - 2026-10-16 Native host 队列编辑与异步连接范围修复。
   - 队列项目支持独立原生编辑/移除：先 held，保留当前 composer 草稿与幂等身份，保存不自动发；已派发、结果未知和外部参与者不可编辑/移除。同步预占 sending 消除 Task 首次运行前的移除竞态，编辑写入失败保留原内容并防止覆盖新历史。增加五项恢复/状态/旧编辑器/取消边界测试，App 非空门槛提升为十项。
   - Host 延迟创建会话、发送、停止、模型选择和异步目录/历史/模型结果均核对 activation/readiness UUID；切换回同一个连接、持久化期间断开又恢复，也不让旧任务进入新代。首次认证 ready 与重连 ready 自动刷新 Agent 目录，避免已连接却空白。切换中的创建保持结果未知，需完整刷新才可再建；离线本地编辑仍独立保留，切换配对入口/后端清除旧错误。新增编辑文案四条、19语真实译文。
-  - Xcode27.1RC/jobs2 实际 App 与十项测试方法 generic Simulator 编译通过；另项目模拟器仍启动，未叠加本机测试，执行交 CI。字符串五项与199条四语 QA 覆盖、Python 结果检查三项通过。正确 USB WebDriver 重建后连接/settings/输入错误分支通过；实际 OpenClaw direct 在 LAN 允许后被 Gateway 以 token_mismatch 拒绝，凭据来源只读定位中，尚无 ready/推理/双后端稳定性证据。未改服务、生产、版本、商店 App 或发布。
+  - Xcode27.1RC/jobs2 实际 App 与十项测试方法 generic Simulator 编译通过；另项目模拟器仍启动，未叠加本机测试，执行交 CI。重基完整本地化后199条界面及两权限用途的全19语源码覆盖、Python结果检查三项、12指令对与七项文档回归通过。正确 USB WebDriver 重建后连接/settings/输入错误分支通过；旧QA的实际 OpenClaw direct 在 LAN 允许后被 Gateway 以 token_mismatch 拒绝，同候选凭据在Mac只读connect认证成功，待重装新版QA核对手机输入/保存/认证路径。尚无手机 ready/推理/双后端稳定性证据。未改服务、生产、版本、商店 App 或发布。
 
 - 2026-10-16 Native 后端认证兼容（OpenClaw bootstrap 与 Hermes direct）。
   - 对齐当前 Mobile：仅 bootstrap 身份的 INVALID_REQUEST/BAD_REQUEST、明确 bootstrapToken 与 unexpected/invalid connect schema 错误、且保留旧 token/password 时，禁用本次连接 bootstrap 并回收一次；本地与 Relay 路径一致，不把认证失败降级为旧身份。等待者与代际围栏保持，第二次错误不循环。
