@@ -118,10 +118,18 @@ struct QuestionContentView: View {
         if question.kind == .editor {
             TextEditor(text: binding)
                 .frame(minHeight: 160, maxHeight: 280)
-                .scrollContentBackground(.hidden).padding(8)
+                .scrollContentBackground(.hidden)
+                .overlay(alignment: .topLeading) {
+                    if binding.wrappedValue.isEmpty, let placeholder = field.placeholder, !placeholder.isEmpty {
+                        Text(placeholder).foregroundStyle(.secondary).padding(.horizontal, 5).padding(.vertical, 8)
+                            .allowsHitTesting(false).accessibilityHidden(true)
+                    }
+                }
+                .padding(8)
                 .background(Color(uiColor: .tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
                 .disabled(isBusy)
                 .accessibilityLabel(field.title.isEmpty ? String(localized: "Your answer") : field.title)
+                .accessibilityHint(field.placeholder ?? "")
                 .accessibilityIdentifier("question-\(question.id)-\(field.id)-editor")
         } else if question.kind == .input {
             TextField(field.placeholder ?? String(localized: "Your answer"), text: binding)
