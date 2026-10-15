@@ -44,7 +44,7 @@ Use `packages/agent-protocol/src/capabilities.ts` plus runtime adapter negotiati
 | Local search | Cross-connection cached messages/Agents/sessions/favorites, correct access gate | Search; chat cache; favorites tests | Pending |
 | Saved history | Immutable saved conversations/export separate from evictable cache; document versions | saved-conversation/version/history services | Pending |
 | Connection settings | Activate/pause/resume/reconnect/remove/rename/free-slot; version/caps; negotiated remote Bridge update | Connection screens; `bridge-update` tests | Pending |
-| Appearance | Theme/accent/chat/wallpaper/fonts/avatar preference/icons, language; existing choices retained | appearance services; theme; icons | Pending |
+| Appearance | Theme/accent/chat/wallpaper/fonts/avatar preference/icons, language; existing choices retained | appearance services; theme; icons; `SETTINGS-NAVIGATION.md` | Free native theme/accent/type/Agent signature implemented; wallpaper/bubbles/icons/language/upgrade/device acceptance pending |
 | Voice | Native16k PCM, signed speech WSS, ACK flow control, durable110s segments/10min recording recovery, no automatic send | `services/speech`; `clawket-voice-capture` Swift | Pending |
 | Audio ownership | Record only on intent; no idle audio session or stopped music; cancellation/background retain recovery audio | `voiceCapture.test.ts`; `useChatVoiceInput.test.ts` | Pending |
 | Phone Node | Distinct role handshake; per-command info/status/notify/camera/photos/location/clipboard/media, foreground permissions | `node-client`; handlers/dispatcher/capability tests | Pending |

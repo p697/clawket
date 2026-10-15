@@ -58,22 +58,47 @@ struct NativeMessageRow: View {
                 if let channel { Text(channel).font(.caption).foregroundStyle(.secondary) }
             }
         case let .agent(name, label):
-            if let label {
-                HStack(spacing: 6) {
+            if model.appearance.showAgentAvatar || label != nil {
+                HStack(spacing: 7) {
+                    if model.appearance.showAgentAvatar {
+                        agentAvatar(name: name)
+                    }
                     Text(name).font(.caption.weight(.semibold))
-                    Text(label).font(.caption2.weight(.medium)).padding(.horizontal, 5).padding(.vertical, 2)
-                        .background(Color(uiColor: .secondarySystemBackground), in: Capsule())
+                    if let label {
+                        Text(label).font(.caption2.weight(.medium)).padding(.horizontal, 5).padding(.vertical, 2)
+                            .background(Color(uiColor: .secondarySystemBackground), in: Capsule())
+                    }
                 }
             }
         case .local, .system: EmptyView()
         }
     }
 
+    @ViewBuilder private func agentAvatar(name: String) -> some View {
+        let agent = model.agents.first { entry in
+            guard entry.name == name else { return false }
+            switch entry.entryMode {
+            case let .conversation(route): return route.connectionID == conversationID.connectionID && route.agentID == conversationID.agentID
+            case let .catalog(id): return id.connectionID == conversationID.connectionID && id.agentID == conversationID.agentID
+            }
+        }
+        Group {
+            if let data = agent?.avatarData, let image = UIImage(data: data) {
+                Image(uiImage: image).resizable().scaledToFill()
+            } else {
+                Text(String(name.prefix(1))).font(.caption2.weight(.semibold))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(model.appearance.accentColor.opacity(0.12))
+            }
+        }
+        .frame(width: 24, height: 24).clipShape(Circle()).accessibilityHidden(true)
+    }
+
     @ViewBuilder
     private func contentView(_ content: MessageContent, id: String) -> some View {
         switch content {
         case let .markdown(text):
-            SelectableMessageText(text: text, onURL: { onIntent(.openURL($0)) }, onReadingInteraction: onReadingInteraction)
+            SelectableMessageText(text: text, fontSize: model.appearance.chatFontSize, onURL: { onIntent(.openURL($0)) }, onReadingInteraction: onReadingInteraction)
         case let .code(language, text):
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
@@ -84,7 +109,7 @@ struct NativeMessageRow: View {
                     } label: { Label("Copy", systemImage: "doc.on.doc").font(.caption).frame(minHeight: 44) }
                     .accessibilityLabel("Copy code")
                 }
-                SelectableMessageText(text: text, monospaced: true, onURL: { onIntent(.openURL($0)) }, onReadingInteraction: onReadingInteraction)
+                SelectableMessageText(text: text, monospaced: true, fontSize: model.appearance.chatFontSize, onURL: { onIntent(.openURL($0)) }, onReadingInteraction: onReadingInteraction)
             }
             .padding(14)
             .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))

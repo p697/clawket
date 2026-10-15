@@ -1,0 +1,27 @@
+# Native preferences and navigation
+
+This slice provides a real native Settings home, connection settings, the existing free theme/accent/chat-font/Agent-signature choices, and local reopening of the last known Agent/conversation and loaded reading position. It does not complete the Appearance or navigation parity rows.
+
+## Existing product policy
+
+Mobile's `AccountSettingsScreen` and `AccountSettings/model` expose Theme and Chat Appearance without a Pro gate. Only App Icon uses the existing Pro/appIcons entitlement. `ChatAppearanceScreen` itself has no purchase gate. Native therefore supplies system/light/dark, the six actual `theme/accents.ts` accent500 light/dark colors, 12–20 point chat type and the opt-in Agent avatar/signature (default off). Chat type also scales with Dynamic Type. The existing participant and Agent-context badges remain visible independently of the optional signature; outgoing ownership still comes from the host's typed author.
+
+Theme saves immediately after verified persistence. The chat editor has an isolated draft: Back cancels, Reset changes only that draft, and Save publishes only after the protected write/readback succeeds. Reset retains the selected overall theme. The current language follows the system's actual app localization; Settings opens the real iOS app settings. Version/build come from the installed bundle. Connections reuse the existing handlers and preserve the development app's separate storage notice.
+
+Wallpaper/photo ownership, bubble styles, alternate icons, purchase/account management and an in-app language selector remain pending. No fake entitlement, missing-asset icon picker or inactive control substitutes for them. Existing Mobile preference and purchase data is untouched; this QA namespace does not establish same-bundle upgrade acceptance.
+
+## Persistence and authority
+
+`NativePreferencesStore` keeps separate versioned appearance and navigation documents in a protected app-support directory. Each JSON document is bounded to 256 KiB, retains the existing verified rollback through `DocumentStore`, validates JS-safe revisions and rejects corrupt/empty data. Navigation retains at most 128 connection targets and 128 loaded reading contexts. IDs are private product navigation values, never diagnostics. Byte-exact stored route comparisons preserve opaque Unicode IDs.
+
+A serialized writer ignores late older snapshots. Only a debounce may be cancelled; an in-flight atomic replacement completes independently. An unknown save outcome closes that document's future writes until reopening. It cannot be overwritten from stale memory or replaced with an empty successful read. Preference failure does not disable connection storage or make the app discard user data.
+
+Navigation stores a concrete route or an explicitly sessions-first catalog and a render-row/offset/follow-bottom context. It stores no socket generation, run, consent, Runtime reference, decision, dispatch receipt or authority. Opening cached navigation remains inert until a fresh catalog contains that exact target. A cached hit stays pending through the open hook: if the fresh target is missing or archived, show that same known Agent's picker; never guess its main conversation. An absent Agent remains home. A paused connection can reopen its cached context without reconnecting. No restored queued/unknown message is dispatched by navigation.
+
+Every conversation open creates a new ephemeral reading scope. Old A → B → A callbacks cannot write the new view's position. UIKit captures the actual first visible loaded render row and its viewport offset, retains it during font reflow and restores only a matching loaded row. A missing anchor does not page, choose a nearby row or replace the saved position before a deliberate reading interaction. Background saves flush immediately, including a late resign-active capture. Root transcript reconciliation owns stable render IDs and physical-history boundaries; this feature does not manufacture a backend cursor or repair lineage.
+
+Compact Back changes visibility without deleting the selected secondary route or cancelling its cache read. A frozen per-view visibility ID stops only that departing view's voice attempt; a late old hidden callback cannot stop a newer view. Audio retention and transcription service behavior remain owned by the existing voice controller. Voice Stop/Retry/Saved recording and recording-row Retry/Delete put their 44-point target inside the actual native Button label; outer layout alone is not hit-target evidence.
+
+## Verification
+
+The first focused strict Swift 6/iOS 16.4 typecheck covers all 19 actual presentation sources. Three pure presentation contracts and nine focused host preference/storage/restoration methods passed locally under the heavy lease/jobs2, including unknown atomic replacement, late snapshots, JS-safe overflow, opaque Unicode IDs and cached-hit → open-hook → fresh-missing recovery. No simulator was started. Actual UIKit window/table/TextKit and voice accessibility consumers, generic App compilation, compiled resources and full current-main CI are recorded in the progress log as they complete. Compilation and fake speech fixtures are not phone/voice-service acceptance.

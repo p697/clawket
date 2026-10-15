@@ -210,6 +210,92 @@ final class NativeVoiceHostTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(controller.attempt?.id, secondID)
         controller.retire()
     }
+    @MainActor func testHiddenConversationStopsOnlyItsExactVoiceViewAndPreservesAudio() async throws {
+        let directory = root(); defer { try? FileManager.default.removeItem(at: directory) }
+        let socket = VoiceHostSocket()
+        let controller = try NativeVoiceController(directory: directory, serviceURL: "wss://speech.invalid/v1/speech",
+            driver: VoiceHostDriver(), socketFactory: VoiceHostSocketFactory(socket: socket)) {
+                let seed = Data(0..<32), key = try Curve25519.Signing.PrivateKey(rawRepresentation: seed)
+                return .init(publicKey: key.publicKey.rawRepresentation, tweetNaClSecretKey: seed + key.publicKey.rawRepresentation)
+            }
+        let created = try await controller.store.create(scope: .init(connectionID: route.connectionID, agentID: route.agentID, sessionKey: route.sessionID), draft: "unsent")
+        _ = try await controller.store.append(Data([0, 0]), to: created.id); try await controller.store.close(created.id)
+        let saved = try await controller.store.recording(created.id)
+        let attempt = try XCTUnwrap(controller.retry(saved, context: context(ComposerDraft(conversationID: route))))
+        let client = NativeAppModel(); client.voice = controller
+        let oldView = UUID(), currentView = UUID(), selection = client.selectionRevision
+        client.handle(.conversationVisibilityChanged(route, viewID: oldView, visible: true))
+        client.handle(.conversationVisibilityChanged(route, viewID: currentView, visible: true))
+        client.handle(.conversationVisibilityChanged(route, viewID: oldView, visible: false))
+        XCTAssertEqual(controller.attempt?.id, attempt)
+        client.handle(.conversationVisibilityChanged(route, viewID: currentView, visible: false))
+        XCTAssertNil(controller.attempt)
+        XCTAssertEqual(client.selectionRevision, selection) // Native Back does not cancel the selected route's read.
+        let retained = try await controller.store.recording(saved.id); XCTAssertEqual(retained.bytes, 2)
+    }
+
+    @MainActor func testComposerVoiceActionsExposeActual44PointAccessibilityButtons() async throws {
+        let cases: [(String, VoicePresentation, VoiceIntent)] = [
+            ("voice-stop", .init(phase: .recording, label: "Recording", canStop: true), .stop),
+            ("voice-retry", .init(phase: .failed, label: "Saved", canRetry: true), .retry),
+            ("voice-saved-recording", .init(phase: .recoverable, label: "Saved", canReview: true), .showRecordings)]
+        for (identifier, voice, expected) in cases {
+            let draft = ComposerDraft(conversationID: route); draft.voice = voice
+            var actions: [VoiceIntent] = []
+            let host = UIHostingController(rootView: NativeComposer(draft: draft,
+                conversation: .init(id: route, agentName: "Agent", sessionTitle: "Voice"), expanded: .constant(false),
+                onIntent: { if case let .voice(_, action) = $0 { actions.append(action) } }, showModels: {}))
+            let window = attach(host); defer { window.isHidden = true; window.rootViewController = nil }
+            await layout(host)
+            let element = try XCTUnwrap(accessibilityElement(identifier, in: host.view))
+            XCTAssertGreaterThanOrEqual(element.accessibilityFrame.width, 44)
+            XCTAssertGreaterThanOrEqual(element.accessibilityFrame.height, 44)
+            XCTAssertTrue(element.accessibilityTraits.contains(.button))
+            XCTAssertTrue(element.accessibilityActivate())
+            XCTAssertEqual(actions, [expected])
+        }
+    }
+
+    @MainActor func testSavedRecordingRetryAndDeleteHave44PointAccessibilityFrames() async throws {
+        let directory = root(); defer { try? FileManager.default.removeItem(at: directory) }
+        let controller = try NativeVoiceController(directory: directory, serviceURL: "", driver: VoiceHostDriver()) { throw SpeechFailure(.authentication) }
+        _ = try await recording(controller.store); await controller.restore()
+        let request = NativeVoiceSheetRequest(context: context(ComposerDraft(conversationID: route)))
+        let client = NativeAppModel(); client.voice = controller; client.voiceSheet = request
+        let host = UIHostingController(rootView: NativeVoiceSheet(client: client, voice: controller, request: request))
+        let window = attach(host); defer { window.isHidden = true; window.rootViewController = nil }
+        await layout(host)
+        for identifier in ["voice-recording-retry", "voice-recording-delete"] {
+            let element = try XCTUnwrap(accessibilityElement(identifier, in: host.view))
+            XCTAssertGreaterThanOrEqual(element.accessibilityFrame.width, 44)
+            XCTAssertGreaterThanOrEqual(element.accessibilityFrame.height, 44)
+            XCTAssertTrue(element.accessibilityTraits.contains(.button))
+        }
+    }
+
+    @MainActor private func accessibilityElement(_ identifier: String, in root: NSObject) -> NSObject? {
+        var visited: Set<ObjectIdentifier> = []
+        func find(_ object: NSObject, depth: Int) -> NSObject? {
+            guard depth < 32, visited.insert(ObjectIdentifier(object)).inserted else { return nil }
+            if (object as? any UIAccessibilityIdentification)?.accessibilityIdentifier == identifier { return object }
+            if let children = object.accessibilityElements as? [NSObject] {
+                for child in children { if let match = find(child, depth: depth + 1) { return match } }
+            }
+            let count = object.accessibilityElementCount()
+            if (0...1_024).contains(count) {
+                for index in 0..<count {
+                    if let child = object.accessibilityElement(at: index) as? NSObject,
+                       let match = find(child, depth: depth + 1) { return match }
+                }
+            }
+            if let view = object as? UIView {
+                for child in view.subviews { if let match = find(child, depth: depth + 1) { return match } }
+            }
+            return nil
+        }
+        return find(root, depth: 0)
+    }
+
     @MainActor private func eventually(_ condition: () async -> Bool) async {
         let deadline = ContinuousClock.now.advanced(by: .seconds(3))
         while ContinuousClock.now < deadline { if await condition() { return }; await Task.yield() }

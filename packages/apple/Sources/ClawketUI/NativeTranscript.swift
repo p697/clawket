@@ -15,6 +15,8 @@ struct NativeTranscript: UIViewRepresentable {
     let isLoadingHistory: Bool
     let onIntent: @MainActor (ClientIntent) -> Void
 
+    static func dismantleUIView(_ table: TranscriptTableView, coordinator: Coordinator) { coordinator.captureReading() }
+
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
     func makeUIView(context: Context) -> TranscriptTableView {
         let table = TranscriptTableView(frame: .zero, style: .plain)
@@ -47,12 +49,18 @@ struct NativeTranscript: UIViewRepresentable {
         private var geometryScheduled = false
         private var lastScrollRequest = 0
         private var generation = 0
+        private var readingScope: UUID?
+        private var pendingRestoration: ConversationReadingContext?
+        private var lastPublishedReading: ConversationReadingContext?
+        private var appearance: ClientAppearancePresentation?
         private let historyButton = UIButton(type: .system)
 
         init(parent: NativeTranscript) { self.parent = parent }
 
         func install(_ table: TranscriptTableView) {
             self.table = table
+            NotificationCenter.default.addObserver(self, selector: #selector(captureReading),
+                name: UIApplication.willResignActiveNotification, object: nil)
             historyButton.addTarget(self, action: #selector(loadEarlier), for: .touchUpInside)
             dataSource = UITableViewDiffableDataSource<Int, String>(tableView: table) { [weak self] table, indexPath, id in
                 let cell = table.dequeueReusableCell(withIdentifier: "message", for: indexPath)
@@ -71,9 +79,19 @@ struct NativeTranscript: UIViewRepresentable {
         func update(_ parent: NativeTranscript, table: TranscriptTableView) {
             let anchor = readingAnchor(in: table)
             self.parent = parent
+            let reading = parent.model.readingContexts[parent.conversationID]
+            if readingScope != reading?.id {
+                readingScope = reading?.id
+                pendingRestoration = reading?.restoration
+                followsBottom = pendingRestoration?.followsBottom ?? true
+                lastPublishedReading = nil
+            }
+            let appearanceChanged = appearance != parent.model.appearance
+            appearance = parent.model.appearance
             if parent.scrollRequest != lastScrollRequest {
                 lastScrollRequest = parent.scrollRequest
                 followsBottom = true
+                pendingRestoration = nil
             }
             configureHistory(in: table)
             var next: [String: MessagePresentation] = [:]
@@ -81,7 +99,7 @@ struct NativeTranscript: UIViewRepresentable {
             for item in parent.messages where next[item.id] == nil {
                 next[item.id] = item; ids.append(item.id)
             }
-            let changed = ids.filter { items[$0] != nil && items[$0] != next[$0] }
+            let changed = ids.filter { items[$0] != nil && (items[$0] != next[$0] || appearanceChanged) }
             let previousIDs = dataSource?.snapshot().itemIdentifiers ?? []
             guard previousIDs != ids || !changed.isEmpty || !initialized else {
                 if followsBottom && parent.scrollRequest != 0 { scrollToBottom(table) }
@@ -97,11 +115,16 @@ struct NativeTranscript: UIViewRepresentable {
             dataSource?.apply(snapshot, animatingDifferences: false) { [weak self, weak table] in
                 guard let self, let table, self.generation == updateGeneration else { return }
                 table.layoutIfNeeded()
-                if self.followsBottom && !table.isDragging && !table.isDecelerating { self.scrollToBottom(table) }
+                if let saved = self.pendingRestoration, let id = saved.messageID,
+                   self.dataSource?.indexPath(for: id) != nil {
+                    self.restore((id, CGFloat(saved.offset)), in: table)
+                    self.pendingRestoration = nil
+                } else if self.followsBottom && !table.isDragging && !table.isDecelerating { self.scrollToBottom(table) }
                 else if let anchor { self.restore(anchor, in: table) }
                 self.initialized = true
                 self.applying = false
                 self.publishFollowing()
+                self.captureReading()
             }
         }
 
@@ -155,7 +178,9 @@ struct NativeTranscript: UIViewRepresentable {
         }
         private func pauseFollowing() {
             followsBottom = false
+            pendingRestoration = nil
             publishFollowing()
+            captureReading()
         }
         func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
             if !decelerate { updateFollowing(scrollView) }
@@ -166,6 +191,19 @@ struct NativeTranscript: UIViewRepresentable {
             let distance = scrollView.contentSize.height - scrollView.bounds.height + scrollView.adjustedContentInset.bottom - scrollView.contentOffset.y
             followsBottom = distance < 44
             publishFollowing()
+            captureReading()
+        }
+        func scrollViewDidScroll(_ scrollView: UIScrollView) {
+            if scrollView.isDragging || scrollView.isDecelerating { captureReading() }
+        }
+        @objc func captureReading() {
+            guard initialized, !applying, pendingRestoration == nil, let readingScope, let table else { return }
+            let anchor = readingAnchor(in: table)
+            let value = ConversationReadingContext(followsBottom: followsBottom,
+                messageID: anchor?.id, offset: Double(anchor?.offset ?? 0))
+            guard value.isValid, value != lastPublishedReading else { return }
+            lastPublishedReading = value
+            parent.onIntent(.readingContextChanged(parent.conversationID, scopeID: readingScope, context: value))
         }
         private func publishFollowing() {
             let value = followsBottom

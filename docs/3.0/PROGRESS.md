@@ -1,5 +1,12 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-16 Native Settings/免费外观与导航恢复（独立切片，完整外观/升级/真机验收另行进行）。
+  - 原生Settings首页复用真实连接操作、系统App设置与安装包版本；实际Mobile外观均免费、仅AppIcon需Pro，因此接入system/light/dark、六真实双scheme accent、12…20字号+DynamicType、默认关闭Agent头像签名。主题验证保存后立即生效；聊天外观编辑隔离draft/Reset/Save，Back不提交；不伪造Pro、壁纸/图标资产或语言控件。作者归属/participant与Agent上下文badge不由偏好改变。
+  - 独立受保护双代文档各限256KiB/JS-safe revision，导航最多128连接目标/128阅读上下文；串行忽略迟到旧快照，只取消debounce、不取消原子写，unknown提交封闭至重开，失败不抹旧数据或阻断连接库。仅存字节精确route/catalog/render anchor，不存Runtime ref/run/consent/dispatch权限。缓存命中保留pending至fresh catalog验证，fresh缺失/归档回同Agent picker，不猜main；暂停连接可读缓存而不自动重连。
+  - 每open独立reading UUID，旧A→B→A回调不污染新位置；真实UITableView记录首个可见已加载render row/offset/follow，字体重排保留锚点，缺锚点不分页/猜行/覆盖旧位置，后台及时flush。compact Back独立viewID只退休对应voice，不清secondary route/打断cache读；Stop/Retry/Saved recording及录音行按钮44pt放实际label内部，非外层布局。
+  - heavy/jobs2下19真实iOS16.4 Swift6 UI源码两轮typecheck，3表示层契约与9偏好/持久/恢复方法串行通过，涵盖unknown原子提交、迟到snapshot、损坏/字节上限/JS-safe overflow、Unicode不透明ID及cached命中→open hook→fresh缺失。实际App及127测试方法源码双架构generic build-for-testing成功，无本机simulator启动；新增3真实UIWindow/UIKit阅读/字体及3voice生命周期/AX框/activate方法实际执行交current-head CI。原9方法首次只因预期tooLarge与现DocumentStore统一invalidDocument分类不符，校正为既有拒绝语义后全绿，未放宽损坏输入拒绝。
+  - 全19语379UI+4权限/7,277编译值精确匹配，21新key中18复用Mobile，目录6/编译资源4/报告3/14指令对与7docs回归通过。完整current-main CI/USB导航冷恢复与44pt复验继续；壁纸/气泡/图标/语言选择、同bundle偏好/权益迁移与其余parity未宣布完成，无商店替换/版本/服务/分发/发布。详见`docs/native-ios/SETTINGS-NAVIGATION.md`。
+
 - 2026-10-16 Native 参与者与消息来源契约（协议验证通过，host整合继续）。
   - RuntimeMessage区分真实providedID与provided/synthetic/ambiguousProvided来源，重复真实ID保留全部消息并使用独立显示fallback；旧cache缺字段保持nil，不靠前缀、正文hash、page index、时钟或角色猜真实身份。RuntimeHistory仅保留真实top-level sessionId及既有thinkingLevel；OpenClaw exact transcriptPosition(source/rawSeq)与system reset/compaction kind独立typed保存，不改wire顺序/时钟，不凭“Reset”正文断定变更。
   - 作者读取沿现Mobile/25-message-participants：六后端explicit attribution，Gateway native sender/transport与识别的渠道route fallback；web/client覆盖Slack fallback，owner/sentLocally wire标记不授本机身份。渠道/account/sender与backend/transport分开；有界文字净化、公共无凭据HTTPS头像且拒绝本地/相对/歧义numeric host，不发目录/头像网络请求。媒体投影保留新增字段，重复真实ID不走managed镜像丢行。

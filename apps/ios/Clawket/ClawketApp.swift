@@ -9,10 +9,13 @@ struct ClawketApp: App {
     var body: some Scene {
         WindowGroup {
             NativeClientView(model: client.presentation, onIntent: client.handle)
+                .preferredColorScheme(client.presentation.appearance.colorScheme)
+                .tint(client.presentation.appearance.accentColor)
                 .sheet(item: $client.destination) { destination in
                     switch destination {
                     case .connect: ConnectAgentView(client: client)
                     case .connections: ConnectionsView(client: client)
+                    case .settings: NativeSettingsView(client: client, preferences: client.preferences)
                     case let .deviceApproval(connectionID): DeviceApprovalView(client: client, connectionID: connectionID)
                     case let .editPending(route, edit, activation):
                         PendingMessageEditor(client: client, route: route, edit: edit, activation: activation)

@@ -224,13 +224,19 @@ struct NativeComposer: View {
             }
             Spacer(minLength: 0)
             if voice.canReview {
-                Button("Saved recording") { onIntent(.voice(conversation.id, action: .showRecordings)) }.frame(minHeight: 44)
+                Button { onIntent(.voice(conversation.id, action: .showRecordings)) } label: {
+                    Text("Saved recording").frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
+                }.accessibilityIdentifier("voice-saved-recording")
             }
             if voice.canRetry {
-                Button("Retry") { onIntent(.voice(conversation.id, action: .retry)) }.frame(minHeight: 44)
+                Button { onIntent(.voice(conversation.id, action: .retry)) } label: {
+                    Text("Retry").frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
+                }.accessibilityIdentifier("voice-retry")
             }
             if voice.canStop {
-                Button("Stop") { onIntent(.voice(conversation.id, action: .stop)) }.frame(minHeight: 44)
+                Button { onIntent(.voice(conversation.id, action: .stop)) } label: {
+                    Text("Stop").frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
+                }.accessibilityIdentifier("voice-stop")
             }
             if voice.canCancel {
                 Button { onIntent(.voice(conversation.id, action: .cancel)) } label: {

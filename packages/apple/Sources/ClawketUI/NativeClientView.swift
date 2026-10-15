@@ -36,7 +36,7 @@ public struct NativeClientView: View {
             }
         }
         .navigationSplitViewStyle(.balanced)
-        .tint(.primary)
+        .tint(model.appearance.accentColor)
         .sheet(item: $sheet) { item in
             ClientSheetView(item: item, model: model, onIntent: onIntent)
         }
@@ -59,6 +59,9 @@ public struct NativeClientView: View {
             if let route { onIntent(.openConversation(route)) }
             else { onIntent(.closeConversation) }
         }
+        .onChange(of: model.requestedCatalog) { id in
+            if let id, model.catalogs[id] != nil { sheet = .catalog(id) }
+        }
         .onChange(of: model.agents) { agents in
             rosterSelection = RosterSelectionPolicy.rowAfterRosterRefresh(
                 currentRow: rosterSelection, selected: model.selectedConversation, agents: agents)
@@ -66,6 +69,7 @@ public struct NativeClientView: View {
         .onAppear {
             guard !didSynchronizeSelection else { return }
             didSynchronizeSelection = true
+            if let id = model.requestedCatalog, model.catalogs[id] != nil { sheet = .catalog(id) }
             rosterSelection = RosterSelectionPolicy.row(for: model.selectedConversation, agents: model.agents)
         }
     }
@@ -151,7 +155,7 @@ public struct NativeClientView: View {
                     Button {
                         onIntent(.openDestination(.account, conversation: nil))
                     } label: {
-                        Image(systemName: "person.crop.circle")
+                        Image(systemName: "gearshape")
                             .font(.title3)
                             .overlay(alignment: .topTrailing) {
                                 if model.accountAttentionCount > 0 {
@@ -161,7 +165,7 @@ public struct NativeClientView: View {
                     }
                     .frame(minWidth: 44, minHeight: 44)
                     .disabled(!model.availability(.account).isEnabled)
-                    .accessibilityLabel("Account settings")
+                    .accessibilityLabel("Settings")
                     .accessibilityValue(model.accountAttentionCount > 0 ? String(localized: "Needs attention") : "")
                 }
             }
@@ -364,6 +368,7 @@ private struct NativeConversationView: View {
     @State private var expanded = false
     @State private var following = true
     @State private var scrollRequest = 0
+    @State private var visibilityID = UUID()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -416,6 +421,8 @@ private struct NativeConversationView: View {
                            }, showModels: { showSheet(.models(conversation.id)) })
         }
         .background(Color(uiColor: .systemBackground))
+        .onAppear { onIntent(.conversationVisibilityChanged(conversation.id, viewID: visibilityID, visible: true)) }
+        .onDisappear { onIntent(.conversationVisibilityChanged(conversation.id, viewID: visibilityID, visible: false)) }
         .navigationTitle(conversation.agentName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

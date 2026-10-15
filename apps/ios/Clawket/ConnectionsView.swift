@@ -3,11 +3,17 @@ import SwiftUI
 
 struct ConnectionsView: View {
     @ObservedObject var client: NativeAppModel
+    var embedded = false
     @Environment(\.dismiss) private var dismiss
     @State private var remove: BackendConnection?
 
     var body: some View {
-        NavigationStack {
+        Group {
+            if embedded { content }
+            else { NavigationStack { content } }
+        }
+    }
+    private var content: some View {
             List {
                 if let approval = client.deviceApproval, approval.connectionID == client.activeConnectionID {
                     Section {
@@ -43,20 +49,19 @@ struct ConnectionsView: View {
                     }
                 }
                 Section {
-                    let version = "3.1.2"
+                    let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
                     LabeledContent("Version", value: String(localized: "\(version) · Native development"))
                     Text("This development app has its own connections and storage.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
             }
             .disabled(client.changingConnections)
-            .navigationTitle("Settings").navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+            .navigationTitle("Connections").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { if !embedded { Button("Done") { dismiss() } } } }
             .confirmationDialog("Remove this connection?", isPresented: Binding(get: { remove != nil }, set: { if !$0 { remove = nil } }), titleVisibility: .visible) {
                 Button("Remove connection", role: .destructive) {
                     if let id = remove?.id { client.removeConnection(id) }; remove = nil
                 }
             } message: { Text("Saved conversations remain on this device. You can pair the agent again later.") }
-        }
     }
 }

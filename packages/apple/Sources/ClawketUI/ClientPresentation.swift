@@ -584,6 +584,10 @@ public final class ClientPresentation: ObservableObject {
     @Published public var approvalConfirmation: ApprovalConfirmationPresentation?
     @Published public var sessionManagement: SessionManagementPresentation?
     @Published public var modelControls: ModelControlsPresentation?
+    @Published public var appearance: ClientAppearancePresentation
+    @Published public var readingContexts: [ConversationID: ConversationReadingPresentation]
+    /// Host-controlled display request; no backend call is implied by showing a catalog.
+    @Published public var requestedCatalog: AgentCatalogID?
 
     public init(title: String = String(localized: "Agents"), agents: [AgentPresentation] = [],
                 selectedConversation: ConversationID? = nil,
@@ -596,7 +600,10 @@ public final class ClientPresentation: ObservableObject {
                 drafts: [ConversationID: ComposerDraft] = [:], questionResponses: [String: QuestionResponse] = [:],
                 expandedContentIDs: Set<String> = [],
                 connectionApprovals: [ApprovalPresentation] = [], approvalConfirmation: ApprovalConfirmationPresentation? = nil,
-                sessionManagement: SessionManagementPresentation? = nil, modelControls: ModelControlsPresentation? = nil) {
+                sessionManagement: SessionManagementPresentation? = nil, modelControls: ModelControlsPresentation? = nil,
+                appearance: ClientAppearancePresentation = .init(),
+                readingContexts: [ConversationID: ConversationReadingPresentation] = [:],
+                requestedCatalog: AgentCatalogID? = nil) {
         self.title = title; self.agents = agents; self.selectedConversation = selectedConversation
         self.conversations = conversations; self.connection = connection; self.isLoading = isLoading
         self.catalogs = catalogs
@@ -607,6 +614,11 @@ public final class ClientPresentation: ObservableObject {
         self.approvalConfirmation = approvalConfirmation
         self.sessionManagement = sessionManagement
         self.modelControls = modelControls
+        self.appearance = appearance; self.readingContexts = readingContexts; self.requestedCatalog = requestedCatalog
+    }
+
+    public func acceptsReadingContext(for route: ConversationID, scopeID: UUID) -> Bool {
+        selectedConversation == route && readingContexts[route]?.id == scopeID
     }
 
     public func availability(_ feature: ClientFeature) -> ActionAvailability { features[feature] ?? .unsupported }
@@ -638,6 +650,9 @@ public enum ClientIntent: Sendable {
     case dismissSessionMutationConfirmation(confirmationID: UUID)
     case openConversation(ConversationID)
     case closeConversation
+    /// Visibility is independent of selected route; native Back must not clear a secondary session.
+    case conversationVisibilityChanged(ConversationID, viewID: UUID, visible: Bool)
+    case readingContextChanged(ConversationID, scopeID: UUID, context: ConversationReadingContext)
     case openDestination(ClientDestination, conversation: ConversationID?)
     case refresh
     case reconnect(connectionID: String?)

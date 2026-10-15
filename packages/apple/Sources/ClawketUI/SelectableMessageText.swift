@@ -8,6 +8,7 @@ import UIKit
 struct SelectableMessageText: UIViewRepresentable {
     let text: String
     var monospaced = false
+    var fontSize: Int = 17
     let onURL: (URL) -> Void
     var onReadingInteraction: () -> Void = {}
 
@@ -35,12 +36,13 @@ struct SelectableMessageText: UIViewRepresentable {
         context.coordinator.onReadingInteraction = onReadingInteraction
         (view as? ReadingTextView)?.onReadingInteraction = onReadingInteraction
         let category = view.traitCollection.preferredContentSizeCategory
-        guard context.coordinator.text != text || context.coordinator.category != category || context.coordinator.monospaced != monospaced else { return }
+        guard context.coordinator.text != text || context.coordinator.category != category || context.coordinator.monospaced != monospaced || context.coordinator.fontSize != fontSize else { return }
         let selection = view.selectedRange
         context.coordinator.text = text
         context.coordinator.category = category
         context.coordinator.monospaced = monospaced
-        view.attributedText = NativeMarkdownFormatter.format(text, monospaced: monospaced)
+        context.coordinator.fontSize = fontSize
+        view.attributedText = NativeMarkdownFormatter.format(text, monospaced: monospaced, fontSize: fontSize, traits: view.traitCollection)
         let length = view.attributedText.length
         let location = min(selection.location, length)
         view.selectedRange = NSRange(location: location, length: min(selection.length, length - location))
@@ -60,6 +62,7 @@ struct SelectableMessageText: UIViewRepresentable {
         var text: String?
         var category: UIContentSizeCategory?
         var monospaced = false
+        var fontSize: Int?
         var onURL: (URL) -> Void
         var onReadingInteraction: () -> Void = {}
         init(onURL: @escaping (URL) -> Void) { self.onURL = onURL }
@@ -87,7 +90,7 @@ private final class ReadingTextView: UITextView {
 
 @MainActor
 private enum NativeMarkdownFormatter {
-    static func format(_ raw: String, monospaced: Bool) -> NSAttributedString {
+    static func format(_ raw: String, monospaced: Bool, fontSize: Int, traits: UITraitCollection) -> NSAttributedString {
         let result = NSMutableAttributedString(string: "")
         let lines = raw.components(separatedBy: "\n")
         var inCode = monospaced
@@ -110,13 +113,13 @@ private enum NativeMarkdownFormatter {
             let style = NSMutableParagraphStyle()
             style.lineHeightMultiple = inCode ? 1.05 : 1.12
             style.paragraphSpacing = inCode ? 2 : headingLevel > 0 ? 8 : 5
-            let baseFont = font(headingLevel: headingLevel, code: inCode)
+            let baseFont = font(headingLevel: headingLevel, code: inCode, size: fontSize, traits: traits)
             if inCode {
                 result.append(NSAttributedString(string: text, attributes: [.font: baseFont, .foregroundColor: UIColor.label, .paragraphStyle: style]))
             } else if let attributed = try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
                 for run in attributed.runs {
                     let intent = run.inlinePresentationIntent ?? []
-                    var runFont = intent.contains(.code) ? font(headingLevel: 0, code: true) : baseFont
+                    var runFont = intent.contains(.code) ? font(headingLevel: 0, code: true, size: fontSize, traits: traits) : baseFont
                     var traits = runFont.fontDescriptor.symbolicTraits
                     if intent.contains(.stronglyEmphasized) { traits.insert(.traitBold) }
                     if intent.contains(.emphasized) { traits.insert(.traitItalic) }
@@ -135,12 +138,12 @@ private enum NativeMarkdownFormatter {
         return result
     }
 
-    private static func font(headingLevel: Int, code: Bool) -> UIFont {
-        if code { return UIFont.monospacedSystemFont(ofSize: UIFont.preferredFont(forTextStyle: .body).pointSize * 0.88, weight: .regular) }
-        if headingLevel == 1 { return .preferredFont(forTextStyle: .title2) }
-        if headingLevel == 2 { return .preferredFont(forTextStyle: .title3) }
-        if headingLevel > 2 { return .preferredFont(forTextStyle: .headline) }
-        return .preferredFont(forTextStyle: .body)
+    private static func font(headingLevel: Int, code: Bool, size: Int, traits: UITraitCollection) -> UIFont {
+        let base = CGFloat((12...20).contains(size) ? size : 17)
+        let pointSize = code ? base * 0.88 : headingLevel == 1 ? base * 1.3 : headingLevel == 2 ? base * 1.18 : base
+        let unscaled = code ? UIFont.monospacedSystemFont(ofSize: pointSize, weight: .regular)
+            : UIFont.systemFont(ofSize: pointSize, weight: headingLevel > 0 ? .semibold : .regular)
+        return UIFontMetrics(forTextStyle: .body).scaledFont(for: unscaled, compatibleWith: traits)
     }
 }
 #endif

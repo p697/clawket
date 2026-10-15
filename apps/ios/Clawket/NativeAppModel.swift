@@ -17,17 +17,19 @@ enum AddConnectionRequest {
 @MainActor
 final class NativeAppModel: ObservableObject {
     enum Destination: Identifiable {
-        case connect, connections, editPending(ConversationID, NativePendingEdit, activation: UUID)
+        case connect, settings, connections, editPending(ConversationID, NativePendingEdit, activation: UUID)
         case deviceApproval(connectionID: String)
         var id: String {
             switch self {
             case .connect: "connect"
             case .connections: "connections"
+            case .settings: "settings"
             case let .deviceApproval(id): "device-approval-\(id)"
             case let .editPending(_, edit, _): edit.id.uuidString
             }
         }
     }
+    let preferences = NativePreferences()
     let presentation = ClientPresentation(title: String(localized: "Agents"),
         emptyTitle: String(localized: "Your agents, within reach"),
         emptyDetail: String(localized: "Connect an agent to continue conversations and keep work moving."))
@@ -44,6 +46,8 @@ final class NativeAppModel: ObservableObject {
     private var catalogCache: NativeCatalogStore?
     private var catalogCacheRevision: Int64 = 0
     private var showingCachedRoster = false
+    private var navigationHeldRoutes: Set<NativeStoredRoute> = []
+    private var conversationVisibility = NativeConversationVisibility()
     var runtime: RuntimeCoordinator?
     private var taskRequests: NativeTaskRequests?
     private var sessionManager: NativeSessionManagement?
@@ -107,6 +111,10 @@ final class NativeAppModel: ObservableObject {
     func start() async {
         guard !started else { return }; started = true
         presentation.features = [.addConnection: .available, .account: .available]
+        preferences.onAppearance = { [weak self] value in
+            self?.objectWillChange.send(); self?.presentation.appearance = value
+        }
+        await preferences.load()
         do {
             let vault = try NativeVault()
             let runtime = try RuntimeCoordinator(credentials: vault,
@@ -165,7 +173,16 @@ final class NativeAppModel: ObservableObject {
                 Task { @MainActor [weak self] in self?.networkPathHint() }
             }
             networkMonitor.start(queue: DispatchQueue(label: "ai.clawket.native.network-hints"))
-            if !registry.paused, let id = registry.activeConnectionID { connectSaved(id) }
+            if let id = registry.activeConnectionID {
+                if !registry.paused { connectSaved(id) }
+                else {
+                    // Reopen saved navigation without reconnecting or resuming dispatch.
+                    preferences.activate(id)
+                    if let roster = try? await catalogCache?.read(connectionID: id), activeConnectionID == id {
+                        showingCachedRoster = true; agents = roster.agents; sessions = roster.sessions; rebuildRoster()
+                    }
+                }
+            }
         } catch {
             presentation.connection = .init(phase: .unavailable, label: String(localized: "Storage unavailable"),
                 detail: String(localized: "Unlock this device and reopen Clawket to access your saved connections."))
@@ -180,7 +197,8 @@ final class NativeAppModel: ObservableObject {
             retireVoice()
             switch destination {
             case .addConnection: self.destination = .connect
-            case .account, .connectionSettings: self.destination = .connections
+            case .account: self.destination = .settings
+            case .connectionSettings: self.destination = .connections
             case .newSession:
                 if case let .openDestination(_, route?) = intent {
                     createSession(.init(connectionID: route.connectionID, agentID: route.agentID), projectID: nil)
@@ -205,7 +223,16 @@ final class NativeAppModel: ObservableObject {
             if archived { loadArchivedCatalog(id) } else { archiveReads[id.connectionID] = nil; showCatalog(id) }
         case let .openConversation(route): open(route)
         case .closeConversation: selectionRevision = UUID(); retireMediaSelection()
-        case let .openAgentCatalog(id): retireVoice(); showCatalog(id)
+        case let .conversationVisibilityChanged(route, viewID, visible):
+            if conversationVisibility.update(route, viewID: viewID, isVisible: visible),
+               voice?.attempt?.context.route == route { retireVoice() }
+        case let .readingContextChanged(route, scopeID, context):
+            guard presentation.acceptsReadingContext(for: route, scopeID: scopeID),
+                  route.connectionID == activeConnectionID, context.isValid else { return }
+            preferences.recordReading(context, route: route)
+        case let .openAgentCatalog(id):
+            guard id.connectionID == activeConnectionID, agents.contains(where: { $0.connectionID == id.connectionID && $0.agentID == id.agentID }) else { return }
+            retireVoice(); presentation.requestedCatalog = nil; preferences.opened(.init(id)); showCatalog(id)
         case let .refreshCatalog(id): showCatalog(id)
         case let .selectCatalogProject(id, projectID):
             guard id.connectionID == activeConnectionID else { return }
@@ -356,7 +383,10 @@ final class NativeAppModel: ObservableObject {
     }
 
     func setForeground(_ foreground: Bool) {
-        if !foreground { for route in documents.keys { scheduleSave(route, immediate: true) } }
+        preferences.setForeground(foreground)
+        if !foreground {
+            for route in documents.keys { scheduleSave(route, immediate: true) }
+        }
         Task { await runtime?.setForeground(foreground) }
         if foreground { taskRequests?.refresh(route: presentation.selectedConversation) }
         else { taskRequests?.flushDrafts(); taskJournal?.flush() }
@@ -380,11 +410,13 @@ final class NativeAppModel: ObservableObject {
         retireMedia(); activationTask?.cancel(); selectionRevision = UUID(); activationRevision = UUID(); wireRevision = UUID()
         taskRequests?.invalidate(); sessionManager?.invalidate(); modelControls?.invalidate(); archiveReads = [:]; deviceApproval = nil
         unconfirmedCreations.formUnion(creatingCatalogs); creatingCatalogs = []
+        preferences.activate(id)
         let activation = activationRevision
         let alreadyReady = state.phase == .ready && state.connectionID == id
         if state.connectionID != id {
             agents = []; sessions = []; presentation.agents = []; presentation.catalogs = [:]
             presentation.selectedConversation = nil
+            presentation.requestedCatalog = nil
         }
         activationTask = Task {
             if let roster = try? await catalogCache?.read(connectionID: id), activation == activationRevision,
@@ -507,7 +539,33 @@ final class NativeAppModel: ObservableObject {
                 cachedLabel: showingCachedRoster ? String(localized: "Saved on this device") : nil)
         }
         for key in presentation.catalogs.keys { updateCatalog(key) }
+        restoreNavigationIfAvailable()
         for key in presentation.conversations.keys { updatePresentation(key) }
+    }
+
+    private func restoreNavigationIfAvailable() {
+        guard let connectionID = activeConnectionID else { return }
+        let routes = sessions.filter { $0.connectionID == connectionID && $0.archived != true }.map {
+            ConversationID(connectionID: connectionID, agentID: $0.agentID, sessionID: $0.key)
+        }
+        let mainRoutes = agents.filter { $0.connectionID == connectionID && !$0.mainSessionKey.isEmpty }.map {
+            ConversationID(connectionID: connectionID, agentID: $0.agentID, sessionID: $0.mainSessionKey)
+        }
+        let known = routes + mainRoutes
+        let fresh = !showingCachedRoster && state.phase == .ready
+        if fresh { navigationHeldRoutes.subtract(known.map(NativeStoredRoute.init)) }
+        let decision = preferences.restoration(connectionID: connectionID,
+            agents: agents.filter { $0.connectionID == connectionID }.map(\.agentID),
+            sessions: known, fresh: fresh)
+        switch decision {
+        case let .conversation(route):
+            if !fresh { navigationHeldRoutes = [NativeStoredRoute(route)] }
+            presentation.selectedConversation = route
+        case let .catalog(id):
+            presentation.selectedConversation = nil
+            preferences.opened(.init(id)); updateCatalog(id); presentation.requestedCatalog = id
+        case .wait, .home: break
+        }
     }
 
     private func showCatalog(_ id: AgentCatalogID) {
@@ -612,6 +670,9 @@ final class NativeAppModel: ObservableObject {
     private func open(_ route: ConversationID) {
         guard route.isConcrete, route.connectionID == activeConnectionID, let cache else { return }
         retireMediaSelection(); mediaVisibleRoute = route
+        presentation.requestedCatalog = nil
+        preferences.opened(.init(route))
+        presentation.readingContexts[route] = .init(restoration: preferences.reading(for: route))
         let revision = UUID(); selectionRevision = revision
         Task {
             do {
@@ -745,7 +806,7 @@ final class NativeAppModel: ObservableObject {
 
     private func send(_ route: ConversationID) {
         guard voice?.attempt?.context.route != route else { return }
-        guard route.connectionID == activeConnectionID, state.phase == .ready, state.capabilities.chat,
+        guard !navigationHeldRoutes.contains(NativeStoredRoute(route)), route.connectionID == activeConnectionID, state.phase == .ready, state.capabilities.chat,
               sessionManager?.permitsInput(route) != false, modelControls?.permitsInput(route) != false,
               let document = documents[route], !mediaSendPreparations.contains(route),
               !mediaImports.values.contains(where: { $0.scope.route == route }) else { return }
@@ -771,7 +832,7 @@ final class NativeAppModel: ObservableObject {
                 try validateMediaModel(route, hasImages: references.contains { $0.kind == .image })
                 guard activation == activationRevision, wire == wireRevision, scope == mediaScope(route),
                       presentation.draft(for: route).text == text, documents[route]?.revision == current.revision,
-                      sessionManager?.permitsInput(route) != false, modelControls?.permitsInput(route) != false else { return }
+                      !navigationHeldRoutes.contains(NativeStoredRoute(route)), sessionManager?.permitsInput(route) != false, modelControls?.permitsInput(route) != false else { return }
                 current.messages.append(.init(id: id, role: .user, local: true, text: text, idempotencyKey: id,
                     timestampMs: Int64(Date().timeIntervalSince1970 * 1000), delivery: .queued, media: references))
                 current.draft = ""; current.draftResourceIDs = []; current.revision += 1
@@ -786,7 +847,7 @@ final class NativeAppModel: ObservableObject {
     }
 
     private func drainQueue(_ route: ConversationID) {
-        guard route.connectionID == activeConnectionID, state.phase == .ready, state.capabilities.chat,
+        guard !navigationHeldRoutes.contains(NativeStoredRoute(route)), route.connectionID == activeConnectionID, state.phase == .ready, state.capabilities.chat,
               sessionManager?.permitsInput(route) != false, modelControls?.permitsInput(route) != false,
               running[route] == nil, sendTasks[route] == nil, let runtime,
               let queued = documents[route]?.messages.first(where: { $0.local && $0.delivery == .queued }),
@@ -812,7 +873,7 @@ final class NativeAppModel: ObservableObject {
                 }
                 try await modelControls?.verifyInput(route)
                 guard activation == activationRevision, wire == wireRevision, state.phase == .ready,
-                      sessionManager?.permitsInput(route) != false, modelControls?.permitsInput(route) != false else {
+                      !navigationHeldRoutes.contains(NativeStoredRoute(route)), sessionManager?.permitsInput(route) != false, modelControls?.permitsInput(route) != false else {
                     updateSend(route, id: queued.id, delivery: .held)
                     sendTasks.removeValue(forKey: route); scheduleSave(route, immediate: true); return
                 }
@@ -847,7 +908,7 @@ final class NativeAppModel: ObservableObject {
     }
 
     private func stop(_ route: ConversationID) {
-        guard route.connectionID == activeConnectionID, state.capabilities.abort,
+        guard !navigationHeldRoutes.contains(NativeStoredRoute(route)), route.connectionID == activeConnectionID, state.capabilities.abort,
               sessionManager?.permitsInput(route) != false, let runtime else { return }
         guard sessions.first(where: { $0.connectionID == route.connectionID && $0.key == route.sessionID })?.canContinue != false else { return }
         let runID = running[route]?.nilIfEmpty
@@ -922,7 +983,7 @@ final class NativeAppModel: ObservableObject {
         guard let document = documents[route] else { return }
         let name = agents.first { $0.agentID == route.agentID && $0.connectionID == route.connectionID }?.name ?? String(localized: "Agent")
         let session = sessions.first { $0.key == route.sessionID && $0.connectionID == route.connectionID }
-        let connected = route.connectionID == activeConnectionID && state.phase == .ready
+        let connected = route.connectionID == activeConnectionID && state.phase == .ready && !navigationHeldRoutes.contains(NativeStoredRoute(route))
         var features: [ClientFeature: ActionAvailability] = [.connectionSettings: .available]
         if state.capabilities.chat {
             features[.send] = connected ? .available
@@ -939,7 +1000,10 @@ final class NativeAppModel: ObservableObject {
         } else if modelControls?.permitsInput(route) == false {
             features[.send] = .temporarilyUnavailable(String(localized: "Review model settings before sending."))
         }
-        if managementAvailability.isVisible { features[.sessionManagement] = managementAvailability }
+        if managementAvailability.isVisible {
+            features[.sessionManagement] = navigationHeldRoutes.contains(NativeStoredRoute(route))
+                ? .temporarilyUnavailable(String(localized: "Reconnect and reopen conversation actions.")) : managementAvailability
+        }
         if state.capabilities.abort && sessionManager?.permitsInput(route) != false && running[route] != nil && session?.canContinue != false { features[.stop] = connected ? .available : .temporarilyUnavailable(String(localized: "Reconnect to stop this run.")) }
         if state.capabilities.sessions { features[.sessions] = .available }
         if state.capabilities.sessionCreate {
@@ -989,7 +1053,7 @@ final class NativeAppModel: ObservableObject {
         let ownedPending = message.local && message.role == .user && message.idempotencyKey?.isEmpty == false
         if ownedPending && [.queued, .held, .failed].contains(message.delivery) { actions += [.edit, .remove] }
         if ownedPending && message.delivery == .held, let route, route.connectionID == activeConnectionID,
-           state.phase == .ready, sessionManager?.permitsInput(route) != false,
+           state.phase == .ready, !navigationHeldRoutes.contains(NativeStoredRoute(route)), sessionManager?.permitsInput(route) != false,
            modelControls?.permitsInput(route) != false { actions.append(.sendNow) }
         return .init(id: message.id, author: author, content: content, delivery: delivery, isStreaming: message.streaming, actions: actions)
     }
@@ -1005,7 +1069,7 @@ final class NativeAppModel: ObservableObject {
             destination = .editPending(route, edit, activation: activationRevision)
         case .sendNow:
             guard message.local, message.role == .user, message.idempotencyKey?.isEmpty == false,
-                  message.delivery == .held, route.connectionID == activeConnectionID, state.phase == .ready,
+                  message.delivery == .held, !navigationHeldRoutes.contains(NativeStoredRoute(route)), route.connectionID == activeConnectionID, state.phase == .ready,
                   sessionManager?.permitsInput(route) != false, modelControls?.permitsInput(route) != false,
                   let index = documents[route]?.messages.firstIndex(where: { $0.id == messageID }) else { return }
             documents[route]?.messages[index].delivery = .queued; changed(route)
