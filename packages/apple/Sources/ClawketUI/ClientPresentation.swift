@@ -257,6 +257,8 @@ public enum ApprovalDecision: String, Hashable, Sendable { case allowOnce, allow
 public struct ApprovalPresentation: Identifiable, Hashable, Sendable {
     public enum Kind: String, Hashable, Sendable { case execution, plugin, pairing }
     public enum Outcome: String, Hashable, Sendable { case allowed, denied, expired }
+    /// Host-wide unique presentation identity, scoped to its connection/request generation.
+    /// The host maps this back to the backend request; it is never an unscoped wire request ID.
     public var id: String
     public var kind: Kind
     public var title: String
@@ -307,6 +309,8 @@ public struct QuestionField: Identifiable, Hashable, Sendable {
 }
 
 public struct QuestionPresentation: Identifiable, Hashable, Sendable {
+    /// Host-wide unique presentation identity, scoped to its conversation/request generation.
+    /// Response drafts and answer intents use this identity, not an unscoped wire request ID.
     public var id: String
     public var title: String
     public var detail: String?
@@ -375,6 +379,8 @@ public struct ConversationPresentation: Identifiable, Hashable, Sendable {
     public var models: [ModelPresentation]
     public var modelTitle: String?
     public var modelScopeLabel: String?
+    /// Describes the host's supported send behavior, such as "Send" or "Add to queue".
+    public var sendLabel: String
     public var isLoading: Bool
     public var isLoadingHistory: Bool
     public var features: [ClientFeature: ActionAvailability]
@@ -382,12 +388,13 @@ public struct ConversationPresentation: Identifiable, Hashable, Sendable {
     public init(id: ConversationID, agentName: String, sessionTitle: String, subtitle: String? = nil,
                 messages: [MessagePresentation] = [], connection: ConnectionPresentation = .init(),
                 sessions: [SessionPresentation] = [], models: [ModelPresentation] = [],
-                modelTitle: String? = nil, modelScopeLabel: String? = nil,
+                modelTitle: String? = nil, modelScopeLabel: String? = nil, sendLabel: String = "Send",
                 isLoading: Bool = false, isLoadingHistory: Bool = false,
                 features: [ClientFeature: ActionAvailability] = [:]) {
         self.id = id; self.agentName = agentName; self.sessionTitle = sessionTitle; self.subtitle = subtitle
         self.messages = messages; self.connection = connection; self.sessions = sessions; self.models = models
         self.modelTitle = modelTitle; self.modelScopeLabel = modelScopeLabel; self.isLoading = isLoading
+        self.sendLabel = sendLabel
         self.isLoadingHistory = isLoadingHistory; self.features = features
     }
 

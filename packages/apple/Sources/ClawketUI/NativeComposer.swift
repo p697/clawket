@@ -123,42 +123,51 @@ struct NativeComposer: View {
     }
 
     @ViewBuilder private var primaryAction: some View {
-        if conversation.availability(.stop).isVisible {
-            Button { onIntent(.stop(conversation.id)) } label: {
-                Group {
-                    if conversation.availability(.stop).isEnabled { Image(systemName: "stop.fill").font(.body) }
-                    else { ProgressView().tint(Color(uiColor: .systemBackground)) }
-                }.frame(width: 44, height: 44)
-                    .foregroundStyle(Color(uiColor: .systemBackground))
-                    .background(Color.primary, in: Circle())
+        VStack(spacing: 8) {
+            if conversation.availability(.stop).isVisible { stopButton }
+            if hasContent && conversation.availability(.send).isVisible {
+                sendButton
+            } else if !conversation.availability(.stop).isVisible && conversation.availability(.voice).isVisible {
+                VoiceCaptureControl(isRecording: draft.voice?.phase == .recording,
+                                    isEnabled: conversation.availability(.voice).isEnabled) { action in
+                    onIntent(.voice(conversation.id, action: action))
+                }
+                .frame(width: 44, height: 48)
+                .accessibilityIdentifier("composer-voice")
             }
-            .disabled(!conversation.availability(.stop).isEnabled)
-            .accessibilityLabel(conversation.availability(.stop).isEnabled ? "Stop task" : "Stopping task")
-            .accessibilityIdentifier("composer-stop")
-            .padding(.bottom, 2)
-        } else if hasContent && conversation.availability(.send).isVisible {
-            Button {
-                input.commitMarkedText()
-                onIntent(.send(conversation.id))
-            } label: {
-                Image(systemName: "arrow.up").font(.body.weight(.semibold))
-                    .frame(width: 44, height: 44)
-                    .foregroundStyle(Color(uiColor: .systemBackground))
-                    .background(Color.primary, in: Circle())
-            }
-            .disabled(!conversation.availability(.send).isEnabled || !attachmentsReady)
-            .opacity(conversation.availability(.send).isEnabled && attachmentsReady ? 1 : 0.35)
-            .accessibilityLabel("Send message")
-            .accessibilityIdentifier("composer-send")
-            .padding(.bottom, 2)
-        } else if conversation.availability(.voice).isVisible {
-            VoiceCaptureControl(isRecording: draft.voice?.phase == .recording,
-                                isEnabled: conversation.availability(.voice).isEnabled) { action in
-                onIntent(.voice(conversation.id, action: action))
-            }
-            .frame(width: 44, height: 48)
-            .accessibilityIdentifier("composer-voice")
         }
+        .padding(.bottom, 2)
+    }
+
+    private var stopButton: some View {
+        Button { onIntent(.stop(conversation.id)) } label: {
+            Group {
+                if conversation.availability(.stop).isEnabled { Image(systemName: "stop.fill").font(.body) }
+                else { ProgressView().tint(hasContent ? Color.primary : Color(uiColor: .systemBackground)) }
+            }.frame(width: 44, height: 44)
+                .foregroundStyle(hasContent ? Color.primary : Color(uiColor: .systemBackground))
+                .background(hasContent ? Color(uiColor: .secondarySystemBackground) : Color.primary, in: Circle())
+        }
+        .disabled(!conversation.availability(.stop).isEnabled)
+        .accessibilityLabel(conversation.availability(.stop).isEnabled ? "Stop task" : "Stopping task")
+        .accessibilityIdentifier("composer-stop")
+    }
+
+    private var sendButton: some View {
+        Button {
+            input.commitMarkedText()
+            onIntent(.send(conversation.id))
+        } label: {
+            Image(systemName: "arrow.up").font(.body.weight(.semibold))
+                .frame(width: 44, height: 44)
+                .foregroundStyle(Color(uiColor: .systemBackground))
+                .background(Color.primary, in: Circle())
+        }
+        .disabled(!conversation.availability(.send).isEnabled || !attachmentsReady)
+        .opacity(conversation.availability(.send).isEnabled && attachmentsReady ? 1 : 0.35)
+        .accessibilityLabel(conversation.sendLabel)
+        .help(conversation.sendLabel)
+        .accessibilityIdentifier("composer-send")
     }
 
     private var attachmentTray: some View {

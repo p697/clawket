@@ -1,5 +1,11 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-15 原生 iOS 表示层基础（负责人授权，原生研究 N0 后推进）。
+  - 新增可复用 `ClawketUI`：SwiftUI 系统导航、花名册/会话/模型/项目面板，UIKit 同实例输入框与可部分选文的消息正文、稳定 ID 表格滚动锚点，原 Clawket 猫形象。会话优先的 Agent 先进入真实目录，不构造空 session；附件、工作、审批/提问、交付状态和能力均由真实 host 注入，不在 View 内实现协议或推断后端状态。
+  - 输入与停止独立呈现：任务执行中有草稿时仍显示 host 实际支持的发送/排队动作，`sendLabel` 由 host 提供；队列持久化、运行结束判断与不确定发送恢复留给运行时。审批/提问使用 host 范围内唯一的请求代际身份，配对审批可独立于会话。原生选择器/语音只发有能力的意图，无默认演示数据、空操作按钮或替身 App。
+  - `heavy` 租约下 8 份实际 UIKit/SwiftUI 源码按 Swift 6、iOS16.4 Simulator 目标编译检查通过；逐文件 `PresentationTests.swift` 4 项通过，覆盖草稿身份/恢复、目录优先与能力隐藏。首轮原生 CI 在 Xcode16.4/Swift6.1.2 上编译全部 iOS UI 并通过 package 33 项；最终提交仍以 PR #225 完整 CI 为准。文档检查 10 对指令/7 项回归、diff 检查通过。本轮新增 Swift 表示源码 2,460 行、测试 63 行，旧 TS/TSX 统计范围保持。
+  - 尚未做真实 native host 的模拟器/手机界面、IME/滚动/VoiceOver、真实后端连接与功能验收；N2 及后续完整迁移仍由 `docs/native-ios/` 追踪，不把表示层编译当成 App 验收。未制作分发包、安装/覆盖商店 App、上传、提审或发布。
+
 - 2026-10-15 原生 iOS 安全配对兼容层（负责人授权，iOS 优先）。
   - 新增 `ClawketPairing`：六后端 QR / 旧 `openclaw://connect`、六位 v2 Box/HMAC 交换、十二位 SecretBox 及邀请链接统一进入后端/环境验证和单次 claim；保留自建 Registry、local-model 与 Pi 的现有环境规则。swift-sodium 精确锁定 0.11.0，Gateway v3 签名支持旧 TweetNaCl 64 字节密钥导入，未更改服务端协议。
   - HTTP 使用无凭据/缓存/重定向的可取消临时会话，完整响应十五秒/128 KiB；配对明文与加密字段有界，受限 Relay 交换十五秒绝对截止，所有结果关闭捕获 Socket，取消与未知结果不自动重试。凭据只在内存返回，持久化/激活由后续连接注册事务接入。
