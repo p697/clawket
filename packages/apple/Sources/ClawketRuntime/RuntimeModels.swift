@@ -225,6 +225,13 @@ public struct RuntimeHistory: Codable, Sendable, Equatable {
     public let pagination: Pagination
     public let hasActiveRun: Bool
     public let activeRun: JSONValue?
+    /// Actual backend history metadata, never inferred from a command or message text.
+    public let thinkingLevel: String?
+    public init(key: String, messages: [RuntimeMessage], nextCursor: String?, hasMore: Bool?, pagination: Pagination,
+                hasActiveRun: Bool, activeRun: JSONValue?, thinkingLevel: String? = nil) {
+        self.key = key; self.messages = messages; self.nextCursor = nextCursor; self.hasMore = hasMore
+        self.pagination = pagination; self.hasActiveRun = hasActiveRun; self.activeRun = activeRun; self.thinkingLevel = thinkingLevel
+    }
 }
 
 public struct RuntimeRoster: Codable, Sendable, Equatable {
@@ -264,10 +271,16 @@ public struct RuntimeModel: Codable, Sendable, Equatable, Identifiable {
     public let provider: String?
     public let selected: Bool
     public let input: [String]?
+    public let sortOrder: Double?
+    /// A native alias remains the write identity; this is optional display evidence only.
+    public let resolvedModel: String?
+    public let reasoningLevels: [String]?
     /// Missing/empty metadata is unknown, matching Mobile's composer guard.
     public var supportsImages: Bool? { guard let input, !input.isEmpty else { return nil }; return input.contains("image") }
-    public init(id: String, name: String, provider: String? = nil, selected: Bool, input: [String]? = nil) {
+    public init(id: String, name: String, provider: String? = nil, selected: Bool, input: [String]? = nil,
+                sortOrder: Double? = nil, resolvedModel: String? = nil, reasoningLevels: [String]? = nil) {
         self.id = id; self.name = name; self.provider = provider; self.selected = selected; self.input = input
+        self.sortOrder = sortOrder; self.resolvedModel = resolvedModel; self.reasoningLevels = reasoningLevels
     }
 }
 

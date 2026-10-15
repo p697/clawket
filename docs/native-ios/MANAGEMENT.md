@@ -18,6 +18,8 @@ No write is replayed. A proven local non-dispatch permits a newly obtained expli
 
 ## Remaining management slices
 
+The ModelSheet/runtime-setting slice now has [typed model-control contracts](MODEL-CONTROLS.md), including selection, thinking commands, negotiated native speed/permissions and uncertainty. Its host UI and real-device acceptance remain separate from the broader Models management row below.
+
 | Surface | Current source / wire oracle | Preservation boundary |
 |---|---|---|
 | Agent identity | `AgentSettings/IdentityScreen`; OpenClaw `agents.list/create/update/delete`, `agents.files.get/set` | Name/emoji are Agent records; vibe merges existing IDENTITY.md; avatar remains desktop-owned. Hermes has no identity writes. Codex/Claude names are local connection labels. |

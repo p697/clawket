@@ -176,7 +176,8 @@ enum WireModels {
         return RuntimeHistory(key: key, messages: messages, nextCursor: nextCursor,
                               hasMore: payload["hasMore"]?.boolValue, pagination: profile.cursorHistory ? .cursor : .limit,
                               hasActiveRun: payload["sessionInfo"]?["hasActiveRun"]?.boolValue ?? payload["hasActiveRun"]?.boolValue ?? false,
-                              activeRun: payload["activeRun"] ?? payload["inFlightRun"])
+                              activeRun: payload["activeRun"] ?? payload["inFlightRun"],
+                              thinkingLevel: payload["thinkingLevel"]?.stringValue.flatMap { ModelControlsWire.levels.contains($0) ? $0 : nil })
     }
 
     private static func avatar(_ value: JSONValue?, base: URL) -> URL? {

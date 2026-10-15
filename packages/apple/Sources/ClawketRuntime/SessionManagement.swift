@@ -134,6 +134,7 @@ extension RuntimeCoordinator {
         }
         sessionManagementState.invalidate(entry.session.key)
         sessionManagementState.writes[entry.session.key] = .pending(entry.reference.token)
+        retireModelControls(sessionKey: entry.session.key)
         // Retire older read completions before the first possible write dispatch.
         catalogTask?.cancel(); catalogTask = nil; catalogTaskID = UUID()
         if historyTasks[entry.session.key] != nil { historyRevisions[entry.session.key] = UUID() }

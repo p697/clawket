@@ -124,6 +124,10 @@ extension RuntimeCoordinator {
         let scope = try scope()
         guard !key.isEmpty, key.utf8.count <= 1_024, (1...1_000).contains(limit), cursor?.utf8.count ?? 0 <= 4_096,
               historyPending < 128, historyTasks.count < 32 || historyTasks[key] != nil else { throw RuntimeFailure(.capacity) }
+        let modelKey = try? modelControlKey(key)
+        let modelRevision = modelKey.flatMap { try? modelControlsState.admit($0) }
+        let thinkingReadID = UUID()
+        if cursor == nil, let modelKey, modelRevision != nil { modelControlsState.latestThinkingRead[modelKey] = thinkingReadID }
         let previous = historyTasks[key], id = UUID()
         let revision = historyRevisions[key] ?? UUID()
         historyRevisions[key] = revision
@@ -145,6 +149,11 @@ extension RuntimeCoordinator {
         do {
             let result = try await task.value; try assertCurrent(scope)
             guard historyRevisions[key] == revision else { throw RuntimeFailure(.superseded, delivery: .responseReceived) }
+            if cursor == nil, let level = result.thinkingLevel, let modelKey,
+               modelControlsState.contexts[modelKey] == modelRevision, modelControlsState.latestThinkingRead[modelKey] == thinkingReadID,
+               modelControlsState.holds[modelKey]?.phase != .pending {
+                modelControlsState.historyThinking[modelKey] = (scope, level)
+            }
             return result
         }
         catch { throw runtimeFailure(error) }
@@ -174,6 +183,9 @@ extension RuntimeCoordinator {
         let scope = try scope()
         guard let connection else { throw RuntimeFailure(.superseded) }
         try validateNativeSessionInput(sessionKey, scope: scope)
+        if let barrier = modelSendBarrier(sessionKey: sessionKey) {
+            throw RuntimeFailure(barrier == .permissionsRequired ? .permissionsRequired : .requestBusy)
+        }
         let gateway = connection.backendKind == .openclaw || connection.backendKind == .hermes
         let params = try promptParameters(sessionKey: sessionKey, input: input)
         do {
@@ -182,7 +194,12 @@ extension RuntimeCoordinator {
             guard let runID else { throw RuntimeFailure(.invalidResponse, delivery: .responseReceived) }
             try sessionEvents.register(runID: runID, sessionKey: sessionKey)
             return RuntimeRunReceipt(runID: runID, idempotencyKey: input.idempotencyKey)
-        } catch { throw runtimeFailure(error, sending: true) }
+        } catch {
+            let failure = runtimeFailure(error, sending: true)
+            if failure.code == .permissionsRequired, modelPermissionsSupported, isCurrent(scope),
+               let key = try? modelControlKey(sessionKey) { try? modelControlsState.requirePermissions(key) }
+            throw failure
+        }
     }
 
     public func abort(sessionKey: String, runID: String? = nil) async throws {
@@ -234,61 +251,12 @@ extension RuntimeCoordinator {
     }
 
     public func models(sessionKey: String? = nil) async throws -> [RuntimeModel] {
-        let scope = try scope()
-        guard let connection else { throw RuntimeFailure(.superseded) }
         if sessionKey != nil && !state.capabilities.modelPerSession { throw RuntimeFailure(.unsupported) }
-        let modelParams: JSONValue = sessionKey != nil && BackendProfile.profile(for: connection.backendKind).handshake == .bridgeHealth
-            ? .object(["sessionKey": .string(sessionKey!)]) : .object([:])
-        let payload = try await rpc("models.list", params: modelParams, timeout: connection.backendKind == .claudeCode ? .seconds(60) : .seconds(20), scope: scope)
-        guard let values = payload["models"]?.array, values.count <= 5_000 else { throw RuntimeFailure(.invalidResponse) }
-        var current = payload["currentModel"]?.stringValue ?? "", provider = payload["currentProvider"]?.stringValue ?? ""
-        if connection.backendKind == .hermes {
-            let selection = try await rpc("model.current", scope: scope)
-            current = selection["currentModel"]?.stringValue ?? ""; provider = selection["currentProvider"]?.stringValue ?? ""
-        } else if connection.backendKind == .openclaw {
-            if let sessionKey {
-                let session = try await readSessions(scope: scope).first { $0.key == sessionKey }
-                current = session?.model ?? ""; provider = session?.modelProvider ?? ""
-            } else {
-                let config = try await rpc("config.get", scope: scope)
-                let model = config["config"]?["agents"]?["defaults"]?["model"]
-                current = model?.stringValue ?? model?["primary"]?.stringValue ?? ""
-            }
-            if let slash = current.firstIndex(of: "/"), provider.isEmpty {
-                provider = String(current[..<slash]); current = String(current[current.index(after: slash)...])
-            }
-        }
-        return try values.map { value in
-            guard let id = value["id"]?.nonemptyString else { throw RuntimeFailure(.invalidResponse) }
-            let itemProvider = value["provider"]?.stringValue
-            return RuntimeModel(id: id, name: value["name"]?.nonemptyString ?? id, provider: itemProvider,
-                                selected: id == current && (provider.isEmpty || itemProvider == provider), input: value["input"]?.array?.compactMap(\.stringValue))
-        }
+        return try await modelControls(sessionKey: sessionKey).models
     }
 
     public func selectModel(id: String, provider: String? = nil, sessionKey: String? = nil) async throws {
-        let scope = try scope()
-        guard let connection, !id.isEmpty, id.utf8.count <= 1_024 else { throw RuntimeFailure(.invalidConnection) }
-        if sessionKey != nil && !state.capabilities.modelPerSession { throw RuntimeFailure(.unsupported) }
-        let model = id.contains("/") || provider?.isEmpty != false ? id : "\(provider!)/\(id)"
-        if connection.backendKind == .openclaw {
-            if let sessionKey { _ = try await rpc("sessions.patch", params: .object(["key": .string(sessionKey), "model": .string(model)]), scope: scope) }
-            else {
-                let config = try await rpc("config.get", scope: scope)
-                guard let hash = config["hash"]?.nonemptyString else { throw RuntimeFailure(.invalidResponse) }
-                let patch: JSONValue = .object(["agents": .object(["defaults": .object(["model": .object(["primary": .string(model)])])])])
-                let result = try await rpc("config.patch", params: .object(["raw": .string(try FrameCodec.encode(patch)), "baseHash": .string(hash)]), scope: scope)
-                guard result["ok"]?.boolValue == true else { throw RuntimeFailure(.invalidResponse, delivery: .responseReceived) }
-            }
-        } else {
-            var params: [String: JSONValue] = ["model": .string(id), "scope": .string(sessionKey == nil ? "global" : "session")]
-            if let provider { params["provider"] = .string(provider) }
-            if let sessionKey { params["sessionKey"] = .string(sessionKey) }
-            if connection.backendKind == .localModel { params = ["model": .string(id)] }
-            let result = try await rpc(connection.backendKind == .hermes ? "model.set" : "models.select", params: .object(params),
-                                       timeout: [.claudeCode, .pi, .localModel].contains(connection.backendKind) ? .seconds(190) : .seconds(45), scope: scope)
-            guard result["ok"]?.boolValue == true else { throw RuntimeFailure(.invalidResponse, delivery: .responseReceived) }
-        }
+        try await selectLegacyModel(id: id, provider: provider, sessionKey: sessionKey)
     }
 
     func rpc(_ method: String, params: JSONValue = .object([:]), timeout: Duration = .seconds(20), scope: Scope) async throws -> JSONValue {

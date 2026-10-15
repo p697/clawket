@@ -49,6 +49,7 @@ public actor RuntimeCoordinator {
     var unavailableAttempts = 0
     var catalog: [RuntimeSession] = []
     var sessionManagementState = SessionManagementState()
+    var modelControlsState = ModelControlsState()
     var historyRevisions: [String: UUID] = [:]
     var catalogTask: Task<RuntimeRoster, any Error>?
     var catalogTaskID = UUID()
@@ -378,6 +379,7 @@ public actor RuntimeCoordinator {
 
     func retireAttempt() -> RPCConnection? {
         attempt = UUID(); authentication = UUID(); signedConnectIdentity = nil
+        modelControlsState.retire()
         resetConsents()
         clearArtifacts()
         sessionManagementState = SessionManagementState()
