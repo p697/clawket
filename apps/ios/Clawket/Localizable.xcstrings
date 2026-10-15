@@ -69,6 +69,24 @@
             "state": "translated",
             "value": "%@ · Desenvolvimento nativo"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · 네이티브 개발 버전"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · Нативная версия для разработки"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · Нативна версія для розробки"
+          }
         }
       },
       "comment": "Native UI / accessibility. Preserve each interpolated value; do not translate names or filenames."
@@ -141,6 +159,24 @@
             "state": "translated",
             "value": "%@, %@, conversas"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, %@, 대화"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, %@, чаты"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, %@, чати"
+          }
         }
       },
       "comment": "Native UI / accessibility. Preserve each interpolated value; do not translate names or filenames."
@@ -212,6 +248,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Já está em curso uma tentativa de emparelhamento."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이미 페어링을 시도하고 있습니다."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сопряжение уже выполняется."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "З’єднання вже виконується."
           }
         }
       },
@@ -525,6 +579,24 @@
             "state": "translated",
             "value": "Adicionar anexo ou ação"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "첨부 파일 또는 작업 추가"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Добавить вложение или действие"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Додати вкладення або дію"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -717,6 +789,24 @@
             "state": "translated",
             "value": "Adicionar à fila"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "대기열에 추가"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Добавить в очередь"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Додати до черги"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -788,6 +878,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Endereço"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "주소"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Адрес"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Адреса"
           }
         }
       },
@@ -1461,6 +1569,24 @@
             "state": "translated",
             "value": "Permitir uma vez"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "한 번만 허용"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Разрешить один раз"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Дозволити один раз"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -1653,6 +1779,24 @@
             "state": "translated",
             "value": "Permitir sempre"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "항상 허용"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Всегда разрешать"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Завжди дозволяти"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -1724,6 +1868,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Permitir sempre esta ação?"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 작업을 항상 허용할까요?"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Всегда разрешать это действие?"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Завжди дозволяти цю дію?"
           }
         }
       },
@@ -1797,6 +1959,24 @@
             "state": "translated",
             "value": "Permitir sempre…"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "항상 허용…"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Всегда разрешать…"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Завжди дозволяти…"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -1868,6 +2048,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aplica-se a todas as conversas"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "모든 대화에 적용"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Применяется ко всем чатам"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Застосовується до всіх чатів"
           }
         }
       },
@@ -1941,6 +2139,24 @@
             "state": "translated",
             "value": "Aprovação necessária"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "승인 필요"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Требуется разрешение"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Потрібен дозвіл"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -2012,6 +2228,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Falha ao preparar o anexo"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "첨부 파일 준비 실패"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось подготовить вложение"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не вдалося підготувати вкладення"
           }
         }
       },
@@ -2205,6 +2439,24 @@
             "state": "translated",
             "value": "O acesso à câmara está indisponível. Pode usar um código de emparelhamento."
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "카메라에 접근할 수 없습니다. 대신 페어링 코드를 사용할 수 있습니다."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет доступа к камере. Можно использовать код сопряжения."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Немає доступу до камери. Можна скористатися кодом з’єднання."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -2277,6 +2529,24 @@
             "state": "translated",
             "value": "A leitura pela câmara parou. Pode introduzir o código de emparelhamento."
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "카메라 스캔이 중지되었습니다. 대신 페어링 코드를 입력할 수 있습니다."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сканирование камерой остановлено. Можно ввести код сопряжения."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сканування камерою зупинено. Можна ввести код з’єднання."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -2348,6 +2618,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Leitura pela câmara indisponível"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "카메라 스캔을 사용할 수 없습니다"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сканирование камерой недоступно"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сканування камерою недоступне"
           }
         }
       },
@@ -2541,6 +2829,24 @@
             "state": "translated",
             "value": "Cancelar gravação"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "녹음 취소"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отменить запись"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скасувати запис"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -2612,6 +2918,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "A verificar o seu Agent…"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "에이전트 확인 중…"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проверка агента…"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Перевірка агента…"
           }
         }
       },
@@ -2685,6 +3009,24 @@
             "state": "translated",
             "value": "Escolha um Agent para continuar uma conversa."
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "대화를 이어갈 에이전트를 선택하세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выберите агента, чтобы продолжить чат."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Виберіть агента, щоб продовжити чат."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -2757,6 +3099,24 @@
             "state": "translated",
             "value": "Escolher modelo"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "모델 선택"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выбрать модель"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вибрати модель"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -2828,6 +3188,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Código"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "코드"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Код"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Код"
           }
         }
       },
@@ -3381,6 +3759,24 @@
             "state": "translated",
             "value": "Ligue um Agent para continuar as conversas e avançar no trabalho."
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "에이전트를 연결하여 대화를 이어가고 작업을 계속하세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подключите агента, чтобы продолжить чаты и работу."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Підключіть агента, щоб продовжити чати й роботу."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -3453,6 +3849,24 @@
             "state": "translated",
             "value": "Ligue um Agent para começar."
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "에이전트를 연결하여 시작하세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подключите агента, чтобы начать."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Підключіть агента, щоб почати."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -3524,6 +3938,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ligar por"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "연결 방법"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Способ подключения"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Спосіб підключення"
           }
         }
       },
@@ -3957,6 +4389,24 @@
             "state": "translated",
             "value": "Aprovação de ligação"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "연결 승인"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Разрешение на подключение"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Дозвіл на підключення"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -4029,6 +4479,24 @@
             "state": "translated",
             "value": "A ligação precisa de aprovação"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "연결 승인이 필요합니다"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Для подключения требуется разрешение"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Для підключення потрібен дозвіл"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -4100,6 +4568,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "A ligação precisa de atenção"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "연결 확인이 필요합니다"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Требуется проверка подключения"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Потрібно перевірити підключення"
           }
         }
       },
@@ -4413,6 +4899,24 @@
             "state": "translated",
             "value": "Ações da conversa"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "대화 작업"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Действия с чатом"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Дії з чатом"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -4484,6 +4988,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ficheiros da conversa"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "대화 파일"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Файлы чата"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Файли чату"
           }
         }
       },
@@ -4557,6 +5079,24 @@
             "state": "translated",
             "value": "Conversas"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "대화"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Чаты"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Чати"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -4629,6 +5169,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Não foi possível atualizar as conversas. Verifique a sua ligação e tente novamente."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "대화를 새로고침하지 못했습니다. 연결을 확인한 후 다시 시도하세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось обновить чаты. Проверьте подключение и повторите попытку."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не вдалося оновити чати. Перевірте підключення й спробуйте ще раз."
           }
         }
       }
@@ -4821,6 +5379,24 @@
             "state": "translated",
             "value": "Copiar código"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "코드 복사"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скопировать код"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скопіювати код"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -4893,6 +5469,24 @@
             "state": "translated",
             "value": "Não foi possível concluir o emparelhamento. Verifique os dados e tente novamente."
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "페어링을 완료하지 못했습니다. 입력 내용을 확인한 후 다시 시도하세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось завершить сопряжение. Проверьте данные и повторите попытку."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не вдалося завершити з’єднання. Перевірте дані й спробуйте ще раз."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -4964,6 +5558,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Não foi possível usar este código ou ligação de emparelhamento. Verifique-o ou gere um novo convite."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 페어링 코드나 링크를 사용할 수 없습니다. 내용을 확인하거나 새 초대를 생성하세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось использовать этот код или ссылку сопряжения. Проверьте их или создайте новое приглашение."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не вдалося скористатися цим кодом або посиланням з’єднання. Перевірте їх або створіть нове запрошення."
           }
         }
       },
@@ -5038,6 +5650,24 @@
             "state": "translated",
             "value": "A criar conversa…"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "대화 생성 중…"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Создание чата…"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Створення чату…"
+          }
         }
       }
     },
@@ -5109,6 +5739,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Não foi possível confirmar a criação. Atualize as conversas antes de tentar novamente."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "생성 여부를 확인할 수 없습니다. 다시 시도하기 전에 대화 목록을 새로고침하세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось подтвердить создание. Обновите чаты, прежде чем повторять попытку."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не вдалося підтвердити створення. Оновіть чати, перш ніж повторювати спробу."
           }
         }
       }
@@ -5301,6 +5949,24 @@
             "state": "translated",
             "value": "Não foi possível confirmar a entrega. Verifique a conversa antes de voltar a enviar."
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "메시지 전달을 확인할 수 없습니다. 다시 보내기 전에 대화를 확인하세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось подтвердить доставку. Проверьте чат перед повторной отправкой."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не вдалося підтвердити доставку. Перевірте чат перед повторним надсиланням."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -5372,6 +6038,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Não foi possível confirmar a entrega. A sua mensagem original está guardada. Verifique a conversa antes de voltar a enviar."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "메시지 전달을 확인할 수 없습니다. 원본 메시지는 저장되었습니다. 다시 보내기 전에 대화를 확인하세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось подтвердить доставку. Исходное сообщение сохранено. Проверьте чат перед повторной отправкой."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не вдалося підтвердити доставку. Початкове повідомлення збережено. Перевірте чат перед повторним надсиланням."
           }
         }
       },
@@ -5565,6 +6249,24 @@
             "state": "translated",
             "value": "Direta"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "직접 연결"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Напрямую"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Напряму"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -5636,6 +6338,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Desligar"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "연결 해제"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отключить"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Відключити"
           }
         }
       },
@@ -5709,6 +6429,24 @@
             "state": "translated",
             "value": "Desligado"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "연결 해제됨"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отключено"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Відключено"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -5780,6 +6518,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Desligado. Não foi possível guardar esta preferência."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "연결이 해제되었으나 이 설정을 저장하지 못했습니다."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подключение разорвано. Не удалось сохранить эту настройку."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Підключення розірвано. Не вдалося зберегти цей параметр."
           }
         }
       },
@@ -5973,6 +6729,24 @@
             "state": "translated",
             "value": "Mensagens anteriores"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이전 메시지"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Предыдущие сообщения"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Попередні повідомлення"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -6164,6 +6938,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Introduza o código apresentado pelo Clawket no computador. Mantenha essa janela aberta durante o emparelhamento."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "컴퓨터의 Clawket에 표시된 코드를 입력하세요. 페어링하는 동안 해당 창을 열어 두세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Введите код, показанный Clawket на компьютере. Не закрывайте это окно во время сопряжения."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Введіть код, який Clawket показує на комп’ютері. Не закривайте це вікно під час з’єднання."
           }
         }
       },
@@ -6717,6 +7509,24 @@
             "state": "translated",
             "value": "É necessária a sua resposta"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "입력 필요"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Требуется ваш ответ"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Потрібна ваша відповідь"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -6788,6 +7598,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mensagens mais recentes"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "최신 메시지"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Последние сообщения"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Останні повідомлення"
           }
         }
       },
@@ -6981,6 +7809,24 @@
             "state": "translated",
             "value": "A carregar Agents…"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "에이전트 불러오는 중…"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Загрузка агентов…"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Завантаження агентів…"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -7052,6 +7898,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "A carregar conversas…"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "대화 불러오는 중…"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Загрузка чатов…"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Завантаження чатів…"
           }
         }
       },
@@ -7125,6 +7989,24 @@
             "state": "translated",
             "value": "A carregar conversa…"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "대화 불러오는 중…"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Загрузка чата…"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Завантаження чату…"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -7196,6 +8078,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "A carregar mensagens anteriores…"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이전 메시지 불러오는 중…"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Загрузка предыдущих сообщений…"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Завантаження попередніх повідомлень…"
           }
         }
       },
@@ -7629,6 +8529,24 @@
             "state": "translated",
             "value": "Mensagem para %@"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@에게 메시지 보내기"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сообщение для %@"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Повідомлення для %@"
+          }
         }
       },
       "comment": "Native UI / accessibility. Preserve each interpolated value; do not translate names or filenames."
@@ -7821,6 +8739,24 @@
             "state": "translated",
             "value": "Modelo: %@"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "모델: %@"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Модель: %@"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Модель: %@"
+          }
         }
       },
       "comment": "Native UI / accessibility. Preserve each interpolated value; do not translate names or filenames."
@@ -7893,6 +8829,24 @@
             "state": "translated",
             "value": "Mais opções de permissão"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "추가 권한 옵션"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Другие варианты разрешения"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Інші варіанти дозволу"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -7964,6 +8918,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nome (opcional)"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이름(선택 사항)"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Название (необязательно)"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Назва (необов’язково)"
           }
         }
       },
@@ -8277,6 +9249,24 @@
             "state": "translated",
             "value": "Nova conversa"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "새 대화"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новый чат"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новий чат"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -8348,6 +9338,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nenhum modelo disponível"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "사용 가능한 모델이 없습니다"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет доступных моделей"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Немає доступних моделей"
           }
         }
       },
@@ -8421,6 +9429,24 @@
             "state": "translated",
             "value": "Ainda não há conversas"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "아직 대화가 없습니다"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Чатов пока нет"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Чатів поки немає"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -8492,6 +9518,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nenhum Agent ou conversa correspondente"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "일치하는 에이전트나 대화가 없습니다"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подходящих агентов или чатов нет"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Відповідних агентів або чатів немає"
           }
         }
       },
@@ -8565,6 +9609,24 @@
             "state": "translated",
             "value": "Nenhuma conversa correspondente"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "일치하는 대화가 없습니다"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подходящих чатов нет"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Відповідних чатів немає"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -8636,6 +9698,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Não enviado. A sua mensagem está guardada."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "전송되지 않았습니다. 메시지는 저장되었습니다."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не отправлено. Сообщение сохранено."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не надіслано. Повідомлення збережено."
           }
         }
       },
@@ -8829,6 +9909,24 @@
             "state": "translated",
             "value": "A abrir conversa…"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "대화 여는 중…"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Открытие чата…"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Відкриття чату…"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -8900,6 +9998,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Emparelhar o seu Agent"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "에이전트 페어링"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сопряжение с агентом"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "З’єднати агента"
           }
         }
       },
@@ -9093,6 +10209,24 @@
             "state": "translated",
             "value": "Não foi possível guardar os dados de emparelhamento. Toque novamente em «Ligar» para guardar o resultado já obtido."
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "페어링 데이터를 저장하지 못했습니다. 기존 결과를 저장하려면 '연결'을 다시 누르세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось сохранить данные сопряжения. Нажмите «Подключить» ещё раз, чтобы сохранить уже полученный результат."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не вдалося зберегти дані з’єднання. Знову натисніть «Підключити», щоб зберегти вже отриманий результат."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -9165,6 +10299,24 @@
             "state": "translated",
             "value": "Participante"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "참여자"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Участник"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Учасник"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -9236,6 +10388,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Palavra-passe (se necessária)"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "암호(필요한 경우)"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пароль (если требуется)"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пароль (якщо потрібен)"
           }
         }
       },
@@ -9429,6 +10599,24 @@
             "state": "translated",
             "value": "Cole o conteúdo do QR ou a ligação de emparelhamento"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "페어링 QR 내용 또는 링크 붙여넣기"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вставьте содержимое QR-кода или ссылку сопряжения"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вставте вміст QR-коду або посилання з’єднання"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -9621,6 +10809,24 @@
             "state": "translated",
             "value": "A preparar %@"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 준비 중"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подготовка %@"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Підготовка %@"
+          }
         }
       },
       "comment": "Native UI / accessibility. Preserve each interpolated value; do not translate names or filenames."
@@ -9692,6 +10898,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pré-visualização de %@"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 미리보기"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Предпросмотр %@"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Попередній перегляд %@"
           }
         }
       },
@@ -9885,6 +11109,24 @@
             "state": "translated",
             "value": "QR ou ligação"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "QR 또는 링크"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "QR или ссылка"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "QR або посилання"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -10077,6 +11319,24 @@
             "state": "translated",
             "value": "A aguardar revisão"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "확인 대기 중"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ожидает проверки"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Очікує на перевірку"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -10148,6 +11408,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "A aguardar a sua confirmação. Envie esta mensagem quando a ligação estiver disponível."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "확인을 기다리고 있습니다. 연결이 가능해지면 이 메시지를 보내세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ожидает вашего подтверждения. Отправьте это сообщение, когда подключение станет доступно."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Очікує на ваше підтвердження. Надішліть це повідомлення, коли підключення стане доступним."
           }
         }
       },
@@ -10222,6 +11500,24 @@
             "state": "translated",
             "value": "Volte a ligar ou atualize as conversas antes de criar outra."
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "다른 대화를 생성하기 전에 다시 연결하거나 대화 목록을 새로고침하세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подключитесь заново или обновите чаты, прежде чем создавать ещё один."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Підключіться знову або оновіть чати, перш ніж створювати ще один."
+          }
         }
       }
     },
@@ -10292,6 +11588,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Volte a ligar para alterar o modelo."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "모델을 변경하려면 다시 연결하세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подключитесь заново, чтобы сменить модель."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Підключіться знову, щоб змінити модель."
           }
         }
       },
@@ -10366,6 +11680,24 @@
             "state": "translated",
             "value": "Volte a ligar para criar uma conversa."
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "대화를 생성하려면 다시 연결하세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подключитесь заново, чтобы создать чат."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Підключіться знову, щоб створити чат."
+          }
         }
       }
     },
@@ -10436,6 +11768,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Volte a ligar para carregar mensagens anteriores."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이전 메시지를 불러오려면 다시 연결하세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подключитесь заново, чтобы загрузить предыдущие сообщения."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Підключіться знову, щоб завантажити попередні повідомлення."
           }
         }
       },
@@ -10509,6 +11859,24 @@
             "state": "translated",
             "value": "Volte a ligar para atualizar as conversas."
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "대화를 새로고침하려면 다시 연결하세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подключитесь заново, чтобы обновить чаты."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Підключіться знову, щоб оновити чати."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -10581,6 +11949,24 @@
             "state": "translated",
             "value": "Volte a ligar para enviar. O seu rascunho está guardado."
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "메시지를 보내려면 다시 연결하세요. 초안은 저장되었습니다."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Для отправки подключитесь заново. Черновик сохранён."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Для надсилання підключіться знову. Чернетку збережено."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -10652,6 +12038,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Volte a ligar para parar esta execução."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 실행을 중지하려면 다시 연결하세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подключитесь заново, чтобы остановить это выполнение."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Підключіться знову, щоб зупинити це виконання."
           }
         }
       },
@@ -10845,6 +12249,24 @@
             "state": "translated",
             "value": "As suas ligações guardadas foram recuperadas da última cópia verificada."
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "마지막으로 검증된 사본에서 저장된 연결을 복구했습니다."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сохранённые подключения восстановлены из последней проверенной копии."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Збережені підключення відновлено з останньої перевіреної копії."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -10917,6 +12339,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Atualize as conversas antes de criar outra."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "다른 대화를 생성하기 전에 대화 목록을 새로고침하세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обновите чаты, прежде чем создавать ещё один."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Оновіть чати, перш ніж створювати ще один."
           }
         }
       }
@@ -11229,6 +12669,24 @@
             "state": "translated",
             "value": "Remover %@"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 제거"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить %@"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Видалити %@"
+          }
         }
       },
       "comment": "Native UI / accessibility. Preserve each interpolated value; do not translate names or filenames."
@@ -11421,6 +12879,24 @@
             "state": "translated",
             "value": "Remover esta ligação?"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 연결을 제거할까요?"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить это подключение?"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Видалити це підключення?"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -11493,6 +12969,24 @@
             "state": "translated",
             "value": "Responder numa nova conversa"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "새 대화에서 답장"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ответить в новом чате"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Відповісти в новому чаті"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -11564,6 +13058,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "A responder…"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "응답 중…"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подготовка ответа…"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Підготовка відповіді…"
           }
         }
       },
@@ -11757,6 +13269,24 @@
             "state": "translated",
             "value": "Guardar ligação"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "연결 저장"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сохранить подключение"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Зберегти підключення"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -11829,6 +13359,24 @@
             "state": "translated",
             "value": "As conversas guardadas permanecem neste dispositivo. Pode voltar a emparelhar o Agent mais tarde."
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "저장된 대화는 이 기기에 남아 있습니다. 나중에 에이전트를 다시 페어링할 수 있습니다."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сохранённые чаты останутся на этом устройстве. Вы сможете повторно выполнить сопряжение с агентом позже."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Збережені чати залишаться на цьому пристрої. Агента можна буде знову з’єднати пізніше."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -11900,6 +13448,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Não foi possível ler os dados guardados em segurança. Desbloqueie este dispositivo e volte a abrir o Clawket."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "저장된 데이터를 안전하게 읽을 수 없습니다. 기기의 잠금을 해제한 후 Clawket을 다시 여세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось безопасно прочитать сохранённые данные. Разблокируйте устройство и снова откройте Clawket."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не вдалося безпечно прочитати збережені дані. Розблокуйте пристрій і знову відкрийте Clawket."
           }
         }
       },
@@ -12093,6 +13659,24 @@
             "state": "translated",
             "value": "Ler código QR"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "QR 코드 스캔"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сканировать QR-код"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сканувати QR-код"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -12165,6 +13749,24 @@
             "state": "translated",
             "value": "Ler QR de emparelhamento"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "페어링 QR 스캔"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сканировать QR-код сопряжения"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сканувати QR-код з’єднання"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -12236,6 +13838,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Leia o código QR apresentado pelo Clawket no computador ou cole a ligação de emparelhamento."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "컴퓨터의 Clawket에 표시된 QR 코드를 스캔하거나 페어링 링크를 붙여넣으세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отсканируйте QR-код, показанный Clawket на компьютере, или вставьте ссылку сопряжения."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Відскануйте QR-код, який Clawket показує на комп’ютері, або вставте посилання з’єднання."
           }
         }
       },
@@ -12549,6 +14169,24 @@
             "state": "translated",
             "value": "Pesquisar Agents e conversas"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "에이전트 및 대화 검색"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поиск агентов и чатов"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пошук агентів і чатів"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -12620,6 +14258,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pesquisar conversas"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "대화 검색"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поиск чатов"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пошук чатів"
           }
         }
       },
@@ -12693,6 +14349,24 @@
             "state": "translated",
             "value": "Pesquisar modelos"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "모델 검색"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поиск моделей"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пошук моделей"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -12764,6 +14438,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "O armazenamento seguro está indisponível."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "보안 저장소를 사용할 수 없습니다."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Защищённое хранилище недоступно."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Захищене сховище недоступне."
           }
         }
       },
@@ -12957,6 +14649,24 @@
             "state": "translated",
             "value": "Enviar resposta"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "답변 보내기"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отправить ответ"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Надіслати відповідь"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -13148,6 +14858,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Estado de envio não confirmado"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "전송 상태 미확인"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Статус отправки не подтверждён"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Статус надсилання не підтверджено"
           }
         }
       },
@@ -13701,6 +15429,24 @@
             "state": "translated",
             "value": "Mostrar comando completo"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "전체 명령 표시"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показать команду целиком"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показати команду повністю"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -13893,6 +15639,24 @@
             "state": "translated",
             "value": "Iniciar conversa"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "대화 시작"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Начать чат"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Почати чат"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -13964,6 +15728,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Iniciar entrada por voz"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "음성 입력 시작"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Начать голосовой ввод"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Почати голосове введення"
           }
         }
       },
@@ -14157,6 +15939,24 @@
             "state": "translated",
             "value": "Parar gravação"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "녹음 중지"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Остановить запись"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Зупинити запис"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -14349,6 +16149,24 @@
             "state": "translated",
             "value": "A parar tarefa"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "작업 중지 중"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Остановка задачи"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Зупинення завдання"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -14420,6 +16238,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Armazenamento indisponível"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "저장 공간을 사용할 수 없습니다"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Хранилище недоступно"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сховище недоступне"
           }
         }
       },
@@ -14493,6 +16329,24 @@
             "state": "translated",
             "value": "Toque para gravar. Mantenha premido e solte para enviar. Deslize para cima para cancelar."
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "탭하여 녹음을 시작하세요. 길게 누른 뒤 놓으면 전송되고 위로 밀면 취소됩니다."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нажмите для записи. Удерживайте и отпустите для отправки. Сдвиньте вверх для отмены."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Натисніть для запису. Утримуйте й відпустіть для надсилання. Посуньте вгору для скасування."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -14564,6 +16418,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Não foi possível remover a ligação. Os seus dados guardados não foram alterados."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "연결을 제거하지 못했습니다. 저장된 데이터는 변경되지 않았습니다."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось удалить подключение. Сохранённые данные не изменились."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не вдалося видалити підключення. Збережені дані не змінилися."
           }
         }
       },
@@ -14637,6 +16509,24 @@
             "state": "translated",
             "value": "Não foi possível guardar a ligação selecionada. Tente novamente."
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "선택한 연결을 저장하지 못했습니다. 다시 시도하세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось сохранить выбранное подключение. Повторите попытку."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не вдалося зберегти вибране підключення. Спробуйте ще раз."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -14708,6 +16598,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Não foi possível concluir a operação. Verifique a sua ligação e tente novamente."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "작업을 완료하지 못했습니다. 연결을 확인한 후 다시 시도하세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось выполнить операцию. Проверьте подключение и повторите попытку."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не вдалося виконати операцію. Перевірте підключення й спробуйте ще раз."
           }
         }
       },
@@ -14781,6 +16689,24 @@
             "state": "translated",
             "value": "Não foi possível concluir a operação. Tente novamente."
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "작업을 완료하지 못했습니다. 다시 시도하세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось выполнить операцию. Повторите попытку."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не вдалося виконати операцію. Спробуйте ще раз."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -14852,6 +16778,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Não foi possível contactar o serviço de emparelhamento. Verifique o seu computador antes de voltar a tentar este convite."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "페어링 서비스에 연결할 수 없습니다. 이 초대를 다시 시도하기 전에 컴퓨터를 확인하세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось связаться с сервисом сопряжения. Проверьте компьютер, прежде чем снова использовать это приглашение."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не вдалося зв’язатися із сервісом з’єднання. Перевірте комп’ютер, перш ніж знову використовувати це запрошення."
           }
         }
       },
@@ -14925,6 +16869,24 @@
             "state": "translated",
             "value": "Há 32 mensagens pendentes. Conclua ou remova uma antes de adicionar outra."
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "대기 중인 메시지가 32개 있습니다. 하나를 완료하거나 제거한 후 추가하세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В ожидании 32 сообщения. Завершите или удалите одно, прежде чем добавить ещё."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В очікуванні 32 повідомлення. Завершіть або видаліть одне, перш ніж додати ще."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -14996,6 +16958,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Esta ação não está disponível para esta ligação."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 연결에서는 해당 작업을 사용할 수 없습니다."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Это действие недоступно для данного подключения."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ця дія недоступна для цього підключення."
           }
         }
       },
@@ -15069,6 +17049,24 @@
             "state": "translated",
             "value": "Este código pertence a outro Agent. Escolha o Agent correspondente e tente novamente."
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 코드는 다른 에이전트의 코드입니다. 해당 에이전트를 선택한 후 다시 시도하세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Этот код принадлежит другому агенту. Выберите соответствующего агента и повторите попытку."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Цей код належить іншому агенту. Виберіть відповідного агента й спробуйте ще раз."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -15140,6 +17138,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Esta ligação não tem permissão para essa ação."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 연결에는 해당 작업을 수행할 권한이 없습니다."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "У этого подключения нет разрешения на это действие."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Це підключення не має дозволу на цю дію."
           }
         }
       },
@@ -15213,6 +17229,24 @@
             "state": "translated",
             "value": "Esta conversa"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 대화"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Этот чат"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Цей чат"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -15284,6 +17318,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Esta conversa está disponível apenas para leitura aqui."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 대화는 여기에서 읽기 전용입니다."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Здесь этот чат доступен только для чтения."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Тут цей чат доступний лише для читання."
           }
         }
       },
@@ -15357,6 +17409,24 @@
             "state": "translated",
             "value": "Esta app de desenvolvimento utiliza ligações e armazenamento próprios."
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 개발용 앱은 독립된 연결과 저장소를 사용합니다."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Это приложение для разработки использует собственные подключения и хранилище."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Цей застосунок для розробки використовує власні підключення та сховище."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -15428,6 +17498,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Não foi possível guardar este rascunho. Mantenha o Clawket aberto e tente novamente."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "초안을 저장하지 못했습니다. Clawket을 열어 둔 상태에서 다시 시도하세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось сохранить черновик. Не закрывайте Clawket и повторите попытку."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не вдалося зберегти чернетку. Не закривайте Clawket і спробуйте ще раз."
           }
         }
       },
@@ -15501,6 +17589,24 @@
             "state": "translated",
             "value": "Este convite expirou ou já foi utilizado. Obtenha um novo código no computador."
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 초대가 만료되었거나 이미 사용되었습니다. 컴퓨터에서 새 코드를 받으세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Срок приглашения истёк или оно уже использовано. Получите новый код на компьютере."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Термін дії запрошення минув або його вже використано. Отримайте новий код на комп’ютері."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -15573,6 +17679,24 @@
             "state": "translated",
             "value": "Este convite usa um ambiente de serviço diferente."
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 초대는 다른 서비스 환경을 사용합니다."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В этом приглашении используется другое окружение сервиса."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "У цьому запрошенні використовується інше середовище сервісу."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -15644,6 +17768,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Esta permissão também se aplica a pedidos futuros."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 권한은 이후 요청에도 적용됩니다."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Это разрешение будет действовать и для будущих запросов."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Цей дозвіл діятиме й для майбутніх запитів."
           }
         }
       },
@@ -15718,6 +17860,24 @@
             "state": "translated",
             "value": "Este projeto está indisponível."
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 프로젝트를 사용할 수 없습니다."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Этот проект недоступен."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Цей проєкт недоступний."
+          }
         }
       }
     },
@@ -15788,6 +17948,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Token (se necessário)"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "토큰(필요한 경우)"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Токен (если требуется)"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Токен (якщо потрібен)"
           }
         }
       },
@@ -15861,6 +18039,24 @@
             "state": "translated",
             "value": "Demasiadas tentativas. Aguarde um pouco antes de tentar novamente."
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "시도 횟수가 너무 많습니다. 잠시 후 다시 시도하세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Слишком много попыток. Подождите немного и повторите попытку."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Забагато спроб. Трохи зачекайте й спробуйте ще раз."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -15932,6 +18128,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Resultado da ferramenta"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "도구 출력"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вывод инструмента"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вивід інструмента"
           }
         }
       },
@@ -16245,6 +18459,24 @@
             "state": "translated",
             "value": "Desbloqueie este dispositivo e volte a abrir o Clawket para aceder às suas ligações guardadas."
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "저장된 연결에 접근하려면 기기의 잠금을 해제한 후 Clawket을 다시 여세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Разблокируйте устройство и снова откройте Clawket для доступа к сохранённым подключениям."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Розблокуйте пристрій і знову відкрийте Clawket, щоб отримати доступ до збережених підключень."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -16437,6 +18669,24 @@
             "state": "translated",
             "value": "Usar um Skill"
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "스킬 사용"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Использовать навык"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Використати навичку"
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -16508,6 +18758,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Utilize o endereço WebSocket fornecido pelo seu Agent. As credenciais são guardadas em segurança neste dispositivo."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "에이전트가 제공한 WebSocket 주소를 사용하세요. 자격 증명은 이 기기에 안전하게 저장됩니다."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Используйте адрес WebSocket, предоставленный агентом. Учётные данные безопасно сохраняются на этом устройстве."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Використовуйте адресу WebSocket, надану агентом. Облікові дані безпечно зберігаються на цьому пристрої."
           }
         }
       },
@@ -16701,6 +18969,24 @@
             "state": "translated",
             "value": "Pode colar o conteúdo do código QR ou introduzir o código de emparelhamento. Se necessário, verifique o acesso à câmara nas Definições."
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "QR 코드 내용을 붙여넣거나 페어링 코드를 입력할 수 있습니다. 필요한 경우 설정에서 카메라 접근 권한을 확인하세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Можно вставить содержимое QR-кода или ввести код сопряжения. При необходимости проверьте доступ к камере в Настройках."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Можна вставити вміст QR-коду або ввести код з’єднання. За потреби перевірте доступ до камери в Налаштуваннях."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -16772,6 +19058,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Não foi possível contactar o seu Agent. O seu rascunho está guardado."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "에이전트에 연결할 수 없습니다. 초안은 저장되었습니다."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось связаться с агентом. Черновик сохранён."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не вдалося зв’язатися з агентом. Чернетку збережено."
           }
         }
       },
@@ -16845,6 +19149,24 @@
             "state": "translated",
             "value": "É necessário voltar a emparelhar o seu Agent. Adicione o código de emparelhamento atual nas Definições."
           }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "에이전트를 다시 페어링해야 합니다. 설정에서 현재 페어링 코드를 추가하세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Необходимо повторно выполнить сопряжение с агентом. Добавьте его текущий код сопряжения в Настройках."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Потрібно знову з’єднати агента. Додайте його поточний код з’єднання в Налаштуваннях."
+          }
         }
       },
       "comment": "Native UI / accessibility."
@@ -16916,6 +19238,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Os seus Agents, sempre à mão"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "언제든 가까이, 나의 에이전트"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ваши агенты всегда рядом"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ваші агенти завжди поруч"
           }
         }
       },
@@ -17108,6 +19448,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "Não foi possível guardar os seus dados em segurança. Mantenha o Clawket aberto e tente novamente."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "데이터를 안전하게 저장하지 못했습니다. Clawket을 열어 둔 상태에서 다시 시도하세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось безопасно сохранить данные. Не закрывайте Clawket и повторите попытку."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не вдалося безпечно зберегти дані. Не закривайте Clawket і спробуйте ще раз."
           }
         }
       },
