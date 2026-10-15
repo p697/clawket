@@ -174,6 +174,10 @@ final class NativeSessionManagementTests: XCTestCase, @unchecked Sendable {
         if case let .acknowledged(target, roster, _) = host.outcomes[0] {
             XCTAssertNil(roster); XCTAssertEqual(target.route, route)
         } else { XCTFail("ACK was converted into uncertain dispatch") }
+        let reopened = UUID(); manager.open(route, id: reopened)
+        try await wait { model.sessionManagement?.id == reopened && model.sessionManagement?.phase == .unavailable }
+        XCTAssertFalse(model.sessionManagement?.isUncertain == true)
+        XCTAssertEqual(model.sessionManagement?.error, String(localized: "Change confirmed. Refresh conversations to see the latest state."))
         await runtime.configure()
         manager.refreshAcknowledged()
         try await wait { host.outcomes.count == 2 }
@@ -269,6 +273,18 @@ final class NativeSessionManagementTests: XCTestCase, @unchecked Sendable {
         document.messages[0].delivery = .sending
         XCTAssertThrowsError(try document.holdForSessionMutation())
         XCTAssertEqual(document.messages[0].delivery, .sending)
+    }
+
+    @MainActor func testRenameKeepsChatAndStopAvailableWhileOnlyManagementWriteIsReserved() async throws {
+        let (manager, model, runtime, host) = fixture(actions: [.rename])
+        await runtime.configure(hold: true)
+        let id = try await open(manager, model)
+        manager.rename(id, title: "A new label")
+        try await wait { await runtime.writes.count == 1 }
+        XCTAssertTrue(manager.permitsInput(route))
+        XCTAssertFalse(model.sessionManagement?.permits(.rename) == true)
+        await runtime.release()
+        try await wait { !host.outcomes.isEmpty }
     }
 
 }

@@ -65,7 +65,9 @@ final class NativeSessionManagement {
     private var authority: Authority?
     private var confirmation: Confirmation?
     private var operations: [ConversationID: UUID] = [:]
+    private var operationActions: [ConversationID: SessionLifecycleAction] = [:]
     private var blocked: Set<ConversationID> = []
+    private var blockedInput: Set<ConversationID> = []
     private var awaitingFresh: [ConversationID: (NativeSessionMutationTarget, RuntimeSession?)] = [:]
 
     init(presentation: ClientPresentation, runtime: any NativeSessionRuntime,
@@ -80,7 +82,7 @@ final class NativeSessionManagement {
     func invalidate() {
         ready = false; scope = UUID(); authority = nil; confirmation = nil
         // Operations already submitted are never replayed. Their captured scope cannot publish late UI.
-        operations = [:]; blocked = []; awaitingFresh = [:]
+        operations = [:]; operationActions = [:]; blocked = []; blockedInput = []; awaitingFresh = [:]
         if var review = presentation.sessionManagement {
             review.phase = .unavailable; review.actions = []; review.submittingAction = nil
             review.confirmation = nil; review.error = String(localized: "Reconnect and reopen conversation actions.")
@@ -93,7 +95,9 @@ final class NativeSessionManagement {
         connectionID = state.connectionID; backend = state.backendKind; ready = state.phase == .ready
     }
 
-    func permitsInput(_ route: ConversationID) -> Bool { operations[route] == nil && !blocked.contains(route) }
+    func permitsInput(_ route: ConversationID) -> Bool {
+        operationActions[route].map(Self.blocksInput) != true && !blockedInput.contains(route)
+    }
     func isMutating(_ route: ConversationID) -> Bool { operations[route] != nil }
 
     func catalogChanged(sessionKey: String? = nil) {
@@ -112,7 +116,7 @@ final class NativeSessionManagement {
             guard let roster = try? await runtime.refreshRoster(), isCurrent(captured, host: host),
                   roster.connectionID == connectionID else { return }
             for (route, value) in pending where awaitingFresh[route]?.0.id == value.0.id {
-                awaitingFresh.removeValue(forKey: route); blocked.remove(route)
+                awaitingFresh.removeValue(forKey: route); blocked.remove(route); blockedInput.remove(route)
                 outcome(.acknowledged(value.0, roster: roster, created: value.1))
             }
             onChange()
@@ -134,14 +138,21 @@ final class NativeSessionManagement {
                 let current = Authority(id: id, route: route, value: value, host: host, scope: captured)
                 authority = current
                 let actions = Set(value.allowedActions.map(Self.presentationAction))
-                let uncertain = value.writeState == .uncertain || blocked.contains(route)
-                presentation.sessionManagement = .init(id: id, route: route, title: value.session.title, phase: .ready,
-                    actions: actions, isUncertain: uncertain,
-                    error: uncertain ? String(localized: "The change could not be confirmed. Reconnect and review this conversation.") : nil,
-                    maximumTitleUTF16: (backend == .codex || backend == .pi) ? 200 : backend == .claudeCode ? 300 : nil)
+                let waitingForRead = awaitingFresh[route] != nil
+                let uncertain = value.writeState == .uncertain || (blocked.contains(route) && !waitingForRead)
+                let errorText: String?
+                if waitingForRead { errorText = String(localized: "Change confirmed. Refresh conversations to see the latest state.") }
+                else if uncertain { errorText = String(localized: "The change could not be confirmed. Reconnect and review this conversation.") }
+                else { errorText = nil }
+                let titleLimit: Int? = (backend == .codex || backend == .pi) ? 200 : backend == .claudeCode ? 300 : nil
+                presentation.sessionManagement = .init(id: id, route: route, title: value.session.title,
+                    phase: waitingForRead ? .unavailable : .ready, actions: waitingForRead ? [] : actions, isUncertain: uncertain,
+                    error: errorText, maximumTitleUTF16: titleLimit)
             } catch {
                 guard isCurrent(captured, host: host), presentation.sessionManagement?.id == id else { return }
-                failReview(id, text: String(localized: "Conversation actions could not be loaded. Close this sheet and try again."))
+                failReview(id, text: awaitingFresh[route] != nil
+                    ? String(localized: "Change confirmed. Refresh conversations to see the latest state.")
+                    : String(localized: "Conversation actions could not be loaded. Close this sheet and try again."))
             }
         }
     }
@@ -185,7 +196,7 @@ final class NativeSessionManagement {
         guard let value = authority, value.id == id, isCurrent(value.scope, host: value.host),
               presentation.sessionManagement?.id == id, presentation.sessionManagement?.permits(action) == true,
               value.value.writeState == .available, value.value.allowedActions.contains(Self.runtimeAction(action)),
-              permitsInput(value.route) else { return nil }
+              operations[value.route] == nil, !blocked.contains(value.route) else { return nil }
         return value
     }
 
@@ -195,6 +206,7 @@ final class NativeSessionManagement {
             previousSessionID: value.value.session.sessionID, action: action,
             reference: value.value.reference, host: value.host)
         operations[target.route] = target.id
+        operationActions[target.route] = action
         presentation.sessionManagement?.submittingAction = action
         confirmation = nil; presentation.sessionManagement?.confirmation = nil
         onChange()
@@ -236,7 +248,11 @@ final class NativeSessionManagement {
                 do { roster = try await runtime.refreshRoster() } catch { roster = nil }
                 guard isCurrent(value.scope, host: value.host), operations[target.route] == target.id else { return }
                 operations.removeValue(forKey: target.route)
-                if roster == nil { blocked.insert(target.route); awaitingFresh[target.route] = (target, created) }
+                operationActions.removeValue(forKey: target.route)
+                if roster == nil {
+                    blocked.insert(target.route); awaitingFresh[target.route] = (target, created)
+                    if Self.blocksInput(action) { blockedInput.insert(target.route) }
+                }
                 outcome(.acknowledged(target, roster: roster, created: created))
                 if presentation.sessionManagement?.id == value.id {
                     if roster != nil { dismiss(value.id) }
@@ -245,9 +261,14 @@ final class NativeSessionManagement {
             } catch {
                 guard isCurrent(value.scope, host: value.host), operations[target.route] == target.id else { return }
                 operations.removeValue(forKey: target.route)
+                operationActions.removeValue(forKey: target.route)
                 let delivery = (error as? RuntimeFailure)?.delivery
                 let uncertain = acknowledged || delivery == .uncertain || delivery == .responseReceived || (wireEntered && delivery == nil)
-                if uncertain { blocked.insert(target.route); outcome(.uncertain(target)) }
+                if uncertain {
+                    blocked.insert(target.route)
+                    if Self.blocksInput(action) { blockedInput.insert(target.route) }
+                    outcome(.uncertain(target))
+                }
                 else { outcome(.notDispatched(target)) }
                 if presentation.sessionManagement?.id == value.id {
                     failReview(value.id, text: uncertain
@@ -271,7 +292,10 @@ final class NativeSessionManagement {
     private func isCurrent(_ captured: UUID, host: NativeSessionHostContext) -> Bool {
         ready && scope == captured && host.sameConnection(as: context())
     }
-    private static func runtimeAction(_ action: SessionLifecycleAction) -> RuntimeSessionAction {
+    nonisolated private static func blocksInput(_ action: SessionLifecycleAction) -> Bool {
+        [.reset, .delete, .archive, .restore].contains(action)
+    }
+    nonisolated private static func runtimeAction(_ action: SessionLifecycleAction) -> RuntimeSessionAction {
         switch action {
         case .rename: .rename
         case .reset: .reset
@@ -281,7 +305,7 @@ final class NativeSessionManagement {
         case .branch: .branch
         }
     }
-    private static func presentationAction(_ action: RuntimeSessionAction) -> SessionLifecycleAction {
+    nonisolated private static func presentationAction(_ action: RuntimeSessionAction) -> SessionLifecycleAction {
         switch action {
         case .rename: .rename
         case .reset: .reset
