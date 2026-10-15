@@ -710,7 +710,7 @@ final class NativeAppModel: ObservableObject {
             }
         case let .sessionMetadata(session):
             sessions.removeAll { $0.key == session.key && $0.connectionID == connectionID }; sessions.append(session); rebuildRoster()
-        case .thought, .tool, .work, .other: break
+        case .thought, .tool, .work, .finalAttachments, .other: break
         }
     }
 

@@ -5,6 +5,9 @@
   - 断线保留32项/8MiB惰性 review 副本但不保留 action reference/token；Runtime 新增 scoped SHA256 reviewKey 仅关联本地显示，实际新请求才能重新操作。问题草稿按7天/32项/256,000编码字节持久化，串行读回校验、旧编辑修订和 resolved tombstone 阻止迟写复活；保持明确false/空白/原值选项身份，后台立即flush。收据目前只在内存，持久任务journal另行推进，parity保持未完成。
   - 正确 USB 手机 WebDriver 实测 main2fbcc478 的独立3.1.2 Debug QA：逐字读回核实输入后，Hermes direct 新 QA 会话单次请求得到实际 native-ok 回复且运行结束；冷启动用已存凭据、下拉读到非缓存真实Agent目录。20秒后台往返composer保留/无错误；原live回复ID查询未找到，需核对history ID转换与文本，不能据此说回复丢失或后台历史通过。OpenClaw 精确输入后进入正常设备批准门槛，尚无该后端手机 ready/推理。测试只操作指定USB QA，未覆盖商店App、改Gateway/Bridge服务或发布。
   - 新增18项实际Host/storage回归源码，App非空门槛提升28；严格Swift6/jobs2下ConsentContractTests单文件8项通过。实际iOS16.4 generic Simulator App/全部28项测试源码在Swift6/jobs2编译通过，19语两表4,066条编译值逐一读回一致；实际App测试执行与完整CI继续验证，不启动另一个本机模拟器。本轮新增四条错误/结果文案各19语；212 UI/2系统权限共4,066语言单元源码覆盖通过，后续合并work UI资源另记最终数。首轮远程Xcode16.4在原长构造表达式新增请求拼接后推导超时（本机27.1已过），拆为显式类型的三个局部值，行为不变，继续实际CI复验。
+  - 首轮CI在Swift6.1长表达式推导超时后拆局部值，第二轮真实App28/28、原生package165/165（56XCTest+109SwiftTesting）及4,066编译译文全过；扫描已由媒体主线的精确源码表达式例外修正，其他门禁按最终current-main复验。重基媒体新增finalAttachments显式保持未展示，真实媒体host由独立任务接入。
+  - 正确USB main9b03cb88复验：Hermes保存凭据冷启动自动真实目录通过；既有QA会话读到原prompt/native-ok，确认旧stream-only查询遗漏history remote ID。二十秒后台返回QA进程仍foreground，却选中状态丢失成Welcome/空导航标题；Back回roster再重入原会话回复与composer都在，无新发送/错误。已交表示层修选择绑定与refresh树身份，后台恢复门槛仍未通过，未把导航缺陷记成数据或backend丢失。WDA会话/自启runner停止、无残留xcodebuild，heavy/ios已释放。
+
 
 - 2026-10-16 Native 媒体与附件协议模块（host 与真机媒体流程另行接入）。
   - 新增独立 `ClawketMedia`：NSItemProvider 回调内同步复制临时文件、受保护 UUID/原文件名资源与 SHA 校验、ImageIO 顺序缩图/GIF 原字节/透明 PNG/EXIF 比例、16M 像素安全预览。原始输入32 MiB、准备后5 MiB；草稿显式删除，metadata 双代读回、未知提交保留文件并封闭至重开；冷启恢复持久化草稿 ID，孤立暂存可显式回收。实际文件/回滚/预留均计入128项/100 MiB，生成缓存另限单会话16项/30 MiB、24小时，分享 retain/release。
