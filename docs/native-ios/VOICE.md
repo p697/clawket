@@ -1,0 +1,35 @@
+# Native voice input and recovery
+
+The iOS host uses `ClawketSpeech` without Expo, JavaScript, a local Speech framework recognizer or server changes. The current Mobile services and `apps/speech-worker/src/{auth,session}.ts` are the protocol oracle. Android and the installed store app remain unchanged.
+
+## Capture and ownership
+
+`SpeechRecorder` reserves one attempt, requests permission on explicit intent, creates verified protected metadata, then starts its injected audio driver. `IOSSpeechAudioDriver` ports the existing `clawket-voice-capture` AVAudioConverter core: hardware format → 16 kHz mono floats → clipped PCM16 little-endian. Initialization never creates an engine/input node, configures a category or activates a session. Start/stop run on a dedicated serial queue with a synchronous cancellation latch and captured UUID; a cancelled queued start cannot activate later, and stale cleanup cannot stop a successor. The active category mixes with other audio without ducking or requesting HFP input. A real interruption, reset or stopped hardware configuration retires capture without resuming automatically.
+
+PCM reaches protected local storage before ASR can read it. The bounded callback stream fails on overflow; it never silently skips a chunk. Stop finishes the native stream and drains yielded chunks before closing the writer. The byte limit and independent wall deadline are 600 seconds / 19,200,000 bytes per recording; at most ten recordings remain, with no automatic eviction. Metadata/checkpoints have current/rollback verification, strict names and bounded files. File length is authoritative after a crash; an incomplete trailing half-sample is ignored without modifying the original. A failed/unknown checkpoint commit blocks that process's reuse until cold-open validation; it does not delete PCM.
+
+Close, Cancel, background, navigation and failure keep recoverable audio. Microphone denial occurs before a recording is created. The scene hook distinguishes background from inactive, so the system permission prompt cannot cancel itself. Only explicit deletion, or a verified transcript handoff, retires source audio.
+
+## Existing signed service contract
+
+`CLAWKET_SPEECH_URL` is an explicit public build setting. Its default is empty, so community builds compile without official credentials and do not show an unavailable recording integration. Configured URLs must be WSS, exact `/v1/speech`, with no user info, query or fragment. The existing device Ed25519 identity signs `clawket-speech-v1|authority|timestamp|nonce`; protocol2 and the same five `x-speech-*` headers are used. No credentials, audio, draft text, raw addresses or native errors are diagnostics. The ephemeral URLSession has no cookies, credential store, cache or redirects.
+
+One accepted socket represents one provider task. Incoming JSON is at most128KiB and32,768 UTF-16 code units; result text is at most16,000 UTF-16 code units, preserving Chinese and supplementary characters. Capture is split sequentially at110 seconds. Binary frames are at most6,400 bytes, and negotiated `ack.v1` permits at most64,000 outstanding bytes. Replays are paced at5× with ACK,1× without ACK; congestion has a10-second bound. Existing pre-ready `speech_busy` alone permits up to eight admission retries inside the30-second retry window; audio, accepted tasks and lost final replies never replay automatically.
+
+Identity/open-ready/provider/finish bounds are5/20/145/16 seconds. Connection deadlines are frozen synchronously against the monotonic clock and checked at I/O/evidence entry, so delayed timer scheduling or suspension cannot admit a late ready/final event. The provider window changes to the existing independent finishing window only before expiry. Successful segments, including empty text, are durably checkpointed before advancing. An explicit retry uses only missing segments; fully checkpointed recordings can be reviewed offline without reading identity or creating a socket. ASR failure does not stop ongoing local capture.
+
+## Host and composer
+
+`NativeVoiceController` owns capture/transcription; it cannot send a chat or modify a composer. `NativeAppVoice` fences completion by connection/Agent/session, activation, selection and the native draft's independent edit revision plus original attachment identities. A fresh unchanged capture follows Mobile's `trimEnd(existing draft) + transcript` behavior through native replacement with undo. Changed drafts and recovered recordings require explicit editable **Use text** at the current caret; when a recovered recording has an original prefix and the current draft is empty, that prefix is visible in the review before insertion.
+
+Native insertion first commits IME composition, checks its expected revision, uses the existing UITextView selection/undo path, then reports one typed acknowledgement. A rejected/stale command keeps the source. The host verifies the actual current protected conversation document and captured post-insertion context before deleting PCM. An interrupted/unknown save keeps it. Attachment queues are never replaced by speech.
+
+An explicit hold-release `finishAndSend` can use the normal bounded outbox only for its original fresh attempt, unchanged scope/draft and no uncertain sending item. Stop, close, background, recovery, Retry and recognition success alone never send. Cancellation/interruption/error clears that intent permanently. The normal outbox keeps its own idempotency/unknown-write rules.
+
+## Verification and remaining acceptance
+
+The initial three serial macOS suites passed18 functions/23 parameter inputs with injected capture and sockets. Additional deadline, segmented-transcriber, native input/undo and host ownership regressions are in this task; final counts/results follow its PR. Actual iOS compilation, CI execution and physical microphone/service acceptance are distinct evidence.
+
+No real microphone, phone, cloud ASR, production identity or service operation is used by the injected tests. The owner still needs to exercise the configured service on the isolated QA app: first permission denial/Settings/grant, short tap and hold-release, prefix/attachments/IME, music and Bluetooth routes, interruptions/background/kill/reopen,110-second segmentation,10-minute bound and failed/lost-final recovery. Same-bundle legacy voice resources remain preserved by `ClawketUpgrade`; activating their consumer in the installed app remains the separate signed upgrade checkpoint. This slice does not establish management, Pro, upgrade or overall parity.
+
+The capture choices follow Apple's [AVAudioConverter](https://developer.apple.com/documentation/avfaudio/avaudioconverter), [mixWithOthers](https://developer.apple.com/documentation/avfaudio/avaudiosession/categoryoptions-swift.struct/mixwithothers), [record permission](https://developer.apple.com/documentation/avfaudio/avaudioapplication/requestrecordpermission(completionhandler:)) and [URLSessionWebSocketTask](https://developer.apple.com/documentation/foundation/urlsessionwebsockettask) contracts. These documents do not substitute for physical audio-route acceptance.

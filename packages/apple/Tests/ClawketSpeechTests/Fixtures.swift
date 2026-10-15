@@ -48,7 +48,17 @@ final class SpeechTestClock: TransportClock, @unchecked Sendable {
         for id in due.keys { waits.removeValue(forKey: id) }; lock.unlock()
         due.values.forEach { $0.1.resume() }
     }
+    func advanceWithoutWaking(_ duration: Duration) { lock.lock(); value += duration; lock.unlock() }
     var pendingCount: Int { lock.lock(); defer { lock.unlock() }; return waits.count }
+}
+
+final class SpeechPacingClock: TransportClock, Sendable {
+    let base = SpeechTestClock()
+    func now() -> Duration { base.now() }
+    func sleep(for duration: Duration) async throws {
+        if duration < .seconds(1) { base.advance(duration); await Task.yield(); try Task.checkCancellation() }
+        else { try await base.sleep(for: duration) }
+    }
 }
 
 actor SpeechPeer: SpeechSocket {

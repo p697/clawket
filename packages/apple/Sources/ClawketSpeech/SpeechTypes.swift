@@ -68,6 +68,7 @@ public struct SpeechRecording: Sendable, Equatable, Identifiable {
     public let createdAt: Date
     public let bytes: Int
     public let isRecording: Bool
+    public let hasCompletedTranscription: Bool
     public var seconds: Double { Double(bytes) / Double(SpeechLimits.bytesPerSecond) }
 }
 

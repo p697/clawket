@@ -127,6 +127,17 @@ actor NativeConversationStore {
         try await documents.write(conversation, key: key)
     }
 
+    /// A native input ACK is not a durable handoff. Verify the current serialized
+    /// document before the voice owner removes its recoverable source audio.
+    func verifiedVoiceDraft(_ text: String, minimumRevision: Int64,
+                            connectionID: String, agentID: String, sessionID: String) async throws -> Bool {
+        await acquireMediaSnapshot(); defer { releaseMediaSnapshot() }
+        let key = try scopedKey(connectionID, agentID, sessionID)
+        guard let saved = try await documents.read(NativeConversation.self, key: key), !saved.recoveredFromRollback else { return false }
+        try saved.value.validateMedia()
+        return saved.value.version == 1 && saved.value.revision >= minimumRevision && saved.value.draft == text
+    }
+
     /// Include both verified document generations before releasing any owned file.
     /// An unreadable source disables reclamation; it never means an empty registry.
     func allMediaResourceIDs() async throws -> Set<UUID> {

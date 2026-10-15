@@ -358,6 +358,125 @@
           }
         }
       }
+    },
+    "NSMicrophoneUsageDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow Clawket to use your microphone for voice input. Audio is sent to Alibaba Cloud for transcription."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "允许 Clawket 使用麦克风进行语音输入。音频会发送至阿里云进行转写。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "允許 Clawket 使用麥克風進行語音輸入。音訊會傳送至阿里雲進行轉錄。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "音声入力のために Clawket にマイクの使用を許可してください。音声は文字起こしのために Alibaba Cloud に送信されます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "음성 입력을 위해 Clawket의 마이크 사용을 허용하세요. 오디오는 전사를 위해 Alibaba Cloud로 전송됩니다."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erlaube Clawket, dein Mikrofon für die Spracheingabe zu verwenden. Audiodaten werden zur Transkription an Alibaba Cloud gesendet."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autorisez Clawket à utiliser votre microphone pour la saisie vocale. L’audio est envoyé à Alibaba Cloud pour transcription."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permite que Clawket use tu micrófono para la entrada de voz. El audio se envía a Alibaba Cloud para transcribirlo."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permite que Clawket use tu micrófono para la entrada de voz. El audio se envía a Alibaba Cloud para transcribirlo."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Consenti a Clawket di usare il microfono per l’input vocale. L’audio viene inviato ad Alibaba Cloud per la trascrizione."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permita que o Clawket use seu microfone para a entrada de voz. O áudio é enviado para a Alibaba Cloud para transcrição."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permita que o Clawket utilize o microfone para a entrada de voz. O áudio é enviado para a Alibaba Cloud para transcrição."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Разрешите Clawket использовать микрофон для голосового ввода. Аудио отправляется в Alibaba Cloud для расшифровки."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Дозвольте Clawket використовувати мікрофон для голосового введення. Аудіо надсилається до Alibaba Cloud для транскрипції."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sesli giriş için Clawket’in mikrofonunuzu kullanmasına izin verin. Ses, transkripsiyon için Alibaba Cloud’a gönderilir."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cho phép Clawket sử dụng micrô để nhập liệu bằng giọng nói. Âm thanh được gửi đến Alibaba Cloud để chép lời."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "อนุญาตให้ Clawket ใช้ไมโครโฟนเพื่อป้อนข้อมูลด้วยเสียง เสียงจะถูกส่งไปยัง Alibaba Cloud เพื่อถอดเป็นข้อความ"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "वॉइस इनपुट के लिए Clawket को आपका माइक्रोफ़ोन इस्तेमाल करने दें। ऑडियो ट्रांसक्रिप्शन के लिए Alibaba Cloud को भेजा जाता है।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "اسمح لتطبيق Clawket باستخدام الميكروفون للإدخال الصوتي. يُرسل الصوت إلى Alibaba Cloud لتحويله إلى نص."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

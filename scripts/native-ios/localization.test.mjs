@@ -20,7 +20,7 @@ test('validates the real UI and permission catalogs in all 19 locales', () => {
   assert.deepEqual(permissions.issues, []);
   assert.equal(result.keyCount, inventory.strings.length);
   assert.equal(Object.keys(result.coverage).length, 19);
-  assert.equal(permissions.keyCount, 3);
+  assert.equal(permissions.keyCount, 4);
   for (const locale of inventory.locales) {
     assert.equal(result.coverage[locale], result.keyCount);
     assert.equal(permissions.coverage[locale], permissions.keyCount);

@@ -128,7 +128,7 @@ public actor SpeechTranscriber {
 
     private func admitted(_ token: UUID) async throws -> SpeechConnection {
         let started = clock.now()
-        for admission in 0..<8 {
+        for admission in 0...8 {
             try check(token)
             let key: SpeechSigningIdentity
             do { key = try await speechDeadline(seconds: 5, clock: clock, operation: identity) }
@@ -151,9 +151,13 @@ public actor SpeechTranscriber {
                 catch { await accepted.cancel(); throw error }
             } catch let failure as SpeechFailure {
                 // Only admission busy, before ready/audio, permits automatic retry.
-                guard failure.code == .busy, admission < 7, clock.now() - started < .seconds(30) else { throw failure }
-                let delay = min(5_000.0, max(500.0 * pow(2, Double(admission)), failure.remainingRetryMilliseconds(now: now())))
-                guard clock.now() - started + .milliseconds(Int64(delay)) <= .seconds(30) else { throw failure }
+                let remaining = .seconds(30) - (clock.now() - started)
+                guard failure.code == .busy, admission < 8, remaining > .zero else { throw failure }
+                let components = remaining.components
+                let remainingMilliseconds = Double(components.seconds) * 1_000 + Double(components.attoseconds) / 1e15
+                let suggested = failure.remainingRetryMilliseconds(now: now())
+                let delay = min(500.0 * pow(2, Double(admission)), 5_000, suggested > 0 ? suggested : 500, remainingMilliseconds)
+                guard delay >= 1 else { throw failure }
                 try await clock.sleep(for: .milliseconds(Int64(delay)))
             }
         }

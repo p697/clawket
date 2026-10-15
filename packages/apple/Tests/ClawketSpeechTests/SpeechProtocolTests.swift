@@ -70,4 +70,32 @@ struct SpeechProtocolTests {
         await #expect(throws: SpeechFailure.self) { _ = try await task.value }
         #expect(await peer.closed)
     }
+    @Test func lateReadyCannotWinWhileDeadlineTaskRemainsSuspended() async throws {
+        let peer = SpeechPeer(ready: false), clock = SpeechTestClock()
+        let task = Task { try await SpeechConnection.connect(request: SpeechFixture.request(), factory: SpeechPeerFactory(peer), clock: clock) }
+        await speechEventually { clock.pendingCount == 1 }
+        clock.advanceWithoutWaking(.seconds(21))
+        await peer.emit("{\"type\":\"ready\",\"maxSeconds\":120}")
+        await #expect(throws: SpeechFailure(.connectTimeout)) { _ = try await task.value }
+        #expect(await peer.closed)
+    }
+    @Test func lateFinalCannotWinWhileFinishingDeadlineTaskRemainsSuspended() async throws {
+        let peer = SpeechPeer(), clock = SpeechTestClock()
+        let connection = try await SpeechConnection.connect(request: SpeechFixture.request(), factory: SpeechPeerFactory(peer), clock: clock)
+        try await connection.audio(Data([0, 0]))
+        let task = Task { try await connection.finish() }
+        await speechEventually { await peer.sent.contains(.text("{\"type\":\"finish\"}")) && clock.pendingCount == 1 }
+        clock.advanceWithoutWaking(.seconds(17))
+        await peer.emit("{\"type\":\"result\",\"text\":\"too late\"}")
+        await #expect(throws: SpeechFailure(.finishTimeout)) { _ = try await task.value }
+        #expect(await peer.closed)
+    }
+    @Test func expiredProviderCannotExtendItsWindowByCallingFinish() async throws {
+        let peer = SpeechPeer(), clock = SpeechTestClock()
+        let connection = try await SpeechConnection.connect(request: SpeechFixture.request(), factory: SpeechPeerFactory(peer), clock: clock)
+        await speechEventually { clock.pendingCount == 1 }
+        clock.advanceWithoutWaking(.seconds(146))
+        await #expect(throws: SpeechFailure(.timeout)) { _ = try await connection.finish() }
+        #expect(await peer.sent.isEmpty)
+    }
 }

@@ -500,15 +500,23 @@ public struct ConversationPresentation: Identifiable, Hashable, Sendable {
 @MainActor
 public final class ComposerDraft: ObservableObject {
     public let conversationID: ConversationID
-    @Published public var text: String
-    @Published public var attachments: [AttachmentPresentation]
+    @Published public var text: String { didSet { if oldValue != text { editRevision = UUID() } } }
+    @Published public var attachments: [AttachmentPresentation] {
+        didSet { if oldValue.map(\.id) != attachments.map(\.id) { editRevision = UUID() } }
+    }
+    @Published public private(set) var editRevision = UUID()
     @Published public var voice: VoicePresentation?
     @Published public var hint: String?
     /// Explicit host paste/dictation uses the current native selection and undo
     /// stack. It is ephemeral UI work, never a second persisted text buffer.
     @Published public var insertion: ComposerTextInsertion?
 
-    public func insertText(_ text: String) { insertion = .init(text: text) }
+    @discardableResult public func insertText(_ text: String, acknowledgement: Bool = false,
+                                             expectedRevision: UUID? = nil, replacingText: Bool = false) -> UUID {
+        let insertion = ComposerTextInsertion(text: text, acknowledgement: acknowledgement,
+                                              expectedRevision: expectedRevision, replacingText: replacingText)
+        self.insertion = insertion; return insertion.id
+    }
 
     public init(conversationID: ConversationID, text: String = "", attachments: [AttachmentPresentation] = [],
                 voice: VoicePresentation? = nil, hint: String? = nil) {
@@ -520,7 +528,12 @@ public final class ComposerDraft: ObservableObject {
 public struct ComposerTextInsertion: Sendable, Equatable {
     public let id = UUID()
     public let text: String
-    public init(text: String) { self.text = text }
+    public let acknowledgement: Bool
+    public let expectedRevision: UUID?
+    public let replacingText: Bool
+    public init(text: String, acknowledgement: Bool = false, expectedRevision: UUID? = nil, replacingText: Bool = false) {
+        self.text = text; self.acknowledgement = acknowledgement; self.expectedRevision = expectedRevision; self.replacingText = replacingText
+    }
 }
 
 public struct VoicePresentation: Hashable, Sendable {
@@ -531,10 +544,12 @@ public struct VoicePresentation: Hashable, Sendable {
     public var canStop: Bool
     public var canCancel: Bool
     public var canRetry: Bool
+    public var canReview: Bool
     public init(phase: Phase, label: String, detail: String? = nil,
-                canStop: Bool = false, canCancel: Bool = false, canRetry: Bool = false) {
+                canStop: Bool = false, canCancel: Bool = false, canRetry: Bool = false, canReview: Bool = false) {
         self.phase = phase; self.label = label; self.detail = detail
         self.canStop = canStop; self.canCancel = canCancel; self.canRetry = canRetry
+        self.canReview = canReview
     }
 }
 
@@ -598,7 +613,7 @@ public final class ClientPresentation: ObservableObject {
     }
 }
 
-public enum VoiceIntent: String, Sendable { case start, stop, finishAndSend, cancel, retry }
+public enum VoiceIntent: String, Sendable { case start, stop, finishAndSend, cancel, retry, showRecordings }
 
 public enum ClientIntent: Sendable {
     case openAgentCatalog(AgentCatalogID)
@@ -627,6 +642,9 @@ public enum ClientIntent: Sendable {
     case removeAttachment(ConversationID, attachmentID: String)
     case openAttachment(attachmentID: String)
     case voice(ConversationID, action: VoiceIntent)
+    /// Reports only completion of one explicit native insertion, never durable
+    /// storage or permission to send. Hosts fence ID/route before committing.
+    case composerInsertionApplied(ConversationID, insertionID: UUID, text: String?)
     case loadEarlier(ConversationID)
     case messageAction(ConversationID, messageID: String, action: MessageAction)
     case resolveApproval(approvalID: String, decision: ApprovalDecision)

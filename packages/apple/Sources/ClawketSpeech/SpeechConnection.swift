@@ -8,6 +8,7 @@ public actor SpeechConnection {
     private var reader: Task<Void, Never>?
     private var watchdog: Task<Void, Never>?
     private var deadlineID = UUID()
+    private var deadline: (at: Duration, failure: SpeechCode)?
     private var initialized = false
     private var finishing = false
     private var writing = false
@@ -40,6 +41,7 @@ public actor SpeechConnection {
         arm(seconds: 20, failure: .connectTimeout)
         do { try await socket.open() }
         catch { await fail(.init(Task.isCancelled ? .cancelled : .disconnected)); throw terminalFailure() }
+        try await ensureDeadline()
         guard terminal == nil, !Task.isCancelled else { throw terminalFailure() }
         reader = Task { [weak self, socket] in
             while !Task.isCancelled {
@@ -58,10 +60,12 @@ public actor SpeechConnection {
             if let terminal { continuation.resume(throwing: terminalFailure(terminal)) }
             else { readyWaiter = continuation }
         }
+        try await ensureDeadline()
         try Task.checkCancellation()
     }
 
-    public func writable(for byteCount: Int) throws -> Bool {
+    public func writable(for byteCount: Int) async throws -> Bool {
+        try await ensureDeadline()
         if let terminal { throw terminalFailure(terminal) }
         guard initialized, !finishing, byteCount > 0, byteCount <= SpeechLimits.chunkBytes,
               byteCount.isMultiple(of: 2) else { throw SpeechFailure(.invalidProtocol) }
@@ -71,7 +75,7 @@ public actor SpeechConnection {
 
     public func audio(_ bytes: Data) async throws {
         try Task.checkCancellation()
-        guard try writable(for: bytes.count), bytes.count <= 120 * SpeechLimits.bytesPerSecond - sentBytes else {
+        guard try await writable(for: bytes.count), bytes.count <= 120 * SpeechLimits.bytesPerSecond - sentBytes else {
             throw SpeechFailure(.audioLimit)
         }
         writing = true; sentBytes += bytes.count
@@ -82,11 +86,13 @@ public actor SpeechConnection {
             await fail(failure); throw failure
         }
         if let terminal { throw terminalFailure(terminal) }
+        try await ensureDeadline()
         try Task.checkCancellation()
     }
 
     public func finish() async throws -> String {
         try Task.checkCancellation()
+        try await ensureDeadline()
         guard terminal == nil, initialized, !finishing, !writing else { throw terminalFailure() }
         finishing = true; arm(seconds: 16, failure: .finishTimeout)
         do { try await socket.send(.text("{\"type\":\"finish\"}")) }
@@ -96,6 +102,7 @@ public actor SpeechConnection {
             if case let .success(text)? = terminal { try Task.checkCancellation(); return text }
             await fail(.init(Task.isCancelled ? .cancelled : .disconnected, requestID: requestID)); throw terminalFailure()
         }
+        if terminal == nil { try await ensureDeadline() }
         let result: String = try await withTaskCancellationHandler {
             if let terminal { return try terminal.get() }
             return try await withCheckedThrowingContinuation { resultWaiter = $0 }
@@ -108,6 +115,7 @@ public actor SpeechConnection {
     private func accept(_ frame: WebSocketFrame) async -> Bool {
         guard terminal == nil else { return false }
         do {
+            try await ensureDeadline()
             guard case .text(let text) = frame, text.utf8.count <= SpeechLimits.wireBytes,
                   text.utf16.count <= 32_768 else { throw SpeechFailure(.invalidProtocol) }
             let event = try FrameCodec.decode(text)
@@ -144,19 +152,31 @@ public actor SpeechConnection {
 
     private func arm(seconds: Int, failure: SpeechCode) {
         let token = UUID(); deadlineID = token; watchdog?.cancel()
+        let at = clock.now() + .seconds(seconds)
+        deadline = (at, failure)
         watchdog = Task { [weak self, clock] in
-            do { try await clock.sleep(for: .seconds(seconds)) } catch { return }
+            do {
+                let remaining = at - clock.now()
+                if remaining > .zero { try await clock.sleep(for: remaining) }
+            } catch { return }
             guard !Task.isCancelled, let self else { return }
             await self.expire(token, failure: failure)
         }
     }
     private func expire(_ token: UUID, failure: SpeechCode) async {
-        guard token == deadlineID else { return }
+        guard token == deadlineID, let deadline, clock.now() >= deadline.at else { return }
         await fail(.init(failure, requestID: requestID))
+    }
+    private func ensureDeadline() async throws {
+        if let terminal { if case .failure(let failure) = terminal { throw failure }; return }
+        if let deadline, clock.now() >= deadline.at {
+            let failure = SpeechFailure(deadline.failure, requestID: requestID)
+            await fail(failure); throw failure
+        }
     }
     private func complete(_ text: String) async {
         guard terminal == nil else { return }
-        terminal = .success(text); deadlineID = UUID(); watchdog?.cancel()
+        terminal = .success(text); deadlineID = UUID(); deadline = nil; watchdog?.cancel()
         let ready = readyWaiter; readyWaiter = nil
         let result = resultWaiter; resultWaiter = nil
         ready?.resume(throwing: SpeechFailure(.invalidProtocol)); result?.resume(returning: text)
@@ -164,7 +184,7 @@ public actor SpeechConnection {
     }
     private func fail(_ failure: SpeechFailure) async {
         guard terminal == nil else { return }
-        terminal = .failure(failure); deadlineID = UUID(); watchdog?.cancel()
+        terminal = .failure(failure); deadlineID = UUID(); deadline = nil; watchdog?.cancel()
         let ready = readyWaiter; readyWaiter = nil
         let result = resultWaiter; resultWaiter = nil
         ready?.resume(throwing: failure); result?.resume(throwing: failure)

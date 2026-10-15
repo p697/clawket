@@ -177,6 +177,7 @@ extension NativeAppModel {
     }
 
     func retireMediaSelection() {
+        retireVoice()
         cancelMediaImports()
         for task in mediaLoads.values { task.cancel() }
         mediaLoads.removeAll(); mediaLoadRevisions.removeAll(); mediaPreviewRequest = nil; mediaPreview = nil

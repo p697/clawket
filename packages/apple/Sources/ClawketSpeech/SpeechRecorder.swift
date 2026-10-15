@@ -12,12 +12,15 @@ public struct SpeechCaptureChunk: Sendable {
 }
 
 public protocol SpeechAudioDriver: Sendable {
+    /// Permission may show system UI; it never claims audio hardware.
+    func requestPermission() async throws
     /// Called only for an explicit record intent. Constructing a driver is inert.
     func start(id: UUID) async throws -> AsyncThrowingStream<SpeechCaptureChunk, any Error>
     /// Stops hardware before returning and finishes the stream without dropping
     /// chunks already yielded. A stale ID never stops a replacement attempt.
     func stop(id: UUID) async
 }
+public extension SpeechAudioDriver { func requestPermission() async throws {} }
 
 public enum SpeechCaptureUpdate: Sendable {
     case recording(SpeechRecording, level: Double)
@@ -30,6 +33,7 @@ public actor SpeechRecorder {
         let token: UUID
         let recordingID: String
         var reader: Task<Void, Never>?
+        var starting: Task<AsyncThrowingStream<SpeechCaptureChunk, any Error>, any Error>?
     }
     private let store: SpeechRecordingStore
     private let driver: any SpeechAudioDriver
@@ -50,10 +54,16 @@ public actor SpeechRecorder {
         let token = UUID(); active = Attempt(token: token, recordingID: "", reader: nil); forcedFailure = nil
         var created: SpeechRecording?
         do {
+            try await driver.requestPermission()
+            guard active?.token == token, !Task.isCancelled else { throw SpeechFailure(.cancelled) }
             let recording = try await store.create(scope: scope, draft: draft); created = recording
             guard active?.token == token, !Task.isCancelled else { throw SpeechFailure(.cancelled) }
             active = Attempt(token: token, recordingID: recording.id, reader: nil)
-            let stream = try await driver.start(id: token)
+            let starting = Task { [driver] in try await driver.start(id: token) }
+            active?.starting = starting
+            let stream = try await withTaskCancellationHandler { try await starting.value }
+                onCancel: { starting.cancel() }
+            if active?.token == token { active?.starting = nil }
             guard active?.token == token, !Task.isCancelled else {
                 await driver.stop(id: token); throw SpeechFailure(.cancelled)
             }
@@ -93,12 +103,14 @@ public actor SpeechRecorder {
         }
     }
 
-    public func stop() async {
+    public func stop(recordingID: String? = nil) async {
         guard let captured = active else { return }
+        if let recordingID, captured.recordingID != recordingID { return }
         watchdog?.cancel(); watchdog = nil
         // Invalidate an incomplete start synchronously. A ready reader instead
         // owns final draining and retires only after the writer is closed.
         if captured.reader == nil { active = nil }
+        captured.starting?.cancel()
         await driver.stop(id: captured.token)
         await captured.reader?.value
         if !captured.recordingID.isEmpty { try? await store.close(captured.recordingID) }
@@ -114,7 +126,13 @@ public actor SpeechRecorder {
         active = nil; forcedFailure = nil; watchdog?.cancel(); watchdog = nil
         return result
     }
-    deinit { watchdog?.cancel() }
+    deinit {
+        watchdog?.cancel()
+        if let active {
+            let driver = driver, token = active.token
+            Task { await driver.stop(id: token) }
+        }
+    }
 }
 
 /// The existing native converter supplies mono 16kHz floats; quantization matches

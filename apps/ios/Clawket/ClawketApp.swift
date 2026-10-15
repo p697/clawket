@@ -19,6 +19,9 @@ struct ClawketApp: App {
                     }
                 }
                 .sheet(item: $client.mediaPicker) { request in NativeMediaPicker(client: client, request: request) }
+                .sheet(item: $client.voiceSheet) { request in
+                    if let voice = client.voice { NativeVoiceSheet(client: client, voice: voice, request: request) }
+                }
                 .fullScreenCover(item: $client.mediaPreview) { preview in NativeMediaViewer(preview: preview) }
                 .alert("Clawket", isPresented: Binding(get: { client.notice != nil }, set: { if !$0 { client.notice = nil } })) {
                     Button("OK", role: .cancel) { client.notice = nil }
@@ -26,6 +29,7 @@ struct ClawketApp: App {
                 .task { await client.start() }
                 .onChange(of: phase) { phase in
                     client.setForeground(phase == .active)
+                    client.voiceSceneChanged(phase)
                 }
         }
     }

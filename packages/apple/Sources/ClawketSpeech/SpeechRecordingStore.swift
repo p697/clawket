@@ -68,7 +68,7 @@ public actor SpeechRecordingStore {
             try Task.checkCancellation()
             try FileManager.default.moveItem(at: staging, to: folder(id))
             writers[id] = try SpeechFiles.openAudio(audio(id), writing: true)
-            return .init(id: id, scope: scope, draft: draft, createdAt: now, bytes: 0, isRecording: true)
+            return .init(id: id, scope: scope, draft: draft, createdAt: now, bytes: 0, isRecording: true, hasCompletedTranscription: false)
         } catch { throw SpeechFailure(.storage) } // Keep an unknown metadata commit for cold-open reconciliation.
     }
 
@@ -151,6 +151,14 @@ public actor SpeechRecordingStore {
         return document.checkpoints.first { $0.index == index }?.text
     }
 
+    /// Offline review of fully checkpointed audio never needs a cloud connection.
+    public func completedText(_ id: String) async throws -> String? {
+        await acquire(); defer { release() }
+        let document = try await readDocument(id)
+        guard try snapshot(document).hasCompletedTranscription else { return nil }
+        return document.checkpoints.sorted { $0.index < $1.index }.map(\.text).filter { !$0.isEmpty }.joined(separator: " ")
+    }
+
     /// Explicit user deletion only; a live writer or unknown commit stays intact.
     public func discard(_ id: String) async throws {
         await acquire(); defer { release() }
@@ -175,8 +183,13 @@ public actor SpeechRecordingStore {
         // A torn trailing half-sample is never sent or overwritten on recovery.
         let bytes = try SpeechFiles.size(file) / 2 * 2
         guard document.checkpoints.allSatisfy({ $0.end <= bytes }) else { throw SpeechFailure(.storage) }
+        let count = (bytes + SpeechLimits.segmentBytes - 1) / SpeechLimits.segmentBytes
+        let complete = bytes > 0 && writers[document.id] == nil && document.checkpoints.count == count &&
+            (0..<count).allSatisfy { index in
+                document.checkpoints.contains { $0.index == index && $0.byteCount == min(SpeechLimits.segmentBytes, bytes - index * SpeechLimits.segmentBytes) }
+            }
         return .init(id: document.id, scope: document.scope, draft: document.draft, createdAt: document.createdAt,
-                     bytes: bytes, isRecording: writers[document.id] != nil)
+                     bytes: bytes, isRecording: writers[document.id] != nil, hasCompletedTranscription: complete)
     }
     private func folder(_ id: String) -> URL { directory.appendingPathComponent(id, isDirectory: true) }
     private func audio(_ id: String) -> URL { folder(id).appendingPathComponent("audio.pcm") }

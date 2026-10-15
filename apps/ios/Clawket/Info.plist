@@ -12,6 +12,8 @@
     <key>CFBundleShortVersionString</key><string>$(MARKETING_VERSION)</string>
     <key>CFBundleVersion</key><string>$(CURRENT_PROJECT_VERSION)</string>
     <key>LSRequiresIPhoneOS</key><true/>
+    <key>ClawketSpeechURL</key><string>$(CLAWKET_SPEECH_URL)</string>
+    <key>NSMicrophoneUsageDescription</key><string>Allow Clawket to use your microphone for voice input. Audio is sent to Alibaba Cloud for transcription.</string>
     <key>NSCameraUsageDescription</key><string>Scan a pairing QR code or take a photo to attach.</string>
     <key>NSPhotoLibraryAddUsageDescription</key><string>Save images you choose to your photo library.</string>
     <key>NSLocalNetworkUsageDescription</key><string>Connect to agents running on your local network.</string>

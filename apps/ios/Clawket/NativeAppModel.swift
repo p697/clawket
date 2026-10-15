@@ -2,6 +2,7 @@ import ClawketMedia
 import ClawketPairing
 import ClawketPersistence
 import ClawketRuntime
+import ClawketSpeech
 import ClawketTransport
 import ClawketUI
 import Network
@@ -93,6 +94,12 @@ final class NativeAppModel: ObservableObject {
     var mediaChangingModelTokens: [ConversationID: UUID] = [:]
     var mediaChangingModels: Set<ConversationID> { Set(mediaChangingModelTokens.keys) }
     var mediaGlobalModel: (wire: UUID, supportsImages: Bool?)?
+    var voice: NativeVoiceController?
+    @Published var voiceSheet: NativeVoiceSheetRequest?
+    @Published var voiceReview: NativeVoiceResult?
+    var voiceInsertion: NativeVoiceInsertion?
+    var voiceHandoffTask: Task<Void, Never>?
+    var voiceShownFailure: SpeechFailure?
     /// A successful single-use claim is retained if saving fails; retry never claims it again.
     @Published private(set) var pendingPairing: PairingPayload?
 
@@ -104,6 +111,7 @@ final class NativeAppModel: ObservableObject {
             let runtime = try RuntimeCoordinator(credentials: vault,
                 client: .init(version: "3.1.2", deviceFamily: UIDevice.current.userInterfaceIdiom == .pad ? "ipad" : "iphone"))
             self.vault = vault; self.runtime = runtime; self.cache = try NativeConversationStore()
+            await setupVoice(vault: vault)
             self.catalogCache = try NativeCatalogStore()
             do {
                 let journal = NativeTaskJournal(store: try NativeJournalStore(), onFailure: { [weak self] in
@@ -159,6 +167,7 @@ final class NativeAppModel: ObservableObject {
     func handle(_ intent: ClientIntent) {
         switch intent {
         case let .openDestination(destination, _):
+            retireVoice()
             switch destination {
             case .addConnection: self.destination = .connect
             case .account, .connectionSettings: self.destination = .connections
@@ -186,7 +195,8 @@ final class NativeAppModel: ObservableObject {
             if archived { loadArchivedCatalog(id) } else { archiveReads[id.connectionID] = nil; showCatalog(id) }
         case let .openConversation(route): open(route)
         case .closeConversation: selectionRevision = UUID(); retireMediaSelection()
-        case let .openAgentCatalog(id), let .refreshCatalog(id): showCatalog(id)
+        case let .openAgentCatalog(id): retireVoice(); showCatalog(id)
+        case let .refreshCatalog(id): showCatalog(id)
         case let .selectCatalogProject(id, projectID):
             guard id.connectionID == activeConnectionID else { return }
             presentation.catalogs[id]?.selectedProjectID = projectID; updateCatalog(id)
@@ -216,8 +226,8 @@ final class NativeAppModel: ObservableObject {
         case let .pickAttachment(route, source): pickMedia(route, source: source)
         case let .removeAttachment(route, attachmentID): removeMedia(route, id: attachmentID)
         case let .openAttachment(attachmentID): openMedia(id: attachmentID)
-        case .voice:
-            break // These capabilities stay hidden until their concrete host handlers are available.
+        case let .voice(route, action): voiceIntent(route, action: action)
+        case let .composerInsertionApplied(route, insertionID, text): voiceInsertionApplied(route, id: insertionID, text: text)
         }
     }
 
@@ -698,6 +708,7 @@ final class NativeAppModel: ObservableObject {
     }
 
     private func send(_ route: ConversationID) {
+        guard voice?.attempt?.context.route != route else { return }
         guard route.connectionID == activeConnectionID, state.phase == .ready, state.capabilities.chat,
               sessionManager?.permitsInput(route) != false,
               let document = documents[route], !mediaSendPreparations.contains(route),
@@ -889,6 +900,7 @@ final class NativeAppModel: ObservableObject {
         }
         if document.hasMore { features[.loadEarlier] = connected ? .available : .temporarilyUnavailable(String(localized: "Reconnect to load earlier messages.")) }
         addMediaFeatures(route, features: &features)
+        addVoiceFeatures(route, editable: session?.canContinue != false, features: &features)
         prepareMessageMedia(route)
         let previous = presentation.conversations[route]
         let transcript: [MessagePresentation] = document.messages.filter(NativeTranscriptPresentation.isVisible)

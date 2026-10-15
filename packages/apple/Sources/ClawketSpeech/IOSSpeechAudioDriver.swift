@@ -2,6 +2,13 @@
 @preconcurrency import AVFoundation
 import Foundation
 
+private final class SpeechAudioStartGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cancelled = false
+    func cancel() { lock.lock(); cancelled = true; lock.unlock() }
+    var isCancelled: Bool { lock.lock(); defer { lock.unlock() }; return cancelled }
+}
+
 private final class SpeechAudioEmitter: @unchecked Sendable {
     private let lock = NSLock()
     private var continuation: AsyncThrowingStream<SpeechCaptureChunk, any Error>.Continuation?
@@ -69,14 +76,7 @@ public final class IOSSpeechAudioDriver: SpeechAudioDriver, @unchecked Sendable 
     private var sessionActive = false
     public init() { queue.setSpecific(key: queueKey, value: true) }
 
-    public func start(id: UUID) async throws -> AsyncThrowingStream<SpeechCaptureChunk, any Error> {
-        try Task.checkCancellation()
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
-            queue.async {
-                guard self.id == nil, !Task.isCancelled else { continuation.resume(throwing: SpeechFailure(.busy)); return }
-                self.id = id; continuation.resume()
-            }
-        }
+    public func requestPermission() async throws {
         let allowed: Bool
         if #available(iOS 17.0, *) { allowed = await AVAudioApplication.requestRecordPermission() }
         else {
@@ -85,17 +85,26 @@ public final class IOSSpeechAudioDriver: SpeechAudioDriver, @unchecked Sendable 
             }
         }
         guard allowed, !Task.isCancelled else {
-            await stop(id: id); throw SpeechFailure(Task.isCancelled ? .cancelled : .permission)
+            throw SpeechFailure(Task.isCancelled ? .cancelled : .permission)
         }
+    }
+    public func start(id: UUID) async throws -> AsyncThrowingStream<SpeechCaptureChunk, any Error> {
+        try Task.checkCancellation()
+        let gate = SpeechAudioStartGate()
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 queue.async {
-                    guard self.id == id else { continuation.resume(throwing: SpeechFailure(.cancelled)); return }
+                    guard !gate.isCancelled else { continuation.resume(throwing: SpeechFailure(.cancelled)); return }
+                    guard self.id == nil else { continuation.resume(throwing: SpeechFailure(.busy)); return }
+                    guard AVAudioSession.sharedInstance().recordPermission == .granted else {
+                        continuation.resume(throwing: SpeechFailure(.permission)); return
+                    }
+                    self.id = id
                     do { continuation.resume(returning: try self.begin(id)) }
                     catch { self.end(id, failure: nil); continuation.resume(throwing: SpeechFailure(.captureFailed)) }
                 }
             }
-        } onCancel: { self.queue.async { self.end(id, failure: .init(.cancelled)) } }
+        } onCancel: { gate.cancel(); self.queue.async { self.end(id, failure: .init(.cancelled)) } }
     }
 
     public func stop(id: UUID) async {
@@ -139,12 +148,15 @@ public final class IOSSpeechAudioDriver: SpeechAudioDriver, @unchecked Sendable 
                   AVAudioSession.InterruptionType(rawValue: raw) == .began else { return }
             self?.queue.async { [weak self] in self?.end(id, failure: .init(.captureFailed)) }
         })
-        for (name, object) in [(AVAudioSession.mediaServicesWereResetNotification, session as AnyObject),
-                               (Notification.Name.AVAudioEngineConfigurationChange, engine as AnyObject)] {
-            observers.append(center.addObserver(forName: name, object: object, queue: nil) { [weak self] _ in
-                self?.queue.async { [weak self] in self?.end(id, failure: .init(.captureFailed)) }
-            })
-        }
+        observers.append(center.addObserver(forName: AVAudioSession.mediaServicesWereResetNotification, object: session, queue: nil) { [weak self] _ in
+            self?.queue.async { [weak self] in self?.end(id, failure: .init(.captureFailed)) }
+        })
+        observers.append(center.addObserver(forName: .AVAudioEngineConfigurationChange, object: engine, queue: nil) { [weak self] _ in
+            self?.queue.async { [weak self] in
+                guard let self, self.id == id, self.engine?.isRunning == false else { return }
+                self.end(id, failure: .init(.captureFailed))
+            }
+        })
         try engine.start()
         return stream
     }

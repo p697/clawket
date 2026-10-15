@@ -2204,6 +2204,184 @@
         "apps/ios/Clawket/NativeAppMedia.swift:243"
       ],
       "mobileTerm": null
+    },
+    {
+      "key": "Cannot save more audio. Free up device storage or remove a saved recording.",
+      "sources": [
+        "apps/ios/Clawket/NativeAppVoice.swift"
+      ],
+      "mobileTerm": "chat.Cannot save more audio. Free up device storage or remove a saved recording."
+    },
+    {
+      "key": "Delete",
+      "sources": [
+        "apps/ios/Clawket/NativeVoiceSheet.swift"
+      ],
+      "mobileTerm": "chat.Delete"
+    },
+    {
+      "key": "Delete recording?",
+      "sources": [
+        "apps/ios/Clawket/NativeVoiceSheet.swift"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Listening…",
+      "sources": [
+        "apps/ios/Clawket/NativeAppVoice.swift"
+      ],
+      "mobileTerm": "chat.Listening…"
+    },
+    {
+      "key": "Microphone access is required to transcribe speech.",
+      "sources": [
+        "apps/ios/Clawket/NativeAppVoice.swift"
+      ],
+      "mobileTerm": "chat.Microphone access is required to transcribe speech."
+    },
+    {
+      "key": "No speech detected. Please try again.",
+      "sources": [
+        "apps/ios/Clawket/NativeAppVoice.swift"
+      ],
+      "mobileTerm": "chat.No speech detected. Please try again."
+    },
+    {
+      "key": "Recording saved locally · Transcription paused",
+      "sources": [
+        "apps/ios/Clawket/NativeAppVoice.swift"
+      ],
+      "mobileTerm": "chat.Recording saved locally · Transcription paused"
+    },
+    {
+      "key": "Review transcription",
+      "sources": [
+        "apps/ios/Clawket/NativeVoiceSheet.swift"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Saved recording",
+      "sources": [
+        "apps/ios/Clawket/NativeAppVoice.swift",
+        "apps/ios/Clawket/NativeVoiceSheet.swift"
+      ],
+      "mobileTerm": "chat.Saved recording"
+    },
+    {
+      "key": "Saved recordings",
+      "sources": [
+        "apps/ios/Clawket/NativeVoiceSheet.swift"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Stop recording before sending.",
+      "sources": [
+        "apps/ios/Clawket/NativeAppVoice.swift"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Stop voice input",
+      "sources": [
+        "packages/apple/Sources/ClawketUI/NativeComposer.swift"
+      ],
+      "mobileTerm": "chat.Stop voice input"
+    },
+    {
+      "key": "The connection was interrupted. Your recording is saved on this device.",
+      "sources": [
+        "apps/ios/Clawket/NativeAppVoice.swift"
+      ],
+      "mobileTerm": "chat.The connection was interrupted. Your recording is saved on this device."
+    },
+    {
+      "key": "The microphone stopped. Your recorded audio is saved.",
+      "sources": [
+        "apps/ios/Clawket/NativeAppVoice.swift"
+      ],
+      "mobileTerm": "chat.The microphone stopped. Your recorded audio is saved."
+    },
+    {
+      "key": "The previous voice session is still closing. Please retry shortly.",
+      "sources": [
+        "apps/ios/Clawket/NativeAppVoice.swift"
+      ],
+      "mobileTerm": "chat.The previous voice session is still closing. Please retry shortly."
+    },
+    {
+      "key": "The transcription limit has been reached. Your recording is saved.",
+      "sources": [
+        "apps/ios/Clawket/NativeAppVoice.swift"
+      ],
+      "mobileTerm": "chat.The transcription limit has been reached. Your recording is saved."
+    },
+    {
+      "key": "The transcription service is unavailable. Your recording is saved on this device.",
+      "sources": [
+        "apps/ios/Clawket/NativeAppVoice.swift"
+      ],
+      "mobileTerm": "chat.The transcription service is unavailable. Your recording is saved on this device."
+    },
+    {
+      "key": "Transcribing…",
+      "sources": [
+        "apps/ios/Clawket/NativeAppVoice.swift",
+        "apps/ios/Clawket/NativeVoiceSheet.swift"
+      ],
+      "mobileTerm": "chat.Transcribing…"
+    },
+    {
+      "key": "Use text",
+      "sources": [
+        "apps/ios/Clawket/NativeVoiceSheet.swift"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Voice authentication failed. Check your device date and time.",
+      "sources": [
+        "apps/ios/Clawket/NativeAppVoice.swift"
+      ],
+      "mobileTerm": "chat.Voice authentication failed. Check your device date and time."
+    },
+    {
+      "key": "Voice input",
+      "sources": [
+        "apps/ios/Clawket/NativeAppVoice.swift",
+        "apps/ios/Clawket/NativeVoiceSheet.swift"
+      ],
+      "mobileTerm": "chat.Voice input"
+    },
+    {
+      "key": "Voice transcription is unavailable in this build.",
+      "sources": [
+        "apps/ios/Clawket/NativeVoiceSheet.swift"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Your audio is saved on this device. Retry transcription or delete it.",
+      "sources": [
+        "apps/ios/Clawket/NativeVoiceSheet.swift"
+      ],
+      "mobileTerm": "chat.Your audio is saved on this device. Retry transcription or delete it."
+    },
+    {
+      "key": "Your draft changed. Insert the transcript where you want it.",
+      "sources": [
+        "apps/ios/Clawket/NativeVoiceSheet.swift"
+      ],
+      "mobileTerm": null
+    },
+    {
+      "key": "Your recording stays on this device until the text is saved.",
+      "sources": [
+        "apps/ios/Clawket/NativeVoiceSheet.swift"
+      ],
+      "mobileTerm": null
     }
   ],
   "infoPlistStrings": [
@@ -2226,6 +2404,13 @@
       "sourceValue": "Save images you choose to your photo library.",
       "sources": [
         "apps/ios/Clawket/Info.plist:16"
+      ]
+    },
+    {
+      "key": "NSMicrophoneUsageDescription",
+      "sourceValue": "Allow Clawket to use your microphone for voice input. Audio is sent to Alibaba Cloud for transcription.",
+      "sources": [
+        "apps/ios/Clawket/Info.plist"
       ]
     }
   ]
