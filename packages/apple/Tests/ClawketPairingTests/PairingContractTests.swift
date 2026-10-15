@@ -55,8 +55,8 @@ final class PairingContractTests: XCTestCase, @unchecked Sendable {
         let secret = try PairingCryptography.decodeHex(vector.secretKey)
         let key = try PairingCryptography.importSigningKey(tweetNaClSecret: secret, publicKey: publicKey)
         XCTAssertEqual(try PairingCryptography.deviceID(publicKey: publicKey), vector.deviceID)
-        XCTAssertEqual(PairingCryptography.deviceAuthPayload(deviceID: vector.deviceID, clientID: "clawket-ios", clientMode: "ui", role: "operator",
-            scopes: ["operator.read", "operator.write"], signedAtMs: 1_700_000_000_123, token: "synthetic-token", nonce: "synthetic-nonce", platform: "ios", deviceFamily: "iPhone"), vector.signedPayload)
+        XCTAssertEqual(PairingCryptography.deviceAuthPayload(deviceID: vector.deviceID, clientID: "openclaw-ios", clientMode: "ui", role: "operator",
+            scopes: ["operator.read", "operator.write"], signedAtMs: 1_700_000_000_123, token: "synthetic-token", nonce: "synthetic-nonce", platform: "ios", deviceFamily: "iphone"), vector.signedPayload)
         XCTAssertEqual(PairingCryptography.hex(try key.signature(for: Data(vector.signedPayload.utf8))), vector.signature)
         XCTAssertThrowsError(try PairingCryptography.importSigningKey(tweetNaClSecret: secret.prefix(32), publicKey: publicKey))
         XCTAssertThrowsError(try PairingCryptography.importSigningKey(tweetNaClSecret: secret, publicKey: Data(repeating: 0, count: 32)))

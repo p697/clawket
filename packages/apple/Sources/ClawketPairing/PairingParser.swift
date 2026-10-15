@@ -40,7 +40,13 @@ public enum PairingParser {
         }
         let server: URL, session: String, secret: String
         if parts.scheme?.lowercased() == "clawket", parts.host == "pair" {
-            server = try pairingHTTPBase(query("server", from: parts.queryItems))
+            let rawServer = try query("server", from: parts.queryItems)
+            guard URLComponents(string: rawServer)?.scheme?.lowercased() == "https" else { throw PairingError.invalidLink }
+            let base = try pairingHTTPBase(rawServer)
+            guard var origin = URLComponents(url: base, resolvingAgainstBaseURL: false) else { throw PairingError.invalidLink }
+            origin.path = ""
+            guard let url = origin.url else { throw PairingError.invalidLink }
+            server = url
             session = try query("session", from: parts.queryItems)
             secret = try query("key", from: parts.queryItems)
         } else {
@@ -50,10 +56,11 @@ public enum PairingParser {
             guard path.count == 2, path[0] == "pair" else { throw PairingError.invalidLink }
             server = try pairingHTTPBase("https://\(parts.host ?? "")")
             session = String(path[1])
-            let fragment = URLComponents(string: "https://fragment.invalid/?\(parts.fragment ?? "")")
+            let fragment = URLComponents(string: "https://fragment.invalid/?\(parts.percentEncodedFragment ?? "")")
             secret = try query("k", from: fragment?.queryItems)
         }
-        guard OfficialPairingServices.service(for: server) != nil, server.scheme == "https",
+        guard OfficialPairingServices.service(for: server) != nil else { throw PairingError.untrustedServer }
+        guard server.scheme == "https",
               session.range(of: "^ps_[A-Za-z0-9_-]+$", options: .regularExpression) != nil,
               session.utf8.count <= 256 else { throw PairingError.invalidLink }
         return PairingLink(serverURL: server, sessionID: session, secret: try PairingCryptography.decodeBase64URL(secret, count: 32))

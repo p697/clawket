@@ -76,7 +76,11 @@ public struct SecurePairingExchange: Sendable {
     private let clientSecretKey: Data
     private let codeKey: Data
 
-    public init(sessionID: String, normalizedCode: String, requestID: String? = nil, clientSecretKey: Data? = nil) throws {
+    public init(sessionID: String, normalizedCode: String) throws {
+        try self.init(sessionID: sessionID, normalizedCode: normalizedCode, requestID: nil, clientSecretKey: nil)
+    }
+
+    init(sessionID: String, normalizedCode: String, requestID: String?, clientSecretKey: Data?) throws {
         guard sessionID.range(of: "^ps_[a-f0-9]{64}$", options: .regularExpression) != nil,
               normalizedCode.range(of: "^[0-9]{6}$", options: .regularExpression) != nil else { throw PairingError.invalidResponse }
         let key = try clientSecretKey.map { try Curve25519.KeyAgreement.PrivateKey(rawRepresentation: $0) } ?? Curve25519.KeyAgreement.PrivateKey()

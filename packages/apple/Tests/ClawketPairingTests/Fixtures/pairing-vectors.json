@@ -32,8 +32,8 @@
     "secretKey": "808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fcd14b37f956e953194ff7fb73b3d81dcc561d61a7538094b7c3e1a643ee5f3aa",
     "publicKey": "cd14b37f956e953194ff7fb73b3d81dcc561d61a7538094b7c3e1a643ee5f3aa",
     "deviceID": "519cae93e93ad011d785355894405ed8fa8162c6e54ada133bbb6dbb932df57b",
-    "signedPayload": "v3|519cae93e93ad011d785355894405ed8fa8162c6e54ada133bbb6dbb932df57b|clawket-ios|ui|operator|operator.read,operator.write|1700000000123|synthetic-token|synthetic-nonce|ios|iPhone",
-    "signature": "220ec1c1c8fbc40debb6da9b784ff90109596fe065d3a214db62a06ba647398e844a5f1fa1140617d046c009424156cae1453d373970d84f476de2d0914c3b0c"
+    "signedPayload": "v3|519cae93e93ad011d785355894405ed8fa8162c6e54ada133bbb6dbb932df57b|openclaw-ios|ui|operator|operator.read,operator.write|1700000000123|synthetic-token|synthetic-nonce|ios|iphone",
+    "signature": "df43f3252047dc95322e8dd26205493fe704bfd0d5bd5d1862d67e1f9da8f20cfc96561c394debf142f668b45a07c1730f3eb01822e8185e1e0af27935c0060c"
   },
   "services": [
     {

@@ -55,7 +55,7 @@ final class PairingParserTests: XCTestCase, @unchecked Sendable {
         let web = try PairingParser.parseLink("https://codex-registry.clawket.ai/pair/\(session)#k=\(key)")
         let scheme = try PairingParser.parseLink("clawket://pair?server=https%3A%2F%2Fcodex-registry.clawket.ai&session=\(session)&key=\(key)")
         XCTAssertEqual(web, scheme)
-        for raw in ["https://custom.invalid/pair/\(session)#k=\(key)", "http://codex-registry.clawket.ai/pair/\(session)#k=\(key)",
+        for raw in ["https://custom.invalid/pair/\(session)#k=\(key)", "https://codex-registry.clawket.ai/pair/\(session)#k=%2541%2541", "http://codex-registry.clawket.ai/pair/\(session)#k=\(key)",
                     "https://codex-registry.clawket.ai/pair/\(session)#k=\(key)&k=\(key)", "clawket://pair?server=https://custom.invalid&session=\(session)&key=\(key)"] {
             XCTAssertThrowsError(try PairingParser.parseLink(raw))
         }

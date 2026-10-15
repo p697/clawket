@@ -39,8 +39,8 @@ const resultFrame = '__clawket_relay_control__:' + JSON.stringify({ type: 'contr
   payload: { protocol: 2, sessionId: sessionID, bridgePublicKey: b64(bridge.publicKey), nonce: b64(nonce), ciphertext: b64(secureCipher), bridgeProof: resultProof } });
 const sign = nacl.sign.keyPair.fromSeed(sequence(128, 32));
 const deviceID = hex(sha(sign.publicKey));
-const signedPayload = runInNewContext(`(() => { ${authReturn} })()`, { params: { deviceId: deviceID, clientId: 'clawket-ios', clientMode: 'ui', role: 'operator', scopes: ['operator.read', 'operator.write'],
-  signedAtMs: 1700000000123, token: 'synthetic-token', nonce: 'synthetic-nonce', platform: 'ios', deviceFamily: 'iPhone' } });
+const signedPayload = runInNewContext(`(() => { ${authReturn} })()`, { params: { deviceId: deviceID, clientId: 'openclaw-ios', clientMode: 'ui', role: 'operator', scopes: ['operator.read', 'operator.write'],
+  signedAtMs: 1700000000123, token: 'synthetic-token', nonce: 'synthetic-nonce', platform: 'ios', deviceFamily: 'iphone' } });
 const vectors = {
   provenance: { implementation: 'apps/mobile/src/services/pairing-session.ts', algorithm: `tweetnacl@${version}`, synthetic: true },
   plaintext,
