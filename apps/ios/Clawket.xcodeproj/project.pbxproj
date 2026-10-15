@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0666E5214AE34FA582FA21BC /* ClawketMedia in Frameworks */ = {isa = PBXBuildFile; productRef = B6A6C2405DAB4BAA85179F4E /* ClawketMedia */; };
 		0965FDA079959C9465C271AD /* NativeConversationStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62CEF4BAC15E5B5B6DD99FD7 /* NativeConversationStoreTests.swift */; };
 		10CEF133A2AFC5BFCE9B1E31 /* NativeConversationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B9A7097C7DD4ABA36FBB7A1 /* NativeConversationStore.swift */; };
 		120EF71EFB3EA1E9173A565B /* ConnectAgentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A8D8F99FE6BF72DD9B9F8AF /* ConnectAgentView.swift */; };
@@ -72,6 +73,7 @@
 				F198A05A5D7D86C890E9264C /* ClawketPersistence in Frameworks */,
 				FE4BA71818051CEDD9C7204A /* ClawketUI in Frameworks */,
 				E3EF23E922BC183B80037647 /* ClawketRuntime in Frameworks */,
+				0666E5214AE34FA582FA21BC /* ClawketMedia in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -175,6 +177,7 @@
 				CC7E6FCD762618577595D7D1 /* ClawketPersistence */,
 				E4FCEFB36539FD378035E5F5 /* ClawketUI */,
 				17D4C878DFA9BEACD825E778 /* ClawketRuntime */,
+				B6A6C2405DAB4BAA85179F4E /* ClawketMedia */,
 			);
 			productName = Clawket;
 			productReference = 2474FDEDA96EC763B092AFA6 /* Clawket.app */;
@@ -555,6 +558,11 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		B6A6C2405DAB4BAA85179F4E /* ClawketMedia */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CD7AB3640BEDF49787C304FD /* XCLocalSwiftPackageReference "apple" */;
+			productName = ClawketMedia;
+		};
 		17D4C878DFA9BEACD825E778 /* ClawketRuntime */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = CD7AB3640BEDF49787C304FD /* XCLocalSwiftPackageReference "apple" */;

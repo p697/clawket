@@ -125,7 +125,12 @@ public enum FrameCodec {
         var tokens = 0
         try validate(value, depth: 0, tokens: &tokens)
         let data: Data
-        do { data = try JSONEncoder().encode(value) }
+        do {
+            let encoder = JSONEncoder()
+            // Match JSON.stringify: slash-heavy base64 must not double on the wire.
+            encoder.outputFormatting = [.withoutEscapingSlashes]
+            data = try encoder.encode(value)
+        }
         catch { throw FrameValidationError.invalidJSON }
         guard data.count <= maximumFrameBytes else { throw FrameValidationError.tooLarge }
         return String(decoding: data, as: UTF8.self)

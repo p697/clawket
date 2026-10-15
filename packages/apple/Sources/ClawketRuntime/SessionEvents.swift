@@ -12,6 +12,8 @@ struct SessionEvents: Sendable {
     }
     var runs: [String: Run] = [:]
     var order: [String] = []
+    var openClawArtifacts = false
+    var artifactsEnabled = false
 
     mutating func register(runID: String, sessionKey: String) throws {
         guard !runID.isEmpty, runID.utf8.count <= 256, !sessionKey.isEmpty, sessionKey.utf8.count <= 1_024 else {
@@ -28,7 +30,9 @@ struct SessionEvents: Sendable {
         runs[runID] = Run(sessionKey: sessionKey); order.append(runID)
     }
 
-    mutating func map(_ frame: JSONValue, connection: BackendConnection) throws -> [RuntimeSessionUpdate] {
+    mutating func map(_ frame: JSONValue, connection: BackendConnection, artifactsEnabled: Bool = false) throws -> [RuntimeSessionUpdate] {
+        self.artifactsEnabled = artifactsEnabled
+        openClawArtifacts = connection.backendKind == .openclaw && artifactsEnabled
         guard frame["type"]?.stringValue == "event", let event = frame["event"]?.stringValue else { return [] }
         let payload = frame["payload"] ?? .null
         if event == BackendProfile.profile(for: connection.backendKind).updateEvent {
@@ -103,6 +107,7 @@ struct SessionEvents: Sendable {
     }
 
     private mutating func textEvent(_ text: String, runID: String, mode: RuntimeTextUpdate.Mode, raw: JSONValue) -> [RuntimeSessionUpdate] {
+        let text = openClawArtifacts ? RuntimeAttachmentProjection.stripMediaDirectives(text) : text
         guard var run = runs[runID], !run.terminal, !text.isEmpty, !silentPrefix(text) else { return [] }
         run.hasText = true; runs[runID] = run
         return [.text(RuntimeTextUpdate(sessionKey: run.sessionKey, runID: runID, segmentID: "\(runID):reply:\(run.segment)",
@@ -129,7 +134,7 @@ struct SessionEvents: Sendable {
     }
 
     private mutating func complete(runID: String, reason: String, raw: JSONValue) -> [RuntimeSessionUpdate] {
-        let text = protocolText(raw["message"]?["content"])
+        let text = RuntimeAttachmentProjection.displayText(raw["message"] ?? .null, fallback: protocolText(raw["message"]?["content"]), enabled: artifactsEnabled)
         return textEvent(text, runID: runID, mode: .snapshot, raw: raw) + finish(runID: runID, reason: reason, raw: raw)
     }
 

@@ -94,13 +94,13 @@ enum WireModels {
                               raw: value)
     }
 
-    static func history(_ payload: JSONValue, key: String, backend: BackendKind) throws -> RuntimeHistory {
+    static func history(_ payload: JSONValue, key: String, backend: BackendKind, artifactsEnabled: Bool = false) throws -> RuntimeHistory {
         guard payload.object != nil, let values = payload["messages"]?.array, values.count <= 10_000 else {
             throw RuntimeFailure(.invalidResponse)
         }
         var syntheticCounts: [String: Int] = [:]
         let gateway = backend == .openclaw || backend == .hermes
-        let messages = try values.compactMap { value -> RuntimeMessage? in
+        var messages = try values.compactMap { value -> RuntimeMessage? in
             if value.object == nil && gateway { return nil }
             let rawRole = value["role"]?.stringValue
             guard value.object != nil, let role = RuntimeMessage.Role(rawValue: rawRole == "toolResult" ? "tool" : rawRole ?? "") ?? (gateway ? .system : nil) else {
@@ -124,12 +124,15 @@ enum WireModels {
                 let knownLegacy = original.range(of: "^[0-9]{13}_[a-z0-9]{1,8}$", options: .regularExpression) != nil
                 if knownLegacy || UUID(uuidString: original) != nil { sendKey = original }
             }
-            return RuntimeMessage(id: id, role: role, text: value["text"]?.stringValue ?? protocolText(value["content"]),
+            let rawText = value["text"]?.stringValue ?? protocolText(value["content"])
+            let text = role == .assistant ? RuntimeAttachmentProjection.displayText(value, fallback: rawText, enabled: artifactsEnabled) : rawText
+            return RuntimeMessage(id: id, role: role, text: text,
                                   timestampMs: clock,
                                   runID: value["runId"]?.stringValue, turnID: value["turnId"]?.stringValue,
                                   idempotencyKey: sendKey,
                                   sentLocally: false, raw: value)
         }
+        if backend == .openclaw && artifactsEnabled { messages = RuntimeAttachmentProjection.reconcileOpenClaw(messages) }
         let profile = BackendProfile.profile(for: backend)
         var nextCursor = payload["nextCursor"]?.nonemptyString
         if backend == .openclaw && payload["hasMore"]?.boolValue == true {

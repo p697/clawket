@@ -283,7 +283,7 @@ public actor RPCConnection {
         if let generation, generation != entry.generation { throw RPCFailure(.retired) }
         guard pending.count < maximumPending else { throw RPCFailure(.pendingLimit) }
         let id = UUID().uuidString.lowercased()
-        let frame = try encode(.object(["type": .string("req"), "id": .string(id), "method": .string(method), "params": params]))
+        let frame = try Self.requestFrame(method: method, params: params, id: id)
         let generation = entry.generation
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
@@ -339,7 +339,20 @@ public actor RPCConnection {
         guard !Task.isCancelled else { throw RPCFailure(.cancelled) }
     }
 
-    private func encode(_ value: JSONValue) throws -> String {
+    /// Exact complete UTF-8 envelope preflight. Dispatch uses the same constructor;
+    /// native request IDs always have the same 36-byte UUID representation.
+    public nonisolated static func validateRequest(method: String, params: JSONValue) throws {
+        _ = try requestFrame(method: method, params: params, id: "00000000-0000-0000-0000-000000000000")
+    }
+
+    private nonisolated static func requestFrame(method: String, params: JSONValue, id: String) throws -> String {
+        guard !method.isEmpty, method.utf8.count <= 128 else { throw RPCFailure(.invalidRequest) }
+        return try encodeFrame(.object(["type": .string("req"), "id": .string(id), "method": .string(method), "params": params]))
+    }
+
+    private func encode(_ value: JSONValue) throws -> String { try Self.encodeFrame(value) }
+
+    private nonisolated static func encodeFrame(_ value: JSONValue) throws -> String {
         do { return try FrameCodec.encode(value) }
         catch FrameValidationError.tooLarge { throw RPCFailure(.frameTooLarge) }
         catch { throw RPCFailure(.invalidFrame) }

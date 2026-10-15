@@ -10,6 +10,10 @@ public actor RuntimeCoordinator {
     let socketFactory: any WebSocketFactory
     let clock: any TransportClock
     let client: RuntimeClient
+    let artifactHTTP: any RuntimeArtifactHTTPClient
+    var artifactEntries: [UUID: RuntimeArtifactEntry] = [:]
+    var artifactOpenings: Set<UUID> = []
+    var artifactDownloads: [UUID: Task<Data, any Error>] = [:]
     var connection: BackendConnection?
     var transport: RPCConnection?
     var generation: ConnectionGeneration?
@@ -68,10 +72,12 @@ public actor RuntimeCoordinator {
 
     public init(credentials: any DeviceCredentialProvider,
                 socketFactory: any WebSocketFactory = URLSessionWebSocketFactory(),
-                clock: any TransportClock = MonotonicTransportClock(), client: RuntimeClient = .init()) throws {
+                clock: any TransportClock = MonotonicTransportClock(), client: RuntimeClient = .init(),
+                artifactHTTP: any RuntimeArtifactHTTPClient = URLSessionArtifactHTTPClient()) throws {
         guard !client.version.isEmpty, client.version.utf8.count <= 128,
               ["iphone", "ipad"].contains(client.deviceFamily) else { throw RuntimeFailure(.invalidConnection) }
         self.credentials = credentials; self.socketFactory = socketFactory; self.clock = clock; self.client = client
+        self.artifactHTTP = artifactHTTP
         let stream = AsyncThrowingStream<RuntimeEvent, any Error>.makeStream(bufferingPolicy: .bufferingOldest(64))
         events = stream.stream; eventContinuation = stream.continuation
         eventContinuation.onTermination = { @Sendable [weak self] _ in Task { await self?.disconnect() } }
@@ -207,7 +213,7 @@ public actor RuntimeCoordinator {
             } else if state.phase == .ready {
                 do {
                     if try receiveConsent(frame, scope: scope()) { return }
-                    for update in try sessionEvents.map(frame, connection: connection) {
+                    for update in try sessionEvents.map(frame, connection: connection, artifactsEnabled: state.capabilities.artifacts) {
                         emit(.update(connectionID: connection.id, update), weight: (try? FrameCodec.encode(frame).utf8.count) ?? 128)
                     }
                 } catch { attemptFailed(runtimeFailure(error), epoch: epoch, attempt: attempt) }
@@ -364,6 +370,7 @@ public actor RuntimeCoordinator {
     func retireAttempt() -> RPCConnection? {
         attempt = UUID(); authentication = UUID()
         resetConsents()
+        clearArtifacts()
         readerTask?.cancel(); readerTask = nil; openTask?.cancel(); openTask = nil
         handshakeTask?.cancel(); handshakeTask = nil; retryTask?.cancel(); retryTask = nil
         periodicProbeTask?.cancel(); periodicProbeTask = nil; probeTask?.cancel(); probeTask = nil
@@ -395,7 +402,9 @@ public actor RuntimeCoordinator {
             capabilities.questions = [.codex, .claudeCode, .pi].contains(connection.backendKind) && consents.evidence.contains("questions")
             capabilities.executionApprovals = [.openclaw, .hermes, .codex, .claudeCode].contains(connection.backendKind) && consents.evidence.contains("execution")
             capabilities.pairingApprovals = connection.backendKind == .openclaw && consents.evidence.contains("pairing")
+            configureAttachmentCapabilities(&capabilities)
         }
+        if !capabilities.artifacts { clearArtifacts() }
         state = RuntimeConnectionState(connectionID: connection?.id, phase: phase, capabilities: capabilities,
                                        backendKind: connection?.backendKind, bridgeVersion: backendHealth["bridgeVersion"]?.stringValue,
                                        nextRetryAt: nextRetryAt)

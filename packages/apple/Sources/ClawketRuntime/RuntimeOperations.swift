@@ -154,27 +154,18 @@ extension RuntimeCoordinator {
                 params["sessionId"] = .string(sessionID); params["offset"] = .number(Double(offset))
             } else { params["cursor"] = .string(cursor) }
         }
+        if connection.backendKind == .pi && state.capabilities.artifacts { params["artifacts"] = .bool(true) }
         let payload = try await rpc("chat.history", params: .object(params), scope: scope)
-        return try WireModels.history(payload, key: key, backend: connection.backendKind)
+        return try WireModels.history(payload, key: key, backend: connection.backendKind, artifactsEnabled: state.capabilities.artifacts)
     }
 
     public func send(sessionKey: String, input: RuntimePrompt) async throws -> RuntimeRunReceipt {
         let scope = try scope()
-        guard let connection, !sessionKey.isEmpty, sessionKey.utf8.count <= 1_024,
-              !input.idempotencyKey.isEmpty, input.idempotencyKey.utf8.count <= 200,
-              !input.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw RuntimeFailure(.invalidConnection) }
-        if connection.backendKind == .localModel && sessionKey != "main" { throw RuntimeFailure(.unsupported) }
+        guard let connection else { throw RuntimeFailure(.superseded) }
         let gateway = connection.backendKind == .openclaw || connection.backendKind == .hermes
-        var params: [String: JSONValue] = ["sessionKey": .string(sessionKey), "idempotencyKey": .string(input.idempotencyKey),
-                                           gateway ? "message" : "text": .string(input.text)]
-        if connection.backendKind == .openclaw { params["deliver"] = .bool(false) }
-        if connection.backendKind != .hermes, let thinking = input.thinkingLevel,
-           !(thinking == "off" && [.codex, .claudeCode].contains(connection.backendKind)) {
-            params[connection.backendKind == .openclaw ? "thinking" : "thinkingLevel"] = .string(thinking)
-        }
-        if let skill = input.skillID { params["skillId"] = .string(skill) }
+        let params = try promptParameters(sessionKey: sessionKey, input: input)
         do {
-            let result = try await rpc("chat.send", params: .object(params), scope: scope)
+            let result = try await rpc("chat.send", params: params, scope: scope)
             let runID = result["runId"]?.nonemptyString ?? (gateway ? input.idempotencyKey : nil)
             guard let runID else { throw RuntimeFailure(.invalidResponse, delivery: .responseReceived) }
             try sessionEvents.register(runID: runID, sessionKey: sessionKey)

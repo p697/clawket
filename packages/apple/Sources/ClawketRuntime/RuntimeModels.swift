@@ -105,6 +105,10 @@ public struct RuntimeCapabilities: Codable, Sendable, Equatable {
     public var questions = false
     public var executionApprovals = false
     public var pairingApprovals = false
+    public var attachments = false
+    public var fileAttachments = false
+    public var documentAttachments = false
+    public var artifacts = false
     public init() {}
 }
 
@@ -194,6 +198,7 @@ public struct RuntimeMessage: Codable, Sendable, Equatable, Identifiable {
     /// Local provenance is never trusted from a backend frame.
     public let sentLocally: Bool
     public let raw: JSONValue
+    public var attachments: [RuntimeMessageAttachment] { RuntimeAttachmentProjection.extract(raw) }
 }
 
 public struct RuntimeHistory: Codable, Sendable, Equatable {
@@ -218,8 +223,18 @@ public struct RuntimePrompt: Codable, Sendable, Equatable {
     public let idempotencyKey: String
     public let thinkingLevel: String?
     public let skillID: String?
-    public init(text: String, idempotencyKey: String = UUID().uuidString.lowercased(), thinkingLevel: String? = nil, skillID: String? = nil) {
+    public let attachments: [RuntimePromptAttachment]
+    public init(text: String, idempotencyKey: String = UUID().uuidString.lowercased(), thinkingLevel: String? = nil, skillID: String? = nil,
+                attachments: [RuntimePromptAttachment] = []) {
         self.text = text; self.idempotencyKey = idempotencyKey; self.thinkingLevel = thinkingLevel; self.skillID = skillID
+        self.attachments = attachments
+    }
+    private enum CodingKeys: String, CodingKey { case text, idempotencyKey, thinkingLevel, skillID, attachments }
+    public init(from decoder: any Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(text: try values.decode(String.self, forKey: .text), idempotencyKey: try values.decode(String.self, forKey: .idempotencyKey),
+                  thinkingLevel: try values.decodeIfPresent(String.self, forKey: .thinkingLevel), skillID: try values.decodeIfPresent(String.self, forKey: .skillID),
+                  attachments: try values.decodeIfPresent([RuntimePromptAttachment].self, forKey: .attachments) ?? [])
     }
 }
 

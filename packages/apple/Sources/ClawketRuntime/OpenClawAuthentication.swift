@@ -25,6 +25,7 @@ extension RuntimeCoordinator {
         let capturedEpoch = epoch, capturedAttempt = attempt
         authentication = UUID(); lastNonce = nonce; sessionEvents = SessionEvents()
         resetConsents()
+        clearArtifacts()
         if state.phase == .ready {
             catalogTask?.cancel(); catalogTask = nil; probeTask?.cancel(); probeTask = nil
             for task in historyTasks.values { task.cancel() }
