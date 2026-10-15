@@ -116,7 +116,7 @@
       "key": "Agent",
       "sources": [
         "apps/ios/Clawket/ConnectAgentView.swift:52",
-        "apps/ios/Clawket/NativeAppModel.swift:1003",
+        "apps/ios/Clawket/NativeAppModel.swift:1002",
         "apps/ios/Clawket/NativeTranscriptPresentation.swift:26"
       ],
       "mobileTerm": "common.Agent"

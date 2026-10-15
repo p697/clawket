@@ -728,7 +728,7 @@ final class NativeAppModel: ObservableObject {
 
     private func mergeHistory(_ history: RuntimeHistory, route: ConversationID, earlier: Bool, liveRevision: Int64,
                               readSnapshot: [String: NativeMessage], revision: UUID, activation: UUID, wire: UUID) async throws {
-        guard var document = documents[route] else { return }
+        guard var document = documents[route] else { throw RuntimeFailure(.superseded) }
         guard history.key.utf8.elementsEqual(route.sessionID.utf8) else { throw RuntimeFailure(.invalidResponse) }
         let projection = try NativeHistoryApplication.prepare(history, stored: document.messages,
             readSnapshot: readSnapshot, epoch: nil, route: route, earlier: earlier)
@@ -752,7 +752,7 @@ final class NativeAppModel: ObservableObject {
         taskJournal?.history(history, route: route, earlier: earlier, acceptedHistoryIDs: projection.acceptedHistoryIDs)
         updatePresentation(route); saveTasks[route]?.cancel()
         try await persist(route)
-        guard activation == activationRevision, wire == wireRevision, historyRevisions[route] == revision else { return }
+        guard activation == activationRevision, wire == wireRevision, historyRevisions[route] == revision else { throw RuntimeFailure(.superseded) }
         hydrateHistoryMedia(history, route: route, acceptedHistoryIDs: projection.acceptedHistoryIDs)
         if !projection.retiringResources.isEmpty, let media, let cache { try await media.reclaim(cache: cache) }
     }

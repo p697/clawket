@@ -4,6 +4,8 @@
   - 新真实window回归只改published reading scope/font、不替换hosting root；旧实现在该case出现六处断言失败，负向进程在teardown期间被中止，因此仅记录case失败证据。修复后第一轮仍暴露首可见行与指定恢复行不同，后两轮暴露estimated row geometry过早被保存，全部保留原位置断言继续修复，未把原红灯当flaky盲重跑。
   - NativeTranscript现在直接观察model，字体变化的同步willSet先捕获实际首可见行；首次恢复仍保留requested row直到行高落定，不在一般capture中采用瞬时估算首行。离屏目标先materialize，再有界两轮layout/offset校正及0.5pt no-op保护。独立源审确认无订阅retain cycle、异步actor跳转或无限scroll。
   - 独占heavy/simulator、jobs2串行；最终自建iOS27.1模拟器实际执行NativeReadingRestorationTests四项，0失败/0跳过，3.573秒，完整xcresult Passed；新增一项使本分支实际方法下限159，减少样本反例同步。测试工具退场后清理仅自己的模拟器并释放租约，其他已启动模拟器未碰。完整重基候选与旧客户端门禁仍须新head CI；没有新增USB/App/服务发布证据。
+  - 随后重基保存/归档主线201f4b95，完整保留NativeConversation physical字段、显式decoder、串行quota/rollover存储、Saved/导出真实consumer与全部412 UI+4权限/19语共7,904语言单元；NativeMessage provenance/ownership与accepted-index reducer独立并存。静态实际发现193 App方法（161主线+31历史+1阅读），报告minimum/192缩减反例同步，PBX逐一核源存在且无重复。该193组合未在本机重跑全App，实际执行与完整仓库门禁交精确head CI。
+  - 重基后轻量检查串行通过docs15对/7、App报告3、locale6与compiled-resource validator4，19语source412UI+4用途完整；没有重复本机完整App或package suite。merge返回成功只表示实际document与当前read仍有效，缺文档/派生结果退休显式superseded，不让后续消费把早退当head接受。
 
 - 2026-10-16 Native history 精确对齐与参与者显示（实际consumer落地，完整parity继续）。
   - head/older history 实际采用独立render UUID、typed providedID/实际transcriptPosition/严格本机send key，opaque身份保留原UTF8；重复/冲突源、不同角色/participant/account、source与send key互相矛盾及两个alias争一个旧行不确认outbox。legacy缺字段保持unknown；wire local不授本机权限。保留API源顺序、精确anchor分页与读前快照，迟到live/edit变化不被旧read覆盖，older页不清当前run。
