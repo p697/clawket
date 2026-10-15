@@ -9,6 +9,7 @@ let package = Package(
         .library(name: "ClawketPairing", targets: ["ClawketPairing"]),
         .library(name: "ClawketUI", targets: ["ClawketUI"]),
         .library(name: "ClawketRuntime", targets: ["ClawketRuntime"]),
+        .library(name: "ClawketPersistence", targets: ["ClawketPersistence"]),
     ],
     dependencies: [
         .package(url: "https://github.com/jedisct1/swift-sodium.git", exact: "0.11.0"),
@@ -19,6 +20,8 @@ let package = Package(
         .target(name: "ClawketUI", exclude: ["AGENTS.md", "CLAUDE.md"]),
         .testTarget(name: "ClawketUITests", dependencies: ["ClawketUI"]),
         .target(name: "ClawketRuntime", dependencies: ["ClawketTransport", "ClawketPairing"]),
+        .target(name: "ClawketPersistence", exclude: ["AGENTS.md", "CLAUDE.md"]),
+        .testTarget(name: "ClawketPersistenceTests", dependencies: ["ClawketPersistence"]),
         .testTarget(name: "ClawketTransportTests", dependencies: ["ClawketTransport"]),
         .testTarget(name: "ClawketRuntimeTests", dependencies: ["ClawketRuntime", "ClawketTransport", "ClawketPairing"]),
         .testTarget(name: "ClawketPairingTests", dependencies: ["ClawketPairing", "ClawketTransport", .product(name: "Sodium", package: "swift-sodium")], resources: [.copy("Fixtures")]),
