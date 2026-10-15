@@ -77,6 +77,7 @@ extension NativeMessage {
     enum CodingKeys: String, CodingKey {
         case id, remoteID, role, local, text, runID, segmentID, idempotencyKey, timestampMs
         case delivery, streaming, isWork, media
+        case providedID, idSource, attribution, transcriptPosition, transcriptBoundary, historyEpoch, sourceRevisionHash
     }
 
     init(from decoder: any Decoder) throws {
@@ -93,7 +94,14 @@ extension NativeMessage {
             delivery: try values.decodeIfPresent(NativeDelivery.self, forKey: .delivery),
             streaming: try values.decodeIfPresent(Bool.self, forKey: .streaming) ?? false,
             isWork: try values.decodeIfPresent(Bool.self, forKey: .isWork) ?? false,
-            media: try values.decodeIfPresent([NativeMediaReference].self, forKey: .media) ?? [])
+            media: try values.decodeIfPresent([NativeMediaReference].self, forKey: .media) ?? [],
+            providedID: try values.decodeIfPresent(String.self, forKey: .providedID),
+            idSource: try values.decodeIfPresent(RuntimeMessageIDSource.self, forKey: .idSource),
+            attribution: try values.decodeIfPresent(RuntimeMessageAttribution.self, forKey: .attribution),
+            transcriptPosition: try values.decodeIfPresent(RuntimeTranscriptPosition.self, forKey: .transcriptPosition),
+            transcriptBoundary: try values.decodeIfPresent(RuntimeTranscriptBoundary.self, forKey: .transcriptBoundary),
+            historyEpoch: try values.decodeIfPresent(UUID.self, forKey: .historyEpoch),
+            sourceRevisionHash: try values.decodeIfPresent(String.self, forKey: .sourceRevisionHash))
     }
 }
 
@@ -129,10 +137,13 @@ extension NativeConversation {
               physicalSessionID == nil || (!physicalSessionID!.isEmpty && physicalSessionID!.utf8.count <= 2_048),
               Set(messages.map(\.id)).count == messages.count else { throw StoreFailure.invalidDocument }
         for message in messages {
-            guard message.media.count <= (message.local && message.role == .user ? 6 : 64),
+            if let digest = message.sourceRevisionHash {
+                guard digest.range(of: "^[a-f0-9]{64}$", options: .regularExpression) != nil else { throw StoreFailure.invalidDocument }
+            }
+            guard message.media.count <= (message.isOwnedUser ? 6 : 64),
                   Set(message.media.map(\.id)).count == message.media.count else { throw StoreFailure.invalidDocument }
             for reference in message.media { try reference.validate() }
-            if message.local, message.role == .user,
+            if message.isOwnedUser,
                [.queued, .held, .sending, .uncertain, .failed].contains(message.delivery) {
                 guard message.media.allSatisfy({ $0.resourceID != nil && $0.artifactID == nil }) else { throw StoreFailure.invalidDocument }
             }

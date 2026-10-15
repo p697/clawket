@@ -224,7 +224,11 @@ public struct RuntimeMessage: Codable, Sendable, Equatable, Identifiable {
         self.attribution = attribution; self.transcriptPosition = transcriptPosition; self.transcriptBoundary = transcriptBoundary
     }
     public var attachments: [RuntimeMessageAttachment] { RuntimeAttachmentProjection.extract(raw) }
-    public func workUpdates(sessionKey: String) -> [RuntimeWorkUpdate] { WorkEvents.history(self, sessionKey: sessionKey) }
+    /// The host may supply its already-reconciled persistent display row ID.
+    /// This changes only fallback display anchors, never actual execution lineage.
+    public func workUpdates(sessionKey: String, presentationMessageID: String? = nil) -> [RuntimeWorkUpdate] {
+        WorkEvents.history(self, sessionKey: sessionKey, presentationMessageID: presentationMessageID)
+    }
     /// Legacy inline images/files are decoded only on explicit consumption,
     /// never while constructing presentation metadata. Managed IDs win over bytes.
     public func inlineAttachmentData(at index: Int) throws -> Data? {

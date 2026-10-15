@@ -15,6 +15,24 @@ private actor JournalValues: ValueStore {
 }
 
 final class NativeTaskJournalTests: XCTestCase, @unchecked Sendable {
+    @MainActor func testOnlyAcceptedHistoryRowsEnterJournalUsingPersistentRenderAnchors() async throws {
+        let journal = NativeTaskJournal(store: try NativeJournalStore(values: JournalValues()), onFailure: { XCTFail("Unexpected failure") })
+        await journal.restore()
+        let row = RuntimeMessage(id: "same-synthetic", role: .tool, text: "", timestampMs: nil, runID: nil,
+            turnID: nil, idempotencyKey: nil, sentLocally: false,
+            raw: .object(["tool": .object(["name": .string("read"), "output": .string("original")])]))
+        let history = RuntimeHistory(key: "s", messages: [row, row], nextCursor: nil, hasMore: false,
+                                     pagination: .limit, hasActiveRun: false, activeRun: nil)
+        journal.history(history, route: route, acceptedHistoryIDs: [:])
+        XCTAssertNil(journal.work(for: route))
+        journal.history(history, route: route, acceptedHistoryIDs: [0: "render-one", 1: "render-two"])
+        let records = try XCTUnwrap(journal.work(for: route)?.records)
+        XCTAssertEqual(records.count, 2)
+        XCTAssertEqual(Set(journal.document.runs.compactMap(\.historyAnchor)), ["render-one:0", "render-two:0"])
+        journal.history(history, route: route, acceptedHistoryIDs: [0: "render-one", 1: "render-two"])
+        XCTAssertEqual(journal.work(for: route)?.records.map(\.id), records.map(\.id))
+    }
+
     private var scope: NativeJournalScope { .init(connectionID: "c", agentID: "a", sessionID: "s") }
     private var route: ConversationID { .init(connectionID: "c", agentID: "a", sessionID: "s") }
     private func work(_ values: [String: JSONValue] = [:]) throws -> RuntimeWorkUpdate {

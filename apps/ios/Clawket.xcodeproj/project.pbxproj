@@ -89,6 +89,12 @@
 		FC97262FAE513625C28FE893 /* NativeModelPreferencesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79FDD4876580D84DDCBD865B /* NativeModelPreferencesTests.swift */; };
 		FE4BA71818051CEDD9C7204A /* ClawketUI in Frameworks */ = {isa = PBXBuildFile; productRef = E4FCEFB36539FD378035E5F5 /* ClawketUI */; };
 		FFEC089FBF61EAE1AFED818F /* NativeMediaController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A163A3B7B0C823A72CF0F2E /* NativeMediaController.swift */; };
+		B003B4CE80384E297EBBB4CA /* NativeHistoryIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = E15ADA9B75E7C45E6B47EBAC /* NativeHistoryIdentity.swift */; };
+		0C727CF37004F6DE5BAEE3D4 /* NativeHistoryReconciliation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 173B7D279A7C6D2A46CFEB22 /* NativeHistoryReconciliation.swift */; };
+		EA3CB328328092D70DBA0982 /* NativeHistoryApplication.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80F3D3004DA864D521332AD3 /* NativeHistoryApplication.swift */; };
+		E91DCD24B85FE73D82CCBBB9 /* NativeHistoryIdentityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A64F710CB5FCC70667CC26AE /* NativeHistoryIdentityTests.swift */; };
+		E126932DF67C8D690ECC27DE /* NativeHistoryReconciliationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87379612AAFDE5BE9821CD4A /* NativeHistoryReconciliationTests.swift */; };
+		5B573C683FE16EFF6010BF12 /* NativeHistoryApplicationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FF75C712705FEE8D68C249C /* NativeHistoryApplicationTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -174,6 +180,12 @@
 		F520934653CF4DC7A40EEF10 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		F82081877A8E20091FD78626 /* ClawketApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ClawketApp.swift; sourceTree = "<group>"; };
 		F9DC4D8745DDCA79E2D272D5 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; includeInIndex = 1; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
+		E15ADA9B75E7C45E6B47EBAC /* NativeHistoryIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeHistoryIdentity.swift; sourceTree = "<group>"; };
+		173B7D279A7C6D2A46CFEB22 /* NativeHistoryReconciliation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeHistoryReconciliation.swift; sourceTree = "<group>"; };
+		80F3D3004DA864D521332AD3 /* NativeHistoryApplication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeHistoryApplication.swift; sourceTree = "<group>"; };
+		A64F710CB5FCC70667CC26AE /* NativeHistoryIdentityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeHistoryIdentityTests.swift; sourceTree = "<group>"; };
+		87379612AAFDE5BE9821CD4A /* NativeHistoryReconciliationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeHistoryReconciliationTests.swift; sourceTree = "<group>"; };
+		6FF75C712705FEE8D68C249C /* NativeHistoryApplicationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeHistoryApplicationTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -229,6 +241,9 @@
 		AB5B0D297DF889E90A91F6CD /* Clawket */ = {
 			isa = PBXGroup;
 			children = (
+				80F3D3004DA864D521332AD3 /* NativeHistoryApplication.swift */,
+				173B7D279A7C6D2A46CFEB22 /* NativeHistoryReconciliation.swift */,
+				E15ADA9B75E7C45E6B47EBAC /* NativeHistoryIdentity.swift */,
 				1AFEFFB85EF18F1FE89359F6 /* NativeModelPreferences.swift */,
 				66E63916FB529FDDF763F8E7 /* NativeModelControls.swift */,
 				F82081877A8E20091FD78626 /* ClawketApp.swift */,
@@ -304,6 +319,9 @@
 		F8EE034C70E7F18A15468525 /* ClawketTests */ = {
 			isa = PBXGroup;
 			children = (
+				6FF75C712705FEE8D68C249C /* NativeHistoryApplicationTests.swift */,
+				87379612AAFDE5BE9821CD4A /* NativeHistoryReconciliationTests.swift */,
+				A64F710CB5FCC70667CC26AE /* NativeHistoryIdentityTests.swift */,
 				79FDD4876580D84DDCBD865B /* NativeModelPreferencesTests.swift */,
 				93FF817FB18D2D6DE5735749 /* NativeModelControlsTests.swift */,
 				62CEF4BAC15E5B5B6DD99FD7 /* NativeConversationStoreTests.swift */,
@@ -458,6 +476,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5B573C683FE16EFF6010BF12 /* NativeHistoryApplicationTests.swift in Sources */,
+				E126932DF67C8D690ECC27DE /* NativeHistoryReconciliationTests.swift in Sources */,
+				E91DCD24B85FE73D82CCBBB9 /* NativeHistoryIdentityTests.swift in Sources */,
 				FC97262FAE513625C28FE893 /* NativeModelPreferencesTests.swift in Sources */,
 				367A5790C5CDA6DAA969E678 /* NativeModelControlsTests.swift in Sources */,
 				0965FDA079959C9465C271AD /* NativeConversationStoreTests.swift in Sources */,
@@ -484,6 +505,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				EA3CB328328092D70DBA0982 /* NativeHistoryApplication.swift in Sources */,
+				0C727CF37004F6DE5BAEE3D4 /* NativeHistoryReconciliation.swift in Sources */,
+				B003B4CE80384E297EBBB4CA /* NativeHistoryIdentity.swift in Sources */,
 				D916719F65B0A699579DF3A5 /* NativeModelPreferences.swift in Sources */,
 				67A303F723B780D5BB1EAC43 /* NativeModelControls.swift in Sources */,
 				E467366C8E9F56FF927B7BA0 /* ClawketApp.swift in Sources */,

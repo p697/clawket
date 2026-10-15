@@ -251,13 +251,16 @@ public enum MessageDelivery: Hashable, Sendable {
 }
 
 public enum MessageAuthor: Hashable, Sendable {
-    /// Only proven local sends use the trailing alignment, never just role=user.
+    /// Local ownership is supplied by the host; presentation never grants queue authority.
     case local
+    /// An unattributed direct-chat user history row; it owns no local send.
+    case directUser
     case agent(name: String, label: String?)
     case participant(name: String, channel: String?)
     case system
 
     public var isLocal: Bool { self == .local }
+    public var isOutgoing: Bool { self == .local || self == .directUser }
 }
 
 public enum MessageAction: String, Hashable, Sendable {

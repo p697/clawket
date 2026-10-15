@@ -5,6 +5,15 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct PresentationTests {
+    @Test func directRemoteUserUsesOutgoingLayoutWithoutLocalSendAuthority() {
+        #expect(MessageAuthor.directUser.isOutgoing)
+        #expect(!MessageAuthor.directUser.isLocal)
+        #expect(MessageAuthor.local.isOutgoing)
+        #expect(MessageAuthor.local.isLocal)
+        #expect(!MessageAuthor.participant(name: "Person", channel: "slack").isOutgoing)
+        #expect(!MessageAuthor.agent(name: "Agent", label: nil).isOutgoing)
+    }
+
     @Test func readingDraftDuringRenderingRetainsInputOwnerWithoutPublishing() {
         let model = ClientPresentation()
         var changes = 0

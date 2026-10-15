@@ -174,7 +174,7 @@ extension NativeAppModel {
         } catch { if voiceSheet?.id == sheet.id { notice = Self.voiceFailureText(.init(.storage)) } }
     }
     private func hasUncertainVoiceSend(_ route: ConversationID) -> Bool {
-        documents[route]?.messages.contains { $0.local && [.sending, .uncertain].contains($0.delivery) } == true
+        documents[route]?.messages.contains { $0.isOwnedUser && [.sending, .uncertain].contains($0.delivery) } == true
     }
     static func voiceDuration(_ seconds: Double) -> String {
         let value = Int(max(0, min(600, seconds)))

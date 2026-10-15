@@ -2,7 +2,7 @@ import ClawketTransport
 import Foundation
 
 extension WorkEvents {
-    static func history(_ message: RuntimeMessage, sessionKey: String) -> [RuntimeWorkUpdate] {
+    static func history(_ message: RuntimeMessage, sessionKey: String, presentationMessageID: String? = nil) -> [RuntimeWorkUpdate] {
         var values: [(JSONValue, Bool, Int)] = []
         if message.role == .tool {
             // The shared SDK ChatMessage contract nests the tool beside text.
@@ -20,7 +20,7 @@ extension WorkEvents {
             }
         }
         return values.compactMap { value, isResult, blockIndex in
-            let source = message.id + ":" + String(blockIndex)
+            let source = (presentationMessageID ?? message.id) + ":" + String(blockIndex)
             var raw: [String: JSONValue] = ["type": .string(isResult ? "tool_call_update" : "tool_call"),
                 "sessionKey": .string(sessionKey)]
             raw["toolCallId"] = value["callId"] ?? value["toolCallId"] ?? value["tool_call_id"] ?? value["tool_use_id"]

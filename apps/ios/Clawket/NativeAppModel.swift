@@ -709,13 +709,15 @@ final class NativeAppModel: ObservableObject {
         let revision = UUID(); historyRevisions[route] = revision
         let activation = activationRevision, wire = wireRevision
         let liveRevision = liveRevisions[route, default: 0]
-        let knownIDs = Set(document.messages.map(\.id))
+        let readSnapshot = Dictionary(uniqueKeysWithValues: document.messages.map { ($0.id, $0) })
         presentation.conversations[route]?.isLoadingHistory = true
         do {
             let history = try await runtime.loadSession(key: route.sessionID, limit: document.historyLimit,
                                                        cursor: earlier ? document.nextCursor : nil)
             guard activation == activationRevision, wire == wireRevision, activeConnectionID == route.connectionID, historyRevisions[route] == revision else { return }
-            mergeHistory(history, route: route, earlier: earlier, liveRevision: liveRevision, knownIDs: knownIDs)
+            try await mergeHistory(history, route: route, earlier: earlier, liveRevision: liveRevision,
+                readSnapshot: readSnapshot, revision: revision, activation: activation, wire: wire)
+            guard activation == activationRevision, wire == wireRevision, historyRevisions[route] == revision else { return }
             presentation.conversations[route]?.isLoadingHistory = false
         } catch {
             guard activation == activationRevision, wire == wireRevision, historyRevisions[route] == revision else { return }
@@ -724,30 +726,35 @@ final class NativeAppModel: ObservableObject {
         }
     }
 
-    private func mergeHistory(_ history: RuntimeHistory, route: ConversationID, earlier: Bool, liveRevision: Int64, knownIDs: Set<String>) {
+    private func mergeHistory(_ history: RuntimeHistory, route: ConversationID, earlier: Bool, liveRevision: Int64,
+                              readSnapshot: [String: NativeMessage], revision: UUID, activation: UUID, wire: UUID) async throws {
         guard var document = documents[route] else { return }
-        taskJournal?.history(history, route: route, earlier: earlier)
-        let old = document.messages
-        var remote = history.messages.map { message -> NativeMessage in
-            let previous = old.first { $0.remoteID == message.id || (message.role == .user && message.idempotencyKey != nil && $0.idempotencyKey == message.idempotencyKey) }
-            return NativeMessage(id: previous?.id ?? "remote-\(message.id)", remoteID: message.id, role: message.role,
-                local: previous?.local ?? false, text: message.text, runID: message.runID, idempotencyKey: message.idempotencyKey,
-                timestampMs: message.timestampMs, delivery: previous?.local == true ? .delivered : nil, isWork: message.role == .tool,
-                media: historyMedia(message, previous: previous, route: route))
+        guard history.key.utf8.elementsEqual(route.sessionID.utf8) else { throw RuntimeFailure(.invalidResponse) }
+        let projection = try NativeHistoryApplication.prepare(history, stored: document.messages,
+            readSnapshot: readSnapshot, epoch: nil, route: route, earlier: earlier)
+        // A release intent must be durable before any consumer can save a document
+        // that drops the old reference. A concurrent edit/live event keeps that
+        // reference and makes this read stale, including across the journal await.
+        if !projection.retiringResources.isEmpty {
+            guard let media else { throw StoreFailure.unavailable }
+            try await media.releaseWhenUnreferenced(projection.retiringResources)
         }
-        let represented = Set(remote.map(\.id))
-        let retained = old.filter { !represented.contains($0.id) && ($0.local || $0.streaming || !knownIDs.contains($0.id)) }
-        if earlier && history.pagination == .cursor {
-            let knownRemote = Set(old.map(\.id)); remote.removeAll { knownRemote.contains($0.id) }
-            document.messages = remote + old
-        } else { document.messages = remote + retained }
+        guard activation == activationRevision, wire == wireRevision, historyRevisions[route] == revision,
+              documents[route]?.revision == document.revision else { throw RuntimeFailure(.superseded) }
+        retireChangedHistoryMedia(old: document.messages, new: projection.messages)
+        document.messages = projection.messages
         document.nextCursor = history.nextCursor; document.hasMore = history.hasMore ?? false
         document.revision += 1; documents[route] = document
-        if liveRevisions[route, default: 0] == liveRevision {
+        if !earlier, liveRevisions[route, default: 0] == liveRevision {
             if history.hasActiveRun { running[route] = history.activeRun?["runId"]?.stringValue ?? running[route] ?? "" }
             else { running.removeValue(forKey: route) }
         }
-        updatePresentation(route); scheduleSave(route); hydrateHistoryMedia(history, route: route)
+        taskJournal?.history(history, route: route, earlier: earlier, acceptedHistoryIDs: projection.acceptedHistoryIDs)
+        updatePresentation(route); saveTasks[route]?.cancel()
+        try await persist(route)
+        guard activation == activationRevision, wire == wireRevision, historyRevisions[route] == revision else { return }
+        hydrateHistoryMedia(history, route: route, acceptedHistoryIDs: projection.acceptedHistoryIDs)
+        if !projection.retiringResources.isEmpty, let media, let cache { try await media.reclaim(cache: cache) }
     }
 
     private func loadEarlier(_ route: ConversationID) {
@@ -861,7 +868,7 @@ final class NativeAppModel: ObservableObject {
         guard !navigationHeldRoutes.contains(NativeStoredRoute(route)), route.connectionID == activeConnectionID, state.phase == .ready, state.capabilities.chat,
               sessionManager?.permitsInput(route) != false, modelControls?.permitsInput(route) != false,
               running[route] == nil, sendTasks[route] == nil, let runtime,
-              let queued = documents[route]?.messages.first(where: { $0.local && $0.delivery == .queued }),
+              let queued = documents[route]?.messages.first(where: { $0.isOwnedUser && $0.delivery == .queued }),
               let id = queued.idempotencyKey else { return }
         guard sessions.first(where: { $0.connectionID == route.connectionID && $0.key == route.sessionID })?.canContinue != false else { return }
         let activation = activationRevision, wire = wireRevision
@@ -1033,8 +1040,9 @@ final class NativeAppModel: ObservableObject {
         addHistoryFeatures(route, features: &features)
         prepareMessageMedia(route)
         let previous = presentation.conversations[route]
+        let hasParticipants = document.messages.contains { $0.role == .user && $0.attribution != nil }
         let transcript: [MessagePresentation] = document.messages.filter(NativeTranscriptPresentation.isVisible)
-            .map { present($0, agentName: name, route: route) }
+            .map { present($0, agentName: name, route: route, hasParticipants: hasParticipants) }
         let requests: [MessagePresentation] = taskRequests?.messages(for: route) ?? []
         let messages: [MessagePresentation] = transcript + requests
         presentation.conversations[route] = .init(id: route, agentName: name, sessionTitle: session.map { displayTitle(for: $0) } ?? name,
@@ -1046,9 +1054,9 @@ final class NativeAppModel: ObservableObject {
             isLoadingHistory: previous?.isLoadingHistory ?? false, features: features, work: taskJournal?.work(for: route))
     }
 
-    func present(_ message: NativeMessage, agentName: String, route: ConversationID? = nil) -> MessagePresentation {
-        let author: MessageAuthor = message.local ? .local : message.role == .assistant ? .agent(name: agentName, label: nil)
-            : message.role == .user ? .participant(name: String(localized: "Participant"), channel: nil) : .system
+    func present(_ message: NativeMessage, agentName: String, route: ConversationID? = nil,
+                 hasParticipants: Bool = false) -> MessagePresentation {
+        let author = NativeTranscriptPresentation.author(message, agentName: agentName, hasParticipants: hasParticipants)
         var content: [MessageContent] = [.markdown(message.text)]
         content += message.media.map { .attachment(mediaPresentation($0)) }
         let delivery: MessageDelivery? = switch message.delivery {
@@ -1062,12 +1070,14 @@ final class NativeAppModel: ObservableObject {
         case nil: nil
         }
         var actions: [MessageAction] = [.copy]
-        let ownedPending = message.local && message.role == .user && message.idempotencyKey?.isEmpty == false
+        let ownedPending = message.isOwnedUser && message.idempotencyKey?.isEmpty == false
         if ownedPending && [.queued, .held, .failed].contains(message.delivery) { actions += [.edit, .remove] }
         if ownedPending && message.delivery == .held, let route, route.connectionID == activeConnectionID,
            state.phase == .ready, !navigationHeldRoutes.contains(NativeStoredRoute(route)), sessionManager?.permitsInput(route) != false,
            modelControls?.permitsInput(route) != false { actions.append(.sendNow) }
-        return .init(id: message.id, author: author, content: content, delivery: delivery, isStreaming: message.streaming, actions: actions)
+        return .init(id: message.id, author: author, content: content,
+                     timeLabel: NativeTranscriptPresentation.timeLabel(message.timestampMs),
+                     delivery: message.isOwnedUser ? delivery : nil, isStreaming: message.streaming, actions: actions)
     }
 
     private func messageAction(_ route: ConversationID, messageID: String, action: MessageAction) {
@@ -1080,7 +1090,7 @@ final class NativeAppModel: ObservableObject {
             documents[route] = document; updatePresentation(route); scheduleSave(route, immediate: true)
             destination = .editPending(route, edit, activation: activationRevision)
         case .sendNow:
-            guard message.local, message.role == .user, message.idempotencyKey?.isEmpty == false,
+            guard message.isOwnedUser, message.idempotencyKey?.isEmpty == false,
                   message.delivery == .held, !navigationHeldRoutes.contains(NativeStoredRoute(route)), route.connectionID == activeConnectionID, state.phase == .ready,
                   sessionManager?.permitsInput(route) != false, modelControls?.permitsInput(route) != false,
                   let index = documents[route]?.messages.firstIndex(where: { $0.id == messageID }) else { return }

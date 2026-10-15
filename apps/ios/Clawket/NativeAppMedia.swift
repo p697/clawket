@@ -302,7 +302,7 @@ extension NativeAppModel {
         guard route == mediaVisibleRoute, route == presentation.selectedConversation, route.connectionID == activeConnectionID,
               let media else { return }
         let recent = Array((documents[route]?.messages ?? []).flatMap { message in
-            message.media.map { (reference: $0, input: message.local && message.role == .user) }
+            message.media.map { (reference: $0, input: message.isOwnedUser) }
         }.suffix(6))
         for item in recent where mediaDisplays[item.reference.id] == nil && mediaLoads[item.reference.id] == nil {
             guard mediaLoads.count < 2 else { return }
@@ -346,7 +346,7 @@ extension NativeAppModel {
             reference = nil; localInput = true
         } else {
             let message = documents[route]?.messages.first { $0.media.contains(where: { $0.id == id }) }
-            reference = message?.media.first { $0.id == id }; localInput = message?.local == true && message?.role == .user
+            reference = message?.media.first { $0.id == id }; localInput = message?.isOwnedUser == true
             guard reference != nil else { return }
         }
         if let previous = mediaPreviewRequest {
@@ -393,23 +393,25 @@ extension NativeAppModel {
         }
     }
 
-    func historyMedia(_ message: RuntimeMessage, previous: NativeMessage?, route: ConversationID) -> [NativeMediaReference] {
-        // A proven local send keeps its own original files when a backend echo
-        // omits, converts or re-encodes the uploaded attachment blocks.
-        if message.role == .user, previous?.local == true, let owned = previous?.media, !owned.isEmpty { return owned }
-        return message.attachments.enumerated().map { index, attachment in
-            let id = (try? DocumentStore.scopedKey(namespace: "attachment", parts: [route.connectionID, route.agentID, route.sessionID, message.id, String(index), attachment.artifactID ?? "inline"])) ?? UUID().uuidString
-            var value = NativeMediaReference(id: id, attachment: attachment)
-            value.resourceID = previous?.media.first(where: { $0.id == id })?.resourceID
-            return value
+    func retireChangedHistoryMedia(old: [NativeMessage], new: [NativeMessage]) {
+        let current = Dictionary(uniqueKeysWithValues: new.map { ($0.id, $0) })
+        for message in old {
+            let next = current[message.id]
+            for reference in message.media where next?.sourceRevisionHash != message.sourceRevisionHash
+                || next?.media.contains(reference) != true {
+                mediaLoads.removeValue(forKey: reference.id)?.cancel()
+                mediaLoadRevisions.removeValue(forKey: reference.id)
+                mediaDisplays.removeValue(forKey: reference.id)
+            }
         }
     }
 
-    func hydrateHistoryMedia(_ history: RuntimeHistory, route: ConversationID) {
-        for raw in history.messages {
-            guard let message = documents[route]?.messages.first(where: { $0.remoteID == raw.id }) else { continue }
+    func hydrateHistoryMedia(_ history: RuntimeHistory, route: ConversationID, acceptedHistoryIDs: [Int: String]) {
+        for (position, raw) in history.messages.enumerated() {
+            guard let id = acceptedHistoryIDs[position],
+                  let message = documents[route]?.messages.first(where: { $0.id == id }) else { continue }
             for (index, reference) in message.media.enumerated() {
-                if let resource = reference.resourceID { loadMediaDisplay(resource, referenceID: reference.id, route: route, input: message.local && message.role == .user) }
+                if let resource = reference.resourceID { loadMediaDisplay(resource, referenceID: reference.id, route: route, input: message.isOwnedUser) }
                 else if reference.artifactID == nil {
                     hydrateInlineMedia(route: route, messageID: message.id, reference: reference) { try raw.inlineAttachmentData(at: index) }
                 }
@@ -439,22 +441,30 @@ extension NativeAppModel {
                             bytes: @escaping @Sendable () throws -> Data?) {
         guard mediaLoads[reference.id] == nil, let media else { return }
         let activation = activationRevision, wire = wireRevision
+        let sourceHash = documents[route]?.messages.first(where: { $0.id == messageID })?.sourceRevisionHash
         let token = UUID(); mediaLoadRevisions[reference.id] = token
         mediaLoads[reference.id] = Task {
             defer { finishMediaLoad(reference.id, token: token) }
             do {
                 guard let staged = try await media.stageInline(bytes, name: NativeMediaNames.safe(reference.name), mimeType: reference.mimeType) else { return }
-                guard activation == activationRevision, wire == wireRevision, !Task.isCancelled else { try? media.stager.discard(staged); return }
+                guard activation == activationRevision, wire == wireRevision, !Task.isCancelled,
+                      mediaLoadRevisions[reference.id] == token,
+                      documents[route]?.messages.first(where: { $0.id == messageID })?.sourceRevisionHash == sourceHash else {
+                    try? media.stager.discard(staged); return
+                }
                 let resource = try await media.adopt(staged, route: route, messageID: messageID, referenceID: reference.id)
                 guard activation == activationRevision, wire == wireRevision, !Task.isCancelled,
+                      mediaLoadRevisions[reference.id] == token,
                       let message = documents[route]?.messages.firstIndex(where: { $0.id == messageID }),
+                      documents[route]?.messages[message].sourceRevisionHash == sourceHash,
                       let item = documents[route]?.messages[message].media.firstIndex(where: { $0.id == reference.id }) else {
                     try await media.releaseWhenUnreferenced([resource.id]); return
                 }
                 documents[route]?.messages[message].media[item].resourceID = resource.id; changed(route)
                 try await persist(route); try await media.confirm(resource.id)
                 let display = try await media.display(resource.id, pixels: 320)
-                guard activation == activationRevision, wire == wireRevision, !Task.isCancelled else { return }
+                guard activation == activationRevision, wire == wireRevision, !Task.isCancelled,
+                      mediaLoadRevisions[reference.id] == token else { return }
                 mediaDisplays[reference.id] = .init(id: reference.id, name: resource.name, kind: display.image == nil ? .file : .image,
                     thumbnailData: display.image, aspectRatio: display.aspectRatio, canOpen: true)
                 updatePresentation(route)

@@ -1,5 +1,19 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-16 Native history 精确对齐与参与者显示（实际consumer落地，完整parity继续）。
+  - head/older history 实际采用独立render UUID、typed providedID/实际transcriptPosition/严格本机send key，opaque身份保留原UTF8；重复/冲突源、不同角色/participant/account、source与send key互相矛盾及两个alias争一个旧行不确认outbox。legacy缺字段保持unknown；wire local不授本机权限。保留API源顺序、精确anchor分页与读前快照，迟到live/edit变化不被旧read覆盖，older页不清当前run。
+  - 接受后的incoming-index→render-ID映射才进入work journal/media hydrate；fallback工具display anchor复用持久UUID，actual tool/run/turn/input不改。inline内容精确hash仅校验缓存像素，改变内容退休原load token；释放intent先于主actor发布去引用文档，await间有并发变动即中止。确认本机echo仍保留原输入文件。
+  - direct history user使用正常outgoing排版但无本机delivery/编辑/移除/发送权，明确participant独立incoming、原name/handle及Agent标签；实际时钟按设备locale/timezone显示，缺失/坏值不补Now。实机日志只记录此前main392而非本候选，physical rollover/旧档案、真实live/history衔接及六后端设备验收继续pending，见docs/native-ios/TRANSCRIPT.md。
+  - 无竞争编译进程/内存42%预检、heavy/jobs2严格Swift6 exact-source mac proof逐文件通过Identity11、Order8、Application7（26项）；首轮发现测试使用Runtime内部memberwise initializer，改为直接取真实附件parser投影，保持断言；独立审查补获单旧row source/key互相矛盾的假ACK，加入反例并修复，未放宽旧协议匹配。实际App及143方法源码 arm64/x86_64 generic build-for-testing已通过（首次PBX测试组路径错误已按real_path验证修复），未启动本机simulator；WorkHistory单文件10项通过，Presentation过滤实际匹配5 suite/28项通过（后续用精确suite名，避免超出单文件）。19语358UI+4权限共6,878精确编译值逐项一致，目录6/资源4/报告3/docs15对及7回归通过并释放heavy。实际iOS测试执行与完整门禁交current-head CI；未发行或改线上配置。
+
+
+  - 重基已合并导航/Appearance主线50d01ac7，保留全部15项真实iOS新增回归与导航输入hold门槛；实际方法并集158，报告minimum/减少样本反例同步。保留UIKit语音按钮、阅读恢复/主题/字体/导航全部consumer，PBX两target源路径逐一核对存在；主线379UI+4权限/19语共7,277值保持，未冒称重基本机generic或iOS执行，交新head CI。TS/TSX167,902/132,119及617测试文件不变，本切片两份新证据/规则文档，物理scope下一任务不借此消项。
+
+- 2026-10-16 Native main392 USB 后台/语音实机验收（完整 parity 继续）。
+  - 指定唯一USB有线设备、独立QA bundle、原3.1.2开发构建；编译输入精确核对main39221c3d，仅复用既有忽略配置的public speech URL。Hermes Local原会话/printf原结果未重放；后台185.09秒返回后，一次新请求实际回复native-background-ok（点击后7.016秒观测），不将其称为Relay/切网/新握手证据。
+  - 实际拒绝麦克风→解释/打开设置→QA专属权限开关重新授权→真实mic/AVAudioConverter/签名云ASR把合成英文句准确写入原生草稿，未发聊天；保护性保存/插入后源PCM为零。第二次录音取消仍保留原草稿及2,787,044字节PCM，仅QA冷重启后字节SHA一致；显式Retry25.735秒进文字审阅，Done不插入/不发送。恢复句精确匹配未通过，准确率仍待专门验收，不能据此称完整voice通过。
+  - 唯一测试录音经原生确认删除、仅合成草稿清除、Mac两份音频copy删除；自己的WDA session/runner关闭并验进程零，ios/heavy释放。发现OS权限改变导致冷启回默认老会话，最后导航恢复另行实现；未改商店App/版本/服务或发行发布。详见docs/native-ios/DEVICE-ACCEPTANCE.md；媒体、真实Relay/OpenClaw与其余六后端功能继续落地。
+
 - 2026-10-16 Native 保存会话、惰性物理档案与显式导出（实际 physical rollover caller/设备验收另行接入）。
   - NativeConversation v1 兼容增加本地 historyEpoch/实际 physicalSessionID；missing/empty 首次绑定与 exact revision/epoch/hash rollover 共用现有串行存储。原文单独不可变8 MiB body、小 manifest、持久 intent 与 old/replacement SHA恢复；第三版本/腐败/未知提交拒绝覆盖，草稿、原 outbox ID/key/delivery/输入资源保持。普通写也核 identity与64 MiB最坏受影响 current/rollback/temp峰值，128份满额明确失败、无静默淘汰；current/rollback/archive/pending资源并集后才允许回收。Root 后续绑定真实 reset/physical变化，不把存储 API 称为 reset 已验收。
   - 真实原生 Saved conversations 列表/惰性只读详情、pin/rename/delete/filter、单份 Markdown/JSON与完整会话 Save/export 接实际 consumer；保持 Mobile 100份/单500k UTF16/总1m/JSON4m预算及原公开 schema。search/bulk 默认关闭直到权威 Pro consumer，缓存不授购买或 wire 权限；Previous transcripts 只读本机原文，附件仅 runtime:nil 已有缓存，导出明确 device-loaded partial。共享文件独立受保护临时副本、操作 UUID 退休与 actual system-completion lease，关闭/重入不复活旧分享、不删源。
@@ -35,7 +49,8 @@
   - 无compiler/测试竞争、memory44%、heavy/jobs2下实际Swift6单WorkHistory文件九项串行通过；新producer回归在未修旧源码明确失败（首项工具投影为空），修复恢复后九项再通过，未改断言。Node三项、producer check（三后端/八工具）、14指令对/7docs及diff通过后释放heavy；Swift源净增6行/测试63行，向量189行、检查脚本111行/Node测试33行。既有TS/TSX167,902/132,119与617测试文件、188文档保持，下述App展示复用现有19语文案。
   - 同切片补实机原始UUID标题与空工具行：仅当title精确等于当前session key/native ID时用首条非空human原文摘要/后端preview/本地化默认名，显式名字（包括另一个UUID）逐字保留；派生摘要最多160完整字符/4KiB，不改持久消息或身份。Journal先消费完整history，聊天投影仅隐藏无文字/附件的tool，不删缓存/原始work。新增五项纯App回归，重基会话管理主线7378221c完整保留76项及三项实际UIKit布局，实际方法并集与报告下限同步81；五项App实际编译/执行交本PR新head CI，避免与模型/语音窄验证竞争本机资源，不把SDK窄测称App执行。
   - 新展示源码经独立只读审查通过；Node三项/三后端八工具check、Python报告validator三项（81通过/80及以下拒绝）、19语295UI/3权限源码与14指令对/7docs再次串行通过，数秒heavy窗口结束已释放。App源与五项新方法的真实编译/执行交current-head CI，无本机模拟器启动；单一超大组合字符超过4KiB也安全退到preview/default，不生成巨型列表标题。
-  - 前一主线#245最终bca7be18/db63实际CI63 App/287 package、19语5,225编译值与全部13门禁绿，合为775b4edc并finish；新增三个真实UIWindow/UIKit布局回归实际3.227秒通过。当前SDK修复还需本PR完整current-main门禁与实际SDK手机history验收；不混称Hermes已有printf手机证据。物理reset/参与者/稳定消息行ID、语义标题与其余parity继续，不发布。
+  - 前一主线#245最终bca7be18/db63实际CI63 App/287 package、19语5,225编译值与全部13门禁绿，合为775b4edc并finish；新增三个真实UIWindow/UIKit布局回归实际3.227秒通过。SDK手机history验收仍待后续，不混称Hermes已有printf手机证据；物理reset/参与者/稳定消息行ID及其余parity继续，不发布。
+  - 本轮#247最终0000404e/7378221c实际CI81 App零失败（新增五项0.008秒、全81为7.178秒）、294 package（59 XCTest+235 SwiftTesting）、19语5,662精确编译值及全部13门禁绿，合入1b50497e并finish。Windows旧supervisor进程测试在未改动的local-model-supervisor.test.mjs:98首次Timed out，核对文件零差异后只重跑同head该job一次通过，不改断言或超时。实际App CI耗时异常期间，39%空闲/无竞争预检与heavy+ios/jobs2下补generic81开发编译，arm64+x86_64实际成功；未boot或执行本机Simulator，完成即释放两租约，无进程残留。
 
 - 2026-10-16 Native 模型/运行设置强类型契约（host 与设备验收另接）。
   - 六后端 selection/thinking/fast/permissions 依现 Mobile/Bridge/agent-protocol 实现；不可持久化当前 authentication/socket/config/会话上下文引用，SDK 无 session 只读 catalog，Hermes 设置始终 global 且保留 caller route。保留原生顺序/alias、session→model→static reasoning 来源、权限 custom/unknown 与 availableModes absent/empty 差异，fast/permissions 需 positive health 与实际 available 双证据；不因 Hermes 存在未被产品启用的 fast RPC 升级能力。

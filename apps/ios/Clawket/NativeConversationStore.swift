@@ -4,7 +4,7 @@ import Foundation
 
 enum NativeDelivery: String, Codable, Sendable { case queued, held, sending, sent, delivered, uncertain, failed }
 
-struct NativeMessage: Codable, Sendable, Identifiable {
+struct NativeMessage: Codable, Sendable, Identifiable, Equatable {
     var id: String
     var remoteID: String?
     var role: RuntimeMessage.Role
@@ -18,6 +18,34 @@ struct NativeMessage: Codable, Sendable, Identifiable {
     var streaming = false
     var isWork = false
     var media: [NativeMediaReference] = []
+    var providedID: String?
+    var idSource: RuntimeMessageIDSource?
+    var attribution: RuntimeMessageAttribution?
+    var transcriptPosition: RuntimeTranscriptPosition?
+    var transcriptBoundary: RuntimeTranscriptBoundary?
+    var historyEpoch: UUID?
+    var sourceRevisionHash: String?
+    var isOwnedUser: Bool { local && role == .user && attribution == nil }
+
+    static func == (left: Self, right: Self) -> Bool {
+        guard byteEqual(left.id, right.id), byteEqual(left.remoteID, right.remoteID),
+              byteEqual(left.providedID, right.providedID), byteEqual(left.runID, right.runID),
+              byteEqual(left.segmentID, right.segmentID), byteEqual(left.idempotencyKey, right.idempotencyKey),
+              byteEqual(left.text, right.text) else { return false }
+        return left.role == right.role && left.local == right.local && left.timestampMs == right.timestampMs
+            && left.delivery == right.delivery && left.streaming == right.streaming && left.isWork == right.isWork
+            && left.media == right.media && left.idSource == right.idSource && left.attribution == right.attribution
+            && left.transcriptPosition == right.transcriptPosition && left.transcriptBoundary == right.transcriptBoundary
+            && left.historyEpoch == right.historyEpoch && left.sourceRevisionHash == right.sourceRevisionHash
+    }
+
+    private static func byteEqual(_ left: String?, _ right: String?) -> Bool {
+        switch (left, right) {
+        case (nil, nil): true
+        case let (left?, right?): left.utf8.elementsEqual(right.utf8)
+        default: false
+        }
+    }
 }
 
 struct NativeConversation: Codable, Sendable {
@@ -58,7 +86,7 @@ struct NativeConversation: Codable, Sendable {
     }
 
     private func editableIndex(messageID: String) -> Int? {
-        messages.firstIndex { $0.id == messageID && $0.local && $0.role == .user && $0.idempotencyKey?.isEmpty == false &&
+        messages.firstIndex { $0.id == messageID && $0.isOwnedUser && $0.idempotencyKey?.isEmpty == false &&
             [.queued, .held, .failed].contains($0.delivery) }
     }
 }
@@ -116,11 +144,11 @@ actor NativeConversationStore {
         // Recovery keeps its exact idempotency key and never dispatches it automatically.
         var changed = false
         for index in conversation.messages.indices {
-            if conversation.messages[index].local && conversation.messages[index].delivery == .sending {
+            if conversation.messages[index].isOwnedUser && conversation.messages[index].delivery == .sending {
                 conversation.messages[index].delivery = .uncertain
                 changed = true
             }
-            if conversation.messages[index].local && conversation.messages[index].delivery == .queued {
+            if conversation.messages[index].isOwnedUser && conversation.messages[index].delivery == .queued {
                 conversation.messages[index].delivery = .held
                 changed = true
             }

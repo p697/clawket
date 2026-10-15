@@ -85,11 +85,14 @@ final class NativeTaskJournal {
     }
 
     /// Only typed adapter history carries execution metadata; this host never parses raw tool JSON.
-    func history(_ history: RuntimeHistory, route: ConversationID, earlier: Bool = false) {
+    func history(_ history: RuntimeHistory, route: ConversationID, earlier: Bool = false,
+                 acceptedHistoryIDs: [Int: String]? = nil) {
         var runs: [String] = [], steps: [String: [String]] = [:]
         let priorRunIDs = Set(document.runs.map(\.id))
-        for message in history.messages {
-            for work in message.workUpdates(sessionKey: route.sessionID) {
+        for (position, message) in history.messages.enumerated() {
+            if let acceptedHistoryIDs, acceptedHistoryIDs[position] == nil { continue }
+            for work in message.workUpdates(sessionKey: route.sessionID,
+                                            presentationMessageID: acceptedHistoryIDs?[position]) {
                 guard let id = NativeWorkReducer.apply(work, scope: scope(route), document: &document),
                       let run = document.runs.first(where: { $0.id == id }) else { continue }
                 runs.append(id)

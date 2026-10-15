@@ -61,6 +61,10 @@ Use `packages/agent-protocol/src/capabilities.ts` plus runtime adapter negotiati
 
 Paths in the source column are under `apps/mobile/src` unless a package/document is named. Root routes are enumerated in `navigation/root-stack.ts` (18 as audited); settings destinations and shared sheets expand that surface. This checklist deliberately tracks capabilities rather than pretending route count measures completeness.
 
+## Physical evidence
+
+`DEVICE-ACCEPTANCE.md` records the designated USB QA results, including main392 Hermes Local background requests and microphone/cloud/draft/cancel/recovery. Those bounded passes leave the wider rows above pending; they do not certify other transports/backends, full voice accuracy or a store upgrade.
+
 ## Upgrade invariants
 
 Expo SecureStore reads generic-password services `app:no-auth`, `app:auth`, then legacy `app`; account and generic attributes are the UTF-8 logical key. Preserve the `WHEN_UNLOCKED_THIS_DEVICE_ONLY` accessibility. Current AsyncStorage is `Library/Application Support/<bundleID>/RCTAsyncLocalStorage_V1/manifest.json`; null manifest entries use MD5-keyed files. Support applicable legacy paths, using synthetic containers before accessing a user's real data.

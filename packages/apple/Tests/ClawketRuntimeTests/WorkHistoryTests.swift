@@ -5,6 +5,24 @@ import Testing
 
 @Suite(.serialized)
 struct WorkHistoryTests {
+    @Test func acceptedDisplayAnchorChangesOnlySyntheticFallbackAndNeverActualToolOrExecutionIDs() throws {
+        func message(_ callID: String?) -> RuntimeMessage {
+            var tool: [String: JSONValue] = ["name": .string("read"), "input": .object(["path": .string("example.txt")])]
+            if let callID { tool["callId"] = .string(callID) }
+            return .init(id: "synthetic-digest", role: .tool, text: "", timestampMs: nil, runID: "run",
+                turnID: "turn", idempotencyKey: nil, sentLocally: false,
+                raw: .object(["tool": .object(tool), "inputMessageId": .string("input")]))
+        }
+        let one = try #require(message(nil).workUpdates(sessionKey: "s", presentationMessageID: "persistent-one").first)
+        let two = try #require(message(nil).workUpdates(sessionKey: "s", presentationMessageID: "persistent-two").first)
+        #expect(one.historyMessageID == "persistent-one:0")
+        #expect(one.itemID != two.itemID)
+        let actual = try #require(message("actual-call").workUpdates(sessionKey: "s", presentationMessageID: "persistent-one").first)
+        #expect(actual.itemID == "actual-call"); #expect(actual.runID == "run"); #expect(actual.turnID == "turn")
+        #expect(actual.inputMessageID == "input")
+        #expect(actual.rawInput == .object(["path": .string("example.txt")]))
+    }
+
     @Test func actualBridgeProducerVectorsRetainAllCanonicalSDKTools() throws {
         let url = try #require(Bundle.module.url(forResource: "sdk-history", withExtension: "json", subdirectory: "Fixtures"))
         let data = try Data(contentsOf: url)

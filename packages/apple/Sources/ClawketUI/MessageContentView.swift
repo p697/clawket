@@ -12,7 +12,7 @@ struct NativeMessageRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
-            if message.author.isLocal { Spacer(minLength: 36) }
+            if message.author.isOutgoing { Spacer(minLength: 36) }
             VStack(alignment: .leading, spacing: 10) {
                 author
                 ForEach(Array(message.content.enumerated()), id: \.offset) { index, content in
@@ -26,15 +26,15 @@ struct NativeMessageRow: View {
                 }
                 delivery
             }
-            .padding(message.author.isLocal ? 14 : 0)
+            .padding(message.author.isOutgoing ? 14 : 0)
             .background {
-                if message.author.isLocal {
+                if message.author.isOutgoing {
                     RoundedRectangle(cornerRadius: 23, style: .continuous)
                         .fill(Color(uiColor: .secondarySystemBackground))
                 }
             }
-            .frame(minWidth: 0, maxWidth: message.author.isLocal ? 650 : .infinity, alignment: .leading)
-            if !message.author.isLocal { Spacer(minLength: 0) }
+            .frame(minWidth: 0, maxWidth: message.author.isOutgoing ? 650 : .infinity, alignment: .leading)
+            if !message.author.isOutgoing { Spacer(minLength: 0) }
         }
         .frame(minWidth: 0, maxWidth: 760)
         .frame(minWidth: 0, maxWidth: .infinity)
@@ -70,7 +70,7 @@ struct NativeMessageRow: View {
                     }
                 }
             }
-        case .local, .system: EmptyView()
+        case .local, .directUser, .system: EmptyView()
         }
     }
 
