@@ -84,7 +84,7 @@
       "key": "Add to queue",
       "sources": [
         "apps/ios/Clawket/NativeAppModel.swift:1142",
-        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:508"
+        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:521"
       ],
       "mobileTerm": null
     },
@@ -117,7 +117,7 @@
       "sources": [
         "apps/ios/Clawket/ConnectAgentView.swift:52",
         "apps/ios/Clawket/NativeAppModel.swift:1091",
-        "apps/ios/Clawket/NativeTranscriptPresentation.swift:26"
+        "apps/ios/Clawket/NativeTranscriptPresentation.swift:34"
       ],
       "mobileTerm": "common.Agent"
     },
@@ -139,7 +139,7 @@
       "key": "Agents",
       "sources": [
         "apps/ios/Clawket/NativeAppModel.swift:43",
-        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:619"
+        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:632"
       ],
       "mobileTerm": "settings.Agents"
     },
@@ -154,7 +154,7 @@
     {
       "key": "Allow once",
       "sources": [
-        "packages/apple/Sources/ClawketUI/MessageContentView.swift:290"
+        "packages/apple/Sources/ClawketUI/MessageContentView.swift:313"
       ],
       "mobileTerm": null
     },
@@ -168,14 +168,14 @@
     {
       "key": "Allowed",
       "sources": [
-        "packages/apple/Sources/ClawketUI/MessageContentView.swift:348"
+        "packages/apple/Sources/ClawketUI/MessageContentView.swift:371"
       ],
       "mobileTerm": "chat.Allowed"
     },
     {
       "key": "Always allow",
       "sources": [
-        "packages/apple/Sources/ClawketUI/MessageContentView.swift:338"
+        "packages/apple/Sources/ClawketUI/MessageContentView.swift:361"
       ],
       "mobileTerm": null
     },
@@ -189,7 +189,7 @@
     {
       "key": "Always allow…",
       "sources": [
-        "packages/apple/Sources/ClawketUI/MessageContentView.swift:294"
+        "packages/apple/Sources/ClawketUI/MessageContentView.swift:317"
       ],
       "mobileTerm": null
     },
@@ -222,7 +222,7 @@
     {
       "key": "Approve",
       "sources": [
-        "packages/apple/Sources/ClawketUI/MessageContentView.swift:284"
+        "packages/apple/Sources/ClawketUI/MessageContentView.swift:307"
       ],
       "mobileTerm": "settings.Approve"
     },
@@ -243,7 +243,7 @@
     {
       "key": "Approved",
       "sources": [
-        "packages/apple/Sources/ClawketUI/MessageContentView.swift:350"
+        "packages/apple/Sources/ClawketUI/MessageContentView.swift:373"
       ],
       "mobileTerm": null
     },
@@ -489,7 +489,7 @@
       "key": "Connect an agent to continue conversations and keep work moving.",
       "sources": [
         "apps/ios/Clawket/NativeAppModel.swift:45",
-        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:625"
+        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:638"
       ],
       "mobileTerm": null
     },
@@ -653,7 +653,8 @@
       "key": "Copy",
       "sources": [
         "packages/apple/Sources/ClawketUI/MessageContentView.swift:109",
-        "packages/apple/Sources/ClawketUI/MessageContentView.swift:393"
+        "packages/apple/Sources/ClawketUI/MessageContentView.swift:122",
+        "packages/apple/Sources/ClawketUI/MessageContentView.swift:416"
       ],
       "mobileTerm": "config.Copy"
     },
@@ -730,7 +731,7 @@
     {
       "key": "Delivered",
       "sources": [
-        "packages/apple/Sources/ClawketUI/MessageContentView.swift:374"
+        "packages/apple/Sources/ClawketUI/MessageContentView.swift:397"
       ],
       "mobileTerm": "chat.Delivered"
     },
@@ -751,7 +752,7 @@
     {
       "key": "Denied",
       "sources": [
-        "packages/apple/Sources/ClawketUI/MessageContentView.swift:349"
+        "packages/apple/Sources/ClawketUI/MessageContentView.swift:372"
       ],
       "mobileTerm": "chat.Denied"
     },
@@ -854,7 +855,7 @@
     {
       "key": "Edit",
       "sources": [
-        "packages/apple/Sources/ClawketUI/MessageContentView.swift:398"
+        "packages/apple/Sources/ClawketUI/MessageContentView.swift:421"
       ],
       "mobileTerm": "common.Edit"
     },
@@ -898,7 +899,7 @@
       "sources": [
         "apps/ios/Clawket/NativeJournalProjection.swift:87",
         "apps/ios/Clawket/NativeTaskRequests.swift:283",
-        "packages/apple/Sources/ClawketUI/MessageContentView.swift:352"
+        "packages/apple/Sources/ClawketUI/MessageContentView.swift:375"
       ],
       "mobileTerm": "chat.Expired"
     },
@@ -912,7 +913,7 @@
     {
       "key": "Favorite",
       "sources": [
-        "packages/apple/Sources/ClawketUI/MessageContentView.swift:395"
+        "packages/apple/Sources/ClawketUI/MessageContentView.swift:418"
       ],
       "mobileTerm": "common.Favorite"
     },
@@ -1064,7 +1065,7 @@
     {
       "key": "More permission options",
       "sources": [
-        "packages/apple/Sources/ClawketUI/MessageContentView.swift:302"
+        "packages/apple/Sources/ClawketUI/MessageContentView.swift:325"
       ],
       "mobileTerm": null
     },
@@ -1247,7 +1248,7 @@
     {
       "key": "Participant",
       "sources": [
-        "apps/ios/Clawket/NativeTranscriptPresentation.swift:31"
+        "apps/ios/Clawket/NativeTranscriptPresentation.swift:39"
       ],
       "mobileTerm": null
     },
@@ -1326,14 +1327,14 @@
     {
       "key": "Queued",
       "sources": [
-        "packages/apple/Sources/ClawketUI/MessageContentView.swift:370"
+        "packages/apple/Sources/ClawketUI/MessageContentView.swift:393"
       ],
       "mobileTerm": "chat.Queued"
     },
     {
       "key": "Ready for review",
       "sources": [
-        "packages/apple/Sources/ClawketUI/MessageContentView.swift:371"
+        "packages/apple/Sources/ClawketUI/MessageContentView.swift:394"
       ],
       "mobileTerm": null
     },
@@ -1443,15 +1444,15 @@
     {
       "key": "Reject",
       "sources": [
-        "packages/apple/Sources/ClawketUI/MessageContentView.swift:281",
-        "packages/apple/Sources/ClawketUI/MessageContentView.swift:287"
+        "packages/apple/Sources/ClawketUI/MessageContentView.swift:304",
+        "packages/apple/Sources/ClawketUI/MessageContentView.swift:310"
       ],
       "mobileTerm": "chat.Reject"
     },
     {
       "key": "Rejected",
       "sources": [
-        "packages/apple/Sources/ClawketUI/MessageContentView.swift:351"
+        "packages/apple/Sources/ClawketUI/MessageContentView.swift:374"
       ],
       "mobileTerm": null
     },
@@ -1459,7 +1460,7 @@
       "key": "Remove",
       "sources": [
         "apps/ios/Clawket/ConnectionsView.swift:44",
-        "packages/apple/Sources/ClawketUI/MessageContentView.swift:399"
+        "packages/apple/Sources/ClawketUI/MessageContentView.swift:422"
       ],
       "mobileTerm": "common.Remove"
     },
@@ -1495,7 +1496,7 @@
     {
       "key": "Reply in new conversation",
       "sources": [
-        "packages/apple/Sources/ClawketUI/MessageContentView.swift:396"
+        "packages/apple/Sources/ClawketUI/MessageContentView.swift:419"
       ],
       "mobileTerm": null
     },
@@ -1704,8 +1705,8 @@
       "key": "Send",
       "sources": [
         "apps/ios/Clawket/NativeAppModel.swift:1142",
-        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:508",
-        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:518"
+        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:521",
+        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:531"
       ],
       "mobileTerm": "chat.Send"
     },
@@ -1719,28 +1720,28 @@
     {
       "key": "Send now",
       "sources": [
-        "packages/apple/Sources/ClawketUI/MessageContentView.swift:397"
+        "packages/apple/Sources/ClawketUI/MessageContentView.swift:420"
       ],
       "mobileTerm": "chat.Send now"
     },
     {
       "key": "Send status unconfirmed",
       "sources": [
-        "packages/apple/Sources/ClawketUI/MessageContentView.swift:375"
+        "packages/apple/Sources/ClawketUI/MessageContentView.swift:398"
       ],
       "mobileTerm": null
     },
     {
       "key": "Sending…",
       "sources": [
-        "packages/apple/Sources/ClawketUI/MessageContentView.swift:372"
+        "packages/apple/Sources/ClawketUI/MessageContentView.swift:395"
       ],
       "mobileTerm": "chat.Sending…"
     },
     {
       "key": "Sent",
       "sources": [
-        "packages/apple/Sources/ClawketUI/MessageContentView.swift:373"
+        "packages/apple/Sources/ClawketUI/MessageContentView.swift:396"
       ],
       "mobileTerm": "chat.Sent"
     },
@@ -1757,14 +1758,14 @@
       "sources": [
         "apps/ios/Clawket/NativeMediaViewer.swift:107",
         "apps/ios/Clawket/NativeMediaViewer.swift:89",
-        "packages/apple/Sources/ClawketUI/MessageContentView.swift:394"
+        "packages/apple/Sources/ClawketUI/MessageContentView.swift:417"
       ],
       "mobileTerm": "chat.Share"
     },
     {
       "key": "Show full command",
       "sources": [
-        "packages/apple/Sources/ClawketUI/MessageContentView.swift:239"
+        "packages/apple/Sources/ClawketUI/MessageContentView.swift:262"
       ],
       "mobileTerm": null
     },
@@ -2097,7 +2098,7 @@
     {
       "key": "Tool output",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:767"
+        "packages/apple/Sources/ClawketUI/MessageContentView.swift:132"
       ],
       "mobileTerm": null
     },
@@ -2226,7 +2227,7 @@
       "sources": [
         "apps/ios/Clawket/NativeAppModel.swift:44",
         "apps/ios/Clawket/NativeSettingsView.swift:79",
-        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:624"
+        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:637"
       ],
       "mobileTerm": null
     },

@@ -98,6 +98,48 @@ final class NativeTranscriptPresentationTests: XCTestCase {
         XCTAssertEqual(messages[2].media, [media]); XCTAssertEqual(messages[3].delivery, .uncertain)
     }
 
+    @MainActor func testOnlyActualToolRoleUsesVerbatimOutputAndKeepsItsMediaSeparate() throws {
+        let model = NativeAppModel()
+        let raw = "{\"status\":\"complete\",\"output\":\"**literal**\"}\n```\n# untouched\n"
+        let media = try JSONDecoder().decode(NativeMediaReference.self,
+            from: Data(#"{"id":"asset","artifactID":"original","kind":"file","mimeType":"text/plain","name":"result.txt"}"#.utf8))
+        let source = NativeMessage(id: "tool", role: .tool, text: raw, media: [media])
+        let presented = model.present(source, agentName: "Agent")
+        XCTAssertEqual(presented.content.first, .toolOutput(.init(text: raw)))
+        let composed = ToolOutputPresentation(text: "\u{00e9}"), decomposed = ToolOutputPresentation(text: "e\u{0301}")
+        XCTAssertEqual(composed.text, decomposed.text)
+        XCTAssertNotEqual(composed, decomposed); XCTAssertEqual(Set([composed, decomposed]).count, 2)
+        XCTAssertEqual(presented.content.count, 2)
+        guard case let .attachment(attachment) = presented.content[1] else { return XCTFail("Tool media was collapsed into its text") }
+        XCTAssertEqual(attachment.name, "result.txt")
+        XCTAssertEqual(presented.author, .system); XCTAssertNil(presented.delivery)
+        XCTAssertFalse(presented.isStreaming); XCTAssertEqual(presented.actions, [.copy])
+        for role in [RuntimeMessage.Role.user, .assistant, .system] {
+            let message = NativeMessage(id: "other", role: role, text: raw)
+            XCTAssertEqual(model.present(message, agentName: "Agent").content.first, .markdown(raw))
+        }
+        XCTAssertEqual(source.text, raw); XCTAssertEqual(source.media, [media])
+        XCTAssertEqual(source.id, "tool"); XCTAssertNil(source.runID)
+    }
+
+    func testOnlyEndedWhitespaceAssistantWithoutMediaIsHiddenAndStoredMessagesRemain() throws {
+        let media = try JSONDecoder().decode(NativeMediaReference.self,
+            from: Data(#"{"id":"asset","artifactID":"original","kind":"file","mimeType":"text/plain","name":"result.txt"}"#.utf8))
+        let source: [NativeMessage] = [
+            .init(id: "ended", role: .assistant, text: " \n\t"),
+            .init(id: "stream", role: .assistant, text: " \n", streaming: true),
+            .init(id: "media", role: .assistant, text: "", media: [media]),
+            .init(id: "body", role: .assistant, text: "  original  "),
+            .init(id: "user", role: .user, local: true, text: "", delivery: .uncertain),
+            .init(id: "system", role: .system, text: ""),
+            .init(id: "tool", role: .tool, text: "{\"output\":\"\"}")]
+        let visible = source.filter(NativeTranscriptPresentation.isVisible)
+        XCTAssertEqual(visible.map(\.id), ["stream", "media", "body", "user", "system", "tool"])
+        XCTAssertEqual(source.count, 7); XCTAssertEqual(source.first?.text, " \n\t")
+        XCTAssertEqual(source[1].streaming, true); XCTAssertEqual(source[2].media, [media])
+        XCTAssertEqual(source[4].delivery, .uncertain)
+    }
+
     func testDerivedTitleBoundsWholeGraphemesWithoutMutatingOriginalMessage() {
         let text = String(repeating: "👩🏽‍💻", count: 200)
         let message = NativeMessage(id: "u", role: .user, text: text)

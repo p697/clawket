@@ -467,9 +467,22 @@ public struct QuestionResponse: Codable, Equatable, Sendable {
     }
 }
 
+/// Tool paths and output bytes are literal data; canonical-equivalent text may
+/// still identify different files. Keep that distinction through row updates.
+public struct ToolOutputPresentation: Hashable, Sendable {
+    public var text: String
+    public init(text: String) { self.text = text }
+    public static func == (left: Self, right: Self) -> Bool {
+        left.text.utf8.elementsEqual(right.text.utf8)
+    }
+    public func hash(into hasher: inout Hasher) { hasher.combine(Data(text.utf8)) }
+}
+
 public enum MessageContent: Hashable, Sendable {
     case markdown(String)
     case code(language: String?, text: String)
+    /// Verbatim tool text, independent of execution status or structured work records.
+    case toolOutput(ToolOutputPresentation)
     case attachment(AttachmentPresentation)
     case work(WorkPresentation)
     case approval(ApprovalPresentation)

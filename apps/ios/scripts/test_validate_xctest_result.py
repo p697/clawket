@@ -4,11 +4,11 @@ from validate_xctest_result import validate_summary
 
 class NativeResultTests(unittest.TestCase):
     def setUp(self):
-        self.valid = {"result": "Passed", "totalTestCount": 203, "passedTests": 203,
+        self.valid = {"result": "Passed", "totalTestCount": 206, "passedTests": 206,
                       "failedTests": 0, "skippedTests": 0, "expectedFailures": 0}
 
     def test_complete_report(self):
-        self.assertEqual(validate_summary(self.valid), 203)
+        self.assertEqual(validate_summary(self.valid), 206)
 
     def test_rejects_missing_corrupt_counts_and_wrong_type(self):
         for field in ("totalTestCount", "passedTests", "failedTests", "skippedTests", "expectedFailures"):
@@ -20,7 +20,7 @@ class NativeResultTests(unittest.TestCase):
                 validate_summary(corrupt)
 
     def test_rejects_empty_reduced_skipped_and_failed_reports(self):
-        for total in (0, 1, 10, 28, 40, 44, 47, 49, 50, 57, 59, 60, 62, 63, 71, 72, 73, 75, 76, 80, 81, 86, 87, 91, 92, 95, 96, 101, 111, 112, 126, 127, 141, 142, 143, 144, 145, 146, 157, 158, 159, 160, 161, 136, 137, 170, 171, 191, 192, 193, 202):
+        for total in (0, 1, 10, 28, 40, 44, 47, 49, 50, 57, 59, 60, 62, 63, 71, 72, 73, 75, 76, 80, 81, 86, 87, 91, 92, 95, 96, 101, 111, 112, 126, 127, 141, 142, 143, 144, 145, 146, 157, 158, 159, 160, 161, 136, 137, 170, 171, 191, 192, 193, 202, 203, 205):
             with self.assertRaises(ValueError):
                 validate_summary({**self.valid, "totalTestCount": total, "passedTests": total})
         for field in ("failedTests", "skippedTests", "expectedFailures"):

@@ -1,5 +1,11 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-16 Native 工具输出阅读收拢（原生consumer已编译，实际交互交CI/设备验收）。
+  - 仅实际tool角色投影为typed ToolOutputPresentation，原生DisclosureGroup默认收起，展开完整等宽原文与真实44pt Copy，媒体保持独立；不解析JSON猜名字、阶段或完成，不删除缓存/journal。已结束assistant只有空白、无媒体且非streaming才隐藏，流式占位/附件/用户/系统原值保留。
+  - Tool输出Eq/Hash与monospaced TextKit更新均保留原UTF8，避免不同NFC/NFD文件路径被当作同一原文；普通Markdown语义不改。新增两个host投影方法与一个真实UIWindow/UIKit方法，覆盖完整原文/独立附件/未知状态、空段条件、320/420/768宽、折叠高度、真实UIButton命中与复制、同TextKit实例原字节更新。实际方法并集206，报告门槛及205/203缩减反例同步，复用417UI+4权限的19语，不新增英文填充。
+  - 无竞争/内存55%预检、独占heavy+ios/jobs2，22真实UI源码strict Swift6/iOS16.4通过；actual App206方法源码arm64+x86_64 generic build-for-testing成功，无本机simulator启动。首编新测试CGSize常量类型推断歧义，显式CGFloat后增量成功，未改断言。7,999编译语言值精确匹配、docs15对/7、locale6、资源4与报告3串行通过，完成立即释放两lease。实际206执行与全13门禁继续本PR current-head CI；USB/全部聊天polish/Markdown与物理会话完整parity不冒称完成。
+  - 前一Roster #256已13门禁全绿/current-main合入39563e23并finish：actual203/203零失败/跳过（21.039秒测试时间）、package412（59 XCTest+353 SwiftTesting）、7,999精确编译值；双desktop和v1绿。最终重基正式consent退休主线4f0c0a22，原head的未完App run只因被新head取代取消，未当作验证通过。primary仅保留原node_modules；本轮不改服务/手机/购买/版本/分发或发布。
+
 - 2026-10-16 Native 会话 consent 权限退休（协议窄测通过，设备与 physical host 整合另验）。
   - reset/delete 在完整本地校验后、唯一管理 RPC 前，同步退休原 UTF8 session 的问题/批准引用、30秒 Always token、在途请求等待与两阶段旧列表。rename/copy/archive 不假定 physical reset；保留其他 route、缺 session 的执行请求与连接级 device/node。只发 pending 状态移除，不伪称 backend resolved；迟 ACK 不作用新卡，也不重放旧写。
   - 只有 current auth/history revision 下最新 loadSession head 的真实已知→已知 sessionId 更换触发同样退休；nil/首次已知、cursor、catalog 推断与 export 纯读不改变权限。wire key/route/physical ID 均按原 UTF8，至多1024个 context 不驱逐旧权限；已观测 physical 更换若不能有界退休则关闭该认证。严格本地 notDispatched/rejectedBeforeDispatch 后，仅新实际 review 可为原 pending 请求发新 UUID，旧引用/确认永不复活；原 submitting/unknown consent 不复活，未知 reset/delete 保持该 route 锁，不由 list/history/metadata 解开。

@@ -113,6 +113,29 @@ struct NativeMessageRow: View {
             }
             .padding(14)
             .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        case let .toolOutput(output):
+            let text = output.text
+            DisclosureGroup(isExpanded: expansion(id)) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Spacer(minLength: 0)
+                        NativeTextActionButton(String(localized: "Copy"), accessibilityIdentifier: "copy-tool-output-\(id)") {
+                            onReadingInteraction()
+                            UIPasteboard.general.string = text
+                        }
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
+                    SelectableMessageText(text: text, monospaced: true, fontSize: model.appearance.chatFontSize,
+                        onURL: { onIntent(.openURL($0)) }, onReadingInteraction: onReadingInteraction)
+                }
+            } label: {
+                Label("Tool output", systemImage: "terminal")
+                    .font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
+                    .frame(minHeight: 44)
+            }
+            .padding(.horizontal, 14).padding(.vertical, 4)
+            .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .accessibilityIdentifier("tool-output-\(id)")
         case let .attachment(attachment):
             MessageAttachmentView(attachment: attachment) { onIntent(.openAttachment(attachmentID: attachment.id)) }
         case let .work(work):

@@ -94,6 +94,63 @@ final class NativeReadingLayoutTests: XCTestCase {
     }
 
     @MainActor
+    func testToolOutputStartsCollapsedThenShowsSelectableVerbatimTextAndCopiesAtRealWidths() async throws {
+        let route = ConversationID(connectionID: "layout", agentID: "agent", sessionID: "session")
+        let raw = "{\"stdout\":\"**literal** # heading\",\"unknown\":true}\n" + String(repeating: "  [raw] > result 中文 e\u{0301} \n", count: 12) + "```\n"
+        let model = ClientPresentation()
+        let message = MessagePresentation(id: "tool", author: .system, content: [.toolOutput(.init(text: raw))])
+        var interactions = 0
+        let row = NativeMessageRow(message: message, conversationID: route, model: model,
+            onIntent: { _ in }, onReadingInteraction: { interactions += 1 })
+        let host = UIHostingController(rootView: row)
+        let window = attach(host)
+        defer { window.isHidden = true; window.rootViewController = nil }
+        await layout(host, width: 420, height: 1_200)
+        let collapsedHeight = host.sizeThatFits(in: CGSize(width: 420, height: CGFloat.greatestFiniteMagnitude)).height
+        XCTAssertGreaterThanOrEqual(collapsedHeight, 44)
+        XCTAssertLessThan(collapsedHeight, 120)
+        XCTAssertFalse(model.expandedContentIDs.contains("tool-0"))
+        model.expandedContentIDs.insert("tool-0")
+        for width in [CGFloat(320), 420, 768] {
+            await layout(host, width: width, height: 1_200)
+            let text = try XCTUnwrap(descendants(host.view, of: UITextView.self).first)
+            XCTAssertTrue(text.text.utf8.elementsEqual(raw.utf8))
+            XCTAssertTrue(text.isSelectable); XCTAssertFalse(text.isEditable)
+            let frame = text.convert(text.bounds, to: host.view)
+            XCTAssertGreaterThan(frame.width, 64); XCTAssertGreaterThan(frame.height, 44)
+            XCTAssertGreaterThanOrEqual(frame.minX, -1); XCTAssertLessThanOrEqual(frame.maxX, width + 1)
+            let copy = try XCTUnwrap(descendants(host.view, of: UIButton.self).first { $0.accessibilityIdentifier == "copy-tool-output-tool-0" })
+            XCTAssertTrue(copy.isAccessibilityElement); XCTAssertEqual(copy.accessibilityLabel, String(localized: "Copy"))
+            XCTAssertGreaterThanOrEqual(copy.bounds.width, 44); XCTAssertGreaterThanOrEqual(copy.bounds.height, 44)
+            let middle = CGPoint(x: copy.bounds.midX, y: copy.bounds.midY)
+            XCTAssertTrue(copy.point(inside: middle, with: nil))
+            XCTAssertTrue(window.hitTest(copy.convert(middle, to: window), with: nil) === copy)
+            copy.sendActions(for: .touchUpInside)
+            XCTAssertTrue((UIPasteboard.general.string ?? "").utf8.elementsEqual(raw.utf8))
+        }
+        XCTAssertGreaterThanOrEqual(interactions, 3)
+        model.expandedContentIDs.remove("tool-0")
+        await layout(host, width: 420, height: 1_200)
+        XCTAssertEqual(host.sizeThatFits(in: CGSize(width: 420, height: CGFloat.greatestFiniteMagnitude)).height, collapsedHeight, accuracy: 1)
+        XCTAssertTrue(message.content == [.toolOutput(.init(text: raw))])
+
+        // Reuse the same TextKit view while the literal source changes only
+        // in Unicode normalization. Swift String equality alone misses this.
+        let composed = "file-\u{00e9}", decomposed = "file-e\u{0301}"
+        let exactHost = UIHostingController(rootView: SelectableMessageText(text: composed, monospaced: true, onURL: { _ in }))
+        let exactWindow = attach(exactHost)
+        defer { exactWindow.isHidden = true; exactWindow.rootViewController = nil }
+        await layout(exactHost, width: 420, height: 200)
+        let originalView = try XCTUnwrap(descendants(exactHost.view, of: UITextView.self).first)
+        exactHost.rootView = SelectableMessageText(text: decomposed, monospaced: true, onURL: { _ in })
+        await layout(exactHost, width: 420, height: 200)
+        let updatedView = try XCTUnwrap(descendants(exactHost.view, of: UITextView.self).first)
+        XCTAssertTrue(originalView === updatedView)
+        XCTAssertTrue(updatedView.attributedText.string.utf8.elementsEqual(decomposed.utf8))
+        XCTAssertFalse(updatedView.attributedText.string.utf8.elementsEqual(composed.utf8))
+    }
+
+    @MainActor
     private func layout<Content: View>(_ host: UIHostingController<Content>, width: CGFloat, height: CGFloat) async {
         host.loadViewIfNeeded()
         host.view.window?.frame = CGRect(x: 0, y: 0, width: width, height: height)

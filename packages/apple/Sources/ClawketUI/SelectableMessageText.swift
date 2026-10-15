@@ -36,7 +36,8 @@ struct SelectableMessageText: UIViewRepresentable {
         context.coordinator.onReadingInteraction = onReadingInteraction
         (view as? ReadingTextView)?.onReadingInteraction = onReadingInteraction
         let category = view.traitCollection.preferredContentSizeCategory
-        guard context.coordinator.text != text || context.coordinator.category != category || context.coordinator.monospaced != monospaced || context.coordinator.fontSize != fontSize else { return }
+        let sameText = monospaced ? context.coordinator.text.map { $0.utf8.elementsEqual(text.utf8) } == true : context.coordinator.text == text
+        guard !sameText || context.coordinator.category != category || context.coordinator.monospaced != monospaced || context.coordinator.fontSize != fontSize else { return }
         let selection = view.selectedRange
         context.coordinator.text = text
         context.coordinator.category = category

@@ -1146,7 +1146,7 @@ final class NativeAppModel: ObservableObject {
     func present(_ message: NativeMessage, agentName: String, route: ConversationID? = nil,
                  hasParticipants: Bool = false) -> MessagePresentation {
         let author = NativeTranscriptPresentation.author(message, agentName: agentName, hasParticipants: hasParticipants)
-        var content: [MessageContent] = [.markdown(message.text)]
+        var content: [MessageContent] = [NativeTranscriptPresentation.textContent(message)]
         content += message.media.map { .attachment(mediaPresentation($0)) }
         let delivery: MessageDelivery? = switch message.delivery {
         case .queued: .queued

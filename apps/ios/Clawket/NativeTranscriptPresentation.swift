@@ -16,8 +16,16 @@ enum NativeTranscriptPresentation {
     }
 
     static func isVisible(_ message: NativeMessage) -> Bool {
-        message.role != .tool || !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || !message.media.isEmpty
+        guard message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, message.media.isEmpty else { return true }
+        switch message.role {
+        case .tool: return false
+        case .assistant: return message.streaming
+        case .user, .system: return true
+        }
+    }
+
+    static func textContent(_ message: NativeMessage) -> MessageContent {
+        message.role == .tool ? .toolOutput(.init(text: message.text)) : .markdown(message.text)
     }
 
     static func author(_ message: NativeMessage, agentName: String, hasParticipants: Bool) -> MessageAuthor {
