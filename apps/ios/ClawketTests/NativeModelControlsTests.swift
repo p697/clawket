@@ -116,6 +116,7 @@ private actor SettingsRuntime: NativeModelRuntime {
     var plans: [RuntimeSettingCommand] = []
     var draft = NativeConversation(draft: "Unsent draft")
     var queueFailure = false
+    var changes = 0
 }
 
 final class NativeModelControlsTests: XCTestCase, @unchecked Sendable {
@@ -127,7 +128,7 @@ final class NativeModelControlsTests: XCTestCase, @unchecked Sendable {
                 host.plans.append(plan)
                 if host.queueFailure { throw StoreFailure.unavailable }
                 try host.draft.enqueueSettingCommand(plan.text, id: UUID().uuidString, timestampMs: 1)
-            }, onSnapshot: { _, value, _ in host.snapshots.append(value) }, onChange: {})
+            }, onSnapshot: { _, value, _ in host.snapshots.append(value) }, onChange: { host.changes += 1 })
         controller.update(.init(connectionID: "c", phase: .ready, backendKind: value.backendKind))
         return (controller, model, runtime, host)
     }
@@ -313,7 +314,7 @@ final class NativeModelControlsTests: XCTestCase, @unchecked Sendable {
             }
             let id = try await open(controller, model)
             try await wait { await runtime.defaultReads == 1 }
-            for _ in 0..<20 { await Task.yield() }
+            if available { try await wait { model.modelControls?.models.first { $0.isConfiguredDefault }?.title == "Next" } }
             XCTAssertEqual(model.modelControls?.phase, .ready)
             XCTAssertEqual(model.modelControls?.models.first { $0.isConfiguredDefault }?.title, available ? "Next" : nil)
             controller.choose(id, choice: .fastMode(true))
@@ -344,9 +345,9 @@ final class NativeModelControlsTests: XCTestCase, @unchecked Sendable {
         try await wait { await runtime.writes.count == 1 }
         controller.invalidate(); host.context = .init(activation: UUID(), wire: UUID(), selection: UUID())
         controller.update(.init(connectionID: "c", phase: .ready, backendKind: .codex))
-        let snapshots = host.snapshots.count
+        let snapshots = host.snapshots.count, changes = host.changes
         await runtime.releaseWrite()
-        for _ in 0..<20 { await Task.yield() }
+        try await wait { host.changes > changes }
         XCTAssertEqual(host.snapshots.count, snapshots)
         XCTAssertEqual(model.modelControls?.phase, .unavailable)
     }
