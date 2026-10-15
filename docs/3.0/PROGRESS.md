@@ -4,7 +4,7 @@
   - `ClawketRuntime` 增加类型化问题、执行授权和 device/node 连接审批：实际请求/声明方法/成功的受支持只读列表提供能力证据，缺失默认关闭；Hermes 保留 `hermes.run-approval.v1` 的显式降级，空列表不证明支持。严格使用真实选项，Codex/Claude 表单与 Pi select/confirm/input/editor 维持各自协议；plugin 元数据保留但无虚构 resolver。
   - 操作只接受当前连接/Socket/认证代际的 opaque reference；问题另有仅用于本地草稿的稳定作用域 hash。Always 需要单次、三十秒且再次验证的确认令牌；关闭表单无副作用，主动取消可中断任务但 ACK 不伪造问题完成。重复点击、过期和旧代际拒绝；未知写入与异常回复保持锁定，列表元数据更新不解锁、不自动重发。列表响应完整验证后应用，真实事件与后发读取均阻止旧响应复活请求；状态/字节/墓碑/并发/读超时有界。
   - canonical work 保留工具输入/输出、producer 时间/状态、turn/input lineage 与独立 commentary item；unknown 不证明执行。Host 绑定与真机问答/审批验收仍待后续，不以库测试代替完整功能验收。
-  - `heavy` 下 jobs=2 逐文件通过 `ConsentContractTests`6、`ConsentCoordinatorTests`6（额外六/两后端参数输入）、`ConsentLifecycleTests`8，共20项/26输入。首轮修正测试 await/autoclosure 编译问题及嵌套字典修改的 Swift exclusivity 冲突后复验通过；补并发读取、草稿键和异常 ACK 回归后相关文件再次通过。文档10对指令/7回归与 diff 检查通过；完整门禁交 PR CI。本轮新增 Swift 源756行、测试415行；原 TS/TSX 统计167,902/132,119不变。无版本变更或发布。
+  - `heavy` 下 jobs=2 逐文件通过 `ConsentContractTests`6、`ConsentCoordinatorTests`6（额外六/两后端参数输入）、`ConsentLifecycleTests`8，共20项/26输入。首轮修正测试 await/autoclosure 编译问题及嵌套字典修改的 Swift exclusivity 冲突后复验通过；补并发读取、草稿键和异常 ACK 回归后相关文件再次通过。首轮 Native CI 发现98项并全通过（77 Swift Testing、21 XCTest），8份UI源码 iOS16.4 类型检查通过；原仓库各门禁通过但 Windows 既有 supervisor 进程测试107行超时，保留证据后仅重跑该作业。重基新 host 后仅补显式新枚举分支并维持动作隐藏，完整门禁继续 CI。文档10对指令/7回归与 diff 检查通过。本轮新增 Swift 源756行、测试415行；原 TS/TSX 统计167,902/132,119不变。无版本变更或发布。
 
 - 2026-10-16 原生 iOS 本地化源码（负责人授权，完整设备语言验收仍为最终迁移门槛）。
   - 按真实 `ClawketUI` 八份源码与 native host 清点 195 条界面/无障碍文案（含新增会话/未知创建恢复提示），新增主 App bundle 字符串目录及逐项来源清单。64 条术语复用现有 Mobile 19 语言译文，其余 131 条逐语言翻译；当前全部 19 语言各 195/195，并增加相机/本地网络两条系统权限用途各 19 语言，共 3,743 条语言单元，无英文占位填充的伪完成。西班牙/拉美、巴西/葡萄牙保留区域术语差异。

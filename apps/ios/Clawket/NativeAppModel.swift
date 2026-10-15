@@ -337,6 +337,13 @@ final class NativeAppModel: ObservableObject {
         case let .failure(id, failure):
             guard id == nil || id == activeConnectionID else { return }
             if !failure.retryable { showFailure(failure) }
+        case let .pendingRequests(snapshot):
+            guard snapshot.connectionID == activeConnectionID else { return }
+            // Typed runtime support is ready; host consent binding remains capability-gated.
+            break
+        case let .requestResolved(connectionID, _, _):
+            guard connectionID == activeConnectionID else { return }
+            break
         }
     }
 
@@ -677,7 +684,7 @@ final class NativeAppModel: ObservableObject {
             }
         case let .sessionMetadata(session):
             sessions.removeAll { $0.key == session.key && $0.connectionID == connectionID }; sessions.append(session); rebuildRoster()
-        case .thought, .tool, .other: break
+        case .thought, .tool, .work, .other: break
         }
     }
 
