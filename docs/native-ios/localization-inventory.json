@@ -82,7 +82,7 @@
     {
       "key": "Add to queue",
       "sources": [
-        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:428",
+        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:450",
         "apps/ios/Clawket/NativeAppModel.swift:723"
       ],
       "mobileTerm": null
@@ -119,7 +119,7 @@
     {
       "key": "Agents",
       "sources": [
-        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:505",
+        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:527",
         "apps/ios/Clawket/NativeAppModel.swift:27"
       ],
       "mobileTerm": "settings.Agents"
@@ -240,7 +240,7 @@
     {
       "key": "Cancel",
       "sources": [
-        "packages/apple/Sources/ClawketUI/QuestionContentView.swift:149",
+        "packages/apple/Sources/ClawketUI/QuestionContentView.swift:151",
         "apps/ios/Clawket/ConnectAgentView.swift:103",
         "apps/ios/Clawket/PairingScanner.swift:25",
         "apps/ios/Clawket/PendingMessageEditor.swift:35"
@@ -278,7 +278,7 @@
     {
       "key": "Choose one answer",
       "sources": [
-        "packages/apple/Sources/ClawketUI/QuestionContentView.swift:57"
+        "packages/apple/Sources/ClawketUI/QuestionContentView.swift:59"
       ],
       "mobileTerm": null
     },
@@ -336,7 +336,7 @@
     {
       "key": "Connect an agent to continue conversations and keep work moving.",
       "sources": [
-        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:511",
+        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:533",
         "apps/ios/Clawket/NativeAppModel.swift:29"
       ],
       "mobileTerm": null
@@ -564,6 +564,13 @@
         "apps/ios/Clawket/ConnectionsView.swift:47"
       ],
       "mobileTerm": "common.Done"
+    },
+    {
+      "key": "Draft answer",
+      "sources": [
+        "packages/apple/Sources/ClawketUI/QuestionContentView.swift:198"
+      ],
+      "mobileTerm": null
     },
     {
       "key": "Duration",
@@ -804,7 +811,8 @@
     {
       "key": "No",
       "sources": [
-        "packages/apple/Sources/ClawketUI/QuestionContentView.swift:155"
+        "packages/apple/Sources/ClawketUI/QuestionContentView.swift:157",
+        "packages/apple/Sources/ClawketUI/QuestionContentView.swift:202"
       ],
       "mobileTerm": "common.No"
     },
@@ -818,7 +826,8 @@
     {
       "key": "No content",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeWorkInspector.swift:233"
+        "packages/apple/Sources/ClawketUI/NativeWorkInspector.swift:233",
+        "packages/apple/Sources/ClawketUI/QuestionContentView.swift:214"
       ],
       "mobileTerm": null
     },
@@ -1125,7 +1134,7 @@
     {
       "key": "Required",
       "sources": [
-        "packages/apple/Sources/ClawketUI/QuestionContentView.swift:54"
+        "packages/apple/Sources/ClawketUI/QuestionContentView.swift:56"
       ],
       "mobileTerm": null
     },
@@ -1252,15 +1261,15 @@
     {
       "key": "Select all that apply",
       "sources": [
-        "packages/apple/Sources/ClawketUI/QuestionContentView.swift:57"
+        "packages/apple/Sources/ClawketUI/QuestionContentView.swift:59"
       ],
       "mobileTerm": null
     },
     {
       "key": "Send",
       "sources": [
-        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:428",
-        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:438",
+        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:450",
+        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:460",
         "apps/ios/Clawket/NativeAppModel.swift:723"
       ],
       "mobileTerm": "chat.Send"
@@ -1268,7 +1277,7 @@
     {
       "key": "Send answer",
       "sources": [
-        "packages/apple/Sources/ClawketUI/QuestionContentView.swift:160"
+        "packages/apple/Sources/ClawketUI/QuestionContentView.swift:162"
       ],
       "mobileTerm": null
     },
@@ -1367,7 +1376,7 @@
       "key": "Stop task",
       "sources": [
         "packages/apple/Sources/ClawketUI/NativeComposer.swift:152",
-        "packages/apple/Sources/ClawketUI/QuestionContentView.swift:149"
+        "packages/apple/Sources/ClawketUI/QuestionContentView.swift:151"
       ],
       "mobileTerm": "chat.Stop task"
     },
@@ -1465,7 +1474,7 @@
     {
       "key": "This answer is too long.",
       "sources": [
-        "packages/apple/Sources/ClawketUI/QuestionContentView.swift:31"
+        "packages/apple/Sources/ClawketUI/QuestionContentView.swift:33"
       ],
       "mobileTerm": null
     },
@@ -1677,7 +1686,8 @@
     {
       "key": "Yes",
       "sources": [
-        "packages/apple/Sources/ClawketUI/QuestionContentView.swift:157"
+        "packages/apple/Sources/ClawketUI/QuestionContentView.swift:159",
+        "packages/apple/Sources/ClawketUI/QuestionContentView.swift:202"
       ],
       "mobileTerm": "common.Yes"
     },
@@ -1705,7 +1715,7 @@
     {
       "key": "Your agents, within reach",
       "sources": [
-        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:510",
+        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:532",
         "apps/ios/Clawket/NativeAppModel.swift:28"
       ],
       "mobileTerm": null
@@ -1713,12 +1723,13 @@
     {
       "key": "Your answer",
       "sources": [
-        "packages/apple/Sources/ClawketUI/QuestionContentView.swift:61",
-        "packages/apple/Sources/ClawketUI/QuestionContentView.swift:131",
-        "packages/apple/Sources/ClawketUI/QuestionContentView.swift:135",
+        "packages/apple/Sources/ClawketUI/QuestionContentView.swift:63",
+        "packages/apple/Sources/ClawketUI/QuestionContentView.swift:133",
         "packages/apple/Sources/ClawketUI/QuestionContentView.swift:137",
-        "packages/apple/Sources/ClawketUI/QuestionContentView.swift:140",
-        "packages/apple/Sources/ClawketUI/QuestionContentView.swift:142"
+        "packages/apple/Sources/ClawketUI/QuestionContentView.swift:139",
+        "packages/apple/Sources/ClawketUI/QuestionContentView.swift:142",
+        "packages/apple/Sources/ClawketUI/QuestionContentView.swift:144",
+        "packages/apple/Sources/ClawketUI/QuestionContentView.swift:198"
       ],
       "mobileTerm": "chat.Your answer"
     },

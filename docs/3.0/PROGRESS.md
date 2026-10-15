@@ -3,7 +3,8 @@
 - 2026-10-16 Native work dock 与工具记录表示层（负责人授权，host/runtime 聚合另行绑定）。
   - 新增默认 nil/unsupported 的强类型 work 表示、输入框上方 44pt 最小原生入口、系统 sheet/导航详情与可原生选择的完整授权工具文本。保持现有 composer/TextView/expanded editor 与 transcript 身份；打开/更新 work 不改会话、不发滚动或 focus 指令，关闭不影响任务。
   - run/turn/input lineage 仅作宿主精确分组/绑定，不显示不透明协议 ID；语义标题、输入预览与原始时间由 host 提供，缺失归属/状态明确未知。按宿主 canonical order 最新在前，缺失/偏斜时间不重排或补归属；输出/后续工具/完成时钟与 Stop ACK 均不推定成功。独立授权 record/step/content 读取和文本选择，部分内容明确标注，重复/空身份拒绝，旧打开详情不可转指新执行。
-  - heavy/jobs2 下 12 份实际 iOS16.4/Swift6 UI 源码 typecheck、单文件 WorkPresentationTests 8 项通过；覆盖默认隐藏、顺序/同序稳定、同 run 不同输入、重复身份、权限撤回、未知状态与草稿保持。新增25条固定文案各19语，其中13条复用现有可信术语、12条逐语言翻译；233 UI/2权限，共4,465语言单元，源码全19语与6项目录回归通过。真实 App/编译资源完整门禁交 CI；未启动本机模拟器、改 Vault/Runtime、绑定生产 work 或发布。详见 `docs/native-ios/WORK-UI.md`。
+  - heavy/jobs2 下实际 iOS16.4/Swift6 UI 源码 typecheck、单文件 WorkPresentationTests 8 项通过；覆盖默认隐藏、顺序/同序稳定、同 run 不同输入、重复身份、权限撤回、未知状态与草稿保持。新增26条固定文案各19语，其中13条复用现有可信术语、13条逐语言翻译；234 UI/2权限，共4,484语言单元，源码全19语与6项目录回归通过。真实 App/编译资源完整门禁交 CI；未启动本机模拟器、改 Vault/Runtime、绑定生产 work 或发布。详见 `docs/native-ios/WORK-UI.md`。
+  - 与真实 host 联查修复提问UI：wire动作预占后仍保留被点按钮及精确spinner，离线/未知review独立禁用输入避免假编辑回弹，resolved保留原问题与可选取回答；仅typed accepted标志把本地响应展示为已接收，外部解决/过期仍标Draft answer，confirm缺失不变No。尾部兼容新增canEdit/responseIsAccepted，纯QuestionPresentationTests六项、最终13源码iOS16.4/Swift6 typecheck通过，随后释放heavy给USB验收。无host Runtime动作变更。
 
 - 2026-10-16 Native host 问答/授权绑定进行中（完整任务历史和手机授权尚未验收）。
   - Host 按真实 opaque reference 接执行/device/node 审批和 select/confirm/input/editor/form；Always 先取运行时令牌并发布冻结唯一确认，同步消费后才启动 Task。重复/迟到确认、同连接重连和选项重排不迁移权限；unknown/取消ACK保持暂停且无伪提交动画。安全列表只读刷新不替代后端健康，connection-wide inbox 与会话请求分开。

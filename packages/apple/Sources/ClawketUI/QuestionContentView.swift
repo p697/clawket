@@ -19,7 +19,9 @@ struct QuestionContentView: View {
             Label(question.title, systemImage: "text.bubble").font(.headline).accessibilityAddTraits(.isHeader)
             if let detail = question.detail { Text(detail).font(.subheadline).foregroundStyle(.secondary).textSelection(.enabled) }
             if let resolved = question.resolvedLabel {
-                Label(resolved, systemImage: "checkmark.circle").font(.subheadline).foregroundStyle(.secondary)
+                Label(resolved, systemImage: question.responseIsAccepted ? "checkmark.circle" : "info.circle")
+                    .font(.subheadline).foregroundStyle(.secondary)
+                if let value = question.readonlyResponse(response) { readonlyAnswer(value) }
             } else {
                 if question.kind != .confirm {
                     ForEach(question.fields) { field in fieldContent(field) }
@@ -103,7 +105,7 @@ struct QuestionContentView: View {
             }.padding(12).frame(minHeight: 44)
                 .background(Color(uiColor: .tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
         }
-        .buttonStyle(.plain).disabled(isBusy)
+        .buttonStyle(.plain).disabled(!question.canEditFields)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(selected ? .isSelected : [])
         .accessibilityIdentifier(identifier)
@@ -127,30 +129,30 @@ struct QuestionContentView: View {
                 }
                 .padding(8)
                 .background(Color(uiColor: .tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
-                .disabled(isBusy)
+                .disabled(!question.canEditFields)
                 .accessibilityLabel(field.title.isEmpty ? String(localized: "Your answer") : field.title)
                 .accessibilityHint(field.placeholder ?? "")
                 .accessibilityIdentifier("question-\(question.id)-\(field.id)-editor")
         } else if question.kind == .input {
             TextField(field.placeholder ?? String(localized: "Your answer"), text: binding)
-                .textFieldStyle(.roundedBorder).disabled(isBusy)
+                .textFieldStyle(.roundedBorder).disabled(!question.canEditFields)
                 .accessibilityLabel(field.title.isEmpty ? String(localized: "Your answer") : field.title)
                 .accessibilityIdentifier("question-\(question.id)-\(field.id)-input")
         } else {
             TextField(field.placeholder ?? String(localized: "Your answer"), text: binding, axis: .vertical)
-                .textFieldStyle(.roundedBorder).lineLimit(2...8).disabled(isBusy)
+                .textFieldStyle(.roundedBorder).lineLimit(2...8).disabled(!question.canEditFields)
                 .accessibilityLabel(field.title.isEmpty ? String(localized: "Your answer") : field.title)
                 .accessibilityIdentifier("question-\(question.id)-\(field.id)-custom-input")
         }
     }
 
     @ViewBuilder private var actions: some View {
-        if question.canCancel {
+        if question.showsCancelAction {
             actionButton(.cancel, title: question.kind == .form ? String(localized: "Stop task") : String(localized: "Cancel")) {
                 onIntent(.cancelQuestion(questionID: question.id))
             }.buttonStyle(.bordered)
         }
-        if question.canSubmit {
+        if question.showsAnswerActions {
             if question.kind == .confirm {
                 actionButton(.confirm(false), title: String(localized: "No")) { submit(.init(confirmed: false)) }
                     .buttonStyle(.bordered)
@@ -170,7 +172,7 @@ struct QuestionContentView: View {
             perform()
         } label: {
             HStack(spacing: 8) {
-                if question.submittingAction == action || question.submittingAction == nil && question.isSubmitting && action == .answer {
+                if question.submittingAction == action {
                     ProgressView().controlSize(.small)
                 }
                 Text(title).font(.subheadline.weight(.medium))
@@ -185,10 +187,38 @@ struct QuestionContentView: View {
     private func allowsMultiple(_ field: QuestionField) -> Bool { question.kind == .form && field.allowsMultiple }
     private func answer(for field: QuestionField) -> QuestionFieldAnswer { response.fields[field.id] ?? .init() }
     private func setAnswer(_ answer: QuestionFieldAnswer, for field: QuestionField) {
-        guard !isBusy, question.resolvedLabel == nil else { return }
+        guard question.canEditFields else { return }
         onReadingInteraction()
         var changed = response; changed.fields[field.id] = answer
         onIntent(.questionDraftChanged(questionID: question.id, response: changed))
+    }
+
+    @ViewBuilder private func readonlyAnswer(_ value: QuestionReadonlyResponse) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(question.responseIsAccepted ? String(localized: "Your answer") : String(localized: "Draft answer"))
+                .font(.caption.weight(.medium)).foregroundStyle(.secondary)
+            switch value {
+            case let .confirmation(confirmed):
+                Text(confirmed ? String(localized: "Yes") : String(localized: "No"))
+                    .font(.subheadline).textSelection(.enabled)
+            case let .fields(fields):
+                ForEach(fields) { field in
+                    VStack(alignment: .leading, spacing: 5) {
+                        if let header = field.header, !header.isEmpty {
+                            Text(header).font(.caption.weight(.medium)).foregroundStyle(.secondary)
+                        }
+                        if !field.title.isEmpty && field.title != question.title {
+                            Text(field.title).font(.subheadline.weight(.medium))
+                        }
+                        ForEach(Array(field.values.enumerated()), id: \.offset) { _, value in
+                            if value.isEmpty { Text("No content").font(.subheadline).foregroundStyle(.secondary) }
+                            else { Text(verbatim: value).font(.subheadline).textSelection(.enabled) }
+                        }
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 #endif

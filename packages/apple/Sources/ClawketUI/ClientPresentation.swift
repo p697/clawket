@@ -355,16 +355,38 @@ public struct QuestionPresentation: Identifiable, Hashable, Sendable {
     public var error: String?
     public var canSubmit: Bool
     public var canCancel: Bool
+    /// Local editing permission is separate from wire response/cancellation authority.
+    public var canEdit: Bool
+    /// Only authoritative acceptance of this exact local answer may set this true.
+    public var responseIsAccepted: Bool
     /// Only the pressed action spins. Unknown delivery must disable actions without claiming a submission.
     public var submittingAction: Submission?
 
     public init(id: String, title: String, detail: String? = nil, fields: [QuestionField],
                 isSubmitting: Bool = false, resolvedLabel: String? = nil,
                 error: String? = nil, canSubmit: Bool = true, kind: Kind = .form,
-                canCancel: Bool = false, submittingAction: Submission? = nil) {
+                canCancel: Bool = false, submittingAction: Submission? = nil,
+                canEdit: Bool? = nil, responseIsAccepted: Bool = false) {
         self.id = id; self.title = title; self.detail = detail; self.fields = fields
         self.isSubmitting = isSubmitting; self.resolvedLabel = resolvedLabel; self.error = error; self.canSubmit = canSubmit
         self.kind = kind; self.canCancel = canCancel; self.submittingAction = submittingAction
+        self.canEdit = canEdit ?? canSubmit; self.responseIsAccepted = responseIsAccepted
+    }
+
+    public var canEditFields: Bool { canEdit && !isSubmitting && submittingAction == nil && resolvedLabel == nil }
+
+    public var showsAnswerActions: Bool {
+        guard resolvedLabel == nil else { return false }
+        if canSubmit { return true }
+        switch submittingAction {
+        case .answer?: return kind != .confirm
+        case .confirm?: return kind == .confirm
+        case .cancel?, nil: return false
+        }
+    }
+
+    public var showsCancelAction: Bool {
+        resolvedLabel == nil && (canCancel || submittingAction == .cancel)
     }
 }
 
