@@ -288,4 +288,23 @@ struct ModelControlsRecoveryTests {
         #expect(try await runtime.modelControls(sessionKey: "conversation-a").thinking?.current == "high")
         await runtime.disconnect(); reader.cancel()
     }
+
+    @Test func newerModelMetadataKeepsPermissionsButCannotInheritOldModelSpeedAvailability() async throws {
+        let (runtime, socket, peer, reader) = try controlsFixture(.codex)
+        try await runtime.activate(connection(.codex)); _ = try await runtime.refreshRoster()
+        await peer.hold("models.list")
+        let reading = Task { try await runtime.modelControls(sessionKey: "owned") }
+        try await eventually { await socket.requests("models.list").count == 1 }
+        var row = lifecycleRow(.codex).object!
+        row["model"] = .string("second"); row["modelProvider"] = .string("provider")
+        try await socket.emit(event("codex.update", .object(["type": .string("session_info_update"), "session": .object(row)])))
+        try await eventually { (try? await runtime.sessionManagement(sessionKey: "owned").session.model) == "second" }
+        try await socket.reply(await socket.requests("models.list")[0], payload: controlsPayload())
+        let value = try await reading.value
+        #expect(value.currentModel == "second"); #expect(value.permissions?.mode == .known(.workspace))
+        #expect(value.fastMode?.enabled == nil); #expect(value.fastMode?.available == false)
+        #expect(!value.allowedActions.contains(.setFastMode)); #expect(!value.allowedActions.contains(.setThinkingLevel))
+        #expect(value.allowedActions.contains(.setPermissions)); #expect(value.canSend)
+        await runtime.disconnect(); reader.cancel()
+    }
 }

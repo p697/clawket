@@ -25,6 +25,9 @@ extension RuntimeCoordinator {
             // A newer model-only event must not discard independent effective speed/permissions.
             values.currentModel = latestSession.model; values.currentProvider = latestSession.provider
             values.models = ModelControlsWire.selecting(values.models, current: latestSession.model, provider: latestSession.provider)
+            // Speed availability depends on the particular native model/provider.
+            // A pre-change response cannot grant it to the newer model.
+            if values.fastMode != nil { values.fastMode = .init(enabled: nil, available: false) }
             if values.thinking != nil {
                 let levels = values.models.first(where: \.selected)?.reasoningLevels ?? []
                 values.thinking = .init(current: nil, levels: levels, writePath: nil)
