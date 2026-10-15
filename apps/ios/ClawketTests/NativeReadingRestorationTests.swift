@@ -5,6 +5,46 @@ import XCTest
 
 final class NativeReadingRestorationTests: XCTestCase {
     @MainActor
+    func testPublishedReadingScopeAndFontChangesReachTheExistingTranscriptWithoutRootReplacement() async throws {
+        let route = ConversationID(connectionID: "reading", agentID: "agent", sessionID: "published")
+        let initial = ConversationReadingPresentation(restoration: .init(followsBottom: false, messageID: "m3", offset: 4))
+        let model = ClientPresentation(readingContexts: [route: initial])
+        let messages = (0..<60).map { index in
+            MessagePresentation(id: "m\(index)", author: .agent(name: "Agent", label: nil),
+                content: [.markdown(String(repeating: "Row \(index) selectable 中文 text. ", count: 10))])
+        }
+        var publishedScopes: [UUID] = []
+        let host = UIHostingController(rootView: NativeTranscript(messages: messages, conversationID: route,
+            model: model, following: .constant(false), scrollRequest: 0, historyAvailability: .unsupported,
+            isLoadingHistory: false, onIntent: {
+                if case let .readingContextChanged(_, id, _) = $0 { publishedScopes.append(id) }
+            }))
+        let window = attach(host)
+        defer { window.isHidden = true; window.rootViewController = nil }
+        await settle(host)
+        let table = try XCTUnwrap(descendants(host.view, of: UITableView.self).first)
+        let source = try XCTUnwrap(table.dataSource as? UITableViewDiffableDataSource<Int, String>)
+        let originalTable = table
+        let replacement = ConversationReadingPresentation(restoration: .init(followsBottom: false, messageID: "m40", offset: -18))
+        model.readingContexts[route] = replacement
+        await settle(host)
+        let target = try XCTUnwrap(source.indexPath(for: "m40"))
+        XCTAssertTrue(table.indexPathsForVisibleRows?.contains(target) == true)
+        XCTAssertEqual(table.rectForRow(at: target).minY - table.contentOffset.y, -18, accuracy: 3)
+        XCTAssertEqual(publishedScopes.last, replacement.id)
+        model.appearance.chatFontSize = 20
+        await settle(host)
+        XCTAssertTrue(descendants(host.view, of: UITableView.self).first === originalTable)
+        XCTAssertEqual(table.rectForRow(at: target).minY - table.contentOffset.y, -18, accuracy: 3)
+        let latest = ConversationReadingPresentation(restoration: .init(followsBottom: false, messageID: "m50", offset: 8))
+        model.readingContexts[route] = latest
+        await settle(host)
+        let last = try XCTUnwrap(source.indexPath(for: "m50"))
+        XCTAssertEqual(table.rectForRow(at: last).minY - table.contentOffset.y, 8, accuracy: 3)
+        XCTAssertEqual(publishedScopes.last, latest.id)
+    }
+
+    @MainActor
     func testCachedAnchorRestoresInRealTranscriptAndFontReflowKeepsReadingPosition() async throws {
         let route = ConversationID(connectionID: "reading", agentID: "agent", sessionID: "secondary")
         let model = ClientPresentation(readingContexts: [route: .init(restoration: .init(followsBottom: false, messageID: "m12", offset: 8))])

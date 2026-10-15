@@ -1,4 +1,5 @@
 #if os(iOS)
+import Combine
 import SwiftUI
 import UIKit
 
@@ -8,7 +9,7 @@ import UIKit
 struct NativeTranscript: UIViewRepresentable {
     let messages: [MessagePresentation]
     let conversationID: ConversationID
-    let model: ClientPresentation
+    @ObservedObject var model: ClientPresentation
     @Binding var following: Bool
     let scrollRequest: Int
     let historyAvailability: ActionAvailability
@@ -54,12 +55,15 @@ struct NativeTranscript: UIViewRepresentable {
         private var lastPublishedReading: ConversationReadingContext?
         private var appearance: ClientAppearancePresentation?
         private var retainedAnchor: (id: String, offset: CGFloat)?
+        private weak var observedModel: ClientPresentation?
+        private var appearanceObservation: AnyCancellable?
         private let historyButton = UIButton(type: .system)
 
         init(parent: NativeTranscript) { self.parent = parent }
 
         func install(_ table: TranscriptTableView) {
             self.table = table
+            observeAppearance(parent.model)
             NotificationCenter.default.addObserver(self, selector: #selector(captureReading),
                 name: UIApplication.willResignActiveNotification, object: nil)
             historyButton.addTarget(self, action: #selector(loadEarlier), for: .touchUpInside)
@@ -78,8 +82,11 @@ struct NativeTranscript: UIViewRepresentable {
         }
 
         func update(_ parent: NativeTranscript, table: TranscriptTableView) {
-            var anchor = readingAnchor(in: table)
+            // Rows also observe appearance. They may reflow before this update;
+            // retain the reader's confirmed anchor rather than the transient geometry.
+            var anchor = retainedAnchor ?? readingAnchor(in: table)
             self.parent = parent
+            observeAppearance(parent.model)
             let reading = parent.model.readingContexts[parent.conversationID]
             if readingScope != reading?.id {
                 readingScope = reading?.id
@@ -155,13 +162,36 @@ struct NativeTranscript: UIViewRepresentable {
             return (id, table.rectForRow(at: index).minY - table.contentOffset.y)
         }
 
+        private func observeAppearance(_ model: ClientPresentation) {
+            guard observedModel !== model else { return }
+            observedModel = model
+            // Published sends before the rows receive their new font. Capture
+            // the actual visible row before either SwiftUI or UIKit can reflow.
+            appearanceObservation = model.$appearance.dropFirst().sink { [weak self] value in
+                guard let self, value != self.appearance, self.initialized, !self.applying,
+                      self.pendingRestoration == nil, let table = self.table else { return }
+                self.retainedAnchor = self.readingAnchor(in: table)
+            }
+        }
+
         private func restore(_ anchor: (id: String, offset: CGFloat), in table: UITableView) {
             guard !table.isDragging && !table.isDecelerating,
                   let index = dataSource?.indexPath(for: anchor.id) else { return }
-            let wanted = table.rectForRow(at: index).minY - anchor.offset
-            let minY = -table.adjustedContentInset.top
-            let maxY = max(minY, table.contentSize.height - table.bounds.height + table.adjustedContentInset.bottom)
-            table.setContentOffset(CGPoint(x: 0, y: min(maxY, max(minY, wanted))), animated: false)
+            // Offscreen rects contain estimated heights. Materialize the target
+            // before using its geometry; scrolling can also size its neighbours.
+            if table.cellForRow(at: index) == nil {
+                table.scrollToRow(at: index, at: .top, animated: false)
+                table.layoutIfNeeded()
+            }
+            for _ in 0..<2 {
+                let wanted = table.rectForRow(at: index).minY - anchor.offset
+                let minY = -table.adjustedContentInset.top
+                let maxY = max(minY, table.contentSize.height - table.bounds.height + table.adjustedContentInset.bottom)
+                let y = min(maxY, max(minY, wanted))
+                guard abs(table.contentOffset.y - y) > 0.5 else { break }
+                table.setContentOffset(CGPoint(x: 0, y: y), animated: false)
+                table.layoutIfNeeded()
+            }
         }
 
         private func scrollToBottom(_ table: UITableView) {
