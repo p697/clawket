@@ -276,7 +276,7 @@ struct TransportTests {
         #expect(receivedGeneration == generation)
         #expect(received.event == "relay.ready")
         #expect(await connection.state == .handshaking)
-        #expect(RelayHeartbeatConfiguration.advertisedCapabilities == ["relay.client-pong.v1"])
+        #expect(RelayHeartbeatConfiguration.advertisedCapabilities == ["relay.client-pong.v1", "relay.client-ping.v1", "relay.transfer-hint.v1"])
         await connection.disconnect()
     }
 

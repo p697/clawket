@@ -1,5 +1,10 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-16 Native Relay 保活与大帧保护（真实手机/Relay恢复验收仍待后续）。
+  - Full client 在已实现/验证后新增 client-ping 与 transfer-hint 广告，仅当前 Relay ready 协商、实际 backend ready、前台后启用5秒 nonce/5秒回声。保留独立旧 tick/pong 三间隔下限，回声只证实同 Socket Relay 返回路径，不建立 backend ready/重置退避；普通流量/重复ready/失败发送不推迟原保活截止，旧代际与已取消 timer 不能影响继任者。
+  - 原生 async 大帧在真实派发前有界预占，实际128 KiB–8 MiB、并发双向共用绝对90秒预算；全体覆盖 upload 完成、input完整交付及最新代际 fresh nonce 才能解锁。完整下载只清该方向，response 先到不丢 send 所有权，失败 reservation 不留下 grace；后台/sleep/同 Socket challenge 保留预算与过期 latch，新hint不能续租。RPC/握手/真实health probe保留普通截止、max(普通,90s)绝对上限及一次有界响应窗口；190秒模型超时保持，Upgrade/12秒bootstrap control/15秒restricted pairing不借用transfer延时，不重放未知写。精简来源/顺序边界见 `docs/native-ios/LIVENESS.md`。
+  - 无竞争进程/内存42%预检、heavy/jobs2 下逐文件严格Swift6通过：Deadline6函数/7输入、Liveness9/10、Transfer11/15、URLSession6/8、双后端RelayProbe2/4、既有Transport25/26与RuntimeContract9/10（共68函数/80输入）。实际 Foundation loopback 完成名义5 MiB原帧往返（约0.75秒）与协商后nonce echo；不是手机/Relay吞吐或模型推理。首次仅Testing宏直接调用mutating Bool展开失败，改等值断言后完整编译通过，未改断言语义；通过后才启用两cap并复验四个实际消费者/旧兼容文件，立即释放heavy。文档14对/7回归、diff与metrics通过；TS/TSX167,902/132,119及617测试文件保持，重基journal后文档187，本轮Swift净增471源行/856测试行用于独立有界状态和真实Socket/故障回归。不改Worker/Bridge/协议/auth/App/UI/凭据/版本，不制作发行包或发布；完整App/仓库门禁交PR CI。
+
 - 2026-10-16 Native work/review host journal（负责人授权，完整parity与设备验收继续）。
   - 实际App接 typed live/history work、工具输入/输出、累计commentary、run/start/final与captured send receipt；原生dock/详情读取只验证当前route/record/step，无RPC写入或composer/focus/scroll副作用。独立持久render UUID，精确run/turn/input归属；复用run时缺失输入的窗口留为未归属，partial final不选错已有执行。早期分页按API规范顺序前插，不按缺失/偏斜时钟排序，也不把旧工具变成最新任务。
   - 独立保护目录内单cache原子双代读回，primary8MiB、128run/4096step/每run1024step、32review；raw输入/输出每项256KiB安全预览，producer完整性缺失不虚报。全局JSON字节/深度/token与身份/计数/答案语义校验；Int64.max损坏计数拒绝并只读回退，不在恢复后溢出。旧/同revision写入拒绝，未知提交停journal写入至重开，不清源或妨碍文字连接。

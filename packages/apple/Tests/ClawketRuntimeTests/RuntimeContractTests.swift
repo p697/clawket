@@ -13,7 +13,7 @@ struct RuntimeContractTests {
             let url = try BackendProfile.endpoint(value, deviceID: "fixture-device")
             let query = URLComponents(url: url, resolvingAgainstBaseURL: false)!.queryItems!
             #expect(query.first { $0.name == (backend == .hermes ? "bridgeId" : "gatewayId") }?.value == "fixture-room")
-            #expect(query.first { $0.name == "capabilities" }?.value == "relay.client-pong.v1")
+            #expect(query.first { $0.name == "capabilities" }?.value == "relay.client-pong.v1,relay.client-ping.v1,relay.transfer-hint.v1")
             #expect(query.first { $0.name == "clientId" }?.value == (backend == .openclaw ? "fixture-device" : value.id))
             #expect(BackendProfile.profile(for: backend).modelsPerSession == ![.hermes, .localModel].contains(backend))
         }

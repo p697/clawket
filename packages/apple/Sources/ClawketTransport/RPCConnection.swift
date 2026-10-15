@@ -58,7 +58,9 @@ public enum ConnectionEvent: Sendable, Equatable {
 
 public struct RelayHeartbeatConfiguration: Sendable, Equatable {
     public static let clientPongCapability = "relay.client-pong.v1"
-    public static let advertisedCapabilities = [clientPongCapability]
+    public static let clientPingCapability = "relay.client-ping.v1"
+    public static let transferHintCapability = "relay.transfer-hint.v1"
+    public static let advertisedCapabilities = [clientPongCapability, clientPingCapability, transferHintCapability]
     public let interval: Duration
     public let missedIntervals: Int
 
@@ -76,42 +78,43 @@ public actor RPCConnection {
     public nonisolated let events: AsyncThrowingStream<ConnectionEvent, any Error>
     private let eventContinuation: AsyncThrowingStream<ConnectionEvent, any Error>.Continuation
     private let factory: any WebSocketFactory
-    private let clock: any TransportClock
+    let clock: any TransportClock
     private let openTimeout: Duration
     private let handshakeTimeout: Duration
     private let maximumPending: Int
     private let eventBufferLimit: Int
     private let eventBufferByteLimit: Int
     private var eventBufferWeights: [Int] = []
-    private var current: Entry?
+    var current: Entry?
     private var pending: [String: Pending] = [:]
     private var dispatches: [String: Task<Void, Never>] = [:]
     private var reconnectPolicy = ReconnectPolicy()
-    private var foreground = true
+    var foreground = true
     private var streamAvailable = true
     public private(set) var state: NativeConnectionState = .idle
     public var generation: ConnectionGeneration? { current?.generation }
     public var pendingRequestCount: Int { pending.count }
 
-    private struct Entry {
+    struct Entry: Sendable {
         let generation: ConnectionGeneration
         let endpoint: URL
         let socket: any WebSocketConnection
         var relay: RelayHeartbeatConfiguration?
         let openDeadline: Duration
-        var handshakeDeadline: Duration?
+        var handshakeDeadline: ResponseDeadline?
         var openTask: Task<Void, any Error>?
         var receiveTask: Task<Void, Never>?
         var openTimeoutTask: Task<Void, Never>?
         var handshakeTask: Task<Void, Never>?
         var heartbeatTask: Task<Void, Never>?
         var lastTick: Duration?
+        var liveness = RelayLivenessState()
     }
 
     private struct Pending {
         let generation: ConnectionGeneration
         let continuation: CheckedContinuation<RPCResponse, any Error>
-        let deadline: Duration
+        var deadline: ResponseDeadline
         var timeout: Task<Void, Never>?
         var delivery: RPCFailure.Delivery = .notDispatched
     }
@@ -189,7 +192,7 @@ public actor RPCConnection {
             current?.openTimeoutTask?.cancel()
             current?.openTimeoutTask = nil
             state = .handshaking
-            current?.handshakeDeadline = clock.now() + handshakeTimeout
+            current?.handshakeDeadline = ResponseDeadline(startedAt: clock.now(), timeout: handshakeTimeout)
             guard emit(.state(generation, .handshaking)) else { throw RPCFailure(.eventBufferOverflow) }
             startReceiving(generation, socket: socket)
             startHandshakeDeadline(generation)
@@ -200,7 +203,7 @@ public actor RPCConnection {
     @discardableResult
     public func confirmBackendReady(generation: ConnectionGeneration) -> Bool {
         guard current?.generation == generation, state == .handshaking || state == .ready else { return false }
-        if state == .handshaking, let deadline = current?.handshakeDeadline, clock.now() >= deadline {
+        if state == .handshaking, handshakeRemaining(generation) <= .zero {
             fail(generation, code: .timeout)
             return false
         }
@@ -212,6 +215,9 @@ public actor RPCConnection {
         state = .ready
         current?.lastTick = clock.now()
         startHeartbeat(generation)
+        if current?.liveness.clientPingNegotiated == true {
+            scheduleClientPing(generation, delay: current?.liveness.transfer.hasWindow == true ? .zero : .seconds(5))
+        }
         return !changed || emit(.state(generation, .ready))
     }
 
@@ -224,8 +230,9 @@ public actor RPCConnection {
         current?.heartbeatTask?.cancel()
         current?.heartbeatTask = nil
         current?.lastTick = nil
+        current?.liveness.pause() // A backend challenge does not renew the socket's transfer budget.
         rejectPending(code: .retired)
-        current?.handshakeDeadline = clock.now() + handshakeTimeout
+        current?.handshakeDeadline = ResponseDeadline(startedAt: clock.now(), timeout: handshakeTimeout)
         state = .handshaking
         guard emit(.state(generation, .handshaking)) else { return false }
         startHandshakeDeadline(generation)
@@ -256,9 +263,13 @@ public actor RPCConnection {
         foreground = active
         current?.heartbeatTask?.cancel()
         current?.heartbeatTask = nil
+        current?.liveness.pause()
         guard active, let generation = current?.generation, state == .ready else { return }
         current?.lastTick = clock.now()
         startHeartbeat(generation)
+        if current?.liveness.clientPingNegotiated == true {
+            scheduleClientPing(generation, delay: current?.liveness.transfer.hasWindow == true ? .zero : .seconds(5))
+        }
         _ = emit(.backendProbeRequired(generation))
     }
 
@@ -288,22 +299,32 @@ public actor RPCConnection {
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 guard !Task.isCancelled else { continuation.resume(throwing: RPCFailure(.cancelled)); return }
-                pending[id] = Pending(generation: generation, continuation: continuation, deadline: clock.now() + timeout)
+                pending[id] = Pending(generation: generation, continuation: continuation,
+                                      deadline: ResponseDeadline(startedAt: clock.now(), timeout: timeout))
                 let clock = clock
                 pending[id]?.timeout = Task { [weak self] in
-                    do { try await clock.sleep(for: timeout) } catch { return }
-                    await self?.expireRequest(id, generation: generation, code: .timeout)
+                    var delay = timeout
+                    do {
+                        while !Task.isCancelled {
+                            try await clock.sleep(for: delay)
+                            guard let next = await self?.requestTimeoutDelay(id, generation: generation) else { return }
+                            delay = next
+                        }
+                    } catch { return }
                 }
                 // The send task never holds the actor across native I/O. Retirement and
                 // expiry retain cancellation ownership even when send completion stalls.
                 dispatches[id] = Task { [weak self, socket = entry.socket] in
-                    guard await self?.beginDispatch(id, generation: generation) == true else { return }
+                    guard let permit = await self?.beginDispatch(id, generation: generation, bytes: frame.utf8.count) else { return }
                     var failed = false
+                    var accepted = false
                     do {
                         try Task.checkCancellation()
                         try await socket.send(frame)
+                        accepted = true
                     } catch { failed = !Task.isCancelled }
-                    await self?.completeDispatch(id, generation: generation, failed: failed)
+                    await self?.completeDispatch(id, generation: generation, transfer: permit.transfer,
+                                                 accepted: accepted, failed: failed)
                 }
             }
         } onCancel: {
@@ -362,35 +383,86 @@ public actor RPCConnection {
         guard !Task.isCancelled else { throw RPCFailure(.cancelled) }
         guard let entry = current, entry.generation == generation,
               state == .handshaking || state == .ready else { throw RPCFailure(.retired) }
+        if frame.utf8.count >= RelayTransferLease.minimumBytes,
+           entry.liveness.transfer.pendingDispatchCount >= 128 { throw RPCFailure(.pendingLimit) }
+        let transfer = beginOutgoingTransfer(bytes: frame.utf8.count, generation: generation)
+        guard current?.generation == generation else { throw RPCFailure(.retired) }
         do { try await entry.socket.send(frame) }
         catch {
+            finishOutgoingTransfer(transfer, accepted: false, generation: generation)
             fail(generation, code: .socketFailure)
             throw RPCFailure(.socketFailure, delivery: .uncertain)
         }
+        finishOutgoingTransfer(transfer, accepted: true, generation: generation)
         guard current?.generation == generation else { throw RPCFailure(.retired, delivery: .uncertain) }
     }
 
-    private func beginDispatch(_ id: String, generation: ConnectionGeneration) -> Bool {
+    private struct DispatchPermit: Sendable { let transfer: UUID? }
+
+    private func beginDispatch(_ id: String, generation: ConnectionGeneration, bytes: Int) -> DispatchPermit? {
         guard let request = pending[id], request.generation == generation,
-              current?.generation == generation, !Task.isCancelled else { return false }
-        if clock.now() >= request.deadline { expireRequest(id, generation: generation, code: .timeout); return false }
+              current?.generation == generation, !Task.isCancelled else { return nil }
+        if requestRemaining(id, generation: generation) <= .zero {
+            expireRequest(id, generation: generation, code: .timeout); return nil
+        }
+        if bytes >= RelayTransferLease.minimumBytes,
+           current?.liveness.transfer.pendingDispatchCount ?? 0 >= 128 {
+            expireRequest(id, generation: generation, code: .pendingLimit); return nil
+        }
         // Entering a native send may dispatch even if its asynchronous completion later fails.
         pending[id]?.delivery = .uncertain
-        return true
+        let transfer = beginOutgoingTransfer(bytes: bytes, generation: generation)
+        guard current?.generation == generation, pending[id] != nil else { return nil }
+        return DispatchPermit(transfer: transfer)
     }
 
-    private func completeDispatch(_ id: String, generation: ConnectionGeneration, failed: Bool) {
+    private func completeDispatch(_ id: String, generation: ConnectionGeneration, transfer: UUID?, accepted: Bool, failed: Bool) {
         dispatches.removeValue(forKey: id)
+        finishOutgoingTransfer(transfer, accepted: accepted, generation: generation)
         if failed { fail(generation, code: .socketFailure) }
     }
 
     private func expireRequest(_ id: String, generation: ConnectionGeneration, code: RPCFailure.Code) {
         guard let request = pending[id], request.generation == generation else { return }
-        if code == .timeout, clock.now() < request.deadline { return }
+        if code == .timeout, requestRemaining(id, generation: generation) > .zero { return }
         pending.removeValue(forKey: id)
         request.timeout?.cancel()
         dispatches.removeValue(forKey: id)?.cancel()
         request.continuation.resume(throwing: RPCFailure(code, delivery: request.delivery))
+    }
+
+    private func requestRemaining(_ id: String, generation: ConnectionGeneration) -> Duration {
+        guard var request = pending[id], request.generation == generation,
+              current?.generation == generation else { return .zero }
+        let remaining = request.deadline.remaining(at: clock.now(), transferGrace: transferGrace(generation: generation))
+        pending[id] = request
+        return remaining
+    }
+
+    private func requestTimeoutDelay(_ id: String, generation: ConnectionGeneration) -> Duration? {
+        guard pending[id]?.generation == generation else { return nil }
+        let remaining = requestRemaining(id, generation: generation)
+        if remaining > .zero { return remaining }
+        expireRequest(id, generation: generation, code: .timeout)
+        return nil
+    }
+
+    func handshakeRemaining(_ generation: ConnectionGeneration) -> Duration {
+        guard current?.generation == generation, var deadline = current?.handshakeDeadline else { return .zero }
+        let remaining = deadline.remaining(at: clock.now(), transferGrace: transferGrace(generation: generation))
+        current?.handshakeDeadline = deadline
+        return remaining
+    }
+
+    /// Observe protection before a frame/probe clears it, even if a timer was suspended.
+    func observeTransferDeadlines(_ generation: ConnectionGeneration) {
+        guard current?.generation == generation else { return }
+        for id in Array(pending.keys) {
+            if requestRemaining(id, generation: generation) <= .zero {
+                expireRequest(id, generation: generation, code: .timeout)
+            }
+        }
+        if state == .handshaking, handshakeRemaining(generation) <= .zero { fail(generation, code: .timeout) }
     }
 
     private func startReceiving(_ generation: ConnectionGeneration, socket: any WebSocketConnection) {
@@ -414,17 +486,25 @@ public actor RPCConnection {
         do { text = try FrameCodec.text(from: frame) }
         catch FrameValidationError.tooLarge { fail(generation, code: .frameTooLarge, closeCode: 1009); return false }
         catch { fail(generation, code: .invalidFrame); return false }
+        guard validateLivenessDeadline(generation) else { return false }
         if text.hasPrefix(RelayControl.prefix) {
             do {
                 let value = try FrameCodec.decode(String(text.dropFirst(RelayControl.prefix.count)))
                 guard value["type"]?.stringValue == "control", let event = value["event"]?.stringValue,
                       !event.isEmpty, event.utf8.count <= 128 else { throw FrameValidationError.invalidJSON }
+                if consumeRelayLiveness(value, bytes: text.utf8.count, generation: generation) {
+                    return current?.generation == generation
+                }
+                completeIncomingTransfer(bytes: text.utf8.count, generation: generation)
+                guard current?.generation == generation else { return false }
                 let requestID = value["requestId"]?.stringValue ?? value["payload"]?["requestId"]?.stringValue
                 guard requestID?.utf8.count ?? 0 <= 128 else { throw FrameValidationError.invalidJSON }
                 return emit(.relayControl(generation, RelayControl(event: event, requestID: requestID,
                             payload: value["payload"] ?? .object([:]), envelope: value)), weight: text.utf8.count)
             } catch { fail(generation, code: .invalidFrame); return false }
         }
+        completeIncomingTransfer(bytes: text.utf8.count, generation: generation)
+        guard current?.generation == generation else { return false }
         let value: JSONValue
         do { value = try FrameCodec.decode(text) }
         catch { fail(generation, code: .invalidFrame); return false }
@@ -442,7 +522,9 @@ public actor RPCConnection {
             guard let id = value["id"]?.stringValue, id.utf8.count <= 128,
                   let ok = value["ok"]?.boolValue else { fail(generation, code: .invalidFrame); return false }
             guard let request = pending[id], request.generation == generation else { return true }
-            if clock.now() >= request.deadline { expireRequest(id, generation: generation, code: .timeout); return true }
+            if requestRemaining(id, generation: generation) <= .zero {
+                expireRequest(id, generation: generation, code: .timeout); return true
+            }
             pending.removeValue(forKey: id)
             request.timeout?.cancel()
             if ok { request.continuation.resume(returning: RPCResponse(payload: value["payload"] ?? .null, metadata: value["meta"], envelope: value)) }
@@ -456,8 +538,14 @@ public actor RPCConnection {
         let clock = clock
         let timeout = handshakeTimeout
         current?.handshakeTask = Task { [weak self] in
-            do { try await clock.sleep(for: timeout) } catch { return }
-            await self?.expireHandshake(generation)
+            var delay = timeout
+            do {
+                while !Task.isCancelled {
+                    try await clock.sleep(for: delay)
+                    guard let next = await self?.handshakeTimeoutDelay(generation) else { return }
+                    delay = next
+                }
+            } catch { return }
         }
     }
 
@@ -467,15 +555,17 @@ public actor RPCConnection {
         fail(generation, code: .timeout)
     }
 
-    private func expireHandshake(_ generation: ConnectionGeneration) {
-        guard current?.generation == generation, state == .handshaking,
-              let deadline = current?.handshakeDeadline, clock.now() >= deadline else { return }
+    private func handshakeTimeoutDelay(_ generation: ConnectionGeneration) -> Duration? {
+        guard current?.generation == generation, state == .handshaking else { return nil }
+        let remaining = handshakeRemaining(generation)
+        if remaining > .zero { return remaining }
         fail(generation, code: .timeout)
+        return nil
     }
 
     private func startHeartbeat(_ generation: ConnectionGeneration) {
         current?.heartbeatTask?.cancel()
-        guard foreground, let relay = current?.relay else { return }
+        guard foreground, let relay = current?.relay, current?.liveness.clientPingNegotiated != true else { return }
         let clock = clock
         let budget = relay.interval * relay.missedIntervals
         current?.heartbeatTask = Task { [weak self] in
@@ -490,6 +580,7 @@ public actor RPCConnection {
     }
 
     private func checkHeartbeat(_ generation: ConnectionGeneration, budget: Duration) -> Bool {
+        guard !Task.isCancelled else { return false }
         guard let entry = current, entry.generation == generation, state == .ready, foreground else { return false }
         guard let tick = entry.lastTick, clock.now() - tick < budget else {
             fail(generation, code: .heartbeatTimeout)
@@ -498,7 +589,7 @@ public actor RPCConnection {
         return true
     }
 
-    private func fail(_ generation: ConnectionGeneration, code: RPCFailure.Code, closeCode: Int = 1001) {
+    func fail(_ generation: ConnectionGeneration, code: RPCFailure.Code, closeCode: Int = 1001) {
         guard current?.generation == generation else { return }
         _ = emit(.failure(generation, code))
         retire(code: code, closeCode: code == .frameTooLarge ? 1009 : closeCode)
@@ -506,13 +597,14 @@ public actor RPCConnection {
 
     /// No await before the generation and every pending request have been retired.
     private func retire(code: RPCFailure.Code, closeCode: Int) {
-        guard let entry = current else { return }
+        guard var entry = current else { return }
         current = nil
         entry.openTask?.cancel()
         entry.openTimeoutTask?.cancel()
         entry.receiveTask?.cancel()
         entry.handshakeTask?.cancel()
         entry.heartbeatTask?.cancel()
+        entry.liveness.retire()
         rejectPending(code: code)
         state = .offline
         _ = emit(.state(entry.generation, .offline))
@@ -571,6 +663,7 @@ public actor RPCConnection {
         current?.receiveTask?.cancel()
         current?.handshakeTask?.cancel()
         current?.heartbeatTask?.cancel()
+        current?.liveness.retire()
         for dispatch in dispatches.values { dispatch.cancel() }
         for request in pending.values {
             request.timeout?.cancel()

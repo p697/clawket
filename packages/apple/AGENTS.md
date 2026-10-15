@@ -2,7 +2,9 @@
 
 Root instructions apply. These Swift 6 packages support iOS 16.4 and macOS 13; they contain no React Native or JavaScript runtime. Keep the application in `apps/ios`, reusable presentation in `ClawketUI`, and backend identity separate from transport identity.
 
-`ClawketTransport` owns bounded WebSocket frames, RPC correlation, socket generations and transport liveness. Only an adapter's verified backend response may establish readiness or reset retry backoff. Relay ticks prove transport traffic only. Advertise only implemented capabilities; the initial native client supports `relay.client-pong.v1`, not client-ping or transfer hints.
+`ClawketTransport` owns bounded WebSocket frames, RPC correlation, socket generations and transport liveness. Only an adapter's verified backend response may establish readiness or reset retry backoff. Relay ticks and nonce echoes prove transport traffic only. Full clients advertise implemented `relay.client-pong.v1`, `relay.client-ping.v1` and `relay.transfer-hint.v1`; only current authenticated Relay negotiation enables the latter two. Keep legacy three-interval ACK expiry separate.
+
+Transfer protection is one absolute ninety-second socket budget, preserved across background and same-socket backend challenges. Actual 128 KiB–8 MiB frames alone can protect a direction; a rejected native send cannot postpone the prior nonce cadence. Complete incoming delivery clears only that direction. A fresh post-latest-transfer nonce may unlock the budget only after all covered native sends and input delivery complete. RPC/handshake/probe waits keep ordinary deadlines unless protected, an absolute max(ordinary,90s) cap and one bounded post-transfer response window; no write replay. Keep Upgrade, bootstrap control and restricted-pairing deadlines independent. See `../../docs/native-ios/LIVENESS.md`.
 
 The coordinator owns the single event-stream reader and retry scheduling; screens never compete for that stream. Use the advertised capability list when constructing Relay URLs. Requests may run during handshaking, but neither a successful arbitrary RPC nor `relay.ready` automatically confirms backend readiness.
 
