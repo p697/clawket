@@ -74,7 +74,7 @@ enum SessionManagementPolicy {
         var actions = Set<RuntimeSessionAction>()
         if !archived {
             if capabilities.rename && row.rename && !(backend == .pi && active)
-                && (!native || backend == .codex) { actions.insert(.rename) }
+                && !(sdk && native && backend != .codex) { actions.insert(.rename) }
             if capabilities.reset && row.reset && !(sdk && (native || active)) { actions.insert(.reset) }
             if capabilities.delete && row.delete && !(sdk && (native || active))
                 && !(capabilities.archive && row.archive) { actions.insert(.delete) }

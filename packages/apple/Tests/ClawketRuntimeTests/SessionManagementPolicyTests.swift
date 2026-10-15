@@ -6,6 +6,17 @@ import ClawketTransport
 
 @Suite(.serialized)
 struct SessionManagementPolicyTests {
+    @Test(arguments: [BackendKind.openclaw, .hermes])
+    func gatewaySourceLabelsRetainTheirOwnRowPolicy(_ backend: BackendKind) throws {
+        let caps = SessionManagementPolicy.capabilities(backend, methods: ["sessions.patch", "sessions.reset", "sessions.delete"],
+            health: .null, bridgeCapabilities: ["hermes.multi-session.v2"])
+        let row = try WireModels.session(lifecycleRow(backend, source: "native"), connection: connection(backend), legacyActivity: true)
+        let actions = SessionManagementPolicy.actions(row, backend: backend, capabilities: caps, active: false)
+        #expect(actions.contains(.rename) == (backend == .openclaw))
+        #expect(actions.contains(.reset) == (backend == .openclaw))
+        #expect(actions.contains(.delete) == (backend == .openclaw))
+    }
+
     @Test func branchResponseCannotAliasAnotherKnownOwnedSession() async throws {
         let native = lifecycleRow(.codex, key: "native", source: "native", native: true)
         let peer = LifecyclePeer(.codex, rows: [native, lifecycleRow(.codex, key: "branched")])
