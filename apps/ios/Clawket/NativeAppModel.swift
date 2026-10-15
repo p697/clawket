@@ -570,11 +570,17 @@ final class NativeAppModel: ObservableObject {
     private func sessionPresentations(connectionID: String, agentID: String, source: [RuntimeSession]? = nil) -> [SessionPresentation] {
         (source ?? sessions).filter { $0.connectionID == connectionID && $0.agentID == agentID && !$0.key.isEmpty }.map { session in
             .init(id: session.key, route: .init(connectionID: connectionID, agentID: agentID, sessionID: session.key),
-                  title: session.title, subtitle: session.preview,
+                  title: displayTitle(for: session), subtitle: session.preview,
                   symbol: session.hasActiveRun ? "ellipsis.bubble" : "bubble.left",
                   isSelected: presentation.selectedConversation == .init(connectionID: connectionID, agentID: agentID, sessionID: session.key),
                   management: managementAvailability, isArchived: session.archived == true)
         }
+    }
+
+    private func displayTitle(for session: RuntimeSession) -> String {
+        let route = ConversationID(connectionID: session.connectionID, agentID: session.agentID, sessionID: session.key)
+        return NativeTranscriptPresentation.title(session.title, key: session.key, nativeSessionID: session.sessionID,
+            preview: session.preview, messages: documents[route]?.messages ?? [])
     }
 
     private func open(_ route: ConversationID) {
@@ -885,10 +891,11 @@ final class NativeAppModel: ObservableObject {
         addMediaFeatures(route, features: &features)
         prepareMessageMedia(route)
         let previous = presentation.conversations[route]
-        let transcript: [MessagePresentation] = document.messages.map { present($0, agentName: name, route: route) }
+        let transcript: [MessagePresentation] = document.messages.filter(NativeTranscriptPresentation.isVisible)
+            .map { present($0, agentName: name, route: route) }
         let requests: [MessagePresentation] = taskRequests?.messages(for: route) ?? []
         let messages: [MessagePresentation] = transcript + requests
-        presentation.conversations[route] = .init(id: route, agentName: name, sessionTitle: session?.title ?? name,
+        presentation.conversations[route] = .init(id: route, agentName: name, sessionTitle: session.map { displayTitle(for: $0) } ?? name,
             messages: messages,
             connection: presentation.connection,
             sessions: sessionPresentations(connectionID: route.connectionID, agentID: route.agentID),
