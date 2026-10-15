@@ -19,6 +19,11 @@ struct RosterAgentEvidenceTests {
         let catalog = JSONValue.array([.object(["agentId": .string("main"), "name": .string("Main"), "mainSessionKey": .string(""), "entryMode": .string("sessions")])])
         let agent = try #require(WireModels.agents(catalog, connection: native).first)
         #expect(agent.isMain == nil); #expect(agent.mainSessionKey.isEmpty); #expect(agent.entryMode == .sessions)
+        let advertised = JSONValue.array([.object(["agentId": .string("custom"), "name": .string("Custom"), "mainSessionKey": .string(""),
+            "entryMode": .string("sessions"), "isMain": .bool(true)])])
+        let actualMain = try #require(WireModels.agents(advertised, connection: native).first)
+        #expect(actualMain.isMain == true); #expect(actualMain.mainSessionKey.isEmpty)
+        #expect(try JSONDecoder().decode(RuntimeAgent.self, from: JSONEncoder().encode(actualMain)).isMain == true)
         let restored = try JSONDecoder().decode(RuntimeAgent.self, from: Data(#"{"agentID":"a","connectionID":"c","name":"A","mainSessionKey":"main","entryMode":"main"}"#.utf8))
         #expect(restored.isMain == nil)
     }
