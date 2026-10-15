@@ -57,10 +57,10 @@ extension RPCConnection {
         return token
     }
 
-    func finishOutgoingTransfer(_ token: UUID?, accepted: Bool, generation: ConnectionGeneration) {
+    func finishOutgoingTransfer(_ token: UUID?, accepted: Bool, uncertain: Bool = false, generation: ConnectionGeneration) {
         guard let token, current?.generation == generation else { return }
         observeTransferDeadlines(generation)
-        current?.liveness.transfer.finishOutgoing(token, accepted: accepted)
+        current?.liveness.transfer.finishOutgoing(token, accepted: accepted, uncertain: uncertain)
         observeTransferDeadlines(generation)
         refreshTransferPing(generation)
     }

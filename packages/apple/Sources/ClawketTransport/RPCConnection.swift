@@ -318,13 +318,15 @@ public actor RPCConnection {
                     guard let permit = await self?.beginDispatch(id, generation: generation, bytes: frame.utf8.count) else { return }
                     var failed = false
                     var accepted = false
+                    var enteredNative = false
                     do {
                         try Task.checkCancellation()
+                        enteredNative = true
                         try await socket.send(frame)
                         accepted = true
                     } catch { failed = !Task.isCancelled }
                     await self?.completeDispatch(id, generation: generation, transfer: permit.transfer,
-                                                 accepted: accepted, failed: failed)
+                                                 accepted: accepted, enteredNative: enteredNative, failed: failed)
                 }
             }
         } onCancel: {
@@ -416,9 +418,9 @@ public actor RPCConnection {
         return DispatchPermit(transfer: transfer)
     }
 
-    private func completeDispatch(_ id: String, generation: ConnectionGeneration, transfer: UUID?, accepted: Bool, failed: Bool) {
+    private func completeDispatch(_ id: String, generation: ConnectionGeneration, transfer: UUID?, accepted: Bool, enteredNative: Bool, failed: Bool) {
         dispatches.removeValue(forKey: id)
-        finishOutgoingTransfer(transfer, accepted: accepted, generation: generation)
+        finishOutgoingTransfer(transfer, accepted: accepted, uncertain: enteredNative && !accepted, generation: generation)
         if failed { fail(generation, code: .socketFailure) }
     }
 

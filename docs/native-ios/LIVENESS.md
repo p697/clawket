@@ -12,7 +12,7 @@ The legacy tick/pong acknowledgment remains independent. Capability-free peers r
 
 ## Large frames and ownership
 
-Application frames remain bounded to 8 MiB of actual UTF-8 bytes. A Relay-authored `relay.transfer-start` names an integral size from 128 KiB through 8 MiB and protects only that incoming frame. A native outgoing frame reserves bounded protection at dispatch because asynchronous send completion can lag delivery. Rejected local sends leave no surviving grace and do not restart the prior ping cadence. Dispatch failure/cancellation still preserves uncertain-write semantics; nothing is replayed.
+Application frames remain bounded to 8 MiB of actual UTF-8 bytes. A Relay-authored `relay.transfer-start` names an integral size from 128 KiB through 8 MiB and protects only that incoming frame. A native outgoing frame reserves bounded protection at dispatch because asynchronous send completion can lag delivery. Rejected local sends leave no surviving grace and do not restart the prior ping cadence. Cancellation after entering native I/O preserves the original budget lock without upload grace: uncertain delivery cannot authorize another ninety seconds. Only a fresh same-socket nonce may unlock it. Dispatch failure/cancellation still preserves uncertain-write semantics; nothing is replayed.
 
 One absolute ninety-second budget covers concurrent upload and download protection on a socket. New hints, larger frames, foreground changes and a backend challenge on that same socket cannot renew it. Receiving the complete matching frame clears only incoming head-of-line protection. It does not clear a concurrent upload, establish health or unlock the budget for another transfer.
 

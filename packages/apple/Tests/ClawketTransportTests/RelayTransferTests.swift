@@ -181,7 +181,7 @@ struct RelayTransferTests {
         #expect(await peer.pings.isEmpty)
     }
 
-    @Test func cancelledUnacceptedLargeSendLeavesNoSurvivingGraceOrReplay() async throws {
+    @Test func cancelledNativeLargeSendLeavesNoSurvivingGraceOrReplay() async throws {
         let (connection, peer, clock, generation) = try await readyRelay()
         await peer.configure(holdLarge: true)
         try await relayEventually { clock.hasDeadline(.seconds(5)) }
@@ -200,6 +200,35 @@ struct RelayTransferTests {
         clock.advance(by: .seconds(1))
         try await relayEventually { await peer.pings.count == 1 }
         await connection.disconnect()
+    }
+
+    @Test func lateNativeSendCancellationCannotRenewTheSocketBudget() async throws {
+        let (connection, peer, clock, generation) = try await readyRelay()
+        await peer.configure(holdLarge: true)
+        let params: JSONValue = .object(["text": .string(String(repeating: "a", count: 200_000))])
+        let first = Task { try await connection.request(method: "chat.send", params: params) }
+        try await relayEventually { await peer.heldOrder.count == 1 }
+        clock.advance(by: .seconds(89), fireTimers: false)
+        first.cancel()
+        let cancelled = await relayFailure(first)
+        #expect(cancelled.code == .cancelled)
+        #expect(cancelled.delivery == .uncertain)
+        try await relayEventually { await connection.current?.liveness.transfer.pendingDispatchCount == 0 }
+        #expect(await connection.current?.liveness.transfer.hasWindow == true)
+        #expect(await connection.transferGrace(generation: generation) == .zero)
+        try await relayEventually { await peer.pings.count == 1 }
+
+        // This is a second explicit operation, never a replay of the cancelled write.
+        let second = Task { try await connection.request(method: "chat.send", params: params) }
+        try await relayEventually { await peer.heldOrder.count == 2 }
+        #expect(await connection.transferGrace(generation: generation) == .seconds(1))
+        clock.advance(by: .seconds(1), fireTimers: false)
+        try await peer.push(.object(["type": .string("event"), "event": .string("update")]))
+        let expired = await relayFailure(second)
+        #expect(expired.code == .heartbeatTimeout)
+        #expect(expired.delivery == .uncertain)
+        #expect(await connection.state == .offline)
+        #expect(await peer.requests.count == 2)
     }
 
     @Test func expiredCompletedUploadRequiresFreshForegroundNonceBeforeNewBudget() async throws {

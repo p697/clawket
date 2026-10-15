@@ -52,9 +52,12 @@ struct RelayTransferLease: Sendable {
         return token
     }
 
-    mutating func finishOutgoing(_ token: UUID, accepted: Bool) {
+    mutating func finishOutgoing(_ token: UUID, accepted: Bool, uncertain: Bool = false) {
         guard dispatches.remove(token) != nil else { return }
         if accepted { outgoingAccepted = true; committedWindow = true }
+        // Cancellation after entering native I/O cannot prove the frame stayed
+        // local. Retain its absolute budget lock without retaining upload grace.
+        if uncertain { committedWindow = true }
         // A rejected local send is not a transfer or a health observation. Drop
         // only its transient reservation; preserve earlier committed directions.
         if !committedWindow, dispatches.isEmpty {

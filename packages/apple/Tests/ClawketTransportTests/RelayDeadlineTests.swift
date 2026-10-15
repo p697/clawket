@@ -43,6 +43,22 @@ struct RelayDeadlineTests {
         #expect(lease.beginIncoming(bytes: RelayTransferLease.maximumBytes + 1, at: .seconds(3)) == false)
     }
 
+    @Test func cancelledNativeDispatchKeepsOnlyItsBudgetLockUntilFreshProof() {
+        var lease = RelayTransferLease()
+        let token = lease.beginOutgoing(bytes: 200_000, at: .zero)!
+        lease.finishOutgoing(token, accepted: false, uncertain: true)
+        #expect(lease.hasWindow)
+        #expect(lease.canConfirm)
+        #expect(lease.grace(at: .seconds(89)) == .zero)
+        let next = lease.beginOutgoing(bytes: 200_000, at: .seconds(89))!
+        #expect(lease.remaining(at: .seconds(89)) == .seconds(1))
+        lease.finishOutgoing(next, accepted: false, uncertain: true)
+        #expect(lease.confirmProbe(generation: lease.generation, at: .seconds(89)) == true)
+        let fresh = lease.beginOutgoing(bytes: 200_000, at: .seconds(90))!
+        #expect(lease.remaining(at: .seconds(90)) == .seconds(90))
+        lease.finishOutgoing(fresh, accepted: false)
+    }
+
     @Test func latestGenerationAndBothDirectionsAreRequiredForConfirmation() {
         var lease = RelayTransferLease()
         let upload = lease.beginOutgoing(bytes: 200_000, at: .zero)!
