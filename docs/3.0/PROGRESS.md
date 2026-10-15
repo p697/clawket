@@ -18,6 +18,8 @@
 
   - 首轮远程CI发现Xcode16.4/Swift6.1将Photos保存的主actor闭包判为non-Sendable，显式标注仅捕获URL的@Sendable闭包；同时原MediaImages回归仍断言SVG不能prepare，与本次“SVG只作文件”的已记录行为不同，改为验证原文件字节/类型不变、无thumbnail/ratio并继续拒绝raster preview，未放宽图片安全限制。实际App测试执行与全门禁继续按修正head验证。
 
+  - 重基已合并work/review journal主线9aebc8d0，保留全部journal初始化、持久review、history/live/receipt与两个读取handler；旧tool文本不再伪标complete。工程源/测试引用按并集保留，实际发现56个App方法（44+媒体12），门槛及损坏fixture同步56；不将新合并代码冒称本机已执行，最终完整编译/运行交当前head CI。
+
 
 - 2026-10-16 Native 会话生命周期运行时（host 菜单与设备验收待接入）。
   - 增加当前目录/认证代际的不可持久化 action reference、逐行操作元数据和 rename/reset/delete、Codex archive/archived/restore、Codex/Claude/Pi 只读原生会话复制。保留 OpenClaw key/label/reason、Hermes key/title 与 SDK sessionKey/title 差异、真实 active-run/ownership 限制、继承项目及主/渠道禁止删除；archive 不冒充 delete，可复制/可续聊不授予重置或删除原会话。已知 native 输入必须有当前目录和精确 canContinue:true，未知/新 owned 键保留后端最终检查。
