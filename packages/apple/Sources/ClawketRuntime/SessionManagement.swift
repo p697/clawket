@@ -77,6 +77,7 @@ extension RuntimeCoordinator {
     public func branchSession(reference: RuntimeSessionReference, title: String? = nil) async throws -> RuntimeSession {
         let entry = try managementEntry(reference, action: .branch)
         let title = try title.map { try managementTitle($0, backend: connection!.backendKind) }
+        let existingKeys = Set(catalog.map(\.key) + sessionManagementState.archives.map(\.key))
         try beginSessionWrite(entry, action: .branch)
         do {
             var params: [String: JSONValue] = ["fromSession": .string(entry.session.key)]
@@ -86,9 +87,10 @@ extension RuntimeCoordinator {
             let session: RuntimeSession
             do {
                 session = try WireModels.session(payload["session"] ?? payload, connection: connection, legacyActivity: !hasHumanActivityClock)
-                guard session.key != entry.session.key, session.source == "bridge", session.agentID == entry.session.agentID,
+                guard !existingKeys.contains(session.key), session.source == "bridge", session.agentID == entry.session.agentID,
                       session.archived != true, session.project?.available != false,
-                      entry.session.project == nil || session.project?.id == entry.session.project?.id else {
+                      entry.session.project == nil || (session.project?.id == entry.session.project?.id
+                          && session.project?.path == entry.session.project?.path) else {
                     throw RuntimeFailure(.invalidResponse)
                 }
             } catch { throw RuntimeFailure(.invalidResponse, delivery: .responseReceived) }
@@ -194,8 +196,8 @@ extension RuntimeCoordinator {
     private func managementTitle(_ value: String, backend: BackendKind) throws -> String {
         let title = value.trimmingCharacters(in: .whitespacesAndNewlines)
         let limit = backend == .claudeCode ? 300 : 200
-        guard !title.isEmpty, value.utf8.count <= 2_048,
-              ![.codex, .claudeCode, .pi].contains(backend) || value.utf16.count <= limit else {
+        guard !title.isEmpty, title.utf8.count <= 2_048,
+              ![.codex, .claudeCode, .pi].contains(backend) || title.utf16.count <= limit else {
             throw RuntimeFailure(.invalidAnswer)
         }
         return title

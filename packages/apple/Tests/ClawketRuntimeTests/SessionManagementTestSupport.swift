@@ -24,8 +24,11 @@ actor LifecyclePeer {
     var archives: [JSONValue] = []
     var healthPayload: JSONValue
     var methods = ["sessions.patch", "sessions.reset", "sessions.delete"]
+    var advertiseMethods = true
+    var rawFeatures: JSONValue?
     var held: Set<String> = []
     var malformed: Set<String> = []
+    var rejected: Set<String> = []
     init(_ backend: BackendKind, rows: [JSONValue]? = nil) {
         self.backend = backend; self.rows = rows ?? [lifecycleRow(backend)]
         healthPayload = health(backend)
@@ -34,16 +37,23 @@ actor LifecyclePeer {
     func setRows(_ values: [JSONValue]) { rows = values }
     func setArchives(_ values: [JSONValue]) { archives = values }
     func setMethods(_ values: [String]) { methods = values }
+    func setAdvertisement(_ values: [String]?) { advertiseMethods = values != nil; methods = values ?? [] }
+    func setFeatures(_ value: JSONValue) { rawFeatures = value }
     func hold(_ method: String) { held.insert(method) }
     func corrupt(_ method: String) { malformed.insert(method) }
+    func reject(_ method: String) { rejected.insert(method) }
     func handle(_ request: JSONValue, socket: ScriptSocket) async throws {
         let method = request["method"]?.stringValue ?? ""
         if held.contains(method) { return }
+        if rejected.contains(method) { try await socket.reject(request, code: "UNKNOWN_METHOD"); return }
         if malformed.contains(method) { try await socket.reply(request, payload: .object(["ok": .string("true")])); return }
         let payload: JSONValue
         switch method {
-        case "connect": payload = backend == .openclaw ? .object(["server": .object(["version": .string("fixture")]),
-            "features": .object(["methods": .array(methods.map(JSONValue.string))])]) : healthPayload
+        case "connect":
+            var hello: [String: JSONValue] = ["server": .object(["version": .string("fixture")])]
+            if advertiseMethods { hello["features"] = .object(["methods": .array(methods.map(JSONValue.string))]) }
+            if let rawFeatures { hello["features"] = rawFeatures }
+            payload = backend == .openclaw ? .object(hello) : healthPayload
         case "health": payload = healthPayload
         case "agents.list": payload = backend == .openclaw ? .object(["agents": .array([.object(["id": .string(backend.rawValue)])])])
             : .array([.object(["agentId": .string(backend.rawValue), "mainSessionKey": .string(""), "entryMode": .string("sessions")])])

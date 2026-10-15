@@ -6,6 +6,82 @@ import ClawketTransport
 
 @Suite(.serialized)
 struct SessionManagementPolicyTests {
+    @Test func branchResponseCannotAliasAnotherKnownOwnedSession() async throws {
+        let native = lifecycleRow(.codex, key: "native", source: "native", native: true)
+        let peer = LifecyclePeer(.codex, rows: [native, lifecycleRow(.codex, key: "branched")])
+        let (runtime, socket, _, reader) = try lifecycleFixture(.codex, peer: peer)
+        try await runtime.activate(connection(.codex)); _ = try await runtime.refreshRoster()
+        let context = try await runtime.sessionManagement(sessionKey: "native")
+        do { _ = try await runtime.branchSession(reference: context.reference); Issue.record("Aliased create response accepted") }
+        catch let failure as RuntimeFailure { #expect(failure.delivery == .responseReceived) }
+        #expect(try await runtime.sessionManagement(sessionKey: "native").writeState == .uncertain)
+        #expect(await socket.requests("sessions.create").count == 1)
+        #expect(await socket.requests("sessions.delete").isEmpty)
+        await runtime.disconnect(); reader.cancel()
+    }
+
+    @Test(arguments: [JSONValue.null, .array([]), .string("legacy"), .object(["methods": .null])])
+    func malformedAdvertisementIsNotLegacyAbsence(_ features: JSONValue) async throws {
+        let peer = LifecyclePeer(.openclaw)
+        await peer.setFeatures(features)
+        let (runtime, _, _, reader) = try lifecycleFixture(.openclaw, peer: peer)
+        try await runtime.activate(connection(.openclaw)); _ = try await runtime.refreshRoster()
+        #expect(try await runtime.sessionManagement(sessionKey: "owned").allowedActions.isEmpty)
+        await runtime.disconnect(); reader.cancel()
+    }
+
+    @Test func malformedRowChoicesAndArchiveOmissionDoNotGrantAuthority() throws {
+        var raw = lifecycleRow(.codex).object!
+        raw["allowedActions"] = .object(["rename": .string("true"), "reset": .bool(true), "delete": .bool(true), "pin": .bool(true)])
+        #expect(throws: RuntimeFailure.self) { try WireModels.session(.object(raw), connection: connection(.codex), legacyActivity: true) }
+        raw = lifecycleRow(.codex, archived: true).object!
+        raw.removeValue(forKey: "hasActiveRun")
+        #expect(throws: RuntimeFailure.self) { try WireModels.session(.object(raw), connection: connection(.codex), legacyActivity: true) }
+        #expect(try WireModels.session(.object(raw), connection: connection(.codex), legacyActivity: true, archivedList: true).archived == true)
+    }
+
+    @Test(arguments: [0, 1, 2, 3])
+    func openClawAbsentAdvertisementNeedsSuccessfulCurrentList(_ advertisement: Int) async throws {
+        let peer = LifecyclePeer(.openclaw)
+        let methods: [String]? = advertisement == 0 ? nil : advertisement == 1 ? []
+            : advertisement == 2 ? ["sessions.patch"] : ["sessions.patch", "sessions.reset", "sessions.delete"]
+        await peer.setAdvertisement(methods)
+        let (runtime, _, _, reader) = try lifecycleFixture(.openclaw, peer: peer)
+        try await runtime.activate(connection(.openclaw))
+        #expect(await runtime.state.capabilities.sessionManagement?.rename == (advertisement >= 2))
+        await #expect(throws: RuntimeFailure.self) { try await runtime.sessionManagement(sessionKey: "owned") }
+        _ = try await runtime.refreshRoster()
+        let context = try await runtime.sessionManagement(sessionKey: "owned")
+        #expect(context.allowedActions.contains(.rename) == (advertisement != 1))
+        #expect(context.allowedActions.contains(.reset) == (advertisement == 0 || advertisement == 3))
+        #expect(context.allowedActions.contains(.delete) == (advertisement == 0 || advertisement == 3))
+        await runtime.disconnect(); reader.cancel()
+    }
+
+    @Test func failedLegacyListAndUnknownMethodNeverGrantOrReplay() async throws {
+        let peer = LifecyclePeer(.openclaw)
+        await peer.setAdvertisement(nil); await peer.corrupt("sessions.list")
+        let (runtime, socket, _, reader) = try lifecycleFixture(.openclaw, peer: peer)
+        try await runtime.activate(connection(.openclaw))
+        await #expect(throws: RuntimeFailure.self) { try await runtime.refreshRoster() }
+        #expect(await runtime.state.capabilities.sessionManagement?.rename == false)
+        await #expect(throws: RuntimeFailure.self) { try await runtime.sessionManagement(sessionKey: "owned") }
+        #expect(await socket.requests("sessions.patch").isEmpty)
+        await runtime.disconnect(); reader.cancel()
+
+        let olderPeer = LifecyclePeer(.openclaw)
+        await olderPeer.setAdvertisement(nil); await olderPeer.reject("sessions.patch")
+        let (older, olderSocket, _, olderReader) = try lifecycleFixture(.openclaw, peer: olderPeer)
+        try await older.activate(connection(.openclaw)); _ = try await older.refreshRoster()
+        let context = try await older.sessionManagement(sessionKey: "owned")
+        await #expect(throws: RuntimeFailure.self) { try await older.renameSession(reference: context.reference, title: "New") }
+        _ = try await older.refreshRoster()
+        #expect(try await older.sessionManagement(sessionKey: "owned").writeState == .uncertain)
+        #expect(await olderSocket.requests("sessions.patch").count == 1)
+        #expect(await olderSocket.requests("sessions.rename").isEmpty)
+        await older.disconnect(); olderReader.cancel()
+    }
+
     @Test(arguments: BackendKind.allCases)
     func productCeilingAndActiveActionsRemainBackendSpecific(_ backend: BackendKind) throws {
         let capabilities = SessionManagementPolicy.capabilities(backend, methods: ["sessions.patch", "sessions.reset", "sessions.delete"],

@@ -21,6 +21,8 @@ extension RuntimeCoordinator {
             if catalogTaskID == id { catalogTask = nil }
             catalog = value.sessions
             sessionManagementState.liveScope = scope; sessionManagementState.liveRevision = UUID()
+            if connection?.backendKind == .openclaw, !sessionMethodsAdvertised,
+               state.capabilities.sessionManagement?.rename != true { publishState(.ready) }
             emit(.roster(value), weight: value.sessions.reduce(128) { $0 + ((try? FrameCodec.encode($1.raw).utf8.count) ?? 128) })
             return value
         } catch {

@@ -1,5 +1,10 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-16 Native 会话生命周期运行时（host 菜单与设备验收待接入）。
+  - 增加当前目录/认证代际的不可持久化 action reference、逐行操作元数据和 rename/reset/delete、Codex archive/archived/restore、Codex/Claude/Pi 只读原生会话复制。保留 OpenClaw key/label/reason、Hermes key/title 与 SDK sessionKey/title 差异、真实 active-run/ownership 限制、继承项目及主/渠道禁止删除；archive 不冒充 delete，可复制/可续聊不授予重置或删除原会话。已知 native 输入必须有当前目录和精确 canContinue:true，未知/新 owned 键保留后端最终检查。
+  - OpenClaw 缺失 method 广告与明确空/缺项列表分开：仅实际当前认证 sessions.list 成功可保留既有 legacy CRUD ceiling；明确/损坏广告不降级，不因 UNKNOWN_METHOD 换 RPC 或重放。操作严格本地验证后才消费 reference，旧目录/历史先退休；回执只标识原目标，迟到 ACK/同 ID 重连/同 Socket 新 challenge 不作用于替换会话。未知与异常写回执跨刷新保持 inert，当前认证内最多256引用/256写目标/32派发。
+  - heavy/jobs2 下逐文件严格 Swift6 首次26秒编译通过：SessionLifecycle5函数/11输入、Policy最终10/23、Recovery6/10（共21/44），另既有 RuntimeOperations6/12；包含真实录制 Hermes packet 等值、六后端降级、UTF16标题、归档真实缺字段、复制别名、正向 continuation 与 unknown/旧代际/旧历史回归。新 legacy 测试捕获首次 ready 的 nil==nil 伪列表证据，改为存在且 isCurrent 的 scope 后保留原断言复验通过；两次窄窗口后均释放heavy。文档14对/7回归、diff与metrics通过；TS/TSX167,902/132,119保持，文档184，Swift净增417源行/479测试行用于真实独立运行时与故障回归。精简完整管理功能盘点/API边界保存于 `docs/native-ios/MANAGEMENT.md`；不改Host/Vault/UI、Mobile、服务/协议、凭据、版本或发布，完整门禁交独立PR CI。
+
 - 2026-10-16 Native work dock 与工具记录表示层（负责人授权，host/runtime 聚合另行绑定）。
   - 新增默认 nil/unsupported 的强类型 work 表示、输入框上方 44pt 最小原生入口、系统 sheet/导航详情与可原生选择的完整授权工具文本。保持现有 composer/TextView/expanded editor 与 transcript 身份；打开/更新 work 不改会话、不发滚动或 focus 指令，关闭不影响任务。
   - run/turn/input lineage 仅作宿主精确分组/绑定，不显示不透明协议 ID；语义标题、输入预览与原始时间由 host 提供，缺失归属/状态明确未知。按宿主 canonical order 最新在前，缺失/偏斜时间不重排或补归属；输出/后续工具/完成时钟与 Stop ACK 均不推定成功。独立授权 record/step/content 读取和文本选择，部分内容明确标注，重复/空身份拒绝，旧打开详情不可转指新执行。
@@ -9,6 +14,7 @@
   - 根据负责人 USB 后台恢复实测修复导航选中边界：List 独立持有 sidebar selection，secondary 会话只映射同连接/Agent 行，规范化/nil/Back 不再改写真实会话或取消缓存恢复；程序同步绕过用户选择 setter，Back 后目录刷新不自动重开。移除按 ready 条件替换 List 的 refreshable 分支，改为 capability 控制的原生工具栏 Refresh，保留实际刷新和会话目录独立刷新；系统 refresh 环境只读，未引入私有滚动 hack 或空操作。新增纯 selection 五项回归；heavy/jobs2 下最终14份真实 iOS16.4/Swift6 UI源码、selection5与修改过的Question6均通过并释放租约。canEdit未显式覆盖时动态跟随canSubmit，旧host复制held/uncertain值也安全锁定。Refresh复用全19语，当前235 UI/2权限共4,503语言单元。实际USB后台/Back/iPad复验仍由负责人在main验收，无新发送或生产变更。
 
   - 最终重基已合并的媒体与真实host问答主线，完整保留已绑定Runtime handler，仅为两个work读取意图维持不支持分支。语义合并全部旧目录值及host四条文案，当前239 UI/2权限、4,579语言单元；没有覆盖旧译文或另加secret例外。最终当前主线真实App/编译资源与完整仓库门禁继续交PR CI。
+
 
 - 2026-10-16 Native host 问答/授权绑定进行中（完整任务历史和手机授权尚未验收）。
   - Host 按真实 opaque reference 接执行/device/node 审批和 select/confirm/input/editor/form；Always 先取运行时令牌并发布冻结唯一确认，同步消费后才启动 Task。重复/迟到确认、同连接重连和选项重排不迁移权限；unknown/取消ACK保持暂停且无伪提交动画。安全列表只读刷新不替代后端健康，connection-wide inbox 与会话请求分开。

@@ -45,13 +45,14 @@ struct SessionManagementState: Sendable {
 
 enum SessionManagementPolicy {
     static func capabilities(_ backend: BackendKind, methods: Set<String>, health: JSONValue,
-                             bridgeCapabilities: [String]) -> RuntimeSessionManagementCapabilities {
+                             bridgeCapabilities: [String], legacyGatewayEvidence: Bool = false) -> RuntimeSessionManagementCapabilities {
         // These ceilings mirror agent-protocol's declared matrix. OpenClaw also
         // supplies method advertisement; Hermes explicitly negotiates multi-session.
         switch backend {
         case .openclaw:
-            return .init(rename: methods.contains("sessions.patch"), reset: methods.contains("sessions.reset"),
-                         delete: methods.contains("sessions.delete"), archive: false, branch: false)
+            return .init(rename: methods.contains("sessions.patch") || legacyGatewayEvidence,
+                         reset: methods.contains("sessions.reset") || legacyGatewayEvidence,
+                         delete: methods.contains("sessions.delete") || legacyGatewayEvidence, archive: false, branch: false)
         case .hermes:
             let multi = bridgeCapabilities.contains("hermes.multi-session.v2")
             return .init(rename: multi, reset: multi, delete: multi, archive: false, branch: false)

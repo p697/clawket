@@ -92,6 +92,9 @@ extension RuntimeCoordinator {
         }
         try assertCurrent(scope)
         supportedMethods = Set(response.payload["features"]?["methods"]?.strings ?? [])
+        if let features = response.payload["features"] {
+            sessionMethodsAdvertised = features.object == nil || features["methods"] != nil
+        } else { sessionMethodsAdvertised = false }
         if connection.transportKind == .relay {
             let capabilities = response.metadata?["capabilities"]?.strings ?? []
             bridgeCapabilities = capabilities.contains("bridge.capabilities.v2") ? capabilities : []

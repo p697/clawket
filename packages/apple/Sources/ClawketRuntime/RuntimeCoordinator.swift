@@ -36,6 +36,7 @@ public actor RuntimeCoordinator {
     var activeAuthSource: AuthSource?
     var bridgeCapabilities: [String] = []
     var supportedMethods: Set<String> = []
+    var sessionMethodsAdvertised = true
     var backendHealth: JSONValue = .null
     var sessionEvents = SessionEvents()
     var consents = ConsentRegistry()
@@ -139,7 +140,7 @@ public actor RuntimeCoordinator {
     func startAttempt() {
         guard !stopped, streamAvailable, let connection, transport == nil else { return }
         attempt = UUID(); authentication = UUID(); generation = nil; lastNonce = nil
-        bridgeCapabilities = []; supportedMethods = []; backendHealth = .null; sessionEvents = SessionEvents()
+        bridgeCapabilities = []; supportedMethods = []; sessionMethodsAdvertised = true; backendHealth = .null; sessionEvents = SessionEvents()
         let capturedEpoch = epoch, capturedAttempt = attempt
         do {
             let transport = try RPCConnection(factory: socketFactory, clock: clock,
@@ -409,7 +410,8 @@ public actor RuntimeCoordinator {
             capabilities.pairingApprovals = connection.backendKind == .openclaw && consents.evidence.contains("pairing")
             configureAttachmentCapabilities(&capabilities)
             capabilities.sessionManagement = SessionManagementPolicy.capabilities(connection.backendKind, methods: supportedMethods,
-                health: backendHealth, bridgeCapabilities: bridgeCapabilities)
+                health: backendHealth, bridgeCapabilities: bridgeCapabilities,
+                legacyGatewayEvidence: !sessionMethodsAdvertised && sessionManagementState.liveScope.map { isCurrent($0) } == true)
         }
         if !capabilities.artifacts { clearArtifacts() }
         state = RuntimeConnectionState(connectionID: connection?.id, phase: phase, capabilities: capabilities,
