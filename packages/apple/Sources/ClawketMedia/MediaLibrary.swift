@@ -127,7 +127,9 @@ public actor MediaLibrary {
     public func preparePrompt(_ id: UUID) throws -> PreparedMedia {
         let value = try resource(id), url = try resourceURL(id)
         try Task.checkCancellation()
-        if value.mimeType.hasPrefix("image/") { return try MediaImages.prepare(resource: value, url: url) }
+        if value.mimeType.hasPrefix("image/"), value.mimeType != "image/svg+xml" {
+            return try MediaImages.prepare(resource: value, url: url)
+        }
         guard value.byteCount <= MediaLimits.promptBytes else { throw MediaFailure.tooLarge }
         return PreparedMedia(resource: value, data: try Data(contentsOf: url), mimeType: value.mimeType, isImage: false, thumbnail: nil, aspectRatio: nil)
     }

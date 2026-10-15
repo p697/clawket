@@ -147,6 +147,15 @@ public final class MediaImportStager: @unchecked Sendable {
     }
 
     /// Explicit cancellation cleanup; never remove a resource already adopted by a library.
+    /// Reopen only a journaled receipt in this stager's owned directory.
+    public func recover(_ resource: MediaResource) throws -> StagedMediaFile {
+        lock.lock(); defer { lock.unlock() }
+        let url = directory.appendingPathComponent(resource.id.uuidString.lowercased())
+        guard try MediaFiles.size(url, maximum: MediaLimits.sourceBytes) == resource.byteCount,
+              try MediaFiles.hash(url, maximum: MediaLimits.sourceBytes) == resource.sha256 else { throw MediaFailure.corrupt }
+        return StagedMediaFile(url: url, resource: resource)
+    }
+
     public func discard(_ value: StagedMediaFile) throws {
         lock.lock(); defer { lock.unlock() }
         guard value.url.deletingLastPathComponent().standardizedFileURL == directory.standardizedFileURL else { throw MediaFailure.invalidFile }

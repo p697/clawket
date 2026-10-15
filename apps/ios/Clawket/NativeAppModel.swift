@@ -1,3 +1,4 @@
+import ClawketMedia
 import ClawketPairing
 import ClawketPersistence
 import ClawketRuntime
@@ -38,29 +39,29 @@ final class NativeAppModel: ObservableObject {
     @Published private(set) var changingConnections = false
     private var registry = ConnectionRegistry()
     private var vault: NativeVault?
-    private var cache: NativeConversationStore?
+    var cache: NativeConversationStore?
     private var catalogCache: NativeCatalogStore?
     private var catalogCacheRevision: Int64 = 0
     private var showingCachedRoster = false
-    private var runtime: RuntimeCoordinator?
+    var runtime: RuntimeCoordinator?
     private var taskRequests: NativeTaskRequests?
     private var taskJournal: NativeTaskJournal?
     private let pairing = PairingService()
     private var eventTask: Task<Void, Never>?
     private var activationTask: Task<Void, Never>?
     private var started = false
-    private var selectionRevision = UUID()
-    private var activationRevision = UUID()
-    private var wireRevision = UUID()
+    var selectionRevision = UUID()
+    var activationRevision = UUID()
+    var wireRevision = UUID()
     private var historyRevisions: [ConversationID: UUID] = [:]
-    private var state = RuntimeConnectionState()
+    var state = RuntimeConnectionState()
     private var agents: [RuntimeAgent] = []
     private var sessions: [RuntimeSession] = []
     private var projects: [String: [RuntimeProject]] = [:]
     private var creatingCatalogs: Set<AgentCatalogID> = []
     private var unconfirmedCreations: Set<AgentCatalogID> = []
-    private var documents: [ConversationID: NativeConversation] = [:]
-    private var modelChoices: [ConversationID: [String: RuntimeModel]] = [:]
+    var documents: [ConversationID: NativeConversation] = [:]
+    var modelChoices: [ConversationID: [String: RuntimeModel]] = [:]
     private let networkMonitor = NWPathMonitor()
     private var networkHintTask: Task<Void, Never>?
     private var lastNetworkHint: ContinuousClock.Instant?
@@ -69,6 +70,21 @@ final class NativeAppModel: ObservableObject {
     private var sendTasks: [ConversationID: Task<Void, Never>] = [:]
     private var finishedRuns: [ConversationID: [String]] = [:]
     private var liveRevisions: [ConversationID: Int64] = [:]
+    var media: NativeMediaController?
+    @Published var mediaPicker: NativeMediaPickerRequest?
+    @Published var mediaPreview: NativeMediaPreview?
+    var mediaImports: [UUID: NativeMediaImport] = [:]
+    var mediaImportResources: [UUID: UUID] = [:]
+    var mediaImportTasks: [UUID: Task<Void, Never>] = [:]
+    var mediaProviderProgress: [UUID: Progress] = [:]
+    var mediaLoadRevisions: [String: UUID] = [:]
+    var mediaLoads: [String: Task<Void, Never>] = [:]
+    var mediaDisplays: [String: AttachmentPresentation] = [:]
+    var mediaDraftRevisions: [ConversationID: UUID] = [:]
+    var mediaSendPreparations: Set<ConversationID> = []
+    var mediaModelRevisions: [ConversationID: UUID] = [:]
+    var mediaChangingModels: Set<ConversationID> = []
+    var mediaGlobalModel: (wire: UUID, supportsImages: Bool?)?
     /// A successful single-use claim is retained if saving fails; retry never claims it again.
     @Published private(set) var pendingPairing: PairingPayload?
 
@@ -94,6 +110,11 @@ final class NativeAppModel: ObservableObject {
                 onStorageFailure: { [weak self] in
                     self?.notice = String(localized: "This draft could not be saved. Keep Clawket open and try again.")
                 }, journal: taskJournal)
+            do {
+                let media = try NativeMediaController()
+                if let cache { try await media.recover(cache: cache) }
+                self.media = media
+            } catch { notice = String(localized: "Some attachments could not be recovered. Your files have been kept.") }
             if let saved = try await vault.readRegistry() {
                 registry = saved.value
                 if saved.recoveredFromRollback { notice = String(localized: "Recovered your saved connections from the last verified copy.") }
@@ -139,7 +160,7 @@ final class NativeAppModel: ObservableObject {
             destination = .deviceApproval(connectionID: connectionID)
         case .refresh: refresh()
         case let .openConversation(route): open(route)
-        case .closeConversation: selectionRevision = UUID()
+        case .closeConversation: selectionRevision = UUID(); cancelMediaImports()
         case let .openAgentCatalog(id), let .refreshCatalog(id): showCatalog(id)
         case let .selectCatalogProject(id, projectID):
             guard id.connectionID == activeConnectionID else { return }
@@ -167,7 +188,10 @@ final class NativeAppModel: ObservableObject {
             guard taskJournal?.canInspect(route, workID: workID) == true else { return }
         case let .workStepOpened(route, workID, recordID, stepID):
             guard taskJournal?.canInspect(route, workID: workID, recordID: recordID, stepID: stepID) == true else { return }
-        case .pickAttachment, .removeAttachment, .openAttachment, .voice:
+        case let .pickAttachment(route, source): pickMedia(route, source: source)
+        case let .removeAttachment(route, attachmentID): removeMedia(route, id: attachmentID)
+        case let .openAttachment(attachmentID): openMedia(id: attachmentID)
+        case .voice:
             break // These capabilities stay hidden until their concrete host handlers are available.
         }
     }
@@ -239,7 +263,7 @@ final class NativeAppModel: ObservableObject {
     func disconnect() {
         guard !changingConnections, let runtime, let vault else { return }
         changingConnections = true
-        activationTask?.cancel()
+        retireMedia(); activationTask?.cancel()
         selectionRevision = UUID(); activationRevision = UUID(); wireRevision = UUID()
         taskRequests?.invalidate(); deviceApproval = nil
         unconfirmedCreations.formUnion(creatingCatalogs); creatingCatalogs = []
@@ -302,7 +326,7 @@ final class NativeAppModel: ObservableObject {
 
     private func connectSaved(_ id: String) {
         guard let connection = connections.first(where: { $0.id == id }), let runtime else { return }
-        activationTask?.cancel(); selectionRevision = UUID(); activationRevision = UUID(); wireRevision = UUID()
+        retireMedia(); activationTask?.cancel(); selectionRevision = UUID(); activationRevision = UUID(); wireRevision = UUID()
         taskRequests?.invalidate(); deviceApproval = nil
         unconfirmedCreations.formUnion(creatingCatalogs); creatingCatalogs = []
         let activation = activationRevision
@@ -334,7 +358,7 @@ final class NativeAppModel: ObservableObject {
             let wasReady = self.state.phase == .ready
             if state.connectionID != self.state.connectionID || wasReady && state.phase != .ready {
                 if let oldConnection = self.state.connectionID { taskJournal?.hold(connectionID: oldConnection) }
-                wireRevision = UUID()
+                retireMedia(); wireRevision = UUID()
                 unconfirmedCreations.formUnion(creatingCatalogs); creatingCatalogs = []
                 for id in presentation.catalogs.keys { presentation.catalogs[id]?.isLoading = false }
                 for route in presentation.conversations.keys { presentation.conversations[route]?.isLoadingHistory = false }
@@ -520,6 +544,7 @@ final class NativeAppModel: ObservableObject {
 
     private func open(_ route: ConversationID) {
         guard route.isConcrete, route.connectionID == activeConnectionID, let cache else { return }
+        cancelMediaImports()
         let revision = UUID(); selectionRevision = revision
         Task {
             do {
@@ -528,6 +553,7 @@ final class NativeAppModel: ObservableObject {
                     guard selectionRevision == revision, presentation.selectedConversation == route else { return }
                     documents[route] = cached
                     presentation.drafts[route] = ComposerDraft(conversationID: route, text: cached.draft)
+                    refreshDraftMedia(route)
                 }
                 updatePresentation(route)
                 taskRequests?.refresh(route: route)
@@ -566,7 +592,8 @@ final class NativeAppModel: ObservableObject {
             let previous = old.first { $0.remoteID == message.id || (message.role == .user && message.idempotencyKey != nil && $0.idempotencyKey == message.idempotencyKey) }
             return NativeMessage(id: previous?.id ?? "remote-\(message.id)", remoteID: message.id, role: message.role,
                 local: previous?.local ?? false, text: message.text, runID: message.runID, idempotencyKey: message.idempotencyKey,
-                timestampMs: message.timestampMs, delivery: previous?.local == true ? .delivered : nil, isWork: message.role == .tool)
+                timestampMs: message.timestampMs, delivery: previous?.local == true ? .delivered : nil, isWork: message.role == .tool,
+                media: historyMedia(message, previous: previous, route: route))
         }
         let represented = Set(remote.map(\.id))
         let retained = old.filter { !represented.contains($0.id) && ($0.local || $0.streaming || !knownIDs.contains($0.id)) }
@@ -580,7 +607,7 @@ final class NativeAppModel: ObservableObject {
             if history.hasActiveRun { running[route] = history.activeRun?["runId"]?.stringValue ?? running[route] ?? "" }
             else { running.removeValue(forKey: route) }
         }
-        updatePresentation(route); scheduleSave(route)
+        updatePresentation(route); scheduleSave(route); hydrateHistoryMedia(history, route: route)
     }
 
     private func loadEarlier(_ route: ConversationID) {
@@ -602,16 +629,22 @@ final class NativeAppModel: ObservableObject {
                 return .init(id: key, title: model.name, subtitle: model.provider, isSelected: model.selected)
             }
             modelChoices[route] = choices
+            mediaModelRevisions[route] = wire
+            if !state.capabilities.modelPerSession { mediaGlobalModel = (wire, models.first(where: \.selected)?.supportsImages) }
             presentation.conversations[route]?.models = display
             presentation.conversations[route]?.modelTitle = models.first(where: \.selected)?.name ?? String(localized: "Choose model")
             presentation.conversations[route]?.modelScopeLabel = state.capabilities.modelPerSession ? String(localized: "This conversation") : String(localized: "Applies to all conversations")
+            updatePresentation(route)
         } catch { if activation == activationRevision, wire == wireRevision, route == presentation.selectedConversation { showFailure(error) } }
     }
 
     private func selectModel(_ route: ConversationID, id: String) {
-        guard route.connectionID == activeConnectionID, let model = modelChoices[route]?[id], let runtime else { return }
+        guard route.connectionID == activeConnectionID, let model = modelChoices[route]?[id], let runtime,
+              !mediaChangingModels.contains(route), state.capabilities.modelPerSession || mediaChangingModels.isEmpty else { return }
         let activation = activationRevision, wire = wireRevision
+        mediaChangingModels.insert(route); updatePresentation(route)
         Task {
+            defer { mediaChangingModels.remove(route); updatePresentation(route) }
             guard activation == activationRevision, wire == wireRevision, route.connectionID == activeConnectionID else { return }
             do {
                 try await runtime.selectModel(id: model.id, provider: model.provider,
@@ -624,23 +657,39 @@ final class NativeAppModel: ObservableObject {
 
     private func send(_ route: ConversationID) {
         guard route.connectionID == activeConnectionID, state.phase == .ready, state.capabilities.chat,
-              var document = documents[route] else { return }
+              let document = documents[route], !mediaSendPreparations.contains(route),
+              !mediaImports.values.contains(where: { $0.scope.route == route }) else { return }
         guard sessions.first(where: { $0.connectionID == route.connectionID && $0.key == route.sessionID })?.canContinue != false else { return }
-        let text = presentation.draft(for: route).text
-        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let text = presentation.draft(for: route).text, ids = document.draftResourceIDs
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !ids.isEmpty else { return }
         guard document.messages.filter({ [.queued, .held, .sending].contains($0.delivery) }).count < 32 else {
             presentation.draft(for: route).hint = String(localized: "There are 32 pending messages. Finish or remove one before adding another.")
             return
         }
+        let activation = activationRevision, wire = wireRevision, scope = mediaScope(route)
         let id = UUID().uuidString.lowercased()
-        let entry = NativeMessage(id: id, role: .user, local: true, text: text, idempotencyKey: id,
-                                  timestampMs: Int64(Date().timeIntervalSince1970 * 1000), delivery: .queued)
-        document.messages.append(entry); document.draft = ""; document.revision += 1
-        documents[route] = document
-        presentation.draft(for: route).text = ""
-        updatePresentation(route)
-        scheduleSave(route, immediate: true)
-        drainQueue(route)
+        mediaSendPreparations.insert(route); updatePresentation(route)
+        Task {
+            defer { mediaSendPreparations.remove(route); updatePresentation(route) }
+            do {
+                _ = try await mediaPrompt(route, text: text, ids: ids, idempotencyKey: id)
+                guard activation == activationRevision, wire == wireRevision, scope == mediaScope(route),
+                      presentation.draft(for: route).text == text, var current = documents[route],
+                      current.draftResourceIDs == ids, state.phase == .ready else { return }
+                let references = try await mediaReferences(ids)
+                guard activation == activationRevision, wire == wireRevision, scope == mediaScope(route),
+                      presentation.draft(for: route).text == text, documents[route]?.revision == current.revision else { return }
+                current.messages.append(.init(id: id, role: .user, local: true, text: text, idempotencyKey: id,
+                    timestampMs: Int64(Date().timeIntervalSince1970 * 1000), delivery: .queued, media: references))
+                current.draft = ""; current.draftResourceIDs = []; current.revision += 1
+                documents[route] = current; mediaDraftRevisions[route] = UUID()
+                presentation.draft(for: route).text = ""; presentation.draft(for: route).attachments = []
+                presentation.draft(for: route).hint = nil
+                updatePresentation(route); scheduleSave(route, immediate: true); drainQueue(route)
+            } catch {
+                if activation == activationRevision, wire == wireRevision, scope == mediaScope(route) { showMediaFailure(error, route: route) }
+            }
+        }
     }
 
     private func drainQueue(_ route: ConversationID) {
@@ -649,31 +698,38 @@ final class NativeAppModel: ObservableObject {
               let queued = documents[route]?.messages.first(where: { $0.local && $0.delivery == .queued }),
               let id = queued.idempotencyKey else { return }
         guard sessions.first(where: { $0.connectionID == route.connectionID && $0.key == route.sessionID })?.canContinue != false else { return }
-        // Reserve the item synchronously. Editing/removal can never race a Task that
-        // captured queued text but has not entered its first actor turn yet.
-        updateSend(route, id: queued.id, delivery: .sending)
         let activation = activationRevision, wire = wireRevision
         sendTasks[route] = Task {
+            var reserved = false
             do {
-                // Queue persistence alone never proves dispatch. Persist sending before entering the wire path.
+                let input = try await mediaPrompt(route, text: queued.text, ids: queued.media.compactMap(\.resourceID), idempotencyKey: id)
+                guard activation == activationRevision, wire == wireRevision, state.phase == .ready,
+                      let current = documents[route]?.messages.first(where: { $0.id == queued.id }),
+                      current.delivery == .queued, current.text == queued.text, current.media == queued.media,
+                      current.idempotencyKey == id else { sendTasks.removeValue(forKey: route); return }
+                // Complete local frame/model validation before retiring editable ownership.
+                // Then reserve synchronously before the persistence await.
+                updateSend(route, id: queued.id, delivery: .sending); reserved = true
                 try await persist(route)
-                guard activation == activationRevision, wire == wireRevision, route.connectionID == activeConnectionID, state.phase == .ready, running[route] == nil else {
+                guard activation == activationRevision, wire == wireRevision, route.connectionID == activeConnectionID,
+                      state.phase == .ready, running[route] == nil else {
                     updateSend(route, id: queued.id, delivery: .held)
                     sendTasks.removeValue(forKey: route); scheduleSave(route, immediate: true); return
                 }
-                let receipt = try await runtime.send(sessionKey: route.sessionID, input: .init(text: queued.text, idempotencyKey: id))
+                try validateMediaModel(route, hasImages: input.attachments.contains { $0.type == .image })
+                let receipt = try await runtime.send(sessionKey: route.sessionID, input: input)
                 if activation == activationRevision, wire == wireRevision {
                     taskJournal?.receipt(receipt, route: route, input: queued.text)
                     updateSend(route, id: queued.id, delivery: .sent, runID: receipt.runID)
                     if finishedRuns[route]?.contains(receipt.runID) != true { running[route] = receipt.runID }
-                } else {
-                    updateSend(route, id: queued.id, delivery: .uncertain, runID: receipt.runID)
-                }
+                } else { updateSend(route, id: queued.id, delivery: .uncertain, runID: receipt.runID) }
             } catch {
-                let delivery = (error as? RuntimeFailure)?.delivery
-                let uncertain = delivery == .uncertain || delivery == .responseReceived
-                updateSend(route, id: queued.id, delivery: uncertain ? .uncertain : .failed)
-                if activation == activationRevision, wire == wireRevision, route == presentation.selectedConversation { showFailure(error) }
+                let current = documents[route]?.messages.first(where: { $0.id == queued.id })
+                if reserved || (current?.delivery == .queued && current?.text == queued.text && current?.media == queued.media) {
+                    let delivery = (error as? RuntimeFailure)?.delivery
+                    updateSend(route, id: queued.id, delivery: delivery == .uncertain || delivery == .responseReceived ? .uncertain : .failed)
+                    if activation == activationRevision, wire == wireRevision, route == presentation.selectedConversation { showMediaFailure(error, route: route) }
+                }
             }
             sendTasks.removeValue(forKey: route)
             updatePresentation(route); scheduleSave(route, immediate: true)
@@ -734,6 +790,7 @@ final class NativeAppModel: ObservableObject {
                     for index in document.messages.indices where document.messages[index].runID == runID { document.messages[index].streaming = false }
                     document.revision += 1; documents[route] = document
                 }
+                bindFinalMedia(update, route: route, runID: runID)
                 updatePresentation(route); scheduleSave(route)
                 drainQueue(route)
             }
@@ -756,7 +813,7 @@ final class NativeAppModel: ObservableObject {
         return routes
     }
 
-    private func updatePresentation(_ route: ConversationID) {
+    func updatePresentation(_ route: ConversationID) {
         guard let document = documents[route] else { return }
         let name = agents.first { $0.agentID == route.agentID && $0.connectionID == route.connectionID }?.name ?? String(localized: "Agent")
         let session = sessions.first { $0.key == route.sessionID && $0.connectionID == route.connectionID }
@@ -779,6 +836,8 @@ final class NativeAppModel: ObservableObject {
             if state.capabilities.modelPerSession && session?.canContinue == false { features[.models] = .temporarilyUnavailable(String(localized: "This conversation is read-only here.")) }
         }
         if document.hasMore { features[.loadEarlier] = connected ? .available : .temporarilyUnavailable(String(localized: "Reconnect to load earlier messages.")) }
+        addMediaFeatures(route, features: &features)
+        prepareMessageMedia(route)
         let previous = presentation.conversations[route]
         let transcript: [MessagePresentation] = document.messages.map { present($0, agentName: name) }
         let requests: [MessagePresentation] = taskRequests?.messages(for: route) ?? []
@@ -792,10 +851,11 @@ final class NativeAppModel: ObservableObject {
             isLoadingHistory: previous?.isLoadingHistory ?? false, features: features, work: taskJournal?.work(for: route))
     }
 
-    private func present(_ message: NativeMessage, agentName: String) -> MessagePresentation {
+    func present(_ message: NativeMessage, agentName: String) -> MessagePresentation {
         let author: MessageAuthor = message.local ? .local : message.role == .assistant ? .agent(name: agentName, label: nil)
             : message.role == .user ? .participant(name: String(localized: "Participant"), channel: nil) : .system
-        let content: [MessageContent] = [.markdown(message.text)]
+        var content: [MessageContent] = [.markdown(message.text)]
+        content += message.media.map { .attachment(mediaPresentation($0)) }
         let delivery: MessageDelivery? = switch message.delivery {
         case .queued: .queued
         case .held: .held(String(localized: "Ready when you are. Send this message when the connection is available."))
@@ -832,19 +892,25 @@ final class NativeAppModel: ObservableObject {
             guard var document = documents[route] else { return }
             do { try document.removePending(messageID: messageID) } catch { return }
             documents[route] = document
-            updatePresentation(route); scheduleSave(route, immediate: true)
+            releaseMediaAfterCommit(route, ids: Set(message.media.compactMap(\.resourceID)))
+            updatePresentation(route)
         default: break
         }
     }
 
-    func savePendingEdit(_ edit: NativePendingEdit, route: ConversationID, activation: UUID, text: String) async throws {
+    func savePendingEdit(_ edit: NativePendingEdit, route: ConversationID, activation: UUID, text: String, media selectedMedia: [NativeMediaReference]? = nil) async throws {
         guard activation == activationRevision, route.connectionID == activeConnectionID,
               destination?.id == edit.id.uuidString, let original = documents[route] else { throw StoreFailure.invalidDocument }
         var updated = original
-        try updated.apply(edit, text: text)
+        try updated.apply(edit, text: text, media: selectedMedia)
         documents[route] = updated; updatePresentation(route)
         saveTasks[route]?.cancel()
-        do { try await persist(route) }
+        let released = Set(edit.originalMedia.compactMap(\.resourceID)).subtracting((selectedMedia ?? edit.originalMedia).compactMap(\.resourceID))
+        do {
+            try await media?.releaseWhenUnreferenced(released)
+            try await persist(route)
+            if let media, let cache { try await media.reclaim(cache: cache) }
+        }
         catch {
             // Do not overwrite history or delivery changes that arrived while writing.
             if documents[route]?.revision == updated.revision {
@@ -855,15 +921,15 @@ final class NativeAppModel: ObservableObject {
         }
         guard activation == activationRevision, destination?.id == edit.id.uuidString,
               let current = documents[route]?.messages.first(where: { $0.id == edit.messageID }),
-              current.idempotencyKey == edit.idempotencyKey, current.text == text, current.delivery == .held else {
+              current.idempotencyKey == edit.idempotencyKey, current.text == text, current.media == (selectedMedia ?? edit.originalMedia), current.delivery == .held else {
             throw StoreFailure.invalidDocument
         }
         destination = nil
     }
 
-    private func changed(_ route: ConversationID) { documents[route]?.revision += 1 }
+    func changed(_ route: ConversationID) { documents[route]?.revision += 1 }
 
-    private func scheduleSave(_ route: ConversationID, immediate: Bool = false) {
+    func scheduleSave(_ route: ConversationID, immediate: Bool = false) {
         saveTasks[route]?.cancel()
         saveTasks[route] = Task {
             if !immediate { try? await Task.sleep(for: .milliseconds(350)) }
@@ -873,7 +939,7 @@ final class NativeAppModel: ObservableObject {
         }
     }
 
-    private func persist(_ route: ConversationID) async throws {
+    func persist(_ route: ConversationID) async throws {
         guard let cache, let document = documents[route] else { throw StoreFailure.unavailable }
         try await cache.write(document, connectionID: route.connectionID, agentID: route.agentID, sessionID: route.sessionID)
     }
@@ -915,7 +981,7 @@ final class NativeAppModel: ObservableObject {
                      action: [.offline, .error, .idle].contains(state.phase) && activeConnectionID != nil ? .available : .unsupported)
     }
 
-    private func showFailure(_ error: Error) {
+    func showFailure(_ error: Error) {
         deviceApprovalNotice = false
         if error is StoreFailure { notice = String(localized: "Your data could not be saved safely. Keep Clawket open and try again."); return }
         guard let failure = error as? RuntimeFailure else { notice = String(localized: "The operation could not be completed. Please try again."); return }

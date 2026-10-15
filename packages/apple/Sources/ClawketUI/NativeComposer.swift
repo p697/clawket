@@ -86,6 +86,11 @@ struct NativeComposer: View {
         .frame(maxWidth: .infinity)
         .frame(maxHeight: expanded ? .infinity : nil, alignment: .bottom)
         .background(Color(uiColor: .systemBackground))
+        .onChange(of: draft.insertion?.id) { _ in
+            guard let insertion = draft.insertion else { return }
+            input.insertText(insertion.text)
+            draft.insertion = nil
+        }
     }
 
     private var hasContent: Bool {
@@ -327,6 +332,13 @@ private final class NativeInputController: NSObject, ObservableObject, UITextVie
     func commitMarkedText() {
         textView.unmarkText()
         onChange?(textView.text)
+    }
+
+    func insertText(_ text: String) {
+        textView.unmarkText()
+        textView.insertText(text)
+        onChange?(textView.text)
+        measure()
     }
 
     private func measure() {

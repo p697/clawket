@@ -496,12 +496,23 @@ public final class ComposerDraft: ObservableObject {
     @Published public var attachments: [AttachmentPresentation]
     @Published public var voice: VoicePresentation?
     @Published public var hint: String?
+    /// Explicit host paste/dictation uses the current native selection and undo
+    /// stack. It is ephemeral UI work, never a second persisted text buffer.
+    @Published public var insertion: ComposerTextInsertion?
+
+    public func insertText(_ text: String) { insertion = .init(text: text) }
 
     public init(conversationID: ConversationID, text: String = "", attachments: [AttachmentPresentation] = [],
                 voice: VoicePresentation? = nil, hint: String? = nil) {
         self.conversationID = conversationID; self.text = text; self.attachments = attachments
         self.voice = voice; self.hint = hint
     }
+}
+
+public struct ComposerTextInsertion: Sendable, Equatable {
+    public let id = UUID()
+    public let text: String
+    public init(text: String) { self.text = text }
 }
 
 public struct VoicePresentation: Hashable, Sendable {

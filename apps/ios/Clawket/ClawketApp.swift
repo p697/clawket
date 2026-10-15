@@ -18,6 +18,8 @@ struct ClawketApp: App {
                         PendingMessageEditor(client: client, route: route, edit: edit, activation: activation)
                     }
                 }
+                .sheet(item: $client.mediaPicker) { request in NativeMediaPicker(client: client, request: request) }
+                .fullScreenCover(item: $client.mediaPreview) { preview in NativeMediaViewer(preview: preview) }
                 .alert("Clawket", isPresented: Binding(get: { client.notice != nil }, set: { if !$0 { client.notice = nil } })) {
                     Button("OK", role: .cancel) { client.notice = nil }
                 } message: { Text(client.notice ?? "") }

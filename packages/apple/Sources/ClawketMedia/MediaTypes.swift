@@ -44,6 +44,8 @@ public struct StagedMediaFile: Sendable {
     let url: URL
     let resource: MediaResource
     public var id: UUID { resource.id }
+    /// Metadata for a host's verified import journal; this exposes no temporary URL.
+    public var metadata: MediaResource { resource }
 }
 
 public struct MediaArtifactKey: Codable, Sendable, Hashable {
