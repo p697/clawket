@@ -72,6 +72,7 @@ final class NativeRosterTests: XCTestCase, @unchecked Sendable {
         let values = RosterValues(), state = NativeRosterState(store: try NativeRosterStore(values: values)); await state.load()
         let scope = AgentCatalogID(connectionID: "c", agentID: "a")
         state.setAgentPinned(scope, pinned: true)
+        XCTAssertFalse(state.document.preference(scope).pinned) // Desired edits are not a verified save.
         for key in ["one", "two", "main", "archived", "denied", "missing"] { state.setSessionOnHome(.init(connectionID: "c", agentID: "a", sessionID: key), visible: true) }
         await state.flush()
         let reopened = NativeRosterState(store: try NativeRosterStore(values: values)); await reopened.load()

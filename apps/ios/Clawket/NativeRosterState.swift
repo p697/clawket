@@ -6,6 +6,7 @@ import Foundation
 @MainActor
 final class NativeRosterState {
     private(set) var document = NativeRosterDocument()
+    private var desired = NativeRosterDocument()
     private(set) var canSave = false
     private var store: NativeRosterStore?
     private var pending: NativeRosterDocument?
@@ -16,7 +17,7 @@ final class NativeRosterState {
     func load() async {
         do {
             let store = try store ?? NativeRosterStore(); self.store = store
-            document = try await store.read(); canSave = true
+            document = try await store.read(); desired = document; canSave = true
         } catch { canSave = false; onFailure?() }
     }
     func setAgentPinned(_ scope: AgentCatalogID, pinned: Bool) {
@@ -35,7 +36,7 @@ final class NativeRosterState {
         }
     }
     func seedIfUnset(connectionID: String, sessions: [RuntimeSession]) {
-        guard canSave, !document.hasBaseline(connectionID) else { return }
+        guard canSave, !desired.hasBaseline(connectionID) else { return }
         mutate { value in
             value.baselines.append(connectionID)
             for session in sessions where session.connectionID.utf8.elementsEqual(connectionID.utf8) {
@@ -48,7 +49,7 @@ final class NativeRosterState {
         let entries = sessions.compactMap { session -> (ConversationID, Int64)? in
             guard let time = NativeRosterProjection.activity(session) else { return nil }
             let route = NativeRosterProjection.route(session)
-            return time > document.watermark(route) ? (route, time) : nil
+            return time > desired.watermark(route) ? (route, time) : nil
         }
         guard !entries.isEmpty else { return }
         mutate { value in for (route, time) in entries { value.mark(route, through: time) } }
@@ -57,8 +58,8 @@ final class NativeRosterState {
     private func mutate(_ change: (inout NativeRosterDocument) -> Void) {
         guard canSave else { return }
         do {
-            var next = document; change(&next); try next.advance(); try next.validate()
-            document = next; pending = next; onChange?(); startSaving()
+            var next = desired; change(&next); try next.advance(); try next.validate()
+            desired = next; pending = next; startSaving()
         } catch { canSave = false; onFailure?(); onChange?() }
     }
     private func startSaving() {
@@ -68,7 +69,7 @@ final class NativeRosterState {
             defer { self.saveTask = nil }
             while let value = self.pending {
                 self.pending = nil
-                do { try await store.write(value) }
+                do { try await store.write(value); self.document = value; self.onChange?() }
                 catch { self.pending = nil; self.canSave = false; self.onFailure?(); self.onChange?(); return }
             }
         }
