@@ -1,5 +1,11 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-16 Native iOS 后端运行时基础（负责人授权原生重构，iOS 优先）。
+  - 新增 `ClawketRuntime`：六后端/传输/环境独立建模、注入凭据存储、单活动连接与事件读取者、Socket/认证/历史代际围栏、前后台真实探测及重连。OpenClaw 保留 v3 Ed25519、作用域设备令牌、一次失效修复与移动 setup 的 operator 交接；Hermes 验证实际 API 健康，四种 SDK 路径验证精确后端身份，原始 open 不进入 ready。
+  - 实现文字收发/停止/历史、Agent/会话目录、真实新建会话、协商项目和模型选择；sessions-first 入口不编造 main 会话，完整冻结目录限制 64 KiB 分页、10,000 会话/8 MiB、512 次/90 秒与一次过期重取。流式段落跨工具保留独立 ID，final-only 回复可见；停止 ACK 不伪造完成，未知发送不自动重放。外层 Bridge `meta` 保留独立响应接口；长模型切换保留原有 190 秒预算。
+  - Swift 6 初轮在 `heavy` 下 jobs=2，逐文件通过 `RuntimeContractTests` 7 与 `CoordinatorTests` 9 项（含参数化后端及两种历史 fixture）；首轮 Void continuation 推断诊断修正后通过。随后补目录/项目/新建/模型作用域/历史串行与替换回归，完整新增 package 测试由本任务 PR CI 验证；另一项目连续 Xcode/UI 测试期间未叠加本地编译。记录协议/模拟 Socket 证据，不概括为手机/Relay/推理验收。
+  - 详见 `docs/native-ios/RUNTIME.md`。附件/审批/问题/完整管理、迁移、语音与其他保全清单仍待后续；现有 Mobile/Bridge/生产服务保持。无版本变更、分发包、上传、部署或发布。
+
 - 2026-10-15 原生 iOS 表示层基础（负责人授权，原生研究 N0 后推进）。
   - 新增可复用 `ClawketUI`：SwiftUI 系统导航、花名册/会话/模型/项目面板，UIKit 同实例输入框与可部分选文的消息正文、稳定 ID 表格滚动锚点，原 Clawket 猫形象。会话优先的 Agent 先进入真实目录，不构造空 session；附件、工作、审批/提问、交付状态和能力均由真实 host 注入，不在 View 内实现协议或推断后端状态。
   - 输入与停止独立呈现：任务执行中有草稿时仍显示 host 实际支持的发送/排队动作，`sendLabel` 由 host 提供；队列持久化、运行结束判断与不确定发送恢复留给运行时。审批/提问使用 host 范围内唯一的请求代际身份，配对审批可独立于会话。原生选择器/语音只发有能力的意图，无默认演示数据、空操作按钮或替身 App。

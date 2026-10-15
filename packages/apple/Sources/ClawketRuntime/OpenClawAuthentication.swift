@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 import ClawketPairing
 import ClawketTransport
 
@@ -42,8 +43,11 @@ extension RuntimeCoordinator {
     func authenticate(nonce: String, signedAt: Int64, scope: Scope) async throws {
         try assertCurrent(scope)
         guard let identity, let transport, let connection else { throw RuntimeFailure(.credentialStorage) }
-        let signingKey = try PairingCryptography.importSigningKey(tweetNaClSecret: identity.secretKey, publicKey: identity.publicKey)
-        guard try PairingCryptography.deviceID(publicKey: identity.publicKey) == identity.deviceID else { throw RuntimeFailure(.credentialStorage) }
+        let signingKey: Curve25519.Signing.PrivateKey
+        do {
+            signingKey = try PairingCryptography.importSigningKey(tweetNaClSecret: identity.secretKey, publicKey: identity.publicKey)
+            guard try PairingCryptography.deviceID(publicKey: identity.publicKey) == identity.deviceID else { throw RuntimeFailure(.credentialStorage) }
+        } catch { throw RuntimeFailure(.credentialStorage) }
         let publicKey = PairingCryptography.encodeBase64URL(identity.publicKey)
         let plan = try await connectPlan(identity: identity, publicKey: publicKey, scope: scope)
         try assertCurrent(scope); activeAuthSource = plan.source
