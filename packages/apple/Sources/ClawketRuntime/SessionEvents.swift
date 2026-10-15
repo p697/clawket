@@ -7,11 +7,11 @@ struct SessionEvents: Sendable {
         let sessionKey: String
         var segment = 0
         var hasText = false
-        var toolIDs: Set<String> = []
+        var toolIDs: Set<Data> = []
         var terminal = false
     }
-    var runs: [String: Run] = [:]
-    var order: [String] = []
+    var runs: [Data: Run] = [:]
+    var order: [Data] = []
     var openClawArtifacts = false
     var artifactsEnabled = false
 
@@ -19,15 +19,15 @@ struct SessionEvents: Sendable {
         guard !runID.isEmpty, runID.utf8.count <= 256, !sessionKey.isEmpty, sessionKey.utf8.count <= 1_024 else {
             throw RuntimeFailure(.invalidResponse)
         }
-        if let run = runs[runID] {
-            guard run.sessionKey == sessionKey else { throw RuntimeFailure(.invalidResponse) }
+        if let run = runs[Data(runID.utf8)] {
+            guard run.sessionKey.utf8.elementsEqual(sessionKey.utf8) else { throw RuntimeFailure(.invalidResponse) }
             return
         }
         if runs.count >= 256 {
             guard let retired = order.first(where: { runs[$0]?.terminal == true }) else { throw RuntimeFailure(.capacity) }
             runs.removeValue(forKey: retired); order.removeAll { $0 == retired }
         }
-        runs[runID] = Run(sessionKey: sessionKey); order.append(runID)
+        runs[Data(runID.utf8)] = Run(sessionKey: sessionKey); order.append(Data(runID.utf8))
     }
 
     mutating func map(_ frame: JSONValue, connection: BackendConnection, artifactsEnabled: Bool = false) throws -> [RuntimeSessionUpdate] {
@@ -90,7 +90,7 @@ struct SessionEvents: Sendable {
 
     private mutating func agent(_ payload: JSONValue) throws -> [RuntimeSessionUpdate] {
         guard let runID = payload["runId"]?.nonemptyString else { return [.other(payload)] }
-        guard let key = payload["sessionKey"]?.nonemptyString ?? runs[runID]?.sessionKey else { return [.other(payload)] }
+        guard let key = payload["sessionKey"]?.nonemptyString ?? runs[Data(runID.utf8)]?.sessionKey else { return [.other(payload)] }
         try register(runID: runID, sessionKey: key)
         let stream = payload["stream"]?.stringValue
         let data = payload["data"] ?? .null
@@ -113,32 +113,38 @@ struct SessionEvents: Sendable {
 
     private mutating func textEvent(_ text: String, runID: String, mode: RuntimeTextUpdate.Mode, raw: JSONValue) -> [RuntimeSessionUpdate] {
         let text = openClawArtifacts ? RuntimeAttachmentProjection.stripMediaDirectives(text) : text
-        guard var run = runs[runID], !run.terminal, !text.isEmpty, !silentPrefix(text) else { return [] }
-        run.hasText = true; runs[runID] = run
+        guard var run = runs[Data(runID.utf8)], !run.terminal, !text.isEmpty, !silentPrefix(text) else { return [] }
+        run.hasText = true; runs[Data(runID.utf8)] = run
         return [.text(RuntimeTextUpdate(sessionKey: run.sessionKey, runID: runID, segmentID: "\(runID):reply:\(run.segment)",
                                        text: text, mode: mode, turnID: raw["turnId"]?.stringValue,
                                        inputMessageID: raw["inputMessageId"]?.stringValue, inputMessageKey: raw["inputMessageKey"]?.stringValue))]
     }
 
     private mutating func boundary(runID: String, toolID: String?) throws {
-        guard var run = runs[runID], !run.terminal else { return }
+        guard var run = runs[Data(runID.utf8)], !run.terminal else { return }
         // Unidentified tool updates are preserved, but cannot safely invent repeated boundaries.
-        guard let toolID, !run.toolIDs.contains(toolID) else { return }
+        guard let toolID, !run.toolIDs.contains(Data(toolID.utf8)) else { return }
         guard toolID.utf8.count <= 512 else { throw RuntimeFailure(.capacity) }
         guard run.toolIDs.count < 128 else { throw RuntimeFailure(.capacity) }
-        run.toolIDs.insert(toolID)
+        run.toolIDs.insert(Data(toolID.utf8))
         if run.hasText { run.segment += 1; run.hasText = false }
-        runs[runID] = run
+        runs[Data(runID.utf8)] = run
     }
 
     private mutating func finish(runID: String, reason: String, raw: JSONValue) -> [RuntimeSessionUpdate] {
-        guard var run = runs[runID], !run.terminal else { return [] }
-        run.terminal = true; runs[runID] = run
+        guard var run = runs[Data(runID.utf8)], !run.terminal else { return [] }
+        run.terminal = true; runs[Data(runID.utf8)] = run
         return [.runFinished(sessionKey: run.sessionKey, runID: runID, reason: reason,
                              segmentID: "\(runID):reply:\(run.segment)", raw: raw)]
     }
 
     private mutating func complete(runID: String, reason: String, raw: JSONValue) -> [RuntimeSessionUpdate] {
+        if let terminal = FinalMessageWire.terminal(raw, reason: reason),
+           protocolText(raw["message"]?["content"]).utf8.elementsEqual(terminal.text.utf8) {
+            // The Bridge sends this assistant copy for old clients. Its real
+            // terminalMessage is a system row; never overwrite a partial reply.
+            return finish(runID: runID, reason: reason, raw: raw)
+        }
         let text = RuntimeAttachmentProjection.displayText(raw["message"] ?? .null, fallback: protocolText(raw["message"]?["content"]), enabled: artifactsEnabled)
         return textEvent(text, runID: runID, mode: .snapshot, raw: raw) + finish(runID: runID, reason: reason, raw: raw)
     }

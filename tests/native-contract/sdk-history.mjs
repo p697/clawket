@@ -9,7 +9,7 @@ import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 
 export const fixtureURL = new URL('../../packages/apple/Tests/ClawketRuntimeTests/Fixtures/sdk-history.json', import.meta.url);
-const sourcePaths = ['codex/history.ts', 'pi/history.ts', 'claude-code/history.ts', 'claude-code/models.ts'];
+const sourcePaths = ['codex/history.ts', 'codex/service.ts', 'pi/history.ts', 'claude-code/history.ts', 'claude-code/models.ts'];
 const sourceURL = name => new URL('../../packages/bridge-runtime/src/' + name, import.meta.url);
 const moduleURL = source => 'data:text/javascript;base64,' + Buffer.from(source).toString('base64');
 
@@ -23,6 +23,14 @@ export function validateProducerImports(source, allowedModels = null) {
   return source;
 }
 
+/** The wrapper is synthetic; its fields must still match the real finish producer. */
+export function validateTerminalProducer(source) {
+  if (typeof source !== 'string' || !source.includes("const terminalMessage = stopReason === 'error' ? codexTurnFailure(")
+      || !source.includes("message: { role: 'assistant', content: terminalMessage.text }")) {
+    throw new Error('Native terminal notice producer changed');
+  }
+}
+
 export async function sdkHistoryFixture() {
   const sources = new Map(await Promise.all(sourcePaths.map(async name => [name, await readFile(sourceURL(name), 'utf8')])));
   const javascript = name => stripTypeScriptTypes(sources.get(name));
@@ -30,11 +38,25 @@ export async function sdkHistoryFixture() {
   // needs explicit review rather than silently loading a service from a test.
   const models = moduleURL(validateProducerImports(javascript('claude-code/models.ts')));
   const claude = javascript('claude-code/history.ts').replace(/from\s+(['"])\.\/models\.js\1/g, `from ${JSON.stringify(models)}`);
-  const [{ codexMessages }, { piMessages }, { claudeHistory }] = await Promise.all([
+  const [{ codexMessages, codexTurnFailure }, { piMessages }, { claudeHistory }] = await Promise.all([
     import(moduleURL(validateProducerImports(javascript('codex/history.ts')))),
     import(moduleURL(validateProducerImports(javascript('pi/history.ts')))),
     import(moduleURL(validateProducerImports(claude, models))),
   ]);
+  validateTerminalProducer(sources.get('codex/service.ts'));
+  const failures = [
+    { id: 'vector-auth', status: 'failed', completedAt: 12, error: { codexErrorInfo: 'unauthorized' } },
+    { id: 'vector-model', status: 'failed', startedAt: 11,
+      error: { message: "The 'synthetic-model' model is not supported when using Codex with a ChatGPT account." } },
+    { id: 'vector-generic', status: 'failed', error: { message: 'PRIVATE-SYNTHETIC-PROVIDER-BODY' } },
+  ];
+  const terminalCases = failures.map((turn, index) => {
+    const terminalMessage = codexTurnFailure(turn);
+    return { name: turn.id, frame: { type: 'event', event: 'codex.update', payload: {
+      type: 'run_finished', sessionKey: 'vector-session', runId: `vector-run-${index}`, stopReason: 'error', terminalMessage,
+      message: { role: 'assistant', content: terminalMessage.text },
+    } }, historyMessage: codexMessages([turn]).find(message => message.role === 'system') };
+  });
   const timestamp = '2026-01-01T00:00:00.000Z';
   const codex = codexMessages([{ id: 'vector-turn', status: 'completed', startedAt: 1767225600, completedAt: 1767225610,
     items: [
@@ -65,7 +87,7 @@ export async function sdkHistoryFixture() {
   ]);
   const value = JSON.parse(JSON.stringify({ version: 1, synthetic: true,
     sourceDigests: Object.fromEntries([...sources].map(([name, source]) => [name, createHash('sha256').update(source).digest('hex')])),
-    cases: [{ backend: 'codex', messages: codex }, { backend: 'pi', messages: pi }, { backend: 'claude-code', messages: claudeMessages }],
+    cases: [{ backend: 'codex', messages: codex }, { backend: 'pi', messages: pi }, { backend: 'claude-code', messages: claudeMessages }], terminalCases,
   }));
   validateSDKHistoryFixture(value);
   return value;
@@ -78,6 +100,17 @@ export function validateSDKHistoryFixture(value) {
   require(Object.values(value.sourceDigests).every(digest => typeof digest === 'string' && /^[a-f0-9]{64}$/.test(digest)));
   require(Array.isArray(value.cases) && value.cases.length === 3);
   require(value.cases.map(entry => entry.backend).sort().join('|') === 'claude-code|codex|pi');
+  require(Array.isArray(value.terminalCases) && value.terminalCases.length === 3);
+  require(new Set(value.terminalCases.map(entry => entry?.name)).size === 3);
+  for (const entry of value.terminalCases) {
+    const payload = entry?.frame?.payload, terminal = payload?.terminalMessage;
+    require(entry.frame.type === 'event' && entry.frame.event === 'codex.update');
+    require(payload.type === 'run_finished' && payload.stopReason === 'error');
+    require(terminal?.role === 'system' && typeof terminal.id === 'string' && terminal.id.length > 0 && terminal.id.length <= 256);
+    require(typeof terminal.text === 'string' && terminal.text.trim().length > 0 && !terminal.text.includes('PRIVATE-SYNTHETIC'));
+    require(payload.message?.role === 'assistant' && payload.message.content === terminal.text);
+    require(JSON.stringify(entry.historyMessage) === JSON.stringify(terminal));
+  }
   let tools = 0;
   for (const entry of value.cases) {
     require(Array.isArray(entry.messages) && entry.messages.length > 0 && entry.messages.length <= 64);
@@ -94,7 +127,7 @@ export function validateSDKHistoryFixture(value) {
     }
     require(caseTools > 0);
   }
-  return { backends: value.cases.length, tools };
+  return { backends: value.cases.length, tools, terminalNotices: value.terminalCases.length };
 }
 
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
@@ -106,6 +139,6 @@ if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.m
     validateSDKHistoryFixture(saved);
     if (JSON.stringify(generated) !== JSON.stringify(saved)) throw new Error('Native SDK history fixture drifted');
   }
-  const { backends, tools } = validateSDKHistoryFixture(generated);
-  console.log(`Verified native history producers: ${backends} backends, ${tools} tool rows`);
+  const { backends, tools, terminalNotices } = validateSDKHistoryFixture(generated);
+  console.log(`Verified native history producers: ${backends} backends, ${tools} tool rows, ${terminalNotices} terminal notices`);
 }

@@ -25,13 +25,17 @@ struct NativeMessage: Codable, Sendable, Identifiable, Equatable {
     var transcriptBoundary: RuntimeTranscriptBoundary?
     var historyEpoch: UUID?
     var sourceRevisionHash: String?
+    var turnID: String?
+    var inputMessageID: String?
+    var inputMessageKey: String?
     var isOwnedUser: Bool { local && role == .user && attribution == nil }
 
     static func == (left: Self, right: Self) -> Bool {
         guard byteEqual(left.id, right.id), byteEqual(left.remoteID, right.remoteID),
               byteEqual(left.providedID, right.providedID), byteEqual(left.runID, right.runID),
               byteEqual(left.segmentID, right.segmentID), byteEqual(left.idempotencyKey, right.idempotencyKey),
-              byteEqual(left.text, right.text) else { return false }
+              byteEqual(left.text, right.text), byteEqual(left.turnID, right.turnID),
+              byteEqual(left.inputMessageID, right.inputMessageID), byteEqual(left.inputMessageKey, right.inputMessageKey) else { return false }
         return left.role == right.role && left.local == right.local && left.timestampMs == right.timestampMs
             && left.delivery == right.delivery && left.streaming == right.streaming && left.isWork == right.isWork
             && left.media == right.media && left.idSource == right.idSource && left.attribution == right.attribution

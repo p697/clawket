@@ -320,6 +320,11 @@ public struct RuntimeTextUpdate: Sendable, Equatable {
     public let turnID: String?
     public let inputMessageID: String?
     public let inputMessageKey: String?
+    public init(sessionKey: String, runID: String, segmentID: String, text: String, mode: Mode,
+                turnID: String? = nil, inputMessageID: String? = nil, inputMessageKey: String? = nil) {
+        self.sessionKey = sessionKey; self.runID = runID; self.segmentID = segmentID; self.text = text; self.mode = mode
+        self.turnID = turnID; self.inputMessageID = inputMessageID; self.inputMessageKey = inputMessageKey
+    }
 }
 
 public enum RuntimeSessionUpdate: Sendable, Equatable {

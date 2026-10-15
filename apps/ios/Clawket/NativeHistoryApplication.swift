@@ -46,7 +46,10 @@ enum NativeHistoryApplication {
                     media: try references(raw, id: id, previous: previous, owned: owned, digest: digest, route: route),
                     providedID: raw.providedID, idSource: raw.idSource, attribution: raw.attribution,
                     transcriptPosition: raw.transcriptPosition, transcriptBoundary: raw.transcriptBoundary,
-                    historyEpoch: epoch, sourceRevisionHash: digest)
+                    historyEpoch: epoch, sourceRevisionHash: digest,
+                    turnID: raw.turnID ?? previous?.turnID,
+                    inputMessageID: raw.inputMessageID ?? previous?.inputMessageID,
+                    inputMessageKey: raw.inputMessageKey ?? previous?.inputMessageKey)
             }
         }
         return Projection(messages: messages, acceptedHistoryIDs: plan.acceptedHistoryIDs,

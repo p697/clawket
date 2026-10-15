@@ -14618,6 +14618,126 @@
       },
       "comment": "Native UI. Terminology reused from Mobile chat.Model."
     },
+    "Model authentication failed. Sign in again on your computer.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Model authentication failed. Sign in again on your computer."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型认证失败，请在电脑上重新登录。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型驗證失敗，請在電腦上重新登入。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "モデルの認証に失敗しました。パソコンで再ログインしてください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "모델 인증에 실패했습니다. 컴퓨터에서 다시 로그인하세요."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modellanmeldung fehlgeschlagen. Melde dich am Computer erneut an."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L’authentification du modèle a échoué. Reconnectez-vous sur votre ordinateur."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Falló la autenticación del modelo. Inicia sesión de nuevo en tu ordenador."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Falló la autenticación del modelo. Inicia sesión de nuevo en tu computadora."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autenticazione del modello non riuscita. Accedi di nuovo sul tuo computer."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Falha na autenticação do modelo. Entre novamente no seu computador."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Falha na autenticação do modelo. Inicie sessão novamente no seu computador."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ошибка аутентификации модели. Войдите заново на компьютере."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Помилка автентифікації моделі. Увійдіть знову на комп’ютері."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Model kimlik doğrulaması başarısız. Bilgisayarınızda yeniden giriş yapın."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xác thực mô hình thất bại. Hãy đăng nhập lại trên máy tính."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "การยืนยันตัวตนของโมเดลล้มเหลว โปรดลงชื่อเข้าใช้อีกครั้งบนคอมพิวเตอร์"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "मॉडल प्रमाणीकरण विफल। अपने कंप्यूटर पर फिर से साइन इन करें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "فشلت مصادقة النموذج. سجّل الدخول مجددًا على جهاز الكمبيوتر."
+          }
+        }
+      },
+      "comment": "Fixed system notice. Terminology reused from Mobile chat.Model authentication failed. Sign in again on your computer."
+    },
     "Model: %@": {
       "extractionState": "manual",
       "localizations": {
@@ -26726,6 +26846,126 @@
       },
       "comment": "Native UI / accessibility."
     },
+    "The agent couldn't complete this reply. Please try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The agent couldn't complete this reply. Please try again."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent 未能完成回复，请重试。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent 未能完成回覆，請重試。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "エージェントが返信を完了できませんでした。もう一度お試しください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "에이전트가 답변을 완료하지 못했습니다. 다시 시도해 주세요."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Agent konnte die Antwort nicht abschließen. Bitte versuche es erneut."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L’Agent n’a pas pu terminer cette réponse. Veuillez réessayer."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El agente no pudo completar la respuesta. Inténtalo de nuevo."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El agente no pudo completar la respuesta. Inténtalo de nuevo."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L’Agent non è riuscito a completare questa risposta. Riprova."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O Agent não conseguiu concluir esta resposta. Tente novamente."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O Agent não conseguiu concluir esta resposta. Tente novamente."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Агент не смог завершить ответ. Попробуйте ещё раз."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Агент не зміг завершити відповідь. Спробуйте ще раз."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent bu yanıtı tamamlayamadı. Lütfen yeniden deneyin."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent không thể hoàn thành câu trả lời này. Vui lòng thử lại."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent ไม่สามารถตอบกลับให้เสร็จสมบูรณ์ได้ โปรดลองอีกครั้ง"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent यह जवाब पूरा नहीं कर सका। कृपया फिर कोशिश करें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "لم يتمكن الوكيل من إكمال هذا الرد. يرجى المحاولة مرة أخرى."
+          }
+        }
+      },
+      "comment": "Fixed system notice. Terminology reused from Mobile chat.The agent couldn't complete this reply. Please try again."
+    },
     "The confirmation expired. Review this request again.": {
       "localizations": {
         "ar": {
@@ -27084,6 +27324,246 @@
         }
       },
       "comment": "Native UI / accessibility."
+    },
+    "The model account has insufficient credits or quota.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The model account has insufficient credits or quota."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型账户余额或额度不足。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型帳戶餘額或額度不足。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "モデルのアカウント残高または利用枠が不足しています。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "모델 계정의 크레딧 또는 할당량이 부족합니다."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Modellkonto hat nicht genügend Guthaben oder Kontingent."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le compte du modèle n’a pas assez de crédits ou de quota."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La cuenta del modelo no tiene créditos o cuota suficientes."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La cuenta del modelo no tiene créditos o cuota suficientes."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L’account del modello non ha crediti o quota sufficienti."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A conta do modelo não tem créditos ou cota suficientes."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A conta do modelo não tem créditos ou quota suficientes."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "На аккаунте модели недостаточно кредитов или квоты."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "На обліковому записі моделі недостатньо кредитів або квоти."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Model hesabının kredisi veya kotası yetersiz."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tài khoản mô hình không đủ tín dụng hoặc hạn mức."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "บัญชีโมเดลมีเครดิตหรือโควตาไม่เพียงพอ"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "मॉडल खाते में पर्याप्त क्रेडिट या कोटा नहीं है।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "رصيد حساب النموذج أو حصته غير كافية."
+          }
+        }
+      },
+      "comment": "Fixed system notice. Terminology reused from Mobile chat.The model account has insufficient credits or quota."
+    },
+    "The model is rate limited. Try again shortly.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The model is rate limited. Try again shortly."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型请求已达限速，请稍后重试。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型請求已達限速，請稍後重試。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "モデルのリクエスト制限に達しました。しばらくしてから再試行してください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "모델 요청 한도에 도달했습니다. 잠시 후 다시 시도하세요."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Modell hat sein Anfragelimit erreicht. Versuche es gleich erneut."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le modèle est limité en débit. Réessayez dans un instant."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El modelo ha alcanzado el límite de solicitudes. Inténtalo en breve."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El modelo ha alcanzado el límite de solicitudes. Inténtalo en breve."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il modello è soggetto a limiti di frequenza. Riprova tra poco."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O modelo está com limite de requisições. Tente novamente em instantes."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O modelo está com limite de pedidos. Tente novamente em instantes."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Для модели действует ограничение частоты запросов. Попробуйте чуть позже."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Для моделі діє обмеження частоти запитів. Спробуйте трохи пізніше."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Model için hız sınırı uygulanıyor. Kısa süre sonra yeniden deneyin."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mô hình đang bị giới hạn tốc độ. Hãy thử lại sau ít phút."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "โมเดลถูกจำกัดอัตราการใช้งาน โปรดลองอีกครั้งในอีกสักครู่"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "मॉडल पर दर सीमा लागू है। थोड़ी देर बाद फिर कोशिश करें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "النموذج خاضع لتحديد المعدل. حاول بعد قليل."
+          }
+        }
+      },
+      "comment": "Fixed system notice. Terminology reused from Mobile chat.The model is rate limited. Try again shortly."
     },
     "The operation could not be completed. Check your connection and try again.": {
       "extractionState": "manual",
@@ -29359,6 +29839,126 @@
           }
         }
       }
+    },
+    "This model is unavailable in the current Codex runtime. Choose another model or update Codex on your computer.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This model is unavailable in the current Codex runtime. Choose another model or update Codex on your computer."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "当前 Codex 无法使用这个模型。请选择其他模型，或在电脑上更新 Codex。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目前 Codex 無法使用這個模型。請選擇其他模型，或在電腦上更新 Codex。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "現在の Codex ではこのモデルを使用できません。別のモデルを選択するか、パソコンで Codex を更新してください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "현재 Codex에서 이 모델을 사용할 수 없습니다. 다른 모델을 선택하거나 컴퓨터에서 Codex를 업데이트하세요."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses Modell ist im aktuellen Codex nicht verfügbar. Wähle ein anderes Modell oder aktualisiere Codex auf deinem Computer."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce modèle n’est pas disponible dans la version actuelle de Codex. Choisissez un autre modèle ou mettez à jour Codex sur votre ordinateur."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este modelo no está disponible en el Codex actual. Elige otro modelo o actualiza Codex en tu ordenador."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este modelo no está disponible en el Codex actual. Elige otro modelo o actualiza Codex en tu computadora."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Questo modello non è disponibile nel Codex attuale. Scegli un altro modello o aggiorna Codex sul computer."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este modelo não está disponível no Codex atual. Escolha outro modelo ou atualize o Codex no computador."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este modelo não está disponível no Codex atual. Escolhe outro modelo ou atualiza o Codex no computador."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Эта модель недоступна в текущем Codex. Выберите другую модель или обновите Codex на компьютере."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ця модель недоступна в поточному Codex. Виберіть іншу модель або оновіть Codex на комп’ютері."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu model mevcut Codex ortamında kullanılamıyor. Başka bir model seçin veya bilgisayarınızda Codex’i güncelleyin."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mô hình này không khả dụng trong Codex hiện tại. Hãy chọn mô hình khác hoặc cập nhật Codex trên máy tính."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "โมเดลนี้ไม่พร้อมใช้งานใน Codex ปัจจุบัน เลือกโมเดลอื่นหรืออัปเดต Codex บนคอมพิวเตอร์ของคุณ"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "मौजूदा Codex में यह मॉडल उपलब्ध नहीं है। कोई दूसरा मॉडल चुनें या अपने कंप्यूटर पर Codex अपडेट करें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "هذا النموذج غير متاح في Codex الحالي. اختر نموذجًا آخر أو حدّث Codex على جهاز الكمبيوتر."
+          }
+        }
+      },
+      "comment": "Fixed system notice. Terminology reused from Mobile chat.This model is unavailable in the current Codex runtime. Choose another model or update Codex on your computer."
     },
     "This permission applies beyond this single request.": {
       "extractionState": "manual",

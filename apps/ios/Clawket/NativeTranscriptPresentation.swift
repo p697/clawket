@@ -25,7 +25,7 @@ enum NativeTranscriptPresentation {
     }
 
     static func textContent(_ message: NativeMessage) -> MessageContent {
-        message.role == .tool ? .toolOutput(.init(text: message.text)) : .markdown(message.text)
+        message.role == .tool ? .toolOutput(.init(text: message.text)) : .markdown(NativeSystemNotice.text(message))
     }
 
     static func author(_ message: NativeMessage, agentName: String, hasParticipants: Bool) -> MessageAuthor {

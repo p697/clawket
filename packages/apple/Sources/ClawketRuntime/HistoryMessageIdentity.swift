@@ -37,7 +37,7 @@ struct HistoryMessageIdentity {
         return .init(id: candidate, providedID: provided, source: provided == nil ? .synthetic : .ambiguousProvided)
     }
 
-    private static func provided(_ value: JSONValue) -> String? {
+    static func provided(_ value: JSONValue) -> String? {
         for raw in [value["id"], value["messageId"], value["__openclaw"]?["id"]] {
             if let value = MessageAttributionWire.identifier(raw, maximum: 4_096), value.utf8.count <= 4_096 { return value }
         }

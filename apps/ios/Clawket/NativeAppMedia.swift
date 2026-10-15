@@ -419,17 +419,13 @@ extension NativeAppModel {
         }
     }
 
-    func bindFinalMedia(_ update: RuntimeSessionUpdate, route: ConversationID, runID: String) {
+    func bindFinalMedia(_ update: RuntimeSessionUpdate, route: ConversationID, messageID: String?) {
         let attachments = update.finalAttachments
-        guard !attachments.isEmpty, var document = documents[route] else { return }
-        var index = document.messages.lastIndex { $0.role == .assistant && $0.runID == runID }
-        if index == nil {
-            document.messages.append(.init(id: "media-\(runID)", role: .assistant, text: "", runID: runID)); index = document.messages.count - 1
-        }
-        guard let index else { return }
-        let messageID = document.messages[index].id
+        guard !attachments.isEmpty, let messageID, var document = documents[route] else { return }
+        let matches = document.messages.indices.filter { document.messages[$0].id.utf8.elementsEqual(messageID.utf8) }
+        guard matches.count == 1, let index = matches.first, document.messages[index].role == .assistant else { return }
         document.messages[index].media = attachments.enumerated().map { offset, attachment in
-            .init(id: (try? DocumentStore.scopedKey(namespace: "attachment", parts: [route.connectionID, route.agentID, route.sessionID, runID, String(offset), attachment.artifactID ?? "inline"])) ?? UUID().uuidString, attachment: attachment)
+            .init(id: (try? DocumentStore.scopedKey(namespace: "attachment", parts: [route.connectionID, route.agentID, route.sessionID, messageID, String(offset), attachment.artifactID ?? "inline"])) ?? UUID().uuidString, attachment: attachment)
         }
         documents[route] = document; changed(route)
         for (offset, reference) in document.messages[index].media.enumerated() where reference.artifactID == nil {

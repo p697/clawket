@@ -1040,17 +1040,15 @@ final class NativeAppModel: ObservableObject {
             for route in journalRoutes(connectionID: connectionID, sessionKey: update.sessionKey) { taskJournal?.text(update, route: route) }
             for route in documents.keys where route.connectionID == connectionID && route.sessionID == update.sessionKey {
                 liveRevisions[route, default: 0] += 1
-                let key = "stream-\(update.runID)-\(update.segmentID)"
-                if let index = documents[route]?.messages.firstIndex(where: { $0.id == key }) {
-                    if update.mode == .delta { documents[route]?.messages[index].text += update.text }
-                    else { documents[route]?.messages[index].text = update.text }
-                } else {
-                    documents[route]?.messages.append(.init(id: key, role: .assistant, text: update.text,
-                        runID: update.runID, segmentID: update.segmentID, streaming: true))
-                }
+                guard var document = documents[route] else { continue }
+                let previous = document.messages
+                let epoch = document.historyEpoch
+                guard NativeLiveMessages.text(update, in: &document, epoch: epoch) else { continue }
+                retireChangedHistoryMedia(old: previous, new: document.messages)
+                documents[route] = document
                 running[route] = update.runID; changed(route); updatePresentation(route); scheduleSave(route)
             }
-        case let .runFinished(key, runID, reason, _, _):
+        case let .runFinished(key, runID, reason, segmentID, _):
             for route in journalRoutes(connectionID: connectionID, sessionKey: key) { taskJournal?.finished(route, runID: runID, reason: reason, completion: update.workCompletion) }
             for route in documents.keys where route.connectionID == connectionID && route.sessionID == key {
                 liveRevisions[route, default: 0] += 1
@@ -1059,10 +1057,15 @@ final class NativeAppModel: ObservableObject {
                 finishedRuns[route] = Array(finished.suffix(128))
                 if running[route] == runID { running.removeValue(forKey: route) }
                 if var document = documents[route] {
-                    for index in document.messages.indices where document.messages[index].runID == runID { document.messages[index].streaming = false }
+                    let backend = connections.first { $0.id.utf8.elementsEqual(connectionID.utf8) }?.backendKind
+                    let epoch = document.historyEpoch
+                    let target = NativeLiveMessages.finish(runID: runID, segmentID: segmentID,
+                        metadata: backend.flatMap { update.finalMessageMetadata(backend: $0) },
+                        notice: backend.flatMap { update.terminalNotice(backend: $0) },
+                        hasAttachments: !update.finalAttachments.isEmpty, in: &document, epoch: epoch)
                     document.revision += 1; documents[route] = document
+                    bindFinalMedia(update, route: route, messageID: target)
                 }
-                bindFinalMedia(update, route: route, runID: runID)
                 updatePresentation(route); scheduleSave(route)
                 drainQueue(route)
             }

@@ -78,6 +78,7 @@ extension NativeMessage {
         case id, remoteID, role, local, text, runID, segmentID, idempotencyKey, timestampMs
         case delivery, streaming, isWork, media
         case providedID, idSource, attribution, transcriptPosition, transcriptBoundary, historyEpoch, sourceRevisionHash
+        case turnID, inputMessageID, inputMessageKey
     }
 
     init(from decoder: any Decoder) throws {
@@ -101,7 +102,10 @@ extension NativeMessage {
             transcriptPosition: try values.decodeIfPresent(RuntimeTranscriptPosition.self, forKey: .transcriptPosition),
             transcriptBoundary: try values.decodeIfPresent(RuntimeTranscriptBoundary.self, forKey: .transcriptBoundary),
             historyEpoch: try values.decodeIfPresent(UUID.self, forKey: .historyEpoch),
-            sourceRevisionHash: try values.decodeIfPresent(String.self, forKey: .sourceRevisionHash))
+            sourceRevisionHash: try values.decodeIfPresent(String.self, forKey: .sourceRevisionHash),
+            turnID: try values.decodeIfPresent(String.self, forKey: .turnID),
+            inputMessageID: try values.decodeIfPresent(String.self, forKey: .inputMessageID),
+            inputMessageKey: try values.decodeIfPresent(String.self, forKey: .inputMessageKey))
     }
 }
 
