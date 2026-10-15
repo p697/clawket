@@ -146,7 +146,7 @@ final class NativeAppModel: ObservableObject {
         case let .questionDraftChanged(id, response): taskRequests?.draftChanged(id: id, response: response)
         case let .answerQuestion(id, response): taskRequests?.answer(id: id, response: response)
         case let .cancelQuestion(id): taskRequests?.cancelQuestion(id: id)
-        case .pickAttachment, .removeAttachment, .openAttachment, .voice:
+        case .pickAttachment, .removeAttachment, .openAttachment, .voice, .workInspectorOpened, .workStepOpened:
             break // These capabilities stay hidden until their concrete host handlers are available.
         }
     }

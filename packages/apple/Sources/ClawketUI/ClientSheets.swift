@@ -17,6 +17,8 @@ struct ClientSheetView: View {
                 case let .models(route): models(route)
                 case let .catalog(id): catalog(id)
                 case .connectionApprovals: connectionApprovals
+                case let .work(route, workID):
+                    NativeWorkInspector(model: model, conversationID: route, workID: workID, onIntent: onIntent)
                 }
             }
             .toolbar {

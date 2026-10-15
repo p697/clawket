@@ -317,12 +317,14 @@ struct ConnectionStatusView: View {
 
 enum ClientSheet: Identifiable {
     case sessions(ConversationID), models(ConversationID), catalog(AgentCatalogID), connectionApprovals
+    case work(ConversationID, workID: String)
     var id: String {
         switch self {
         case let .sessions(route): "sessions-\(route.connectionID)-\(route.agentID)"
         case let .models(route): "models-\(route.connectionID)-\(route.agentID)"
         case let .catalog(id): "catalog-\(id.connectionID)-\(id.agentID)"
         case .connectionApprovals: "connection-approvals"
+        case let .work(route, workID): "work-\(route.connectionID)-\(route.agentID)-\(route.sessionID)-\(workID)"
         }
     }
 }
@@ -375,6 +377,13 @@ private struct NativeConversationView: View {
             .opacity(expanded ? 0 : 1)
             .accessibilityHidden(expanded)
 
+            if let work = conversation.work, work.inspect.isVisible, !work.id.isEmpty {
+                NativeWorkDock(work: work) {
+                    guard let intent = work.openIntent(conversationID: conversation.id) else { return }
+                    onIntent(intent)
+                    showSheet(.work(conversation.id, workID: work.id))
+                }
+            }
             NativeComposer(draft: draft, conversation: conversation, expanded: $expanded,
                            onIntent: { intent in
                                if case .send = intent { scrollRequest += 1 }

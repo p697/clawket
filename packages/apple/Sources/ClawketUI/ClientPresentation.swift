@@ -430,18 +430,20 @@ public struct ConversationPresentation: Identifiable, Hashable, Sendable {
     public var isLoading: Bool
     public var isLoadingHistory: Bool
     public var features: [ClientFeature: ActionAvailability]
+    public var work: WorkDockPresentation?
 
     public init(id: ConversationID, agentName: String, sessionTitle: String, subtitle: String? = nil,
                 messages: [MessagePresentation] = [], connection: ConnectionPresentation = .init(),
                 sessions: [SessionPresentation] = [], models: [ModelPresentation] = [],
                 modelTitle: String? = nil, modelScopeLabel: String? = nil, sendLabel: String = String(localized: "Send"),
                 isLoading: Bool = false, isLoadingHistory: Bool = false,
-                features: [ClientFeature: ActionAvailability] = [:]) {
+                features: [ClientFeature: ActionAvailability] = [:], work: WorkDockPresentation? = nil) {
         self.id = id; self.agentName = agentName; self.sessionTitle = sessionTitle; self.subtitle = subtitle
         self.messages = messages; self.connection = connection; self.sessions = sessions; self.models = models
         self.modelTitle = modelTitle; self.modelScopeLabel = modelScopeLabel; self.isLoading = isLoading
         self.sendLabel = sendLabel
         self.isLoadingHistory = isLoadingHistory; self.features = features
+        self.work = work
     }
 
     public func availability(_ feature: ClientFeature) -> ActionAvailability { features[feature] ?? .unsupported }
@@ -564,5 +566,8 @@ public enum ClientIntent: Sendable {
     case questionDraftChanged(questionID: String, response: QuestionResponse)
     case answerQuestion(questionID: String, response: QuestionResponse)
     case cancelQuestion(questionID: String)
+    /// Read-only intent. The host may mark this exact work record read or load bounded data.
+    case workInspectorOpened(ConversationID, workID: String)
+    case workStepOpened(ConversationID, workID: String, recordID: String, stepID: String)
     case openURL(URL)
 }
