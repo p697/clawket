@@ -22,6 +22,8 @@
 
   - 自审补齐已下载输出的离线/冷启读取：Library只读cachedArtifact按精确connection/session/artifact+24小时+SHA验证已owned文件，不发网络或创造凭据权限；缺失/损坏在线才重取当前Runtime handle，离线不能换scope。新增第13项Host冷启/离线/过期/损坏回归，当前与journal并集门槛57，实际执行继续交最终CI。
 
+  - 再重基设备批准主线4d8adf0a，完整保留DeviceApprovalView/当前review handler与三个新增App回归；最终实际发现60个方法（47+媒体13），validator及反例同步60。272 UI/3权限语义并集合并，保留全部原译文，当前源码5,225语言单元，最终实际编译/执行仍按该head CI。
+
 
 - 2026-10-16 Native 会话生命周期运行时（host 菜单与设备验收待接入）。
   - 增加当前目录/认证代际的不可持久化 action reference、逐行操作元数据和 rename/reset/delete、Codex archive/archived/restore、Codex/Claude/Pi 只读原生会话复制。保留 OpenClaw key/label/reason、Hermes key/title 与 SDK sessionKey/title 差异、真实 active-run/ownership 限制、继承项目及主/渠道禁止删除；archive 不冒充 delete，可复制/可续聊不授予重置或删除原会话。已知 native 输入必须有当前目录和精确 canContinue:true，未知/新 owned 键保留后端最终检查。
