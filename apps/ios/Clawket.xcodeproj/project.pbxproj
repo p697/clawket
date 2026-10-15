@@ -19,6 +19,7 @@
 		44DD38E10C3292EF4F89CD64 /* ClawketRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = B354D017C96AC77858BE7A91 /* ClawketRuntime */; };
 		475F5B966EAA0E954DEFBCDB /* ClawketUI in Frameworks */ = {isa = PBXBuildFile; productRef = EE43E43C07082D0E9B174E3F /* ClawketUI */; };
 		525AC5AA6876B193A893CA1C /* ClawketPersistence in Frameworks */ = {isa = PBXBuildFile; productRef = F5775CE4CCE6F16F9D1400CE /* ClawketPersistence */; };
+		71FE8BB4E98A63D874F1F9CD /* NativeDeviceApprovalPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EE8DA28492E208D65D074FC /* NativeDeviceApprovalPolicyTests.swift */; };
 		72620A6CA1CBC261C9D08231 /* NativeTaskRequestsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83E37C1EE73DD7335ED11156 /* NativeTaskRequestsTests.swift */; };
 		7A694C62FB9D749CD18EE6C6 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = F9DC4D8745DDCA79E2D272D5 /* InfoPlist.xcstrings */; };
 		7FA2632EF83D1302AC0C0FE3 /* ConnectionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06C52C439D7B014576D9687E /* ConnectionsView.swift */; };
@@ -60,6 +61,7 @@
 		06C52C439D7B014576D9687E /* ConnectionsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConnectionsView.swift; sourceTree = "<group>"; };
 		1425ABDA3CA558320898A191 /* NativeVault.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeVault.swift; sourceTree = "<group>"; };
 		1A8D8F99FE6BF72DD9B9F8AF /* ConnectAgentView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConnectAgentView.swift; sourceTree = "<group>"; };
+		1EE8DA28492E208D65D074FC /* NativeDeviceApprovalPolicyTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeDeviceApprovalPolicyTests.swift; sourceTree = "<group>"; };
 		2474FDEDA96EC763B092AFA6 /* Clawket.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Clawket.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		305D6E7D33031255FC087A1D /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		4226A597815E0BC70CE657C2 /* NativeQuestionDraftStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeQuestionDraftStore.swift; sourceTree = "<group>"; };
@@ -191,6 +193,7 @@
 				8EA8C05BF26248B8F8DA8395 /* NativeQuestionDraftStoreTests.swift */,
 				83E37C1EE73DD7335ED11156 /* NativeTaskRequestsTests.swift */,
 				76EE3BA27F5BF88C7BEFC5EB /* NativeTaskJournalTests.swift */,
+				1EE8DA28492E208D65D074FC /* NativeDeviceApprovalPolicyTests.swift */,
 			);
 			name = ClawketTests;
 			path = ClawketTests;
@@ -327,6 +330,7 @@
 				8B15DDB46A3D105034AC29C6 /* NativeQuestionDraftStoreTests.swift in Sources */,
 				72620A6CA1CBC261C9D08231 /* NativeTaskRequestsTests.swift in Sources */,
 				6AB1932CB11F21EA620C8A3B /* NativeTaskJournalTests.swift in Sources */,
+				71FE8BB4E98A63D874F1F9CD /* NativeDeviceApprovalPolicyTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -921,11 +921,11 @@ final class NativeAppModel: ObservableObject {
         guard let failure = error as? RuntimeFailure else { notice = String(localized: "The operation could not be completed. Please try again."); return }
         switch failure.code {
         case .authenticationRequired:
-            notice = String(localized: "Authentication required. Check this connection’s credentials.")
+            notice = NativeDeviceApprovalPolicy.failureText(failure.code, backend: state.backendKind)
         case .pairingRequired:
             if deviceApproval == nil {
-                deviceApprovalNotice = true
-                notice = String(localized: "Approve this device in OpenClaw on your computer, then connect again.")
+                deviceApprovalNotice = state.backendKind == .openclaw
+                notice = NativeDeviceApprovalPolicy.failureText(failure.code, backend: state.backendKind)
             }
         case .permissionsRequired: notice = String(localized: "This connection does not have permission for that action.")
         case .superseded: break

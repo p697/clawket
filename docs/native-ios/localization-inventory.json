@@ -82,7 +82,7 @@
     {
       "key": "Add to queue",
       "sources": [
-        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:466",
+        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:468",
         "apps/ios/Clawket/NativeAppModel.swift:759"
       ],
       "mobileTerm": null
@@ -97,7 +97,7 @@
     {
       "key": "After approving the device, check the connection again.",
       "sources": [
-        "apps/ios/Clawket/DeviceApprovalView.swift:61"
+        "apps/ios/Clawket/DeviceApprovalView.swift:71"
       ],
       "mobileTerm": null
     },
@@ -126,7 +126,7 @@
     {
       "key": "Agents",
       "sources": [
-        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:543",
+        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:545",
         "apps/ios/Clawket/NativeAppModel.swift:29"
       ],
       "mobileTerm": "settings.Agents"
@@ -206,14 +206,14 @@
     {
       "key": "Approve this device",
       "sources": [
-        "apps/ios/Clawket/DeviceApprovalView.swift:71"
+        "apps/ios/Clawket/DeviceApprovalView.swift:81"
       ],
       "mobileTerm": null
     },
     {
       "key": "Approve this device in OpenClaw on your computer, then connect again.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:898"
+        "apps/ios/Clawket/DeviceApprovalView.swift:13"
       ],
       "mobileTerm": "config.Approve this device in OpenClaw on your computer, then connect again."
     },
@@ -234,7 +234,7 @@
     {
       "key": "Authentication required. Check this connection’s credentials.",
       "sources": [
-        "apps/ios/Clawket/NativeAppModel.swift:894"
+        "apps/ios/Clawket/DeviceApprovalView.swift:14"
       ],
       "mobileTerm": null
     },
@@ -286,14 +286,14 @@
     {
       "key": "Check again",
       "sources": [
-        "apps/ios/Clawket/DeviceApprovalView.swift:56"
+        "apps/ios/Clawket/DeviceApprovalView.swift:66"
       ],
       "mobileTerm": null
     },
     {
       "key": "Checking approval…",
       "sources": [
-        "apps/ios/Clawket/DeviceApprovalView.swift:63"
+        "apps/ios/Clawket/DeviceApprovalView.swift:73"
       ],
       "mobileTerm": null
     },
@@ -379,7 +379,7 @@
     {
       "key": "Connect an agent to continue conversations and keep work moving.",
       "sources": [
-        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:549",
+        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:551",
         "apps/ios/Clawket/NativeAppModel.swift:31"
       ],
       "mobileTerm": null
@@ -401,7 +401,7 @@
     {
       "key": "Connected",
       "sources": [
-        "apps/ios/Clawket/DeviceApprovalView.swift:65",
+        "apps/ios/Clawket/DeviceApprovalView.swift:75",
         "apps/ios/Clawket/NativeAppModel.swift:879"
       ],
       "mobileTerm": "settings.Connected"
@@ -512,7 +512,7 @@
     {
       "key": "Copy device ID",
       "sources": [
-        "apps/ios/Clawket/DeviceApprovalView.swift:45"
+        "apps/ios/Clawket/DeviceApprovalView.swift:55"
       ],
       "mobileTerm": null
     },
@@ -583,7 +583,7 @@
     {
       "key": "Device ID",
       "sources": [
-        "apps/ios/Clawket/DeviceApprovalView.swift:48"
+        "apps/ios/Clawket/DeviceApprovalView.swift:58"
       ],
       "mobileTerm": null
     },
@@ -628,7 +628,7 @@
       "sources": [
         "packages/apple/Sources/ClawketUI/ClientSheets.swift:26",
         "apps/ios/Clawket/ConnectionsView.swift:54",
-        "apps/ios/Clawket/DeviceApprovalView.swift:72"
+        "apps/ios/Clawket/DeviceApprovalView.swift:82"
       ],
       "mobileTerm": "common.Done"
     },
@@ -954,7 +954,7 @@
     {
       "key": "Open OpenClaw on your computer and approve the device whose ID matches this one.",
       "sources": [
-        "apps/ios/Clawket/DeviceApprovalView.swift:28"
+        "apps/ios/Clawket/DeviceApprovalView.swift:38"
       ],
       "mobileTerm": null
     },
@@ -1237,7 +1237,7 @@
     {
       "key": "Review this device’s requested access in OpenClaw before approving.",
       "sources": [
-        "apps/ios/Clawket/DeviceApprovalView.swift:31"
+        "apps/ios/Clawket/DeviceApprovalView.swift:41"
       ],
       "mobileTerm": null
     },
@@ -1358,8 +1358,8 @@
     {
       "key": "Send",
       "sources": [
-        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:466",
-        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:476",
+        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:468",
+        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:478",
         "apps/ios/Clawket/NativeAppModel.swift:759"
       ],
       "mobileTerm": "chat.Send"
@@ -1557,7 +1557,7 @@
     {
       "key": "This ID is the fingerprint of this app’s public key.",
       "sources": [
-        "apps/ios/Clawket/DeviceApprovalView.swift:49"
+        "apps/ios/Clawket/DeviceApprovalView.swift:59"
       ],
       "mobileTerm": null
     },
@@ -1658,7 +1658,7 @@
     {
       "key": "This request is no longer available.",
       "sources": [
-        "apps/ios/Clawket/DeviceApprovalView.swift:67",
+        "apps/ios/Clawket/DeviceApprovalView.swift:77",
         "apps/ios/Clawket/NativeTaskRequests.swift:260",
         "apps/ios/Clawket/NativeTaskRequests.swift:339"
       ],
@@ -1806,9 +1806,16 @@
       "mobileTerm": null
     },
     {
+      "key": "Your agent needs to be paired again. Add its current pairing code in Settings.",
+      "sources": [
+        "apps/ios/Clawket/DeviceApprovalView.swift:10"
+      ],
+      "mobileTerm": null
+    },
+    {
       "key": "Your agents, within reach",
       "sources": [
-        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:548",
+        "packages/apple/Sources/ClawketUI/ClientPresentation.swift:550",
         "apps/ios/Clawket/NativeAppModel.swift:30"
       ],
       "mobileTerm": null

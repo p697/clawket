@@ -4,6 +4,16 @@ import UIKit
 
 /// Matching a display snapshot can open/retry its connection, never approve a device.
 enum NativeDeviceApprovalPolicy {
+    static func failureText(_ code: RuntimeFailure.Code, backend: BackendKind?) -> String? {
+        guard code == .authenticationRequired || code == .pairingRequired else { return nil }
+        guard backend == .openclaw else {
+            return String(localized: "Your agent needs to be paired again. Add its current pairing code in Settings.")
+        }
+        return code == .pairingRequired
+            ? String(localized: "Approve this device in OpenClaw on your computer, then connect again.")
+            : String(localized: "Authentication required. Check this connection’s credentials.")
+    }
+
     static func matches(_ context: RuntimeDeviceApprovalContext?, connectionID: String,
                         contextID: UUID, activeConnectionID: String?) -> Bool {
         guard let context else { return false }

@@ -29620,6 +29620,126 @@
       },
       "comment": "Native UI / accessibility."
     },
+    "Your agent needs to be paired again. Add its current pairing code in Settings.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your agent needs to be paired again. Add its current pairing code in Settings."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你的 Agent 需要重新配对。请在设置中添加它当前的配对码。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你的 Agent 需要重新配對。請在設定中加入它目前的配對碼。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "エージェントの再ペアリングが必要です。「設定」で現在のペアリングコードを追加してください。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dein Agent muss erneut gekoppelt werden. Füge seinen aktuellen Kopplungscode in den Einstellungen hinzu."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Votre Agent doit être jumelé à nouveau. Ajoutez son code de jumelage actuel dans Réglages."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il tuo Agent deve essere abbinato di nuovo. Aggiungi il suo codice di abbinamento attuale in Impostazioni."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Debes volver a emparejar tu Agente. Añade su código de emparejamiento actual en Ajustes."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Debes volver a emparejar tu Agente. Agrega su código de emparejamiento actual en Configuración."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seu Agent precisa ser pareado novamente. Adicione o código de pareamento atual dele em Ajustes."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "É necessário voltar a emparelhar o seu Agent. Adicione o código de emparelhamento atual nas Definições."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "에이전트를 다시 페어링해야 합니다. 설정에서 현재 페어링 코드를 추가하세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Необходимо повторно выполнить сопряжение с агентом. Добавьте его текущий код сопряжения в Настройках."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Потрібно знову з’єднати агента. Додайте його поточний код з’єднання в Налаштуваннях."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent’ınızın yeniden eşleştirilmesi gerekiyor. Güncel eşleştirme kodunu Ayarlar’dan ekleyin."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent của bạn cần được ghép nối lại. Thêm mã ghép nối hiện tại trong Cài đặt."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent ของคุณต้องจับคู่ใหม่ เพิ่มรหัสจับคู่ปัจจุบันในการตั้งค่า"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "आपके Agent को फिर से पेयर करना होगा। सेटिंग में उसका मौजूदा पेयरिंग कोड जोड़ें।"
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "يحتاج وكيلك إلى الاقتران مجددًا. أضف رمز الاقتران الحالي في الإعدادات."
+          }
+        }
+      },
+      "comment": "Native UI / accessibility."
+    },
     "Your agents, within reach": {
       "extractionState": "manual",
       "localizations": {
