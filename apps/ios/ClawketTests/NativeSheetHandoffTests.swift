@@ -10,7 +10,7 @@ final class NativeSheetHandoffTests: XCTestCase {
     @MainActor func testEmbeddedAddClosesTheOwningSettingsSheetAndOpensConnectAfterDismissal() async throws {
         let client = model(), fixture = try attach(client)
         defer { fixture.close() }
-        client.handle(.openDestination(.account, nil))
+        client.handle(.openDestination(.account, conversation: nil))
         try await waitUntil(fixture) { fixture.hasNavigationTitle(String(localized: "Settings")) }
         let outgoing = try XCTUnwrap(client.destinationPresentationID)
         // Invoke the actual embedded button action; the fixture never substitutes its own presenter.
@@ -24,7 +24,7 @@ final class NativeSheetHandoffTests: XCTestCase {
         XCTAssertNotEqual(client.destinationPresentationID, outgoing)
         client.destination = nil
         try await waitUntil(fixture) { !fixture.hasPresentation }
-        client.handle(.openDestination(.account, nil))
+        client.handle(.openDestination(.account, conversation: nil))
         try await waitUntil(fixture) { fixture.hasNavigationTitle(String(localized: "Settings")) }
     }
 
@@ -44,7 +44,7 @@ final class NativeSheetHandoffTests: XCTestCase {
         // The production OK action uses this same exact-generation acknowledgement.
         client.dismissNotice(id: noticeID)
         try await waitUntil(fixture) { !fixture.hasPresentation }
-        client.handle(.openDestination(.account, nil))
+        client.handle(.openDestination(.account, conversation: nil))
         try await waitUntil(fixture) { fixture.hasNavigationTitle(String(localized: "Settings")) }
         client.showFailure(RuntimeFailure(.authenticationRequired))
         try await waitUntil(fixture) { fixture.alert?.message == client.notice }
