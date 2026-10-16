@@ -13,6 +13,38 @@ struct RuntimeLiveBufferTests {
         throw RuntimeFailure(.notConnected)
     }
 
+    @Test func realHermesMapperDoesNotInsertPerTokenBarriersAndRetainsWholeSingleSegmentFinal() async throws {
+        let socket = ScriptSocket { request, socket in try await socket.reply(request, payload: health(.hermes)) }
+        let runtime = try RuntimeCoordinator(credentials: Credentials(), socketFactory: ScriptFactory(socket))
+        try await runtime.activate(connection(.hermes))
+        var reader = try await ready(runtime)
+        let scope = try await runtime.scope()
+        func chat(_ text: String, state: String = "delta") -> JSONValue {
+            event("chat", .object(["runId": .string("fixture-hermes"), "sessionKey": .string("main"),
+                "state": .string(state), "message": .object(["role": .string("assistant"), "content": .string(text)])]))
+        }
+        let pieces = ["NO", "RMAL", " \r\n", "e", "\u{301}", "👩", "\u{200D}", "💻"]
+        for index in 0..<1_024 {
+            await runtime.receive(.backendFrame(scope.generation, chat(pieces[index % pieces.count])), epoch: scope.epoch, attempt: scope.attempt)
+        }
+        #expect(await runtime.state.phase == .ready)
+        try await runtime.abort(sessionKey: "main", runID: "fixture-hermes")
+        #expect(await socket.requests("chat.abort").count == 1)
+        let full = (0..<1_024).map { pieces[$0 % pieces.count] }.joined() + " — corrected final"
+        await runtime.receive(.backendFrame(scope.generation, chat(full, state: "final")), epoch: scope.epoch, attempt: scope.attempt)
+        guard case let .update(_, .text(delta)) = try await reader.next(),
+              case let .update(_, .text(snapshot)) = try await reader.next(),
+              case .update(_, .runFinished) = try await reader.next() else {
+            Issue.record("Unexpected per-token event/barrier or lost terminal"); await runtime.disconnect(); return
+        }
+        #expect(delta.mode == .delta && snapshot.mode == .snapshot)
+        #expect(Data(delta.text.utf8) == Data((0..<1_024).map { pieces[$0 % pieces.count] }.joined().utf8))
+        #expect(Data(snapshot.text.utf8) == Data(full.utf8))
+        #expect(delta.segmentID == snapshot.segmentID && delta.snapshotMetadata == nil)
+        #expect(await socket.requests("chat.send").isEmpty)
+        await runtime.disconnect()
+    }
+
     @Test func slowPublicConsumerKeepsMappedDeltasBarriersAndAllowsStopWithoutReplayingSend() async throws {
         let socket = ScriptSocket { request, socket in
             let payload: JSONValue = switch request["method"]?.stringValue {

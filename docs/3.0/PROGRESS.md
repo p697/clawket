@@ -1,5 +1,10 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-16 Native Runtime 消费驱动事件缓冲（独立修复；RN 保持默认）。
+  - 保留公开 AsyncThrowingStream，内部单一64项/16MiB有界队列随真实next出队；仅同内部代际且UTF8精确路由/segment/lineage、无snapshot metadata的相邻纯delta合并，其他事件保持barrier。原始事件weight全部计费，容量溢出仍同步退休、不丢已准入正文、不提高限额、不自动重放；取消/finish单次通知并唤醒reader。
+  - 两个独立SPM文件覆盖慢consumer千片Unicode/空白、真实Hermes/Pi mapper→Coordinator→公开stream、tool/work/snapshot/final顺序、Stop不等UI消费、严格身份/代际隔离、65个非合并项、字节限/超限、取消/finish/owner释放与pending写退休无重放。首编strict Swift6/jobs2 39.21秒，新buffer9方法/10输入与真实runtime5方法首轮全绿；既有SessionLifecycle5方法/11输入、RuntimeOperations6方法/12输入逐文件全绿，16指令对/7docs与diff通过。strict Swift6/iOS16.4双arch实际App开发编译/codesign验证也已通过，私有dev副本交主线程，heavy已释放；不属发行包或设备验收。独立只读review与完整CI并行。
+  - 现场仅实采event_stream catch与随后activate断点；Runtime唯一throwing finish源码是capacity，但Swift表达式受stale PCM阻挡，未实采code或数量/字节细分，不将本切片冒称已确定现场全部根因。真实Hermes本轮最终final不等于Stop通过；跨工具aggregate final范围仍独立待处理。容量故障后的Host事件loop仅showFailure、已展示state可能仍ready，本轮不扩Host恢复或宣称全部capacity恢复完成。无RN、服务、设备审批、版本或发布变更。
+
 - 2026-10-16 Native 真实 Hermes Stop 定位与复验（独立探索；RN 保持默认）。
   - #274 exactca7f9393/base76bc45b9在current-main/CLEAN、全13 CI绿后合8afa5784并finish；App314/314零失败/跳过（57.765秒test/80.504秒wall）、package459、19语两表9082精确编译值。primary既有node_modules保留，自有开发副本/证据保存在SSD，不发行。工作入口/菜单实际验收边界见下条，不以CI替代真实后端。
   - 新任务从fresh main独立工作树开始，仅用既有owner QA route与baseline physical/首条自有输入比对。原生registry只在QA独立Keychain，未扫Vault或按剩余Hermes行猜observer身份；未启动原observer或覆写旧结果。独立loopback probe前后各定向history，先确认无活动，单次send，等真实非空delta，再核samephysical/inFlightRun精确归属后唯一次Stop。20秒绝对RPC预算、总145秒、事件只保留本QA的128KiB/256条紧凑类别/布尔，未知不重试，凭据只内存、不输出URL/正文。
