@@ -1,5 +1,11 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-16 Native assistant Markdown 代码卡片（独立候选，完整CI待续）。
+  - 实际 assistant Markdown 在原 message/content 内按 fence 源字节偏移展示已有原生代码容器、语言栏与独立44pt Copy；正文/媒体顺序、原消息身份、缓存与协议不变。Copy先暂停阅读跟随，再复制该块原字节，保留缩进/CRLF/Unicode；不由代码推工作状态。
+  - 开fence等换行、完整闭fence可在EOF识别；短/无效尾标记保留原文。解析只依赖原文字节，不把spinner/proof失效当正文final；已开启而未闭合时保留当前body，不伪造完成。仅markdown/code的Eq/Hash采用字节精确比较，防canonical alias修正留旧复制内容，其他case语义不变。7个纯parser方法和1个真实UIWindow/assistant row/UIButton回归已写；App方法下限295及294缩减反例同步。独立只读审查指出spinner失效不等于正文final后，已以纯正文EOF规则修复并补actualrow不变回归，复核无新阻挡。React Native默认与源码、服务/凭据/版本/发布均未改。
+
+  - 重基source主线4c00d504；memory43%/无竞争进程预检后独占heavy/simulator、jobs2串行：7个parser方法通过，strict Swift6/iOS16.4 actual App与295方法arm64/x86_64开发编译成功，QA模拟器NativeReadingLayout10/10零失败（7.425秒；新actualrow涵盖320/420/768pt、同UIButton/UITextView、NFC→NFD修正Copy与仅proof失效）。16指令对/7docs、report3（295下限/294缩减拒绝）、19语9063编译值通过；精确开发app保存到外置.native-ios-tools后释放两租约，QA数据未清除。不是本机295全跑、真机/真实后端代码内容或完整视觉验收；完整current-main门禁交PR CI。
+
 - 2026-10-16 Native source-backed snapshot/history handoff（独立候选，窄验证通过，精确head CI待续）。
   - 只处理实际完整 `chat.message` 累计快照：复用 final/history 的实际消息 ID、role、原UTF8、run/turn/input冲突解析；缺ID、真delta、SDK跨item聚合仍无snapshot来源，不按run/正文猜合并。保留原render UUID、physical gates、媒体目标与owned outbox；RN、默认入口、共享服务与协议均不改。
   - Live/source与segment候选必须唯一且相容；history-first仅实际当前活动与真实run匹配才有候选资格，只有真正accepted snapshot晋级live。活动/unknown head不回退accepted正文与final媒体；合法final目标明确terminal并拒绝迟snapshot。128条epoch-scoped字节精确歧义记忆保留已观测同source矛盾及unique/empty/cold/reappearance，overflow关闭source join而不驱逐旧证据。typed negative-only结果须持久化歧义但不授正文/journal/running/proof；缺/坏activity不当终态，同时保留实际runId无bool的既有正向契约。

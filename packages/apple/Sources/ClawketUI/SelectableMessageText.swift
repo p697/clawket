@@ -9,6 +9,7 @@ struct SelectableMessageText: UIViewRepresentable {
     let text: String
     var monospaced = false
     var fontSize: Int = 17
+    var interpretsCodeFences = true
     let onURL: (URL) -> Void
     var onReadingInteraction: () -> Void = {}
 
@@ -37,13 +38,16 @@ struct SelectableMessageText: UIViewRepresentable {
         (view as? ReadingTextView)?.onReadingInteraction = onReadingInteraction
         let category = view.traitCollection.preferredContentSizeCategory
         let sameText = monospaced ? context.coordinator.text.map { $0.utf8.elementsEqual(text.utf8) } == true : context.coordinator.text == text
-        guard !sameText || context.coordinator.category != category || context.coordinator.monospaced != monospaced || context.coordinator.fontSize != fontSize else { return }
+        guard !sameText || context.coordinator.category != category || context.coordinator.monospaced != monospaced || context.coordinator.fontSize != fontSize
+            || context.coordinator.interpretsCodeFences != interpretsCodeFences else { return }
         let selection = view.selectedRange
         context.coordinator.text = text
         context.coordinator.category = category
         context.coordinator.monospaced = monospaced
         context.coordinator.fontSize = fontSize
-        view.attributedText = NativeMarkdownFormatter.format(text, monospaced: monospaced, fontSize: fontSize, traits: view.traitCollection)
+        context.coordinator.interpretsCodeFences = interpretsCodeFences
+        view.attributedText = NativeMarkdownFormatter.format(text, monospaced: monospaced, fontSize: fontSize,
+            traits: view.traitCollection, interpretsCodeFences: interpretsCodeFences)
         let length = view.attributedText.length
         let location = min(selection.location, length)
         view.selectedRange = NSRange(location: location, length: min(selection.length, length - location))
@@ -64,6 +68,7 @@ struct SelectableMessageText: UIViewRepresentable {
         var category: UIContentSizeCategory?
         var monospaced = false
         var fontSize: Int?
+        var interpretsCodeFences = true
         var onURL: (URL) -> Void
         var onReadingInteraction: () -> Void = {}
         init(onURL: @escaping (URL) -> Void) { self.onURL = onURL }
@@ -91,12 +96,13 @@ private final class ReadingTextView: UITextView {
 
 @MainActor
 private enum NativeMarkdownFormatter {
-    static func format(_ raw: String, monospaced: Bool, fontSize: Int, traits: UITraitCollection) -> NSAttributedString {
+    static func format(_ raw: String, monospaced: Bool, fontSize: Int, traits: UITraitCollection,
+                       interpretsCodeFences: Bool) -> NSAttributedString {
         let result = NSMutableAttributedString(string: "")
         let lines = raw.components(separatedBy: "\n")
         var inCode = monospaced
         for (index, line) in lines.enumerated() {
-            if !monospaced && (line.hasPrefix("```") || line.hasPrefix("~~~")) {
+            if interpretsCodeFences && !monospaced && (line.hasPrefix("```") || line.hasPrefix("~~~")) {
                 inCode.toggle()
                 continue
             }

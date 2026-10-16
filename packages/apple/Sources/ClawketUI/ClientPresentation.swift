@@ -493,6 +493,35 @@ public enum MessageContent: Hashable, Sendable {
     case approval(ApprovalPresentation)
     case question(QuestionPresentation)
     case notice(String)
+
+    public static func == (left: Self, right: Self) -> Bool {
+        switch (left, right) {
+        case let (.markdown(a), .markdown(b)): a.utf8.elementsEqual(b.utf8)
+        case let (.code(a, text), .code(b, other)):
+            a.map { Data($0.utf8) } == b.map { Data($0.utf8) } && text.utf8.elementsEqual(other.utf8)
+        case let (.toolOutput(a), .toolOutput(b)): a == b
+        case let (.attachment(a), .attachment(b)): a == b
+        case let (.work(a), .work(b)): a == b
+        case let (.approval(a), .approval(b)): a == b
+        case let (.question(a), .question(b)): a == b
+        case let (.notice(a), .notice(b)): a == b
+        default: false
+        }
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        switch self {
+        case let .markdown(text): hasher.combine(0); hasher.combine(Data(text.utf8))
+        case let .code(language, text):
+            hasher.combine(1); hasher.combine(language.map { Data($0.utf8) }); hasher.combine(Data(text.utf8))
+        case let .toolOutput(value): hasher.combine(2); hasher.combine(value)
+        case let .attachment(value): hasher.combine(3); hasher.combine(value)
+        case let .work(value): hasher.combine(4); hasher.combine(value)
+        case let .approval(value): hasher.combine(5); hasher.combine(value)
+        case let .question(value): hasher.combine(6); hasher.combine(value)
+        case let .notice(value): hasher.combine(7); hasher.combine(value)
+        }
+    }
 }
 
 public struct MessagePresentation: Identifiable, Hashable, Sendable {

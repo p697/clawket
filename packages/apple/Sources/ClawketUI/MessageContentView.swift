@@ -107,21 +107,23 @@ struct NativeMessageRow: View {
     private func contentView(_ content: MessageContent, id: String) -> some View {
         switch content {
         case let .markdown(text):
-            SelectableMessageText(text: text, fontSize: model.appearance.chatFontSize, onURL: { onIntent(.openURL($0)) }, onReadingInteraction: onReadingInteraction)
-        case let .code(language, text):
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Text(language ?? String(localized: "Code")).font(.caption.weight(.medium)).foregroundStyle(.secondary)
-                    Spacer()
-                    Button {
-                        UIPasteboard.general.string = text
-                    } label: { Label("Copy", systemImage: "doc.on.doc").font(.caption).frame(minHeight: 44) }
-                    .accessibilityLabel("Copy code")
+            if case .agent = message.author {
+                ForEach(NativeMarkdownBlocks.parse(text)) { block in
+                    switch block.content {
+                    case let .code(language, text):
+                        codeBlock(language: language, text: text, id: "\(id)-fence-\(block.id)")
+                    case let .markdown(text):
+                        SelectableMessageText(text: text, fontSize: model.appearance.chatFontSize, interpretsCodeFences: false,
+                            onURL: { onIntent(.openURL($0)) }, onReadingInteraction: onReadingInteraction)
+                    default: EmptyView()
+                    }
                 }
-                SelectableMessageText(text: text, monospaced: true, fontSize: model.appearance.chatFontSize, onURL: { onIntent(.openURL($0)) }, onReadingInteraction: onReadingInteraction)
+            } else {
+                SelectableMessageText(text: text, fontSize: model.appearance.chatFontSize,
+                    onURL: { onIntent(.openURL($0)) }, onReadingInteraction: onReadingInteraction)
             }
-            .padding(14)
-            .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        case let .code(language, text):
+            codeBlock(language: language, text: text, id: id)
         case let .toolOutput(output):
             let text = output.text
             DisclosureGroup(isExpanded: expansion(id)) {
@@ -156,6 +158,27 @@ struct NativeMessageRow: View {
         case let .notice(text):
             Label(text, systemImage: "info.circle").font(.footnote).foregroundStyle(.secondary)
         }
+    }
+
+    private func codeBlock(language: String?, text: String, id: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(language ?? String(localized: "Code")).font(.caption.weight(.medium)).foregroundStyle(.secondary)
+                    .lineLimit(1).truncationMode(.tail)
+                Spacer(minLength: 8)
+                NativeTextActionButton(String(localized: "Copy"), accessibilityIdentifier: "copy-code-\(id)") {
+                    onReadingInteraction()
+                    UIPasteboard.general.string = text
+                }
+                .accessibilityLabel("Copy code")
+                .disabled(text.isEmpty)
+            }
+            SelectableMessageText(text: text, monospaced: true, fontSize: model.appearance.chatFontSize,
+                onURL: { onIntent(.openURL($0)) }, onReadingInteraction: onReadingInteraction)
+        }
+        .padding(14)
+        .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .accessibilityIdentifier("code-block-\(id)")
     }
 
     private func imageGallery(_ items: [NativeMessageContentGroup.ImageItem]) -> some View {

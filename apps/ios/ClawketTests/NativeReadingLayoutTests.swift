@@ -4,6 +4,70 @@ import XCTest
 @testable import ClawketUI
 
 final class NativeReadingLayoutTests: XCTestCase {
+    @MainActor func testActualAssistantMarkdownCodeCardCopiesExactBytesAcrossStreamingAndFinal() async throws {
+        let route = ConversationID(connectionID: "layout", agentID: "agent", sessionID: "code")
+        let model = ClientPresentation(), prefix = "Explanation 中文\n"
+        let body = "  let name = \"é\"\r\n\tprint(name) // **literal** `raw`\r\n"
+        var interactions = 0
+        func row(_ raw: String, streaming: Bool, author: MessageAuthor = .agent(name: "Agent", label: nil)) -> NativeMessageRow {
+            NativeMessageRow(message: .init(id: "reply", author: author, content: [.markdown(raw)], isStreaming: streaming),
+                conversationID: route, model: model, onIntent: { _ in }, onReadingInteraction: { interactions += 1 })
+        }
+        let host = UIHostingController(rootView: row(prefix + "```swift\r\n" + body, streaming: true)), window = attach(host)
+        defer { window.isHidden = true; window.rootViewController = nil }
+        let copyID = "copy-code-reply-0-fence-\(prefix.utf8.count)"
+        for width in [CGFloat(320), 420, 768] {
+            await layout(host, width: width, height: 900)
+            let copy = try XCTUnwrap(descendants(host.view, of: UIButton.self).first { $0.accessibilityIdentifier == copyID })
+            XCTAssertGreaterThanOrEqual(copy.bounds.width, 44); XCTAssertGreaterThanOrEqual(copy.bounds.height, 44)
+            let code = try XCTUnwrap(descendants(host.view, of: UITextView.self).first { $0.text.utf8.elementsEqual(body.utf8) })
+            XCTAssertTrue(code.isSelectable); XCTAssertFalse(code.isScrollEnabled)
+            let frame = code.convert(code.bounds, to: host.view)
+            XCTAssertGreaterThanOrEqual(frame.minX, -1); XCTAssertLessThanOrEqual(frame.maxX, width + 1)
+            copy.sendActions(for: .touchUpInside)
+            XCTAssertEqual(Data(try XCTUnwrap(UIPasteboard.general.string).utf8), Data(body.utf8))
+        }
+        let copy = try XCTUnwrap(descendants(host.view, of: UIButton.self).first { $0.accessibilityIdentifier == copyID })
+        let code = try XCTUnwrap(descendants(host.view, of: UITextView.self).first { $0.text.utf8.elementsEqual(body.utf8) })
+        let corrected = body.replacingOccurrences(of: "é", with: "e\u{301}")
+        host.rootView = row(prefix + "```swift\r\n" + corrected + "```\r\nAfter", streaming: false)
+        await layout(host, width: 420, height: 900)
+        let finalCopy = try XCTUnwrap(descendants(host.view, of: UIButton.self).first { $0.accessibilityIdentifier == copyID })
+        XCTAssertTrue(finalCopy === copy)
+        XCTAssertTrue(descendants(host.view, of: UITextView.self).contains { $0 === code })
+        XCTAssertEqual(Data(code.text.utf8), Data(corrected.utf8))
+        finalCopy.sendActions(for: .touchUpInside)
+        XCTAssertEqual(Data(try XCTUnwrap(UIPasteboard.general.string).utf8), Data(corrected.utf8))
+        XCTAssertEqual(interactions, 4)
+        let readingTexts = descendants(host.view, of: UITextView.self).map(\.text)
+        XCTAssertTrue(readingTexts.contains(prefix)); XCTAssertTrue(readingTexts.contains("After"))
+        host.rootView = row("```sw", streaming: true)
+        await layout(host, width: 320, height: 900)
+        let openingTail = try XCTUnwrap(descendants(host.view, of: UITextView.self).first { $0.text == "```sw" })
+        host.rootView = row("```sw", streaming: false) // Lost current-wire proof is not final text.
+        await layout(host, width: 320, height: 900)
+        XCTAssertTrue(descendants(host.view, of: UITextView.self).contains { $0 === openingTail && $0.text == "```sw" })
+        XCTAssertFalse(descendants(host.view, of: UIButton.self).contains { $0.accessibilityIdentifier?.hasPrefix("copy-code-") == true })
+        let closingTail = prefix + "```swift\r\n" + body + "```"
+        host.rootView = row(closingTail, streaming: true)
+        await layout(host, width: 320, height: 900)
+        let closingCopy = try XCTUnwrap(descendants(host.view, of: UIButton.self).first { $0.accessibilityIdentifier == copyID })
+        let closingCode = try XCTUnwrap(descendants(host.view, of: UITextView.self).first { $0.text.utf8.elementsEqual(body.utf8) })
+        closingCopy.sendActions(for: .touchUpInside)
+        XCTAssertEqual(Data(try XCTUnwrap(UIPasteboard.general.string).utf8), Data(body.utf8))
+        host.rootView = row(closingTail, streaming: false)
+        await layout(host, width: 320, height: 900)
+        let disconnectedCopy = try XCTUnwrap(descendants(host.view, of: UIButton.self).first { $0.accessibilityIdentifier == copyID })
+        XCTAssertTrue(disconnectedCopy === closingCopy)
+        XCTAssertTrue(descendants(host.view, of: UITextView.self).contains { $0 === closingCode && $0.text.utf8.elementsEqual(body.utf8) })
+        disconnectedCopy.sendActions(for: .touchUpInside)
+        XCTAssertEqual(Data(try XCTUnwrap(UIPasteboard.general.string).utf8), Data(body.utf8))
+        XCTAssertEqual(interactions, 6)
+        host.rootView = row(prefix + "```swift\ncode\n```", streaming: false, author: .local)
+        await layout(host, width: 320, height: 900)
+        XCTAssertFalse(descendants(host.view, of: UIButton.self).contains { $0.accessibilityIdentifier?.hasPrefix("copy-code-") == true })
+    }
+
     @MainActor func testConversationKeepsWorkAndUpgradeAccessibleBesideBoundedComposer() async throws {
         let route = ConversationID(connectionID: "layout", agentID: "agent", sessionID: "accessories")
         let draft = ComposerDraft(conversationID: route, text: "A retained draft\nSecond line\nThird line")
