@@ -50,7 +50,19 @@ One fresh real input received a run receipt and independently observed live text
 
 Afterward, there was no failure notice or Stop control. Actual system Paste restored the original 16-character draft with zero resources and Send enabled. An independent read-only history check verified the original owned input, same physical session and no active run. This establishes a completed real long reply and the later idle window; it is not full-network stability, an original-failure typed sample or successful native cancellation.
 
-The first owner review may focus on Studio's chat typography, code Copy, scroll/Latest, multiline editing, ordered three-image tray, preview/return and Work/Menu navigation. Studio is synthetic; use the separate Hermes QA conversation for real text only. OpenClaw authentication, native Stop, Relay/network recovery, VoiceOver and full parity remain pending. React Native remains the default.
+The first owner review targets chat typography, code Copy, scroll/Latest, multiline editing, ordered images, preview/return and Work/Menu navigation. The original Studio is no longer the live review entry; the separate UI connection below has its own synthetic scope. Use the separate Hermes QA conversation for real text only. OpenClaw authentication, native Stop, Relay/network recovery, VoiceOver and full parity remain pending. React Native remains the default.
+
+## First UI review: a separate synthetic connection
+
+The original synthetic-peer processes had exited. Original Studio now shows cached content and reconnecting; a replacement peer must not be described as recovery of its physical session. A dedicated UI peer was started with a new process and physical session, and a new saved connection named **Clawket · UI 体验** was actually established through the product connection form.
+
+WebDriver sent text with three known fixture images once. Independent peer statistics recorded `acceptedSends=1`, `completedRuns=1`, `active=0`, `images=3` and `dedupe=0`. The app showed no Alert or Stop in the completed window. A new reply image actually opened in native QuickLook and returned through Done. This proves that bounded synthetic UI interaction, not model inference, backend cancellation or recovery of the original connection.
+
+Original Studio's empty draft bytes and three resource IDs in their original order exactly matched the baseline; its held input was not sent. The completed real Hermes long-reply window remains separate evidence. Native Stop, OpenClaw authentication, Relay/weak-network recovery, VoiceOver and full parity remain pending.
+
+The main thread confirmed the first review entry: **Device Hub → Clawket Chat Craft QA → Clawket · UI 体验**. That connection has an empty text draft and three new unsent draft images. An actual downward drag in the chat table hid the keyboard, and the saved screenshot was inspected with no Alert present. Peer totals remained one accepted send, one completed run, zero active runs, three images and zero deduplicated sends; no extra Send occurred. Original Studio's baseline draft hash and three ordered resource IDs were checked again and remained identical. This prepared window is an interactive first review of simulated replies, chat, editing, uploads, previews and navigation, not full functional or real-backend acceptance.
+
+The existing Device Hub GUI selected only the **Clawket Chat Craft QA** simulator; no physical phone was operated. An unnecessary XIP expansion attempt based on the old Simulator path was stopped, and Full Disk Access permissions were not changed. React Native remains the default; no shared service, existing backend credential or release configuration changed. This documentation task performs no device operation, native build or local test, and documentation CI does not establish UI or model acceptance.
 
 ## Later authentication diagnostics
 

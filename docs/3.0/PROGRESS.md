@@ -1,5 +1,11 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-17 Native 第一轮 UI 初验独立入口（RN 保持默认）。
+  - 原合成peer进程已退出，原Studio当前只有缓存/正在重连；不以新peer冒充原physical恢复。另起专用UI peer、新physical及新saved connection，显示名「Clawket · UI 体验」，已实际通过产品连接表单建立。WebDriver仅发送一次文字与三张已知fixture图片，独立stats为acceptedSends1/completedRuns1/active0/images3/dedupe0；完成窗口App无Alert/Stop，一张新回复图片实际原生QuickLook→完成通过。这是新合成UI窗口，不是真模型或原连接恢复验收。
+  - 原Studio空draft原UTF8及三资源ID/顺序与baseline完全一致，未发held。真实Hermes长回复已通过，Native Stop、OpenClaw认证、Relay/弱网恢复仍未通过；VoiceOver/完整N5与owner接受未完成，不以文档/CI替代UI或模型验收。
+  - 主线程已确认首轮入口：Device Hub → Clawket Chat Craft QA → 当前「Clawket · UI 体验」。当前空draft/三张新的未发草稿图片，实际在聊天table下拉后keyboardVisible由true变false，无Alert；截图已保存并实际查看。新peer累计仍accepted1/completed1/active0/images3/dedupe0，无额外Send；原Studio baseline空draft hash/三有序refs再次全等。此窗口可交互体验模拟回复、聊天/编辑/上传/预览与导航，不是完整功能或真实后端合格证明。
+  - GUI使用已安装的Device Hub，仅选「Clawket Chat Craft QA」模拟器，不触物理手机。先前误按旧Simulator路径判断缺GUI而进行的不必要XIP解压已停止，未修改完全磁盘访问权限。无RN默认、共享服务、既有凭据或发布变更；本独立切片只更新两份验收文档，不使用设备/租约或运行本机测试。16指令对检查与diff通过，独立只读文案复核无阻挡；完整CI另验，不抵UI/模型验收。
+
 - 2026-10-16 Native 有界流开发包真实复验与第一轮 UI 初验准备（RN 保持默认）。
   - #276 exactfe157111/current-main/CLEAN全部11门禁绿后合2d8a7890并finish；仅证据文档，不改产品。新独立acceptance工作树使用#277 productiond5d2e6a3（与重基6d2fd826源码/测试等价）开发App，不打Archive/IPA或改共享服务。
   - 实际UI automation stale导致预检停在Send0/Stop0，临时Studio草稿已恢复，三refs/held保留；随后真saved connection、header/原draft/导航route精确核对。新真实Send1经被动reader绑定receipt/见非空live，Native单assistant15630字节、streaming=false、无failure/Stop，长流完整结束。元素Stop调用未拿到中止证据；另一次新input单Send/单coordinate tap、live截图有Stop，最终亦final非aborted。未证明handler或坐标等于live center，原生取消仍未通过，均未重发。
