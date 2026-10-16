@@ -6,8 +6,9 @@
   - 共存边界已写入根 AGENTS 与 native PLAN：保留 RN 源码、UI、默认命令、Expo/EAS 与商店/发布路径；原生探索不得降低 RN 连接稳定性或共享协议兼容性。本任务仅更新规则和文档，不改应用、构建配置、版本或服务，不执行设备安装、分发或发布。
 
 - 2026-10-16 Native physical history 宿主、旧请求隔离与附件epoch缓存（候选，完整CI/设备验收待续）。
+  - 已整合#253 consent/#256 roster/#257 tool/#259 live provenance主线165810d7；实际发现240 App方法，报告minimum与239缩减反例同步，PBX55生产/26测试实际路径无重无缺。upstream物理gate后才进入真实UUID LiveMessages reducer与exact final媒体target，旧lastIndex分支已删；本机217编译证据不冒充此240执行，完整组合交CI。
   - 当前head实际物理ID变化或捕获reset/delete ACK才归档并替换本机epoch；ACK即使后续catalog失败也单次消费，receipt中的旧physical ID不冒充新ID。旧raw原样保存、draft/资源并发编辑保留、旧outbox原render/key/epoch保留并hold，unknown不重发。原始hash+revision+epoch的bind API让ACK后的held input原地绑定首次真实ID，不重复归档。
-  - reset/delete前durable unconfirmed intent跨冷启动保留；仅真实ACK或old/new非nil真实ID精确变化清锁，nil/首次known/legacy本地归档不当远端成功。实际host回归覆盖已提交后wire失效仍采用current、未知存储锁单route、旧cache读取跨断线/重入不得覆盖新draft。只按scope/epoch/当前input/实际receipt/accepted head接live，裸旧run不借新input洗白；超过128新run滚动更新近期证据，overflow旧run保守回head。
+  - reset/delete前durable unconfirmed intent跨冷启动保留；仅真实ACK或old/new非nil真实ID精确变化清锁，nil/首次known/legacy本地归档不当远端成功。实际host回归覆盖已提交后wire失效仍采用current、未知存储锁单route、旧cache读取跨断线/重入不得覆盖新draft。只按scope/epoch/当前input/实际receipt/accepted head接live，新input tuple不让裸旧run获得后续权限；超过128新run滚动更新近期证据，overflow旧run保守回head。
   - 旧work按物理epoch隔离仍可只读查看；同scope canonical Unicode opaque IDs精确区分。审批/问题在critical preparation暂停仅目标session，冻结Always不复活；epoch相关本地draft key不重绑旧答案。fresh-list捕获epoch后才登记新请求UUID，迟到旧push/读不获新scope权限，其他session与global authority保留。
   - 生成附件cache新增可选historyEpoch（legacy nil兼容，RPC不变/配额仍按逻辑session/24h）；artifact resource pointer与thumbnail直读不能绕过key，image-only final带当前epoch，旧档案只读原epoch缓存。已接受send/final后排新的实际head RPC修复早于receipt的终态/文本；本地reserve/receipt也推进live修订，旧read不清新run。
   - heavy/jobs2串行actual-source proof逐文件通过Binding6、Requests19、Journal15、Models19与实际MediaLibrary10；未跑完整本地suite或启动模拟器。真实App及217个测试方法Strict Swift6/iOS16.4双架构generic build-for-testing成功（新测试DTO/import错误按实际API修正，保留断言）；217个App实际执行及完整旧客户端门禁仍须最终重基head CI。无发行/上传/生产变更。
