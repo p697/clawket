@@ -1,5 +1,10 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-16 Native 有界流开发包真实复验与第一轮 UI 初验准备（RN 保持默认）。
+  - #276 exactfe157111/current-main/CLEAN全部11门禁绿后合2d8a7890并finish；仅证据文档，不改产品。新独立acceptance工作树使用#277 productiond5d2e6a3（与重基6d2fd826源码/测试等价）开发App，不打Archive/IPA或改共享服务。
+  - 实际UI automation stale导致预检停在Send0/Stop0，临时Studio草稿已恢复，三refs/held保留；随后真saved connection、header/原draft/导航route精确核对。新真实Send1经被动reader绑定receipt/见非空live，Native单assistant15630字节、streaming=false、无failure/Stop，长流完整结束。元素Stop调用未拿到中止证据；另一次新input单Send/单coordinate tap、live截图有Stop，最终亦final非aborted。未证明handler或坐标等于live center，原生取消仍未通过，均未重发。
+  - 真实系统Paste恢复原16字draft/0refs、Send可用；独立定向history核首条自有输入/samephysical/noactive。不是Relay/弱网/稳定性或Stop通过。初验聚焦聊天/编辑/附件/预览/导航，真实Hermes文本另验；OpenClaw认证、Stop、网络恢复/VoiceOver/完整N5继续待验，默认客户端不切换。
+
 - 2026-10-16 Native Runtime 消费驱动事件缓冲（独立修复；RN 保持默认）。
   - 保留公开 AsyncThrowingStream，内部单一64项/16MiB有界队列随真实next出队；仅同内部代际且UTF8精确路由/segment/lineage、无snapshot metadata的相邻纯delta合并，其他事件保持barrier。原始事件weight全部计费，容量溢出仍同步退休、不丢已准入正文、不提高限额、不自动重放；取消/finish单次通知并唤醒reader。
   - 两个独立SPM文件覆盖慢consumer千片Unicode/空白、真实Hermes/Pi mapper→Coordinator→公开stream、tool/work/snapshot/final顺序、Stop不等UI消费、严格身份/代际隔离、65个非合并项、字节限/超限、取消/finish/owner释放与pending写退休无重放。首编strict Swift6/jobs2 39.21秒，新buffer9方法/10输入与真实runtime5方法首轮全绿；既有SessionLifecycle5方法/11输入、RuntimeOperations6方法/12输入逐文件全绿，16指令对/7docs与diff通过。strict Swift6/iOS16.4双arch实际App开发编译/codesign验证也已通过，私有dev副本交主线程，heavy已释放；不属发行包或设备验收。独立只读review与完整CI并行。
