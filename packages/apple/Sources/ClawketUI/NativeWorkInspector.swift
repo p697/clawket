@@ -30,12 +30,41 @@ struct NativeWorkDock: View {
         .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .padding(.horizontal, 12).padding(.top, 6)
         .frame(maxWidth: 790).frame(maxWidth: .infinity)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(work.title)
-        .accessibilityValue([work.status.label, work.detail, work.clock.durationLabel, work.inspect.explanation]
-            .compactMap { $0 }.joined(separator: ". "))
-        .accessibilityHint("View work record")
-        .accessibilityIdentifier("work-dock")
+        .modifier(WorkEntryAccessibility(work: work, identifier: "work-dock"))
+    }
+}
+
+@MainActor
+struct NativeWorkToolbarButton: View {
+    let work: WorkDockPresentation
+    let open: () -> Void
+
+    var body: some View {
+        Button(action: open) {
+            WorkStatusGlyph(status: work.status)
+                .font(.system(size: 18))
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!work.inspect.isEnabled)
+        .modifier(WorkEntryAccessibility(work: work, identifier: "work-toolbar"))
+    }
+}
+
+@MainActor
+private struct WorkEntryAccessibility: ViewModifier {
+    let work: WorkDockPresentation
+    let identifier: String
+
+    func body(content: Content) -> some View {
+        content
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(work.title)
+            .accessibilityValue([work.status.label, work.detail, work.clock.durationLabel, work.inspect.explanation]
+                .compactMap { $0 }.joined(separator: ". "))
+            .accessibilityHint("View work record")
+            .accessibilityIdentifier(identifier)
     }
 }
 

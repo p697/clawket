@@ -1,5 +1,10 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-16 Native Work 响应式入口（独立候选；RN 保持默认）。
+  - 按会话外层实际可用高度响应：小于500pt或展开编辑器时，将同一workID/typed状态/inspect入口移至独立44pt原生导航栏控件，充足时恢复body dock。不按键盘焦点/设备名猜高度，不推断idle或修改host活动/队列/审批/协议；全六状态均保留一个入口，完整AX说明与暂不可用状态复用。
+  - NativeReadingLayoutTests新增两方法，真实NavigationStack宿主公开UIKit AX容器/frame核六状态反复切换、320/402/768宽与最大字号的Back/会话标题/More/Work边界、无More独立入口和unsupported隐藏；复用同UITextView/table并保留UTF8草稿、选区与实际阅读锚点。未伪称点击SwiftUI按钮、展开手势或VoiceOver验收。
+  - 基于main2a0ba53c自有依赖与工作树；源码App方法312/33文件，报告minimum312与311缩减反例同步。文档16指令对/7回归、19语474UI键/4权限目的源码检查与diff通过；实际Swift编译/执行交本head CI；root照片托盘合并后须重基并集再跑完整精确门禁。本机不运行native构建/测试或操作模拟器，owner视觉与真实后端验收仍待。
+
 - 2026-10-16 Native 紧凑草稿照片（独立探索，本机验收通过，完整CI待续）。
   - 普通字号草稿图改88pt方形，完整名称/大小保留于辅助信息和原生长按Details；文件与224pt大字号卡片仍显示metadata，失败仍显示原因并可查看全文。Remove保持44pt但采用圆形触区以避开图心；tray本体88pt，外部原有间距14pt另计。RN默认/源码不变。
   - 已知image provider、文档扩展类型与相机只传递临时布局hint；原有字节检查、模型/Runtime预检、原始资源/动作ID和选择顺序不改。预览准备保留原显示类型/名称/大小，成功重建补回实际byte count，避免开过一次就丢Details大小。没有据mediaDisplays赋值声称draft spinner已发布。

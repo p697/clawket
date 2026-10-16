@@ -436,6 +436,7 @@ struct NativeConversationView: View {
 
     var body: some View {
         GeometryReader { geometry in
+            let toolbarWork = expanded || geometry.size.height < 500
             VStack(spacing: 0) {
                 ZStack(alignment: .bottom) {
                     if conversation.messages.isEmpty {
@@ -474,7 +475,7 @@ struct NativeConversationView: View {
                 .accessibilityHidden(expanded)
 
                 ScrollView(.vertical, showsIndicators: accessoryHeight > accessoryViewportHeight(geometry.size.height)) {
-                    conversationAccessories
+                    conversationAccessories(toolbarWork: toolbarWork)
                 }
                 .scrollBounceBehavior(.basedOnSize)
                 .scrollDismissesKeyboard(.never)
@@ -486,6 +487,7 @@ struct NativeConversationView: View {
                                maximumHeight: geometry.size.height - accessoryViewportHeight(geometry.size.height))
             }
             .onPreferenceChange(NativeConversationAccessoryHeightKey.self) { accessoryHeight = $0 }
+            .toolbar { conversationToolbar(toolbarWork: toolbarWork) }
         }
         .background(Color(uiColor: .systemBackground))
         .onAppear {
@@ -505,55 +507,6 @@ struct NativeConversationView: View {
         .onChange(of: model.readingContexts[conversation.id]?.id) { _ in reportReadingVisibility(canRead) }
         .navigationTitle(conversation.agentName)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                if conversation.availability(.sessions).isVisible {
-                    Button {
-                        showSheet(.sessions(conversation.id))
-                    } label: {
-                        headerTitle(showChevron: true)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!conversation.availability(.sessions).isEnabled)
-                    .accessibilityLabel(Text("\(conversation.agentName), \(conversation.sessionTitle), conversations"))
-                    .accessibilityIdentifier("conversation-sessions")
-                } else { headerTitle(showChevron: false) }
-            }
-            ToolbarItem(placement: .navigationBarTrailing) {
-                if hasMoreActions {
-                    Menu {
-                        if conversation.availability(.sessionManagement).isVisible {
-                            Button {
-                                let id = UUID()
-                                onIntent(.prepareSessionManagement(conversation.id, requestID: id))
-                                showSheet(.management(conversation.id, reviewID: id))
-                            } label: { Label("Manage conversation", systemImage: "slider.horizontal.3") }
-                                .disabled(!conversation.availability(.sessionManagement).isEnabled)
-                        }
-                        destinationButton("Agent settings", symbol: "slider.horizontal.3", feature: .agentSettings, destination: .agentSettings)
-                        destinationButton("Memory", symbol: "brain", feature: .memory, destination: .memory)
-                        destinationButton("Skills", symbol: "sparkles", feature: .skills, destination: .skills)
-                        destinationButton("Scheduled tasks", symbol: "calendar", feature: .schedule, destination: .schedule)
-                        destinationButton("Files", symbol: "folder", feature: .sessionFiles, destination: .sessionFiles)
-                        destinationButton("Connection settings", symbol: "link", feature: .connectionSettings, destination: .connectionSettings)
-                        destinationButton("Export conversation", symbol: "square.and.arrow.up", feature: .exportConversation, destination: .exportConversation)
-                        destinationButton("Saved conversations", symbol: "books.vertical", feature: .savedHistory, destination: .savedHistory)
-                        destinationButton("Previous transcripts", symbol: "clock.arrow.circlepath", feature: .previousTranscripts, destination: .previousTranscripts)
-                        if conversation.availability(.loadEarlier).isVisible {
-                            Button {
-                                onIntent(.loadEarlier(conversation.id))
-                            } label: { Label("Load earlier messages", systemImage: "clock.arrow.circlepath") }
-                                .disabled(!conversation.availability(.loadEarlier).isEnabled || conversation.isLoadingHistory)
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis").foregroundStyle(Color(uiColor: .label))
-                            .frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
-                    }
-                    .tint(Color(uiColor: .label))
-                    .accessibilityLabel("Conversation actions")
-                }
-            }
-        }
         .overlay(alignment: .top) {
             if !expanded && conversation.connection.phase != .ready && !conversation.connection.label.isEmpty {
                 ConnectionStatusView(status: conversation.connection) {
@@ -566,7 +519,68 @@ struct NativeConversationView: View {
         }
     }
 
-    private var conversationAccessories: some View {
+    @ToolbarContentBuilder
+    private func conversationToolbar(toolbarWork: Bool) -> some ToolbarContent {
+        ToolbarItem(placement: .principal) {
+            if conversation.availability(.sessions).isVisible {
+                Button {
+                    showSheet(.sessions(conversation.id))
+                } label: {
+                    headerTitle(showChevron: true)
+                }
+                .buttonStyle(.plain)
+                .disabled(!conversation.availability(.sessions).isEnabled)
+                .accessibilityLabel(Text("\(conversation.agentName), \(conversation.sessionTitle), conversations"))
+                .accessibilityIdentifier("conversation-sessions")
+            } else { headerTitle(showChevron: false) }
+        }
+        ToolbarItemGroup(placement: .navigationBarTrailing) {
+            if toolbarWork, let work = conversation.work, work.inspect.isVisible, !work.id.isEmpty {
+                NativeWorkToolbarButton(work: work) { openWork(work) }
+            }
+            if hasMoreActions {
+                Menu {
+                    if conversation.availability(.sessionManagement).isVisible {
+                        Button {
+                            let id = UUID()
+                            onIntent(.prepareSessionManagement(conversation.id, requestID: id))
+                            showSheet(.management(conversation.id, reviewID: id))
+                        } label: { Label("Manage conversation", systemImage: "slider.horizontal.3") }
+                            .disabled(!conversation.availability(.sessionManagement).isEnabled)
+                    }
+                    destinationButton("Agent settings", symbol: "slider.horizontal.3", feature: .agentSettings, destination: .agentSettings)
+                    destinationButton("Memory", symbol: "brain", feature: .memory, destination: .memory)
+                    destinationButton("Skills", symbol: "sparkles", feature: .skills, destination: .skills)
+                    destinationButton("Scheduled tasks", symbol: "calendar", feature: .schedule, destination: .schedule)
+                    destinationButton("Files", symbol: "folder", feature: .sessionFiles, destination: .sessionFiles)
+                    destinationButton("Connection settings", symbol: "link", feature: .connectionSettings, destination: .connectionSettings)
+                    destinationButton("Export conversation", symbol: "square.and.arrow.up", feature: .exportConversation, destination: .exportConversation)
+                    destinationButton("Saved conversations", symbol: "books.vertical", feature: .savedHistory, destination: .savedHistory)
+                    destinationButton("Previous transcripts", symbol: "clock.arrow.circlepath", feature: .previousTranscripts, destination: .previousTranscripts)
+                    if conversation.availability(.loadEarlier).isVisible {
+                        Button {
+                            onIntent(.loadEarlier(conversation.id))
+                        } label: { Label("Load earlier messages", systemImage: "clock.arrow.circlepath") }
+                            .disabled(!conversation.availability(.loadEarlier).isEnabled || conversation.isLoadingHistory)
+                    }
+                } label: {
+                    Image(systemName: "ellipsis").foregroundStyle(Color(uiColor: .label))
+                        .frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
+                }
+                .tint(Color(uiColor: .label))
+                .accessibilityLabel("Conversation actions")
+                .accessibilityIdentifier("conversation-actions")
+            }
+        }
+    }
+
+    private func openWork(_ work: WorkDockPresentation) {
+        guard let intent = work.openIntent(conversationID: conversation.id) else { return }
+        onIntent(intent)
+        showSheet(.work(conversation.id, workID: work.id))
+    }
+
+    private func conversationAccessories(toolbarWork: Bool) -> some View {
         VStack(spacing: 0) {
             if !expanded && conversation.availability(.pro).isVisible {
                 Button {
@@ -583,12 +597,8 @@ struct NativeConversationView: View {
                     }.frame(minHeight: 44).padding(.horizontal, 20).padding(.vertical, 8)
                 }.buttonStyle(.plain).accessibilityIdentifier("conversation-upgrade")
             }
-            if !expanded, let work = conversation.work, work.inspect.isVisible, !work.id.isEmpty {
-                NativeWorkDock(work: work) {
-                    guard let intent = work.openIntent(conversationID: conversation.id) else { return }
-                    onIntent(intent)
-                    showSheet(.work(conversation.id, workID: work.id))
-                }
+            if !toolbarWork, let work = conversation.work, work.inspect.isVisible, !work.id.isEmpty {
+                NativeWorkDock(work: work) { openWork(work) }
             }
         }
         .background(GeometryReader { accessory in

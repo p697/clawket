@@ -29,6 +29,8 @@ class NativeResultTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_summary({**self.valid, "totalTestCount": 311, "passedTests": 311})
         with self.assertRaises(ValueError):
+            validate_summary({**self.valid, "totalTestCount": 309, "passedTests": 309})
+        with self.assertRaises(ValueError):
             validate_summary({**self.valid, "totalTestCount": 302, "passedTests": 302})
         with self.assertRaises(ValueError):
             validate_summary({**self.valid, "totalTestCount": 299, "passedTests": 299})
