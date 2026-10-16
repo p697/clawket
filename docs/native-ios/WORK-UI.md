@@ -6,7 +6,7 @@ With at least 500 points of actual outer conversation height, the 44-point minim
 
 ## Host contract
 
-The entry exposes one explicitly labeled accessibility button. Its status glyph is decorative; the outer title/value retains the real status, detail, duration and inspection explanation. This prevents the toolbar's symbol from supplying a second, unrelated “selected” action. Runtime accessibility and activation still require actual device or WebDriver verification.
+The real button receives its explicit accessibility title/value, status, detail, duration and inspection explanation directly, without creating an extra accessibility container. Its status glyph is decorative. The initial wrapper exposed a second, unrelated “selected” action; hiding only the glyph left an unnamed button, so that intermediate candidate did not pass. Runtime accessibility and activation still require actual device or WebDriver verification.
 
 - `WorkDockPresentation` supplies the current localized or backend-authored title/detail, explicit status, producer clocks, inspection availability and all authorized records. Its ID is a stable host-wide presentation identity within the concrete conversation; replace it when a different record scope must invalidate an open inspector.
 - `WorkRunPresentation` is one exact run/turn/input grouping. Preserve `RuntimeWorkUpdate.runID`, `turnID`, `inputMessageID` and `inputMessageKey` in `WorkLineage`; never infer missing attribution from timestamps, adjacent messages or prose. A reused wire run with a different turn/input gets a distinct record ID. Supply a semantic title and an authorized input preview; absent attribution is labeled “Unattributed work”. Opaque IDs are not displayed, copied into product text or used for diagnostics.

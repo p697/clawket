@@ -60,7 +60,6 @@ private struct WorkEntryAccessibility: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .accessibilityElement(children: .ignore)
             .accessibilityAddTraits(.isButton)
             .accessibilityLabel(work.title)
             .accessibilityValue([work.status.label, work.detail, work.clock.durationLabel, work.inspect.explanation]
