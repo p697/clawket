@@ -83,7 +83,7 @@ final class NativeAutosaveTests: XCTestCase, @unchecked Sendable {
         let (model, cache, library) = try await seed(root)
         let original = try XCTUnwrap(model.documents[route])
         let (old, latest) = try await blockedSave(model, cache: cache) {
-            model.handle(.draftChanged(route, "后来的中文草稿"))
+            model.handle(.draftChanged(route, text: "后来的中文草稿"))
             return try XCTUnwrap(model.saveTasks[route])
         }
         await old.value; await latest.value
@@ -99,7 +99,7 @@ final class NativeAutosaveTests: XCTestCase, @unchecked Sendable {
     @MainActor func testActivationChangeDuringDebounceStillPersistsTheOfflineDraft() async throws {
         let root = directory(); defer { try? FileManager.default.removeItem(at: root) }
         let (model, cache, _) = try await seed(root)
-        model.handle(.draftChanged(route, "离线切换后仍须保存的草稿"))
+        model.handle(.draftChanged(route, text: "离线切换后仍须保存的草稿"))
         let task = try XCTUnwrap(model.saveTasks[route])
         // This happens before the scheduled task can run or finish its production debounce.
         model.activationRevision = UUID(); model.activationRevision = UUID()
