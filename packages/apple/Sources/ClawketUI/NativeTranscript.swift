@@ -3,6 +3,19 @@ import Combine
 import SwiftUI
 import UIKit
 
+/// One conversation's synchronous reading interaction; it owns no view or route.
+@MainActor
+final class NativeTranscriptReadingInteraction: ObservableObject {
+    fileprivate weak var coordinator: NativeTranscript.Coordinator?
+
+    func pause() { coordinator?.pauseVisibleFollowing() }
+
+    func forwardComposerIntent(_ intent: ClientIntent, to perform: @MainActor (ClientIntent) -> Void) {
+        if case .openAttachment = intent { pause() }
+        perform(intent)
+    }
+}
+
 /// UIKit owns scrolling geometry. SwiftUI owns each native message's content.
 /// Appending/streaming never chooses a new route or replays a send.
 @MainActor
@@ -15,8 +28,9 @@ struct NativeTranscript: UIViewRepresentable {
     let historyAvailability: ActionAvailability
     let isLoadingHistory: Bool
     let onIntent: @MainActor (ClientIntent) -> Void
+    var readingInteraction: NativeTranscriptReadingInteraction? = nil
 
-    static func dismantleUIView(_ table: TranscriptTableView, coordinator: Coordinator) { coordinator.captureReading() }
+    static func dismantleUIView(_ table: TranscriptTableView, coordinator: Coordinator) { coordinator.retire() }
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
     func makeUIView(context: Context) -> TranscriptTableView {
@@ -85,7 +99,11 @@ struct NativeTranscript: UIViewRepresentable {
             // Rows also observe appearance. They may reflow before this update;
             // retain the reader's confirmed anchor rather than the transient geometry.
             var anchor = retainedAnchor ?? readingAnchor(in: table)
+            if self.parent.readingInteraction !== parent.readingInteraction {
+                unbindReadingInteraction()
+            }
             self.parent = parent
+            parent.readingInteraction?.coordinator = self
             observeAppearance(parent.model)
             let reading = parent.model.readingContexts[parent.conversationID]
             if readingScope != reading?.id {
@@ -223,6 +241,21 @@ struct NativeTranscript: UIViewRepresentable {
 
         func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
             pauseFollowing()
+        }
+        fileprivate func pauseVisibleFollowing() {
+            // An expanded composer retains a zero-height transcript. Its empty
+            // viewport cannot replace an already confirmed reading anchor.
+            guard let table, table.window != nil, table.bounds.width > 0, table.bounds.height > 0 else { return }
+            pauseFollowing()
+        }
+        private func unbindReadingInteraction() {
+            if parent.readingInteraction?.coordinator === self {
+                parent.readingInteraction?.coordinator = nil
+            }
+        }
+        func retire() {
+            captureReading()
+            unbindReadingInteraction()
         }
         private func pauseFollowing() {
             followsBottom = false

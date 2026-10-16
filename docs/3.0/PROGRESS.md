@@ -1,5 +1,12 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-16 Native 草稿预览阅读连续性（独立探索，组合验收继续）。
+  - 上一caret #265 exact0f648ece全13CI绿/current-main后合bdf98e7b并finish：App296/296零失败/跳过（38.404秒test/91.887秒wall）、package459=59+400、19语9063精确编译值；RN默认/源码与共享服务未改。
+  - WebDriver旧0f648ece实际系统Photos按顺序选三张本机fixture，保留草稿时由受控peer的独立client触发外部输入/流式回复；打开草稿预览后关闭，同一source19回复起点y70→-326（-396pt），复现仍自动跟随后移。非真实模型/Relay证据。现在每会话弱handle同步暂停当前可见UIKit表格，再向host原样转发open intent；不以following绑定假暂停。更新先解绑旧owner，旧dismantle不能清新owner，展开编辑器零高度不捕获空锚点；原初始化/apply/restoration保护不动。
+  - 新真实表格回归已写：同一production typed-forward helper在host回调前暂停，追加长回复保留anchor、显式Latest到底、零高无capture、换handle/双host旧退休隔离。静态独立review无阻挡；它没有实际点击Composer/Expand控件，WebDriver修后复验与本机编译/窄测仍待。重基复制反馈993cc686后当前源码300方法，完整门禁交精确head CI。
+  - 组合UI另见保存失败hint，当前保持现场。只读exact synthetic文档（不扫描其他会话）核revision1179/53412bytes、69消息、三唯一draft引用及对应文件存在、held1/queued0/sending0，证明后来已落盘，不倒推提示当次写成功或取消。源码明确存在被新live保存取消的旧save仍catch发布失败且不清的可达竞态，已另切独立autosave任务；不吞真存储错误，不删草稿/资源，不猜容量。
+  - 代码Copy实际50×45pt按钮精确复制原块含尾换行通过；后续live自动化因AX名称/可见标志与元素刷新未取得有效中途点击证据，保留未验，不能把completed Copy当stream通过。新增本机loopback应用帧观察工具只记allowlist错误分类/耗时，用于后续Hermes Stop/OpenClaw认证定位；代理新URL scope、心跳/来源均异于原Direct，不作原路径稳定性结论。无共享服务/凭据/版本/分发/发布变更。
+
 - 2026-10-16 Native 代码/原文复制反馈（独立候选，执行验证待资源协调）。
   - 从 fresh bdf98e7b 创建独立工作树，仅代码卡片与 tool 原文 Copy 采用专用 native control；保留旧 AX ID、同按钮对象与最新原UTF8，严格先暂停跟随再写剪贴板，随后短暂 Copied、辅助值/系统播报与成功haptic。两种本地化标题按当前字体共同占位、44pt下限不变；不改 generic voice按钮、RN、协议或服务。
   - 普通流式更新只换下一次Copy载荷，不重启提示；重复点击取消旧reset且以独立generation隔离，控件移出window/退休即取消。timer只恢复标题，不再次复制/播报/震动。Copied复用Mobile chat既有19语真实译文，加入native catalog与inventory。

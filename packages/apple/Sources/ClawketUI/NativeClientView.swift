@@ -421,6 +421,7 @@ struct NativeConversationView: View {
     @State private var expanded = false
     @State private var following = true
     @State private var scrollRequest = 0
+    @StateObject private var readingInteraction = NativeTranscriptReadingInteraction()
     @State private var accessoryHeight: CGFloat = 0
     @State private var visibilityID = UUID()
     @State private var ownedReadingScope: UUID?
@@ -452,7 +453,7 @@ struct NativeConversationView: View {
                                          model: model, following: $following, scrollRequest: scrollRequest,
                                          historyAvailability: conversation.availability(.loadEarlier),
                                          isLoadingHistory: conversation.isLoadingHistory,
-                                         onIntent: onIntent)
+                                         onIntent: onIntent, readingInteraction: readingInteraction)
                     }
                     if !following && !conversation.messages.isEmpty {
                         Button {
@@ -479,7 +480,9 @@ struct NativeConversationView: View {
                 .scrollDismissesKeyboard(.never)
                 .frame(height: accessoryViewportHeight(geometry.size.height))
                 NativeComposer(draft: draft, conversation: conversation, expanded: $expanded,
-                               onIntent: onIntent, showModels: { showSheet(.models(conversation.id)) },
+                               onIntent: { intent in
+                                   readingInteraction.forwardComposerIntent(intent, to: onIntent)
+                               }, showModels: { showSheet(.models(conversation.id)) },
                                maximumHeight: geometry.size.height - accessoryViewportHeight(geometry.size.height))
             }
             .onPreferenceChange(NativeConversationAccessoryHeightKey.self) { accessoryHeight = $0 }

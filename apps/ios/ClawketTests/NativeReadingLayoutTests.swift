@@ -4,6 +4,89 @@ import XCTest
 @testable import ClawketUI
 
 final class NativeReadingLayoutTests: XCTestCase {
+    @MainActor func testPreviewPauseKeepsTheRealTranscriptAnchorAndRetiresOnlyItsOwner() async throws {
+        let route = ConversationID(connectionID: "layout", agentID: "agent", sessionID: "preview")
+        let model = ClientPresentation(readingContexts: [route: .init()])
+        let firstInteraction = NativeTranscriptReadingInteraction()
+        var messages = (0..<30).map {
+            MessagePresentation(id: "preview-\($0)", author: .agent(name: "Agent", label: nil),
+                content: [.markdown("Readable message \($0) 中文.\nSecond line.")])
+        }
+        var captures: [ConversationReadingContext] = []
+        func transcript(_ interaction: NativeTranscriptReadingInteraction, scroll: Int = 0) -> AnyView {
+            AnyView(NativeTranscript(messages: messages, conversationID: route, model: model,
+                following: .constant(true), scrollRequest: scroll, historyAvailability: .unsupported,
+                isLoadingHistory: false, onIntent: {
+                    if case let .readingContextChanged(_, _, value) = $0 { captures.append(value) }
+                }, readingInteraction: interaction))
+        }
+        let host = UIHostingController(rootView: transcript(firstInteraction)), window = attach(host)
+        defer { window.isHidden = true; window.rootViewController = nil }
+        await layout(host, width: 320, height: 420)
+        let table = try XCTUnwrap(descendants(host.view, of: UITableView.self).first)
+        let source = try XCTUnwrap(table.dataSource as? UITableViewDiffableDataSource<Int, String>)
+        XCTAssertEqual(captures.last?.followsBottom, true)
+
+        // This is synchronous, before the host prepares or opens a preview.
+        var forwarded = false
+        firstInteraction.forwardComposerIntent(.openAttachment(attachmentID: "draft-image")) { intent in
+            guard case let .openAttachment(id) = intent else { return XCTFail("The original intent must be forwarded") }
+            XCTAssertEqual(id, "draft-image")
+            XCTAssertEqual(captures.last?.followsBottom, false, "Pause must precede host preview preparation")
+            forwarded = true
+        }
+        XCTAssertTrue(forwarded)
+        let reading = try XCTUnwrap(captures.last)
+        XCTAssertFalse(reading.followsBottom)
+        let id = try XCTUnwrap(reading.messageID)
+        let index = try XCTUnwrap(source.indexPath(for: id))
+        let offset = table.rectForRow(at: index).minY - table.contentOffset.y
+        messages.append(.init(id: "new-reply", author: .agent(name: "Agent", label: nil),
+            content: [.markdown(String(repeating: "New streamed content.\n", count: 18))], isStreaming: true))
+        host.rootView = transcript(firstInteraction)
+        await layout(host, width: 320, height: 420)
+        XCTAssertEqual(table.rectForRow(at: index).minY - table.contentOffset.y, offset, accuracy: 2)
+        XCTAssertEqual(captures.last?.messageID, id)
+        XCTAssertEqual(captures.last?.followsBottom, false)
+
+        // Expanded editing hides the transcript without retiring its confirmed
+        // reading scope. A preview must not capture this empty geometry.
+        let frame = table.frame, beforeHidden = captures
+        table.frame.size.height = 0
+        firstInteraction.pause()
+        XCTAssertEqual(captures, beforeHidden)
+        table.frame = frame
+
+        let replacement = NativeTranscriptReadingInteraction()
+        host.rootView = transcript(replacement, scroll: 1)
+        await layout(host, width: 320, height: 420)
+        XCTAssertEqual(captures.last?.followsBottom, true)
+        let bottom = max(-table.adjustedContentInset.top, table.contentSize.height - table.bounds.height + table.adjustedContentInset.bottom)
+        XCTAssertEqual(table.contentOffset.y, bottom, accuracy: 2)
+        let beforeRetired = captures
+        firstInteraction.pause()
+        XCTAssertEqual(captures, beforeRetired, "A replaced handle cannot control the current table")
+
+        let secondRoute = ConversationID(connectionID: "layout", agentID: "agent", sessionID: "replacement")
+        let secondModel = ClientPresentation(readingContexts: [secondRoute: .init()])
+        var secondCaptures: [ConversationReadingContext] = []
+        let secondHost = UIHostingController(rootView: NativeTranscript(messages: messages,
+            conversationID: secondRoute, model: secondModel, following: .constant(true), scrollRequest: 0,
+            historyAvailability: .unsupported, isLoadingHistory: false, onIntent: {
+                if case let .readingContextChanged(_, _, value) = $0 { secondCaptures.append(value) }
+            }, readingInteraction: replacement))
+        let secondWindow = attach(secondHost)
+        defer { secondWindow.isHidden = true; secondWindow.rootViewController = nil }
+        await layout(secondHost, width: 320, height: 420)
+        XCTAssertEqual(secondCaptures.last?.followsBottom, true)
+        host.rootView = AnyView(EmptyView())
+        await layout(host, width: 320, height: 420)
+        replacement.pause()
+        XCTAssertEqual(secondCaptures.last?.followsBottom, false,
+            "Dismantling the old table cannot retire a new owner of the same handle")
+        XCTAssertNotNil(secondCaptures.last?.messageID)
+    }
+
     @MainActor func testActualAssistantMarkdownCodeCardCopiesExactBytesAcrossStreamingAndFinal() async throws {
         let route = ConversationID(connectionID: "layout", agentID: "agent", sessionID: "code")
         let model = ClientPresentation(), prefix = "Explanation 中文\n"
