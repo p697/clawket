@@ -74,6 +74,14 @@ final class NativeAppModel: ObservableObject {
     var activationRevision = UUID()
     var wireRevision = UUID()
     private var historyRevisions: [ConversationID: UUID] = [:]
+    private var physicalOperations: [NativeHistoryScope: UUID] = [:]
+    private var physicalFailures: Set<NativeHistoryScope> = []
+    private var preparedPhysicalMutations: [UUID: ConversationID] = [:]
+    private var previousPhysicalUncertainty: [UUID: Bool] = [:]
+    private var physicalReady: Set<NativeHistoryScope> = []
+    private var physicalLiveEvidence: [NativeHistoryScope: NativePhysicalLiveEvidence] = [:]
+    private var physicalRecoveryTasks: [NativeHistoryScope: Task<Void, Never>] = [:]
+    private var physicalRecoveryIDs: [NativeHistoryScope: UUID] = [:]
     var state = RuntimeConnectionState()
     private var agents: [RuntimeAgent] = []
     private var sessions: [RuntimeSession] = []
@@ -377,7 +385,7 @@ final class NativeAppModel: ObservableObject {
         guard !changingConnections, let runtime, let vault else { return }
         changingConnections = true
         retireMedia(); activationTask?.cancel()
-        selectionRevision = UUID(); activationRevision = UUID(); wireRevision = UUID()
+        retirePreparedPhysicalMutations(); selectionRevision = UUID(); activationRevision = UUID(); wireRevision = UUID(); physicalReady = []
         taskRequests?.invalidate(); sessionManager?.invalidate(); modelControls?.invalidate(); archiveReads = [:]; deviceApproval = nil
         unconfirmedCreations.formUnion(creatingCatalogs); creatingCatalogs = []
         Task {
@@ -403,7 +411,7 @@ final class NativeAppModel: ObservableObject {
                 let wasActive = activeConnectionID == id
                 registry = next; connections = next.records; activeConnectionID = next.activeConnectionID
                 if wasActive {
-                    activationRevision = UUID(); wireRevision = UUID()
+                    activationRevision = UUID(); wireRevision = UUID(); physicalReady = []
                     taskRequests?.invalidate()
                     await runtime?.disconnect()
                     agents = []; sessions = []; presentation.agents = []; presentation.selectedConversation = nil
@@ -444,7 +452,7 @@ final class NativeAppModel: ObservableObject {
 
     private func connectSaved(_ id: String) {
         guard let connection = connections.first(where: { $0.id == id }), let runtime else { return }
-        retireMedia(); activationTask?.cancel(); selectionRevision = UUID(); activationRevision = UUID(); wireRevision = UUID()
+        retireMedia(); activationTask?.cancel(); retirePreparedPhysicalMutations(); selectionRevision = UUID(); activationRevision = UUID(); wireRevision = UUID(); physicalReady = []
         taskRequests?.invalidate(); sessionManager?.invalidate(); modelControls?.invalidate(); archiveReads = [:]; deviceApproval = nil
         unconfirmedCreations.formUnion(creatingCatalogs); creatingCatalogs = []
         preferences.activate(id)
@@ -478,7 +486,7 @@ final class NativeAppModel: ObservableObject {
             let wasReady = self.state.phase == .ready
             if state.connectionID != self.state.connectionID || wasReady && state.phase != .ready {
                 if let oldConnection = self.state.connectionID { taskJournal?.hold(connectionID: oldConnection) }
-                retireMedia(); wireRevision = UUID()
+                retirePreparedPhysicalMutations(); retireMedia(); wireRevision = UUID(); physicalReady = []
                 unconfirmedCreations.formUnion(creatingCatalogs); creatingCatalogs = []
                 for id in presentation.catalogs.keys { presentation.catalogs[id]?.isLoading = false }
                 for route in presentation.conversations.keys { presentation.conversations[route]?.isLoadingHistory = false }
@@ -774,6 +782,9 @@ final class NativeAppModel: ObservableObject {
                     let cached = try await cache.read(connectionID: route.connectionID, agentID: route.agentID, sessionID: route.sessionID)
                     guard selectionRevision == revision, presentation.selectedConversation == route else { return }
                     documents[route] = cached
+                    taskJournal?.bindHistoryScope(route, epoch: cached.historyEpoch)
+                    taskRequests?.bindHistoryScope(route, epoch: cached.historyEpoch)
+                    if cached.physicalMutationUnconfirmed == true { taskRequests?.pauseHistoryScope(route) }
                     presentation.drafts[route] = ComposerDraft(conversationID: route, text: cached.draft)
                     refreshDraftMedia(route)
                 }
@@ -786,6 +797,8 @@ final class NativeAppModel: ObservableObject {
     }
 
     private func loadHistory(_ route: ConversationID, earlier: Bool = false) async {
+        guard physicalOperations[NativeHistoryScope(route)] == nil,
+              !physicalFailures.contains(NativeHistoryScope(route)) else { return }
         guard route.connectionID == activeConnectionID, state.phase == .ready, state.capabilities.history,
               sessionManager?.isMutating(route) != true,
               let runtime, let document = documents[route] else { return }
@@ -817,10 +830,18 @@ final class NativeAppModel: ObservableObject {
 
     private func mergeHistory(_ history: RuntimeHistory, route: ConversationID, earlier: Bool, liveRevision: Int64,
                               readSnapshot: [String: NativeMessage], revision: UUID, activation: UUID, wire: UUID) async throws {
-        guard var document = documents[route] else { throw RuntimeFailure(.superseded) }
         guard history.key.utf8.elementsEqual(route.sessionID.utf8) else { throw RuntimeFailure(.invalidResponse) }
+        guard let original = documents[route] else { throw RuntimeFailure(.superseded) }
+        let decision = try NativePhysicalHistoryPolicy.head(history.sessionID, current: original, earlier: earlier)
+        if decision != .unchanged {
+            try await reconcilePhysicalHistory(route, decision: decision) {
+                activation == self.activationRevision && wire == self.wireRevision &&
+                    self.historyRevisions[route] == revision && self.activeConnectionID == route.connectionID
+            }
+        }
+        guard var document = documents[route] else { throw RuntimeFailure(.superseded) }
         let projection = try NativeHistoryApplication.prepare(history, stored: document.messages,
-            readSnapshot: readSnapshot, epoch: nil, route: route, earlier: earlier)
+            readSnapshot: readSnapshot, epoch: document.historyEpoch, route: route, earlier: earlier)
         // A release intent must be durable before any consumer can save a document
         // that drops the old reference. A concurrent edit/live event keeps that
         // reference and makes this read stale, including across the journal await.
@@ -842,6 +863,16 @@ final class NativeAppModel: ObservableObject {
         updatePresentation(route); saveTasks[route]?.cancel()
         try await persist(route)
         guard activation == activationRevision, wire == wireRevision, historyRevisions[route] == revision else { throw RuntimeFailure(.superseded) }
+        if !earlier {
+            let scope = NativeHistoryScope(route)
+            if physicalLiveEvidence[scope] == nil, let epoch = document.historyEpoch {
+                physicalLiveEvidence[scope] = .init(epoch: epoch, retiringRunIDs: [])
+            }
+            physicalReady.insert(scope); taskRequests?.refresh(route: route); updatePresentation(route)
+        }
+        if !earlier, history.hasActiveRun, let runID = history.activeRun?["runId"]?.stringValue {
+            physicalLiveEvidence[NativeHistoryScope(route)]?.admit(runID)
+        }
         hydrateHistoryMedia(history, route: route, acceptedHistoryIDs: projection.acceptedHistoryIDs)
         if !projection.retiringResources.isEmpty, let media, let cache { try await media.reclaim(cache: cache) }
     }
@@ -886,24 +917,25 @@ final class NativeAppModel: ObservableObject {
     }
 
     private func queueModelCommand(_ route: ConversationID, plan: RuntimeSettingCommand) async throws {
-        guard route.isConcrete, route.connectionID == activeConnectionID, state.phase == .ready,
+        guard physicalPermitsInput(route), route.isConcrete, route.connectionID == activeConnectionID, state.phase == .ready,
               plan.connectionID == route.connectionID, plan.sessionKey == route.sessionID,
               plan.thinkingLevel == nil, let runtime, var document = documents[route],
               sessionManager?.permitsInput(route) != false,
               document.messages.filter({ [.queued, .held, .sending].contains($0.delivery) }).count < 32 else {
             throw RuntimeFailure(.requestBusy)
         }
-        let host = sessionHostContext
+        let host = sessionHostContext, epoch = document.historyEpoch
         let id = UUID().uuidString.lowercased()
         try await runtime.validatePrompt(sessionKey: route.sessionID, input: .init(text: plan.text, idempotencyKey: id))
-        guard host.sameConnection(as: sessionHostContext), state.phase == .ready,
+        guard physicalPermitsInput(route), documents[route]?.historyEpoch == epoch, host.sameConnection(as: sessionHostContext), state.phase == .ready,
               sessionManager?.permitsInput(route) != false, let latest = documents[route],
               latest.revision == document.revision else { throw RuntimeFailure(.superseded) }
         try document.enqueueSettingCommand(plan.text, id: id, timestampMs: Int64(Date().timeIntervalSince1970 * 1_000))
+        document.messages[document.messages.count - 1].historyEpoch = document.historyEpoch
         documents[route] = document; updatePresentation(route)
         do { try await persist(route) }
         catch { updateSend(route, id: id, delivery: .held); updatePresentation(route); throw error }
-        guard host.sameConnection(as: sessionHostContext), state.phase == .ready,
+        guard physicalPermitsInput(route), documents[route]?.historyEpoch == epoch, host.sameConnection(as: sessionHostContext), state.phase == .ready,
               sessionManager?.permitsInput(route) != false else {
             updateSend(route, id: id, delivery: .held); updatePresentation(route)
             scheduleSave(route, immediate: true); throw RuntimeFailure(.superseded)
@@ -913,7 +945,7 @@ final class NativeAppModel: ObservableObject {
 
     private func send(_ route: ConversationID) {
         guard voice?.attempt?.context.route != route else { return }
-        guard !navigationHeldRoutes.contains(NativeStoredRoute(route)), route.connectionID == activeConnectionID, state.phase == .ready, state.capabilities.chat,
+        guard physicalPermitsInput(route), !navigationHeldRoutes.contains(NativeStoredRoute(route)), route.connectionID == activeConnectionID, state.phase == .ready, state.capabilities.chat,
               sessionManager?.permitsInput(route) != false, modelControls?.permitsInput(route) != false,
               let document = documents[route], !mediaSendPreparations.contains(route),
               !mediaImports.values.contains(where: { $0.scope.route == route }) else { return }
@@ -931,17 +963,18 @@ final class NativeAppModel: ObservableObject {
             defer { mediaSendPreparations.remove(route); updatePresentation(route) }
             do {
                 _ = try await mediaPrompt(route, text: text, ids: ids, idempotencyKey: id)
-                guard activation == activationRevision, wire == wireRevision, scope == mediaScope(route),
+                guard physicalPermitsInput(route), activation == activationRevision, wire == wireRevision, scope == mediaScope(route),
                       presentation.draft(for: route).text == text, var current = documents[route],
                       current.draftResourceIDs == ids, state.phase == .ready, sessionManager?.permitsInput(route) != false else { return }
                 let references = try await mediaReferences(ids)
                 try await modelControls?.verifyInput(route)
                 try validateMediaModel(route, hasImages: references.contains { $0.kind == .image })
-                guard activation == activationRevision, wire == wireRevision, scope == mediaScope(route),
+                guard physicalPermitsInput(route), activation == activationRevision, wire == wireRevision, scope == mediaScope(route),
                       presentation.draft(for: route).text == text, documents[route]?.revision == current.revision,
                       !navigationHeldRoutes.contains(NativeStoredRoute(route)), sessionManager?.permitsInput(route) != false, modelControls?.permitsInput(route) != false else { return }
                 current.messages.append(.init(id: id, role: .user, local: true, text: text, idempotencyKey: id,
-                    timestampMs: Int64(Date().timeIntervalSince1970 * 1000), delivery: .queued, media: references))
+                    timestampMs: Int64(Date().timeIntervalSince1970 * 1000), delivery: .queued, media: references,
+                    historyEpoch: current.historyEpoch))
                 current.draft = ""; current.draftResourceIDs = []; current.revision += 1
                 documents[route] = current; mediaDraftRevisions[route] = UUID()
                 presentation.draft(for: route).text = ""; presentation.draft(for: route).attachments = []
@@ -954,42 +987,52 @@ final class NativeAppModel: ObservableObject {
     }
 
     private func drainQueue(_ route: ConversationID) {
-        guard !navigationHeldRoutes.contains(NativeStoredRoute(route)), route.connectionID == activeConnectionID, state.phase == .ready, state.capabilities.chat,
+        guard physicalPermitsInput(route), !navigationHeldRoutes.contains(NativeStoredRoute(route)), route.connectionID == activeConnectionID, state.phase == .ready, state.capabilities.chat,
               sessionManager?.permitsInput(route) != false, modelControls?.permitsInput(route) != false,
               running[route] == nil, sendTasks[route] == nil, let runtime,
-              let queued = documents[route]?.messages.first(where: { $0.isOwnedUser && $0.delivery == .queued }),
+              let document = documents[route],
+              let queued = document.messages.first(where: { $0.isOwnedUser && $0.delivery == .queued && $0.historyEpoch == document.historyEpoch }),
               let id = queued.idempotencyKey else { return }
         guard sessions.first(where: { $0.connectionID == route.connectionID && $0.key == route.sessionID })?.canContinue != false else { return }
-        let activation = activationRevision, wire = wireRevision
+        let activation = activationRevision, wire = wireRevision, epoch = document.historyEpoch
         sendTasks[route] = Task {
-            var reserved = false
+            var reserved = false, wireEntered = false
             do {
                 let input = try await mediaPrompt(route, text: queued.text, ids: queued.media.compactMap(\.resourceID), idempotencyKey: id)
-                guard activation == activationRevision, wire == wireRevision, state.phase == .ready,
+                guard physicalPermitsInput(route), documents[route]?.historyEpoch == epoch,
+                      activation == activationRevision, wire == wireRevision, state.phase == .ready,
                       let current = documents[route]?.messages.first(where: { $0.id == queued.id }),
                       current.delivery == .queued, current.text == queued.text, current.media == queued.media,
                       current.idempotencyKey == id else { sendTasks.removeValue(forKey: route); return }
                 // Complete local frame/model validation before retiring editable ownership.
                 // Then reserve synchronously before the persistence await.
                 updateSend(route, id: queued.id, delivery: .sending); reserved = true
+                liveRevisions[route, default: 0] += 1
                 try await persist(route)
-                guard activation == activationRevision, wire == wireRevision, route.connectionID == activeConnectionID, state.phase == .ready,
+                guard physicalPermitsInput(route), documents[route]?.historyEpoch == epoch,
+                      activation == activationRevision, wire == wireRevision, route.connectionID == activeConnectionID, state.phase == .ready,
                       sessionManager?.permitsInput(route) != false, running[route] == nil else {
                     updateSend(route, id: queued.id, delivery: .held)
                     sendTasks.removeValue(forKey: route); scheduleSave(route, immediate: true); return
                 }
                 try await modelControls?.verifyInput(route)
-                guard activation == activationRevision, wire == wireRevision, state.phase == .ready,
+                guard physicalPermitsInput(route), documents[route]?.historyEpoch == epoch,
+                      activation == activationRevision, wire == wireRevision, state.phase == .ready,
                       !navigationHeldRoutes.contains(NativeStoredRoute(route)), sessionManager?.permitsInput(route) != false, modelControls?.permitsInput(route) != false else {
                     updateSend(route, id: queued.id, delivery: .held)
                     sendTasks.removeValue(forKey: route); scheduleSave(route, immediate: true); return
                 }
                 try validateMediaModel(route, hasImages: input.attachments.contains { $0.type == .image })
+                wireEntered = true
                 let receipt = try await runtime.send(sessionKey: route.sessionID, input: input)
-                if activation == activationRevision, wire == wireRevision {
+                if physicalPermitsInput(route), documents[route]?.historyEpoch == epoch,
+                   activation == activationRevision, wire == wireRevision {
+                    liveRevisions[route, default: 0] += 1
                     taskJournal?.receipt(receipt, route: route, input: queued.text)
                     updateSend(route, id: queued.id, delivery: .sent, runID: receipt.runID)
-                    if finishedRuns[route]?.contains(receipt.runID) != true { running[route] = receipt.runID }
+                    physicalLiveEvidence[NativeHistoryScope(route)]?.admit(receipt.runID)
+                    if finishedRuns[route]?.contains(where: { historySame($0, receipt.runID) }) != true { running[route] = receipt.runID }
+                    refreshLiveHistory(route)
                 } else { updateSend(route, id: queued.id, delivery: .uncertain, runID: receipt.runID) }
             } catch {
                 let current = documents[route]?.messages.first(where: { $0.id == queued.id })
@@ -997,13 +1040,16 @@ final class NativeAppModel: ObservableObject {
                     let failure = error as? RuntimeFailure
                     let delivery = failure?.delivery
                     let paused = modelControls?.permitsInput(route) == false && (delivery == .notDispatched || delivery == .rejectedBeforeDispatch)
-                    updateSend(route, id: queued.id, delivery: delivery == .uncertain || delivery == .responseReceived ? .uncertain : paused ? .held : .failed)
+                    let scopeChanged = documents[route]?.historyEpoch != epoch || activation != activationRevision || wire != wireRevision
+                    let next: NativeDelivery = delivery == .uncertain || delivery == .responseReceived || wireEntered && delivery == nil
+                        ? .uncertain : scopeChanged || paused ? .held : .failed
+                    updateSend(route, id: queued.id, delivery: next)
                     if activation == activationRevision, wire == wireRevision, route == presentation.selectedConversation { showMediaFailure(error, route: route) }
                 }
             }
             sendTasks.removeValue(forKey: route)
             updatePresentation(route); scheduleSave(route, immediate: true)
-            if activation == activationRevision, wire == wireRevision, running[route] == nil { drainQueue(route) }
+            if documents[route]?.historyEpoch == epoch, activation == activationRevision, wire == wireRevision, running[route] == nil { drainQueue(route) }
         }
     }
 
@@ -1015,13 +1061,13 @@ final class NativeAppModel: ObservableObject {
     }
 
     private func stop(_ route: ConversationID) {
-        guard !navigationHeldRoutes.contains(NativeStoredRoute(route)), route.connectionID == activeConnectionID, state.capabilities.abort,
+        guard physicalPermitsInput(route), !navigationHeldRoutes.contains(NativeStoredRoute(route)), route.connectionID == activeConnectionID, state.capabilities.abort,
               sessionManager?.permitsInput(route) != false, let runtime else { return }
         guard sessions.first(where: { $0.connectionID == route.connectionID && $0.key == route.sessionID })?.canContinue != false else { return }
         let runID = running[route]?.nilIfEmpty
-        let activation = activationRevision, wire = wireRevision
+        let activation = activationRevision, wire = wireRevision, epoch = documents[route]?.historyEpoch
         Task {
-            guard activation == activationRevision, wire == wireRevision, route.connectionID == activeConnectionID,
+            guard physicalPermitsInput(route), documents[route]?.historyEpoch == epoch, activation == activationRevision, wire == wireRevision, route.connectionID == activeConnectionID,
                   sessionManager?.permitsInput(route) != false else { return }
             do { try await runtime.abort(sessionKey: route.sessionID, runID: runID) }
             catch { if activation == activationRevision, wire == wireRevision, route.connectionID == activeConnectionID { showFailure(error) } }
@@ -1031,14 +1077,16 @@ final class NativeAppModel: ObservableObject {
     private func receive(_ update: RuntimeSessionUpdate, connectionID: String) {
         switch update {
         case let .runStarted(key, runID):
-            for route in journalRoutes(connectionID: connectionID, sessionKey: key) { taskJournal?.started(route, runID: runID) }
-            for route in documents.keys where route.connectionID == connectionID && route.sessionID == key {
+            for route in documents.keys where historySame(route.connectionID, connectionID) && historySame(route.sessionID, key) {
+                guard acceptPhysicalLive(route, runID: runID, inputKey: update.workCompletion?.inputMessageKey) else { continue }
+                taskJournal?.started(route, runID: runID)
                 liveRevisions[route, default: 0] += 1
                 running[route] = runID; updatePresentation(route)
             }
         case let .text(update):
-            for route in journalRoutes(connectionID: connectionID, sessionKey: update.sessionKey) { taskJournal?.text(update, route: route) }
-            for route in documents.keys where route.connectionID == connectionID && route.sessionID == update.sessionKey {
+            for route in documents.keys where historySame(route.connectionID, connectionID) && historySame(route.sessionID, update.sessionKey) {
+                guard acceptPhysicalLive(route, runID: update.runID, inputKey: update.inputMessageKey) else { continue }
+                taskJournal?.text(update, route: route)
                 liveRevisions[route, default: 0] += 1
                 guard var document = documents[route] else { continue }
                 let previous = document.messages
@@ -1049,13 +1097,14 @@ final class NativeAppModel: ObservableObject {
                 running[route] = update.runID; changed(route); updatePresentation(route); scheduleSave(route)
             }
         case let .runFinished(key, runID, reason, segmentID, _):
-            for route in journalRoutes(connectionID: connectionID, sessionKey: key) { taskJournal?.finished(route, runID: runID, reason: reason, completion: update.workCompletion) }
-            for route in documents.keys where route.connectionID == connectionID && route.sessionID == key {
+            for route in documents.keys where historySame(route.connectionID, connectionID) && historySame(route.sessionID, key) {
+                guard acceptPhysicalLive(route, runID: runID, inputKey: update.workCompletion?.inputMessageKey) else { continue }
+                taskJournal?.finished(route, runID: runID, reason: reason, completion: update.workCompletion)
                 liveRevisions[route, default: 0] += 1
                 var finished = finishedRuns[route] ?? []
-                if !finished.contains(runID) { finished.append(runID) }
+                if !finished.contains(where: { historySame($0, runID) }) { finished.append(runID) }
                 finishedRuns[route] = Array(finished.suffix(128))
-                if running[route] == runID { running.removeValue(forKey: route) }
+                if historySame(running[route], runID) { running.removeValue(forKey: route) }
                 if var document = documents[route] {
                     let backend = connections.first { $0.id.utf8.elementsEqual(connectionID.utf8) }?.backendKind
                     let epoch = document.historyEpoch
@@ -1066,6 +1115,7 @@ final class NativeAppModel: ObservableObject {
                     document.revision += 1; documents[route] = document
                     bindFinalMedia(update, route: route, messageID: target)
                 }
+                refreshLiveHistory(route)
                 updatePresentation(route); scheduleSave(route)
                 drainQueue(route)
             }
@@ -1075,10 +1125,45 @@ final class NativeAppModel: ObservableObject {
         case let .work(work):
             guard let key = work.sessionKey else { return }
             for route in journalRoutes(connectionID: connectionID, sessionKey: key) {
+                guard acceptPhysicalLive(route, runID: work.runID, inputKey: work.inputMessageKey) else { continue }
                 taskJournal?.record(work, route: route); updatePresentation(route)
             }
         case .thought, .tool, .other: break
         }
+    }
+
+    /// Reads queued by Runtime start their own RPC after preceding reads. This
+    /// repairs pre-receipt deltas/finals without replaying an unknown live frame.
+    private func refreshLiveHistory(_ route: ConversationID) {
+        let host = sessionHostContext, epoch = documents[route]?.historyEpoch
+        Task {
+            guard host.sameConnection(as: sessionHostContext), documents[route]?.historyEpoch == epoch,
+                  physicalPermitsInput(route) else { return }
+            await loadHistory(route)
+        }
+    }
+
+    private func acceptPhysicalLive(_ route: ConversationID, runID: String?, inputKey: String?) -> Bool {
+        let scope = NativeHistoryScope(route)
+        guard physicalPermitsInput(route), let document = documents[route],
+              var evidence = physicalLiveEvidence[scope] else { return false }
+        let accepted = evidence.accepts(runID: runID, inputKey: inputKey, current: document)
+        physicalLiveEvidence[scope] = evidence
+        if !accepted, physicalRecoveryTasks[scope] == nil {
+            let host = sessionHostContext, id = UUID()
+            // One bounded read per route; a stopped/old event never gains write authority.
+            physicalRecoveryIDs[scope] = id
+            physicalRecoveryTasks[scope] = Task {
+                defer {
+                    if physicalRecoveryIDs[scope] == id {
+                        physicalRecoveryTasks.removeValue(forKey: scope); physicalRecoveryIDs.removeValue(forKey: scope)
+                    }
+                }
+                guard host.sameConnection(as: sessionHostContext), physicalPermitsInput(route) else { return }
+                await loadHistory(route)
+            }
+        }
+        return accepted
     }
 
     private func journalRoutes(connectionID: String, sessionKey: String) -> Set<ConversationID> {
@@ -1130,6 +1215,13 @@ final class NativeAppModel: ObservableObject {
         addMediaFeatures(route, features: &features)
         addVoiceFeatures(route, editable: session?.canContinue != false, features: &features)
         addHistoryFeatures(route, features: &features)
+        if !physicalPermitsInput(route) {
+            let reason = documents[route]?.physicalMutationUnconfirmed == true || physicalFailures.contains(NativeHistoryScope(route))
+                ? String(localized: "Review the conversation update before sending.") : String(localized: "Loading conversation…")
+            for feature in [ClientFeature.send, .stop, .photos, .camera, .files, .paste, .models, .modelControls, .loadEarlier] where features[feature]?.isVisible == true {
+                features[feature] = .temporarilyUnavailable(reason)
+            }
+        }
         prepareMessageMedia(route)
         let previous = presentation.conversations[route]
         let hasParticipants = document.messages.contains { $0.role == .user && $0.attribution != nil }
@@ -1164,7 +1256,7 @@ final class NativeAppModel: ObservableObject {
         var actions: [MessageAction] = [.copy]
         let ownedPending = message.isOwnedUser && message.idempotencyKey?.isEmpty == false
         if ownedPending && [.queued, .held, .failed].contains(message.delivery) { actions += [.edit, .remove] }
-        if ownedPending && message.delivery == .held, let route, route.connectionID == activeConnectionID,
+        if ownedPending && message.delivery == .held, let route, physicalPermitsInput(route), route.connectionID == activeConnectionID,
            state.phase == .ready, !navigationHeldRoutes.contains(NativeStoredRoute(route)), sessionManager?.permitsInput(route) != false,
            modelControls?.permitsInput(route) != false { actions.append(.sendNow) }
         return .init(id: message.id, author: author, content: content,
@@ -1177,18 +1269,25 @@ final class NativeAppModel: ObservableObject {
         switch action {
         case .copy: UIPasteboard.general.string = message.text
         case .edit:
-            guard route.connectionID == activeConnectionID, var document = documents[route],
+            guard physicalPermitsLocalChanges(route), route.connectionID == activeConnectionID, var document = documents[route],
                   let edit = try? document.holdForEditing(messageID: messageID) else { return }
             documents[route] = document; updatePresentation(route); scheduleSave(route, immediate: true)
             destination = .editPending(route, edit, activation: activationRevision)
         case .sendNow:
-            guard message.isOwnedUser, message.idempotencyKey?.isEmpty == false,
+            guard physicalPermitsInput(route), message.isOwnedUser, message.idempotencyKey?.isEmpty == false,
                   message.delivery == .held, !navigationHeldRoutes.contains(NativeStoredRoute(route)), route.connectionID == activeConnectionID, state.phase == .ready,
                   sessionManager?.permitsInput(route) != false, modelControls?.permitsInput(route) != false,
                   let index = documents[route]?.messages.firstIndex(where: { $0.id == messageID }) else { return }
+            let currentEpoch = documents[route]?.historyEpoch
+            documents[route]?.messages[index].historyEpoch = currentEpoch
+            documents[route]?.messages[index].remoteID = nil; documents[route]?.messages[index].providedID = nil
+            documents[route]?.messages[index].idSource = nil; documents[route]?.messages[index].transcriptPosition = nil
+            documents[route]?.messages[index].transcriptBoundary = nil; documents[route]?.messages[index].sourceRevisionHash = nil
+            documents[route]?.messages[index].runID = nil; documents[route]?.messages[index].segmentID = nil
             documents[route]?.messages[index].delivery = .queued; changed(route)
             updatePresentation(route); scheduleSave(route, immediate: true); drainQueue(route)
         case .remove:
+            guard physicalPermitsLocalChanges(route) else { return }
             guard var document = documents[route] else { return }
             do { try document.removePending(messageID: messageID) } catch { return }
             documents[route] = document
@@ -1199,7 +1298,7 @@ final class NativeAppModel: ObservableObject {
     }
 
     func savePendingEdit(_ edit: NativePendingEdit, route: ConversationID, activation: UUID, text: String, media selectedMedia: [NativeMediaReference]? = nil) async throws {
-        guard activation == activationRevision, route.connectionID == activeConnectionID,
+        guard physicalPermitsLocalChanges(route), activation == activationRevision, route.connectionID == activeConnectionID,
               destination?.id == edit.id.uuidString, let original = documents[route] else { throw StoreFailure.invalidDocument }
         var updated = original
         try updated.apply(edit, text: text, media: selectedMedia)
@@ -1234,14 +1333,144 @@ final class NativeAppModel: ObservableObject {
         saveTasks[route] = Task {
             if !immediate { try? await Task.sleep(for: .milliseconds(350)) }
             guard !Task.isCancelled else { return }
+            guard physicalOperations[NativeHistoryScope(route)] == nil else { return }
             do { try await persist(route) }
             catch { presentation.draft(for: route).hint = String(localized: "This draft could not be saved. Keep Clawket open and try again.") }
         }
     }
 
-    func persist(_ route: ConversationID) async throws {
+    func persist(_ route: ConversationID, physicalOperation: UUID? = nil) async throws {
+        let scope = NativeHistoryScope(route)
+        guard !physicalFailures.contains(scope), physicalOperations[scope] == physicalOperation else { throw RuntimeFailure(.requestBusy) }
         guard let cache, let document = documents[route] else { throw StoreFailure.unavailable }
         try await cache.write(document, connectionID: route.connectionID, agentID: route.agentID, sessionID: route.sessionID)
+    }
+
+    func physicalPermitsInput(_ route: ConversationID) -> Bool {
+        let scope = NativeHistoryScope(route)
+        return physicalPermitsLocalChanges(route) && physicalReady.contains(scope) &&
+            documents[route]?.historyEpoch != nil && documents[route]?.physicalMutationUnconfirmed != true
+    }
+
+    func physicalPermitsLocalChanges(_ route: ConversationID) -> Bool {
+        let scope = NativeHistoryScope(route)
+        return physicalOperations[scope] == nil && !physicalFailures.contains(scope)
+    }
+
+    func beginPhysicalOperation(_ route: ConversationID, token: UUID) throws {
+        let scope = NativeHistoryScope(route)
+        guard !physicalFailures.contains(scope), physicalOperations[scope] == nil else { throw RuntimeFailure(.requestBusy) }
+        physicalOperations[scope] = token
+        taskRequests?.pauseHistoryScope(route)
+        if case let .editPending(editRoute, _, _)? = destination, editRoute == route { destination = nil }
+        if mediaVisibleRoute == route { retireMediaSelection() }
+        else if voice?.attempt?.context.route == route || voiceSheet?.context.route == route { retireVoice() }
+        mediaDraftRevisions[route] = UUID()
+        mediaModelRevisions.removeValue(forKey: route)
+        modelControls?.retireSession(route)
+        sessionManager?.catalogChanged(sessionKey: route.sessionID)
+        if let messages = documents[route]?.messages { retireChangedHistoryMedia(old: messages, new: []) }
+        updatePresentation(route)
+    }
+
+    /// The operation fence stays synchronous; actor suspension cannot let a new
+    /// send, picker, ordinary save or stale history read overtake this transaction.
+    func reconcilePhysicalHistory(_ route: ConversationID, decision: NativePhysicalHistoryPolicy.Decision,
+                                         operation supplied: UUID? = nil, acknowledgedMutation: Bool = false,
+                                         current: @MainActor () -> Bool) async throws {
+        guard current(), let cache, let original = documents[route] else { throw RuntimeFailure(.superseded) }
+        let scope = NativeHistoryScope(route), token = supplied ?? UUID()
+        if supplied == nil { try beginPhysicalOperation(route, token: token) }
+        guard physicalOperations[scope] == token else { throw RuntimeFailure(.superseded) }
+        var persistedRevision: Int64?
+        defer {
+            if physicalOperations[scope] == token {
+                physicalOperations.removeValue(forKey: scope)
+                if !physicalFailures.contains(scope), documents[route]?.physicalMutationUnconfirmed != true {
+                    taskRequests?.resumeHistoryScope(route)
+                }
+                updatePresentation(route)
+                if !physicalFailures.contains(scope), documents[route]?.revision != persistedRevision {
+                    scheduleSave(route, immediate: true)
+                }
+            }
+        }
+        do {
+            var version = try await cache.historyStoredVersion(scope: scope)
+            guard current(), physicalOperations[scope] == token else { throw RuntimeFailure(.superseded) }
+            if version == nil || version!.revision < original.revision {
+                try await cache.write(original, connectionID: route.connectionID, agentID: route.agentID, sessionID: route.sessionID)
+                version = try await cache.historyStoredVersion(scope: scope)
+            }
+            guard current(), physicalOperations[scope] == token, let version,
+                  version.revision == original.revision, version.epoch == original.historyEpoch,
+                  historySame(version.physicalSessionID, original.physicalSessionID) else { throw RuntimeFailure(.superseded) }
+            let replacement: NativeConversation
+            let changedEpoch: Bool
+            switch decision {
+            case .unchanged: return
+            case let .establish(physicalID):
+                replacement = try await cache.establishHistoryScope(scope: scope, expectedRevision: version.revision,
+                    epoch: UUID(), physicalSessionID: physicalID)
+                changedEpoch = true
+            case let .bind(physicalID):
+                guard let epoch = original.historyEpoch else { throw NativeHistoryFailure.changed }
+                replacement = try await cache.bindPhysicalSession(scope: scope, expectedRevision: version.revision,
+                    epoch: epoch, expectedCurrentHash: version.sha256, physicalSessionID: physicalID)
+                changedEpoch = false
+            case let .rollover(physicalID):
+                replacement = try await cache.rollover(scope: scope, expectedRevision: version.revision,
+                    fromEpoch: original.historyEpoch, toEpoch: UUID(), physicalSessionID: physicalID,
+                    retainingMessageIDs: Set(original.messages.filter(NativePhysicalHistoryPolicy.retainAcrossBoundary).map(\.id)),
+                    expectedCurrentHash: version.sha256).current
+                changedEpoch = true
+            }
+            // A completed storage transaction must be adopted even when the
+            // connection changed during it. It supplies no new wire authority.
+            guard physicalOperations[scope] == token, let latest = documents[route],
+                  latest.historyEpoch == original.historyEpoch else { throw NativeHistoryFailure.commitUncertain }
+            var adopted = replacement
+            adopted.draft = latest.draft; adopted.draftResourceIDs = latest.draftResourceIDs
+            NativePhysicalHistoryPolicy.hold(&adopted)
+            let observedID: String? = switch decision {
+            case let .establish(value), let .rollover(value): value
+            case let .bind(value): value
+            case .unchanged: nil
+            }
+            if acknowledgedMutation || (original.physicalSessionID != nil && observedID != nil &&
+                !historySame(original.physicalSessionID, observedID)) {
+                adopted.physicalMutationUnconfirmed = nil
+            }
+            adopted.revision = max(adopted.revision, latest.revision)
+            if try historyEncode(adopted) != historyEncode(replacement) { adopted.revision += 1 }
+            documents[route] = adopted
+            taskJournal?.bindHistoryScope(route, epoch: adopted.historyEpoch)
+            if changedEpoch, let epoch = adopted.historyEpoch {
+                physicalLiveEvidence[scope] = .init(epoch: epoch,
+                    retiringRunIDs: original.messages.compactMap(\.runID) + [running[route]].compactMap { $0 })
+                running.removeValue(forKey: route); finishedRuns.removeValue(forKey: route)
+                if original.historyEpoch != nil { taskRequests?.retireHistoryScope(route, epoch: epoch) }
+                else { taskRequests?.bindHistoryScope(route, epoch: epoch) }
+                physicalReady.remove(scope)
+                preferences.recordReading(.init(), route: route)
+                presentation.readingContexts[route] = .init()
+            }
+            if adopted.physicalMutationUnconfirmed != true { taskRequests?.resumeHistoryScope(route) }
+            updatePresentation(route)
+            if adopted.revision != replacement.revision {
+                try await cache.write(adopted, connectionID: route.connectionID, agentID: route.agentID, sessionID: route.sessionID)
+            }
+            persistedRevision = adopted.revision
+        } catch {
+            if let failure = error as? NativeHistoryFailure, failure == .commitUncertain || failure == .changed {
+                physicalFailures.insert(scope)
+            }
+            if physicalFailures.contains(scope) {
+                notice = String(localized: "Saved data could not be read safely. Reopen Clawket after unlocking this device.")
+            }
+            throw error
+        }
+        guard current() else { throw RuntimeFailure(.superseded) }
     }
 
     private var sessionHostContext: NativeSessionHostContext {
@@ -1281,53 +1510,121 @@ final class NativeAppModel: ObservableObject {
         }
     }
 
+    private func retirePreparedPhysicalMutations() {
+        for (id, route) in preparedPhysicalMutations {
+            let scope = NativeHistoryScope(route)
+            if physicalOperations[scope] == id { physicalOperations.removeValue(forKey: scope) }
+            // The already-persisted intent remains conservative; a late ACK cannot
+            // become a new connection's physical identity or unlock its input.
+            previousPhysicalUncertainty.removeValue(forKey: id)
+        }
+        preparedPhysicalMutations = [:]
+    }
+
+    func adoptPreparedPhysicalConversation(_ loaded: NativeConversation, route: ConversationID,
+                                           operation: UUID, host: NativeSessionHostContext) throws {
+        guard host.sameConnection(as: sessionHostContext), state.phase == .ready,
+              physicalOperations[NativeHistoryScope(route)] == operation, documents[route] == nil else {
+            throw RuntimeFailure(.superseded)
+        }
+        documents[route] = loaded
+        taskJournal?.bindHistoryScope(route, epoch: loaded.historyEpoch)
+        taskRequests?.bindHistoryScope(route, epoch: loaded.historyEpoch)
+    }
+
     private func prepareSessionMutation(_ target: NativeSessionMutationTarget) async throws {
         guard target.host.sameConnection(as: sessionHostContext), target.route.connectionID == activeConnectionID,
               state.phase == .ready else { throw RuntimeFailure(.superseded) }
-        historyRevisions[target.route] = UUID()
-        presentation.conversations[target.route]?.isLoadingHistory = false
-        if [.reset, .delete, .archive].contains(target.action), var document = documents[target.route] {
-            guard sendTasks[target.route] == nil, !mediaSendPreparations.contains(target.route), !document.messages.contains(where: { $0.delivery == .sending }) else {
-                throw RuntimeFailure(.requestBusy)
+        let route = target.route, destructive = [.reset, .delete].contains(target.action)
+        historyRevisions[route] = UUID()
+        presentation.conversations[route]?.isLoadingHistory = false
+        if destructive {
+            guard sendTasks[route] == nil, !mediaSendPreparations.contains(route) else { throw RuntimeFailure(.requestBusy) }
+            try beginPhysicalOperation(route, token: target.id)
+            preparedPhysicalMutations[target.id] = route
+            if documents[route] == nil, let cache {
+                let loaded = try await cache.read(connectionID: route.connectionID, agentID: route.agentID, sessionID: route.sessionID)
+                try adoptPreparedPhysicalConversation(loaded, route: route, operation: target.id, host: target.host)
             }
+            previousPhysicalUncertainty[target.id] = documents[route]?.physicalMutationUnconfirmed == true
+            guard var document = documents[route], !document.messages.contains(where: { $0.delivery == .sending }) else { throw RuntimeFailure(.requestBusy) }
+            NativePhysicalHistoryPolicy.hold(&document)
+            // The durable intent is conservative on a crash between dispatch and ACK.
+            document.physicalMutationUnconfirmed = true; document.revision += 1
+            documents[route] = document; saveTasks[route]?.cancel()
+            try await persist(route, physicalOperation: target.id)
+        } else if target.action == .archive, var document = documents[route] {
+            guard sendTasks[route] == nil, !mediaSendPreparations.contains(route) else { throw RuntimeFailure(.requestBusy) }
             if try document.holdForSessionMutation() {
-                documents[target.route] = document
-                saveTasks[target.route]?.cancel()
-                try await persist(target.route)
+                documents[route] = document; saveTasks[route]?.cancel(); try await persist(route)
             }
         }
-        guard target.host.sameConnection(as: sessionHostContext), state.phase == .ready else { throw RuntimeFailure(.superseded) }
+        guard target.host.sameConnection(as: sessionHostContext), state.phase == .ready,
+              !destructive || physicalOperations[NativeHistoryScope(route)] == target.id else { throw RuntimeFailure(.superseded) }
     }
 
     private func sessionMutationFinished(_ outcome: NativeSessionMutationOutcome) {
         switch outcome {
         case let .acknowledged(target, roster, created):
-            guard target.host.sameConnection(as: sessionHostContext), target.route.connectionID == activeConnectionID,
-                  let roster, roster.connectionID == activeConnectionID else { return }
-            showingCachedRoster = false; agents = roster.agents; sessions = roster.sessions
-            historyRevisions[target.route] = UUID()
-            if target.action == .restore || target.action == .archive { archivedSessions[target.route.connectionID] = nil }
-            if target.action == .branch, let created, target.host.selection == selectionRevision {
-                presentation.selectedConversation = .init(connectionID: created.connectionID, agentID: created.agentID, sessionID: created.key)
-            } else if [.delete, .archive].contains(target.action), target.host.selection == selectionRevision,
-                      presentation.selectedConversation == target.route,
-                      !roster.sessions.contains(where: { $0.connectionID == target.route.connectionID && $0.key == target.route.sessionID }) {
-                presentation.selectedConversation = nil
-            }
-            rebuildRoster()
-            if target.action == .reset, presentation.selectedConversation == target.route {
-                let host = sessionHostContext
+            // Consume exactly once, including an ACK whose catalog refresh failed.
+            // receipt.sessionID is the pre-action ID, never the new physical ID.
+            if let route = preparedPhysicalMutations.removeValue(forKey: target.id) {
+                previousPhysicalUncertainty.removeValue(forKey: target.id)
+                let scope = NativeHistoryScope(route)
+                guard physicalOperations[scope] == target.id else { return }
                 Task {
-                    guard host.sameConnection(as: sessionHostContext) else { return }
-                    await loadHistory(target.route)
+                    do {
+                        try await reconcilePhysicalHistory(route, decision: .rollover(nil), operation: target.id, acknowledgedMutation: true) {
+                            self.physicalOperations[scope] == target.id
+                        }
+                        applySessionRoster(target, roster: roster, created: created)
+                        if target.host.sameConnection(as: sessionHostContext), target.action == .reset {
+                            await loadHistory(route)
+                        }
+                    } catch { showFailure(error) }
+                }
+            } else { applySessionRoster(target, roster: roster, created: created) }
+        case let .notDispatched(target):
+            if let route = preparedPhysicalMutations.removeValue(forKey: target.id) {
+                let scope = NativeHistoryScope(route)
+                if physicalOperations[scope] == target.id {
+                    documents[route]?.physicalMutationUnconfirmed = previousPhysicalUncertainty.removeValue(forKey: target.id) == true
+                    changed(route); physicalOperations.removeValue(forKey: scope)
+                    if documents[route]?.physicalMutationUnconfirmed != true { taskRequests?.resumeHistoryScope(route) }
+                    scheduleSave(route, immediate: true); updatePresentation(route)
                 }
             }
-            for id in presentation.catalogs.keys where id.connectionID == target.route.connectionID && presentation.catalogs[id]?.showingArchived == true {
-                loadArchivedCatalog(id)
-            }
-        case .notDispatched, .uncertain:
-            // Keep content and held queue values. Unknown outcomes stay locked in sessionManager.
             rebuildRoster()
+        case let .uncertain(target):
+            // Preserve the durable intent and held input. Only a later proven
+            // physical boundary or another explicit ACK can retire it.
+            if let route = preparedPhysicalMutations.removeValue(forKey: target.id) {
+                previousPhysicalUncertainty.removeValue(forKey: target.id)
+                if physicalOperations[NativeHistoryScope(route)] == target.id {
+                    physicalOperations.removeValue(forKey: NativeHistoryScope(route))
+                    updatePresentation(route); scheduleSave(route, immediate: true)
+                }
+            }
+            rebuildRoster()
+        }
+    }
+
+    private func applySessionRoster(_ target: NativeSessionMutationTarget, roster: RuntimeRoster?, created: RuntimeSession?) {
+        guard target.host.sameConnection(as: sessionHostContext), target.route.connectionID == activeConnectionID,
+              let roster, roster.connectionID == activeConnectionID else { return }
+        showingCachedRoster = false; agents = roster.agents; sessions = roster.sessions
+        historyRevisions[target.route] = UUID()
+        if target.action == .restore || target.action == .archive { archivedSessions[target.route.connectionID] = nil }
+        if target.action == .branch, let created, target.host.selection == selectionRevision {
+            presentation.selectedConversation = .init(connectionID: created.connectionID, agentID: created.agentID, sessionID: created.key)
+        } else if [.delete, .archive].contains(target.action), target.host.selection == selectionRevision,
+                  presentation.selectedConversation == target.route,
+                  !roster.sessions.contains(where: { historySame($0.connectionID, target.route.connectionID) && historySame($0.key, target.route.sessionID) }) {
+            presentation.selectedConversation = nil
+        }
+        rebuildRoster()
+        for id in presentation.catalogs.keys where id.connectionID == target.route.connectionID && presentation.catalogs[id]?.showingArchived == true {
+            loadArchivedCatalog(id)
         }
     }
 

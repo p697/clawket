@@ -27,7 +27,7 @@ extension NativeAppModel {
     }
 
     func voiceContext(_ route: ConversationID) -> NativeVoiceContext? {
-        guard route.isConcrete, route.connectionID == activeConnectionID, presentation.selectedConversation == route,
+        guard physicalPermitsLocalChanges(route), route.isConcrete, route.connectionID == activeConnectionID, presentation.selectedConversation == route,
               let document = documents[route] else { return nil }
         let draft = presentation.draft(for: route)
         return .init(route: route, activation: activationRevision, selection: selectionRevision,

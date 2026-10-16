@@ -33,6 +33,39 @@ final class NativeTaskJournalTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(journal.work(for: route)?.records.map(\.id), records.map(\.id))
     }
 
+    @MainActor func testPhysicalEpochKeepsOldWorkInspectableButCannotJoinReusedRunOrFinishIt() async throws {
+        let journal = NativeTaskJournal(store: try NativeJournalStore(values: JournalValues()), onFailure: { XCTFail("Unexpected failure") })
+        await journal.restore()
+        let first = UUID(), second = UUID()
+        journal.bindHistoryScope(route, epoch: first)
+        journal.started(route, runID: "reused")
+        let old = try XCTUnwrap(journal.document.runs.first)
+        journal.bindHistoryScope(route, epoch: second)
+        let held = try XCTUnwrap(journal.work(for: route))
+        XCTAssertEqual(held.status, .unknown); XCTAssertEqual(held.records.map(\.id), [old.id])
+        XCTAssertEqual(journal.document.runs.first?.status, .unknown)
+        journal.started(route, runID: "reused")
+        journal.finished(route, runID: "reused", reason: "end_turn")
+        XCTAssertEqual(journal.document.runs.count, 2)
+        XCTAssertEqual(journal.document.runs[0].id, old.id); XCTAssertEqual(journal.document.runs[0].status, .unknown)
+        XCTAssertEqual(journal.document.runs[0].scope.historyEpoch, first)
+        XCTAssertEqual(journal.document.runs[1].scope.historyEpoch, second)
+        XCTAssertEqual(journal.document.runs[1].status, .succeeded)
+        XCTAssertEqual(journal.work(for: route)?.records.count, 2)
+    }
+
+    func testOpaqueUnicodeScopeAndLineageRemainDistinctAcrossJournalBindings() {
+        let epoch = UUID()
+        let first = NativeJournalScope(connectionID: "c", agentID: "a", sessionID: "é", historyEpoch: epoch)
+        let second = NativeJournalScope(connectionID: "c", agentID: "a", sessionID: "e\u{301}", historyEpoch: epoch)
+        XCTAssertNotEqual(first, second); XCTAssertEqual(Set([first, second]).count, 2)
+        var value = NativeJournalDocument()
+        _ = NativeWorkReducer.index(&value, scope: first, lineage: .init(runID: "é"))
+        _ = NativeWorkReducer.index(&value, scope: first, lineage: .init(runID: "e\u{301}"))
+        XCTAssertEqual(value.runs.count, 2)
+        XCTAssertTrue(NativeWorkLineage(runID: "é").conflicts(with: .init(runID: "e\u{301}")))
+    }
+
     private var scope: NativeJournalScope { .init(connectionID: "c", agentID: "a", sessionID: "s") }
     private var route: ConversationID { .init(connectionID: "c", agentID: "a", sessionID: "s") }
     private func work(_ values: [String: JSONValue] = [:]) throws -> RuntimeWorkUpdate {

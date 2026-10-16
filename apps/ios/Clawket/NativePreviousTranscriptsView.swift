@@ -121,11 +121,12 @@ private struct NativePhysicalTranscriptView: View {
     }
     private func open(_ reference: NativeMediaReference) {
         guard visible, previewRequest == nil else { return }
+        let epoch = value?.messages.first { $0.media.contains(where: { $0.id == reference.id }) }?.historyEpoch
         let request = UUID(); previewRequest = request
         loadTask = Task {
             defer { if previewRequest == request { previewRequest = nil; loadTask = nil } }
             do {
-                let prepared = try await controller.cachedPreview(reference, scope: expectedScope)
+                let prepared = try await controller.cachedPreview(reference, scope: expectedScope, historyEpoch: epoch)
                 guard visible, previewRequest == request, !Task.isCancelled else { await prepared.release(); return }
                 preview = prepared
             } catch { if visible && previewRequest == request { notice = String(localized: "Attachment could not be loaded. Try again.") } }

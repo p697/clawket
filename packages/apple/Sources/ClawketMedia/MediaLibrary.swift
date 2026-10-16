@@ -183,8 +183,8 @@ public actor MediaLibrary {
         }
         if let (_, task) = pending[key] { let result = try await task.value; try Task.checkCancellation(); return result }
         try capacity(bytes: size)
-        let scoped = entries.values.filter { $0.artifact?.connectionID == key.connectionID && $0.artifact?.sessionKey == key.sessionKey }
-        let reserved = reservations.values.filter { $0.0.connectionID == key.connectionID && $0.0.sessionKey == key.sessionKey }
+        let scoped = entries.values.filter { mediaScopeEqual($0.artifact?.connectionID, key.connectionID) && mediaScopeEqual($0.artifact?.sessionKey, key.sessionKey) }
+        let reserved = reservations.values.filter { mediaScopeEqual($0.0.connectionID, key.connectionID) && mediaScopeEqual($0.0.sessionKey, key.sessionKey) }
         guard scoped.count + reserved.count < 16,
               size <= 30 * 1_024 * 1_024 - scoped.reduce(0, { $0 + $1.resource.byteCount }) - reserved.reduce(0, { $0 + $1.1 }) else { throw MediaFailure.capacity }
         let operation = UUID(); reservations[operation] = (key, size)
@@ -200,7 +200,7 @@ public actor MediaLibrary {
     }
 
     public func invalidateArtifacts(connectionID: String, sessionKey: String? = nil) {
-        for (key, (_, task)) in pending where key.connectionID == connectionID && (sessionKey == nil || key.sessionKey == sessionKey) {
+        for (key, (_, task)) in pending where mediaScopeEqual(key.connectionID, connectionID) && (sessionKey == nil || mediaScopeEqual(key.sessionKey, sessionKey)) {
             task.cancel(); pending.removeValue(forKey: key)
         }
     }

@@ -12,6 +12,10 @@ The caller API is:
 establishHistoryScope(scope: NativeHistoryScope, expectedRevision: Int64,
                       epoch: UUID, physicalSessionID: String?) async throws -> NativeConversation
 
+bindPhysicalSession(scope: NativeHistoryScope, expectedRevision: Int64,
+                    epoch: UUID, expectedCurrentHash: String,
+                    physicalSessionID: String) async throws -> NativeConversation
+
 rollover(scope: NativeHistoryScope, expectedRevision: Int64,
          fromEpoch: UUID?, toEpoch: UUID, physicalSessionID: String?,
          retainingMessageIDs: Set<String>, expectedCurrentHash: String? = nil)
@@ -20,7 +24,13 @@ rollover(scope: NativeHistoryScope, expectedRevision: Int64,
 
 Initial binding accepts a missing current at revision zero, or an empty transcript without a previous physical identity; it preserves the draft and files. An empty current with an established local epoch and nil physical ID can adopt the first actual physical ID in that same epoch. Nonempty legacy data with nil identity must roll over. Repeating the same verified completed operation returns its committed value; different evidence is rejected.
 
-Before rollover the host must freeze the actual observed scope and hold its outbox. It supplies a new UUID, exact previous revision/epoch and exact IDs to retain. Only existing local user outbox items in queued/held/sending/uncertain/failed states may remain in the new current. Their render IDs, idempotency keys, text, delivery values and files are unchanged; the draft and draft resource IDs are unchanged. Cursor and has-more state clear. The store emits no RPC and never replays input. The host must separately retire late voice/media/model work when publishing a replacement physical epoch, even when its logical route and draft stay the same. Runtime-to-host physical rollover integration is a separate consumer change; creating this storage API alone does not prove reset acceptance.
+Before rollover the host must freeze the actual observed scope and hold its outbox. It supplies a new UUID, exact previous revision/epoch and exact IDs to retain. Only existing local user outbox items in queued/held/sending/uncertain/failed states may remain in the new current. Their render IDs, idempotency keys, text, delivery values and files are unchanged; the draft and draft resource IDs are unchanged. Cursor and has-more state clear. The store emits no RPC and never replays input. The host must separately retire late voice/media/model work when publishing a replacement physical epoch, even when its logical route and draft stay the same. The actual host now invokes this transaction after a current accepted head supplies a different actual physical ID, or once for a captured reset/delete ACK, including when the post-ACK catalog read failed. ACK receipt IDs describe the previous physical session and never become the new ID. The ACK replacement initially has a nil physical ID; a subsequent accepted head can bind that actual ID in the same epoch only when every remaining row is a held/uncertain/failed owned input. Binding checks the original raw hash, revision, epoch and exact completed replacement, preserving unknown fields without creating another archive.
+
+Before reset/delete dispatch the host durably saves `physicalMutationUnconfirmed` and holds the outbox. Proven non-dispatch restores the preceding intent state; an unknown outcome retains it across cold reads. The same/missing physical ID or an older page cannot clear that intent. A different actually observed physical ID or another explicit successful reset/delete can establish the replacement. Retained inputs keep their original epoch; only explicit Send now on a known held item moves that item to the current epoch. Unknown deliveries cannot take that action. New wire input also requires a current accepted head after each connection generation.
+
+The synchronous host operation fence precedes all storage awaits. It retires exact picker/voice/model/read scopes and pending editing, preserves concurrent composer edits/resources during adoption, and adopts a completed local transaction even if its originating wire read becomes stale. Unknown storage commits lock only that route until verified cold recovery. Same-socket late live events require the current epoch's actual input key, a current send receipt, or an actual active run from an accepted head; clocks, prose and arrival order grant nothing. Unknown live lineage triggers a bounded read rather than selecting an older run. Work records are epoch-scoped and remain locally inspectable; consent drafts use epoch-specific local correlation keys, without persisting wire authority.
+
+These host and storage regressions are separate from actual phone/backend reset, network interruption and archive acceptance; those remain in the device matrix.
 
 The protected `NativeConversations/History` directory holds a raw body and a separate small manifest per archive. The body is the exact original current bytes, including unknown legacy fields, without a wrapper that reduces the 8 MiB record limit. List reads load manifests only; selecting a copy verifies and decodes that body. The original draft is preserved in the body but is not shown as a restored composer or portable transcript.
 
@@ -28,7 +38,7 @@ A replacement is staged before a durable immutable intent. Only the original SHA
 
 Limits are 128 physical copies, 8 MiB per raw body and 64 MiB for archive/pending/preparation data plus the affected current/rollback transaction's worst atomic footprint. Normal current writes also preflight their actual archive/current/rollback/new-file peak. This is not a claim that every unrelated evictable conversation cache on the device fits 64 MiB. Metadata, counter bounds and filenames are bounded. Full storage rejects before mutation; there is no implicit eviction or truncation.
 
-Archive media ownership includes current, rollback, durable pending replacement and verified original bodies before reclaiming any input file. A corrupt source stops reclamation. Generated artifact metadata stays display context and does not become a permanent strong reference; its existing 24-hour cache remains in effect.
+Archive media ownership includes current, rollback, durable pending replacement and verified original bodies before reclaiming any input file. A corrupt source stops reclamation. Generated artifact metadata stays display context and does not become a permanent strong reference; its existing 24-hour cache remains in effect. Cache keys include the local message history epoch without changing artifact RPC arguments or logical-session quotas. A cached resource pointer cannot bypass its artifact/scope/epoch binding; archive preview supplies the original message epoch and stays offline-only.
 
 ## Explicit saved conversations and export
 

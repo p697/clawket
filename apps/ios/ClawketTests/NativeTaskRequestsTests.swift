@@ -17,7 +17,17 @@ private actor RequestRuntime: NativeTaskRuntime {
     var decisions: [(RuntimeRequestReference, RuntimeApprovalDecision, RuntimeApprovalConfirmation?)] = []
     var answers: [(RuntimeRequestReference, RuntimeQuestionAnswer)] = []
     var failure: RuntimeFailure?
-    func listPending(sessionKey: String?) -> RuntimePendingRequests { .init(connectionID: "c", approvals: [], questions: []) }
+    private var pending: RuntimePendingRequests?
+    func setPending(_ value: RuntimePendingRequests) { pending = value }
+    private var holdList = false
+    private var heldList: CheckedContinuation<RuntimePendingRequests, Never>?
+    func holdNextList() { holdList = true }
+    func isListHeld() -> Bool { heldList != nil }
+    func releaseList(_ value: RuntimePendingRequests) { heldList?.resume(returning: value); heldList = nil }
+    func listPending(sessionKey: String?) async -> RuntimePendingRequests {
+        if holdList { holdList = false; return await withCheckedContinuation { heldList = $0 } }
+        return pending ?? .init(connectionID: "c", approvals: [], questions: [])
+    }
     func prepareApprovalConfirmation(_ reference: RuntimeRequestReference) -> RuntimeApprovalConfirmation {
         prepared.append(reference); return .init(id: UUID(), reference: reference)
     }
@@ -65,6 +75,103 @@ final class NativeTaskRequestsTests: XCTestCase, @unchecked Sendable {
         XCTFail("Request operation did not reach its expected state"); throw StoreFailure.unavailable
     }
     private var route: ConversationID { .init(connectionID: "c", agentID: "a", sessionID: "s") }
+
+    @MainActor func testPhysicalRetirementConsumesOnlyItsConfirmationAndPreservesOtherSessionAuthority() async throws {
+        let (requests, presentation, runtime, _) = try fixture(), old = try approval(), other = try approval(session: "other")
+        requests.bindHistoryScope(route, epoch: UUID())
+        await runtime.setPending(.init(connectionID: "c", approvals: [old, other], questions: []))
+        requests.refresh(route: route)
+        try await waitUntil { requests.messages(for: self.route).count == 1 }
+        requests.prepareApproval(id: old.id.uuidString)
+        try await waitUntil { presentation.approvalConfirmation != nil }
+        let frozen = try XCTUnwrap(presentation.approvalConfirmation)
+        requests.retireHistoryScope(route, epoch: UUID())
+        requests.confirmApproval(id: frozen.id)
+        requests.apply(.init(connectionID: "c", approvals: [old, other], questions: []))
+        XCTAssertTrue(requests.messages(for: route).isEmpty)
+        XCTAssertNil(presentation.approvalConfirmation)
+        requests.resolve(id: old.id.uuidString, decision: .allowOnce)
+        requests.resolve(id: other.id.uuidString, decision: .allowOnce)
+        try await waitUntil { await runtime.decisions.count == 1 }
+        let decisions = await runtime.decisions
+        XCTAssertEqual(decisions[0].0, other.reference)
+    }
+
+    @MainActor func testReusedWireQuestionCannotInheritOldPhysicalAnswerDraft() async throws {
+        let (requests, presentation, runtime, drafts) = try fixture(), old = try question()
+        let oldEpoch = UUID(), newEpoch = UUID()
+        requests.bindHistoryScope(route, epoch: oldEpoch)
+        await runtime.setPending(.init(connectionID: "c", approvals: [], questions: [old]))
+        requests.refresh(route: route)
+        try await waitUntil { requests.messages(for: self.route).count == 1 }
+        let response = QuestionResponse(fields: ["value": .init(text: "old physical answer")])
+        requests.draftChanged(id: old.id.uuidString, response: response)
+        requests.retireHistoryScope(route, epoch: newEpoch)
+        let fresh = try question()
+        XCTAssertNotEqual(old.id, fresh.id); XCTAssertEqual(old.draftKey, fresh.draftKey)
+        await runtime.setPending(.init(connectionID: "c", approvals: [], questions: [fresh]))
+        requests.refresh(route: route)
+        try await waitUntil { requests.messages(for: self.route).count == 1 }
+        for _ in 0..<20 { await Task.yield() }
+        XCTAssertNotEqual(presentation.questionResponses[fresh.id.uuidString]?.fields["value"]?.text, response.fields["value"]?.text)
+        let unscoped = try await drafts.read(key: fresh.draftKey)
+        XCTAssertNil(unscoped)
+        XCTAssertEqual(requests.messages(for: route).count, 1)
+        requests.answer(id: old.id.uuidString, response: response)
+        XCTAssertNil(presentation.approvalConfirmation)
+    }
+
+    @MainActor func testPreviouslyUnseenOldPushCannotAcquireNewEpochAuthorityWithoutCurrentListEvidence() async throws {
+        let (requests, presentation, runtime, _) = try fixture(), unseen = try question(), current = try question()
+        requests.bindHistoryScope(route, epoch: UUID())
+        requests.retireHistoryScope(route, epoch: UUID())
+        await runtime.setPending(.init(connectionID: "c", approvals: [], questions: [current]))
+        requests.apply(.init(connectionID: "c", approvals: [], questions: [unseen]))
+        XCTAssertTrue(requests.messages(for: route).isEmpty)
+        XCTAssertNil(presentation.questionResponses[unseen.id.uuidString])
+        requests.answer(id: unseen.id.uuidString, response: .init(fields: ["value": .init(text: "late")]))
+        try await waitUntil { requests.messages(for: self.route).count == 1 }
+        let row = try XCTUnwrap(requests.messages(for: route).first)
+        XCTAssertEqual(row.id, "request-" + current.id.uuidString)
+        XCTAssertNil(presentation.questionResponses[unseen.id.uuidString])
+        let answers = await runtime.answers; XCTAssertTrue(answers.isEmpty)
+    }
+
+    @MainActor func testPreparingPhysicalMutationPausesOnlyThatSessionAndDoesNotResurrectAlways() async throws {
+        let (requests, presentation, runtime, _) = try fixture(), old = try approval(), other = try approval(session: "other")
+        requests.apply(.init(connectionID: "c", approvals: [old, other], questions: []))
+        requests.prepareApproval(id: old.id.uuidString)
+        try await waitUntil { presentation.approvalConfirmation != nil }
+        let confirmation = try XCTUnwrap(presentation.approvalConfirmation)
+        requests.pauseHistoryScope(route)
+        requests.confirmApproval(id: confirmation.id)
+        requests.resolve(id: old.id.uuidString, decision: .allowOnce)
+        requests.resolve(id: other.id.uuidString, decision: .allowOnce)
+        try await waitUntil { await runtime.decisions.count == 1 }
+        requests.resumeHistoryScope(route)
+        requests.confirmApproval(id: confirmation.id)
+        requests.resolve(id: old.id.uuidString, decision: .allowOnce)
+        try await waitUntil { await runtime.decisions.count == 2 }
+        let values = await runtime.decisions
+        XCTAssertEqual(values.map { $0.0.id }, [other.id, old.id])
+        XCTAssertTrue(values.allSatisfy { $0.1 == .allowOnce && $0.2 == nil })
+    }
+
+    @MainActor func testPendingReadStartedBeforeBoundaryCannotRegisterOldReferenceInNewEpoch() async throws {
+        let (requests, presentation, runtime, _) = try fixture(), old = try question(), current = try question()
+        requests.bindHistoryScope(route, epoch: UUID())
+        await runtime.holdNextList()
+        requests.refresh(route: route)
+        try await waitUntil { await runtime.isListHeld() }
+        requests.retireHistoryScope(route, epoch: UUID())
+        await runtime.setPending(.init(connectionID: "c", approvals: [], questions: [current]))
+        await runtime.releaseList(.init(connectionID: "c", approvals: [], questions: [old]))
+        try await waitUntil { requests.messages(for: self.route).count == 1 }
+        XCTAssertEqual(requests.messages(for: route).first?.id, "request-" + current.id.uuidString)
+        XCTAssertNil(presentation.questionResponses[old.id.uuidString])
+        requests.answer(id: old.id.uuidString, response: .init(fields: ["value": .init(text: "old answer")]))
+        let answers = await runtime.answers; XCTAssertTrue(answers.isEmpty)
+    }
 
     @MainActor func testAlwaysNeedsFrozenConfirmationAndConsumesItBeforeAnyAwait() async throws {
         let (requests, presentation, runtime, _) = try fixture(), value = try approval()

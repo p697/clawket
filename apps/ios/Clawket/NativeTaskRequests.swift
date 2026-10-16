@@ -2,6 +2,7 @@ import ClawketRuntime
 import ClawketTransport
 import ClawketUI
 import Foundation
+import CryptoKit
 
 protocol NativeTaskRuntime: Sendable {
     func listPending(sessionKey: String?) async throws -> RuntimePendingRequests
@@ -31,6 +32,7 @@ final class NativeTaskRequests {
         let held: Bool
         let message: MessagePresentation
         let bytes: Int
+        let historyEpoch: UUID?
     }
     private let presentation: ClientPresentation
     private let runtime: any NativeTaskRuntime
@@ -56,6 +58,72 @@ final class NativeTaskRequests {
     private var saveTasks: [String: Task<Void, Never>] = [:]
     private var saveTokens: [String: UUID] = [:]
     private var receipts: [Receipt] = []
+    private var historyEpochs: [Data: UUID] = [:]
+    private var retiredReferences: Set<UUID> = []
+    private var retiredOverflow = false
+    private var needsFreshReferences: Set<Data> = []
+    private var pausedHistoryScopes: Set<Data> = []
+    private var freshReferences: [Data: Set<UUID>] = [:]
+    private var refreshReads: [Data: UUID] = [:]
+
+    private func sessionScope(_ connectionID: String, _ sessionID: String?) -> Data? {
+        guard let sessionID else { return nil }
+        return Data("\(connectionID.utf8.count):\(connectionID)\(sessionID)".utf8)
+    }
+    private func epoch(_ reference: RuntimeRequestReference) -> UUID? {
+        sessionScope(reference.connectionID, reference.sessionKey).flatMap { historyEpochs[$0] }
+    }
+    private func localKey(_ key: String, reference: RuntimeRequestReference) -> String {
+        guard let epoch = epoch(reference) else { return key }
+        return SHA256.hash(data: Data((key + epoch.uuidString).utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+    func bindHistoryScope(_ route: ConversationID, epoch: UUID?) {
+        guard let key = sessionScope(route.connectionID, route.sessionID) else { return }
+        guard historyEpochs[key] != epoch else { return }
+        if let epoch { historyEpochs[key] = epoch } else { historyEpochs.removeValue(forKey: key) }
+        needsFreshReferences.insert(key); freshReferences[key] = []
+    }
+    func pauseHistoryScope(_ route: ConversationID) {
+        guard let key = sessionScope(route.connectionID, route.sessionID) else { return }
+        pausedHistoryScopes.insert(key)
+        if let reference = confirmation?.reference, sessionScope(reference.connectionID, reference.sessionKey) == key { clearConfirmation() }
+        publish()
+    }
+    func resumeHistoryScope(_ route: ConversationID) {
+        guard let key = sessionScope(route.connectionID, route.sessionID) else { return }
+        pausedHistoryScopes.remove(key); publish()
+    }
+    private func isHistoryPaused(_ reference: RuntimeRequestReference) -> Bool {
+        sessionScope(reference.connectionID, reference.sessionKey).map { pausedHistoryScopes.contains($0) } ?? false
+    }
+    private func hasFreshAuthority(_ reference: RuntimeRequestReference) -> Bool {
+        guard !retiredReferences.contains(reference.id) else { return false }
+        guard let key = sessionScope(reference.connectionID, reference.sessionKey), needsFreshReferences.contains(key) else { return true }
+        return freshReferences[key]?.contains(reference.id) == true
+    }
+    func retireHistoryScope(_ route: ConversationID, epoch: UUID?) {
+        let ids = Set(order.filter { id in
+            let reference = approvals[id]?.reference ?? questions[id]?.reference
+            return reference.map { historySame($0.connectionID, route.connectionID) && historySame($0.sessionKey, route.sessionID) } == true
+        })
+        for id in ids {
+            if let question = questions[id], let response = presentation.questionResponses[id], let revision = inputRevisions[id] {
+                saveDraft(response, question: question, revision: revision, immediate: true)
+            }
+        }
+        holdCurrentReviews(except: Set(order).subtracting(ids))
+        for id in ids {
+            if let value = UUID(uuidString: id) {
+                if retiredReferences.count < 1_024 { retiredReferences.insert(value) } else { retiredOverflow = true }
+            }
+            approvals.removeValue(forKey: id); questions.removeValue(forKey: id)
+            submissions.removeValue(forKey: id); acceptedAnswers.remove(id); blocked.remove(id)
+            errors.removeValue(forKey: id); inputRevisions.removeValue(forKey: id)
+            if confirmation?.reference.id.uuidString == id { clearConfirmation() }
+        }
+        order.removeAll { ids.contains($0) }
+        bindHistoryScope(route, epoch: epoch); pruneResponses(); publish()
+    }
 
     init(presentation: ClientPresentation, runtime: any NativeTaskRuntime,
          drafts: NativeQuestionDraftStore, onChange: @escaping @MainActor () -> Void,
@@ -71,14 +139,15 @@ final class NativeTaskRequests {
                 else { response = nil }
                 receipts.append(.init(connectionID: record.connectionID, sessionKey: record.sessionID,
                     key: record.correlationKey, held: record.held, message: message,
-                    bytes: message.content.first.map { NativeTaskPresentation.byteCount($0, response: response) } ?? 0))
+                    bytes: message.content.first.map { NativeTaskPresentation.byteCount($0, response: response) } ?? 0,
+                    historyEpoch: record.historyEpoch))
             }
         }
     }
 
     func invalidate() {
         flushDrafts()
-        ready = false; scope = UUID(); clearConfirmation()
+        ready = false; scope = UUID(); refreshReads = [:]; clearConfirmation()
         holdCurrentReviews()
         approvals = [:]; questions = [:]; order = []; submissions = [:]; acceptedAnswers = []; blocked = []; errors = [:]; inputRevisions = [:]
         pruneResponses()
@@ -93,29 +162,58 @@ final class NativeTaskRequests {
     }
 
     func refresh(route: ConversationID? = nil) {
-        guard ready, route == nil || route?.connectionID == connectionID else { return }
-        let captured = scope, runtime = runtime
+        guard ready, let connectionID, route == nil || route?.connectionID == connectionID else { return }
+        let readKey = route.flatMap { sessionScope($0.connectionID, $0.sessionID) }.map { Data([1]) + $0 } ?? Data([0])
+        guard refreshReads[readKey] == nil else { return }
+        let readID = UUID(), captured = scope, capturedEpochs = historyEpochs, runtime = runtime
+        refreshReads[readKey] = readID
         Task {
+            defer { if refreshReads[readKey] == readID { refreshReads.removeValue(forKey: readKey) } }
             guard captured == scope, ready else { return }
             do {
                 let snapshot = try await runtime.listPending(sessionKey: route?.sessionID)
-                guard captured == scope, ready else { return }
+                guard captured == scope, ready, refreshReads[readKey] == readID else { return }
+                for (key, epoch) in capturedEpochs where historyEpochs[key] == epoch {
+                    if let route, sessionScope(route.connectionID, route.sessionID) != key { continue }
+                    freshReferences[key] = []
+                }
+                for reference in snapshot.approvals.map(\.reference) + snapshot.questions.map(\.reference) {
+                    guard let key = sessionScope(reference.connectionID, reference.sessionKey),
+                          let epoch = capturedEpochs[key], historyEpochs[key] == epoch,
+                          route == nil || historySame(route?.sessionID, reference.sessionKey),
+                          !retiredReferences.contains(reference.id) else { continue }
+                    freshReferences[key, default: []].insert(reference.id)
+                }
+                // Release this read before applying a stale snapshot, so an
+                // untrusted pushed value can schedule one fresh successor.
+                refreshReads.removeValue(forKey: readKey)
                 apply(snapshot)
             } catch { /* Safe optional discovery does not replace connection-health evidence. */ }
         }
     }
 
     func apply(_ snapshot: RuntimePendingRequests) {
-        guard ready, snapshot.connectionID == connectionID else { return }
-        let references = snapshot.approvals.map(\.reference) + snapshot.questions.map(\.reference)
-        let reviewKeys = snapshot.approvals.map(\.reviewKey) + snapshot.questions.map(\.draftKey)
+        guard ready, !retiredOverflow, snapshot.connectionID == connectionID else { return }
+        let rawReferences = snapshot.approvals.map(\.reference) + snapshot.questions.map(\.reference)
+        let rawKeys = snapshot.approvals.map(\.reviewKey) + snapshot.questions.map(\.draftKey)
+        guard rawReferences.count <= 256, Set(rawReferences.map(\.id)).count == rawReferences.count,
+              Set(rawKeys).count == rawKeys.count,
+              rawReferences.allSatisfy({ $0.connectionID == snapshot.connectionID }) else { invalidate(); return }
+        let incomingApprovals = snapshot.approvals.filter { hasFreshAuthority($0.reference) }
+        let incomingQuestions = snapshot.questions.filter { hasFreshAuthority($0.reference) }
+        let untrusted = (snapshot.approvals.map(\.reference) + snapshot.questions.map(\.reference)).contains {
+            !retiredReferences.contains($0.id) && !hasFreshAuthority($0)
+        }
+        if untrusted { refresh() }
+        let references = incomingApprovals.map(\.reference) + incomingQuestions.map(\.reference)
+        let reviewKeys = incomingApprovals.map { localKey($0.reviewKey, reference: $0.reference) } + incomingQuestions.map { localKey($0.draftKey, reference: $0.reference) }
         guard references.count <= 256, Set(references.map(\.id)).count == references.count,
               Set(reviewKeys).count == reviewKeys.count,
               references.allSatisfy({ $0.connectionID == snapshot.connectionID }) else { invalidate(); return }
         let oldQuestions = questions
         var localDrafts: [String: QuestionResponse] = [:]
         for question in oldQuestions.values {
-            if let response = presentation.questionResponses[question.id.uuidString] { localDrafts[question.draftKey] = response }
+            if let response = presentation.questionResponses[question.id.uuidString] { localDrafts[localKey(question.draftKey, reference: question.reference)] = response }
         }
         for receipt in receipts where receipt.held {
             let id = responseID(receipt)
@@ -123,20 +221,20 @@ final class NativeTaskRequests {
         }
         // A disappearing entry may be reauthentication or unsupported discovery, not a decision.
         holdCurrentReviews(except: Set(references.map { $0.id.uuidString }))
-        approvals = Dictionary(uniqueKeysWithValues: snapshot.approvals.map { ($0.id.uuidString, $0) })
-        questions = Dictionary(uniqueKeysWithValues: snapshot.questions.map { ($0.id.uuidString, $0) })
-        order = snapshot.approvals.map { $0.id.uuidString } + snapshot.questions.map { $0.id.uuidString }
+        approvals = Dictionary(uniqueKeysWithValues: incomingApprovals.map { ($0.id.uuidString, $0) })
+        questions = Dictionary(uniqueKeysWithValues: incomingQuestions.map { ($0.id.uuidString, $0) })
+        order = incomingApprovals.map { $0.id.uuidString } + incomingQuestions.map { $0.id.uuidString }
         let current = Set(order), freshKeys = Set(reviewKeys)
         receipts.removeAll { $0.connectionID == snapshot.connectionID && freshKeys.contains($0.key) }
         submissions = submissions.filter { current.contains($0.key) }
         acceptedAnswers.formIntersection(current)
-        blocked.formUnion(snapshot.approvals.filter { $0.state == .uncertain }.map { $0.id.uuidString })
-        blocked.formUnion(snapshot.questions.filter { $0.state == .uncertain }.map { $0.id.uuidString })
+        blocked.formUnion(incomingApprovals.filter { $0.state == .uncertain }.map { $0.id.uuidString })
+        blocked.formUnion(incomingQuestions.filter { $0.state == .uncertain }.map { $0.id.uuidString })
         blocked = blocked.intersection(current); errors = errors.filter { current.contains($0.key) }
         if let confirmation, approvals[confirmation.reference.id.uuidString]?.reference != confirmation.reference { clearConfirmation() }
         for id in oldQuestions.keys where questions[id] == nil { inputRevisions.removeValue(forKey: id) }
         for (id, question) in questions where oldQuestions[id] == nil {
-            if let local = localDrafts[question.draftKey] {
+            if let local = localDrafts[localKey(question.draftKey, reference: question.reference)] {
                 presentation.questionResponses[id] = NativeTaskPresentation.restore(local, for: present(question))
                 continue // An older disk copy must never replace editing retained across a reconnect.
             }
@@ -144,7 +242,7 @@ final class NativeTaskRequests {
             let input = inputRevisions[id, default: 0]
             Task {
                 do {
-                    guard let draft = try await drafts.read(key: question.draftKey),
+                    guard let draft = try await drafts.read(key: localKey(question.draftKey, reference: question.reference)),
                           questions[id]?.reference == question.reference, inputRevisions[id, default: 0] == input else { return }
                     presentation.questionResponses[id] = NativeTaskPresentation.restore(draft, for: present(question))
                     saveReview(question)
@@ -160,7 +258,7 @@ final class NativeTaskRequests {
     }
 
     func draftChanged(id: String, response: QuestionResponse) {
-        guard let question = questions[id], question.state == .pending, submissions[id] == nil, !blocked.contains(id) else { return }
+        guard let question = questions[id], hasFreshAuthority(question.reference), !isHistoryPaused(question.reference), question.state == .pending, submissions[id] == nil, !blocked.contains(id) else { return }
         presentation.questionResponses[id] = response
         saveReview(question)
         draftRevision += 1; inputRevisions[id] = draftRevision
@@ -175,7 +273,7 @@ final class NativeTaskRequests {
     }
 
     private func saveDraft(_ response: QuestionResponse, question: RuntimeQuestion, revision: UInt64, immediate: Bool) {
-        let key = question.draftKey, id = question.id.uuidString
+        let key = localKey(question.draftKey, reference: question.reference), id = question.id.uuidString
         saveTasks[key]?.cancel()
         let token = UUID(); saveTokens[key] = token
         saveTasks[key] = Task {
@@ -231,7 +329,7 @@ final class NativeTaskRequests {
         let captured = scope
         submissions[id] = .approval(decision); errors.removeValue(forKey: id); publish()
         Task {
-            guard captured == scope, approvals[id]?.reference == approval.reference, !blocked.contains(id) else { return }
+            guard captured == scope, approvals[id]?.reference == approval.reference, hasFreshAuthority(approval.reference), !isHistoryPaused(approval.reference), !blocked.contains(id) else { return }
             do { try await runtime.resolve(approval.reference, decision: NativeTaskPresentation.decision(decision), confirmation: confirmation) }
             catch { fail(error, id: id, scope: captured) }
         }
@@ -270,7 +368,7 @@ final class NativeTaskRequests {
             }
             // An external resolution without an exact decision never invents an Allowed receipt.
             if value.outcome == nil { value.error = NativeJournalProjection.unavailable }
-            appendReceipt(reference, key: approvals[id]!.reviewKey, content: .approval(value))
+            appendReceipt(reference, key: localKey(approvals[id]!.reviewKey, reference: reference), content: .approval(value))
             saveReview(approvals[id]!, held: false, outcome: value.outcome)
             approvals.removeValue(forKey: id)
         }
@@ -282,12 +380,12 @@ final class NativeTaskRequests {
             value.resolvedLabel = sentAnswer ? String(localized: "Answer sent")
                 : resolution == .expired ? String(localized: "Expired") : String(localized: "This request is no longer available.")
             saveReview(question, held: false, accepted: sentAnswer, expired: resolution == .expired)
-            appendReceipt(reference, key: question.draftKey, content: .question(value))
-            draftRevision += 1; let revision = draftRevision
-            saveTasks[question.draftKey]?.cancel(); saveTasks.removeValue(forKey: question.draftKey)
-            saveTokens.removeValue(forKey: question.draftKey)
+            appendReceipt(reference, key: localKey(question.draftKey, reference: question.reference), content: .question(value))
+            draftRevision += 1; let revision = draftRevision, key = localKey(question.draftKey, reference: question.reference)
+            saveTasks[key]?.cancel(); saveTasks.removeValue(forKey: key)
+            saveTokens.removeValue(forKey: key)
             Task {
-                do { try await drafts.retire(key: question.draftKey, revision: revision) }
+                do { try await drafts.retire(key: key, revision: revision) }
                 catch { onStorageFailure() }
             }
         }
@@ -299,7 +397,8 @@ final class NativeTaskRequests {
     }
 
     func messages(for route: ConversationID) -> [MessagePresentation] {
-        let completed = receipts.filter { $0.connectionID == route.connectionID && $0.sessionKey == route.sessionID }.map(\.message)
+        let completed = receipts.filter { $0.connectionID == route.connectionID && $0.sessionKey == route.sessionID &&
+            $0.historyEpoch == sessionScope(route.connectionID, route.sessionID).flatMap({ historyEpochs[$0] }) }.map(\.message)
         guard route.connectionID == connectionID else { return completed }
         return completed + order.compactMap { id in
             if let approval = approvals[id], approval.reference.sessionKey == route.sessionID {
@@ -324,23 +423,23 @@ final class NativeTaskRequests {
         let response = presentation.questionResponses[id] ?? .init()
         submissions[id] = .question(action); errors.removeValue(forKey: id); publish()
         Task {
-            guard captured == scope, questions[id]?.reference == question.reference, !blocked.contains(id) else { return }
+            guard captured == scope, questions[id]?.reference == question.reference, hasFreshAuthority(question.reference), !isHistoryPaused(question.reference), !blocked.contains(id) else { return }
             do {
                 try await runtime.answer(question.reference, answer: answer)
-                guard captured == scope, action != .cancel else { return }
+                guard captured == scope, action != .cancel, !retiredReferences.contains(question.id) else { return }
                 if questions[id]?.reference == question.reference {
                     acceptedAnswers.insert(id)
-                } else if receipts.contains(where: { $0.message.id == "request-" + id && $0.key == question.draftKey }) {
+                } else if receipts.contains(where: { $0.message.id == "request-" + id && $0.key == localKey(question.draftKey, reference: question.reference) }) {
                     // The authoritative resolution may arrive before the exact local RPC acknowledgement.
                     // Only that successful acknowledgement can upgrade this frozen response's receipt.
                     presentation.questionResponses[id] = response
                     var value = NativeTaskPresentation.question(question, available: false, submitting: nil, error: nil)
                     value.canEdit = false; value.canCancel = false; value.responseIsAccepted = true
                     value.resolvedLabel = String(localized: "Answer sent")
-                    appendReceipt(question.reference, key: question.draftKey, content: .question(value))
-                    journal?.upsertReview(key: question.draftKey, connectionID: question.reference.connectionID,
+                    appendReceipt(question.reference, key: localKey(question.draftKey, reference: question.reference), content: .question(value))
+                    journal?.upsertReview(key: localKey(question.draftKey, reference: question.reference), connectionID: question.reference.connectionID,
                         sessionID: question.reference.sessionKey, held: false,
-                        content: .question(NativeJournalProjection.question(question, response: response, accepted: true)))
+                        content: .question(NativeJournalProjection.question(question, response: response, accepted: true)), historyEpoch: epoch(question.reference))
                     publish()
                 }
             }
@@ -352,11 +451,11 @@ final class NativeTaskRequests {
         guard ready, submissions[id] == nil, !blocked.contains(id) else { return false }
         let now = Int64(Date().timeIntervalSince1970 * 1_000)
         if let approval = approvals[id] {
-            return approval.state == .pending && (approval.expiresAtMs.map { $0 > now } ?? true)
+            return hasFreshAuthority(approval.reference) && !isHistoryPaused(approval.reference) && approval.state == .pending && (approval.expiresAtMs.map { $0 > now } ?? true)
                 && (approval.kind == .pairing ? capabilities.pairingApprovals : approval.kind == .execution && capabilities.executionApprovals)
         }
         if let question = questions[id] {
-            return question.state == .pending && (question.expiresAtMs.map { $0 > now } ?? true) && question.canAnswer && capabilities.questions
+            return hasFreshAuthority(question.reference) && !isHistoryPaused(question.reference) && question.state == .pending && (question.expiresAtMs.map { $0 > now } ?? true) && question.canAnswer && capabilities.questions
         }
         return false
     }
@@ -406,14 +505,14 @@ final class NativeTaskRequests {
             if let approval = approvals[id] {
                 var value = present(approval); value.canResolve = false; value.submitting = nil
                 value.error = Self.uncertainText
-                appendReceipt(approval.reference, key: approval.reviewKey, content: .approval(value), held: true)
+                appendReceipt(approval.reference, key: localKey(approval.reviewKey, reference: approval.reference), content: .approval(value), held: true)
                 saveReview(approval)
             }
             if let question = questions[id] {
                 var value = present(question); value.canSubmit = false; value.canCancel = false
                 value.canEdit = false
                 value.isSubmitting = false; value.submittingAction = nil; value.error = Self.uncertainText
-                appendReceipt(question.reference, key: question.draftKey, content: .question(value), held: true)
+                appendReceipt(question.reference, key: localKey(question.draftKey, reference: question.reference), content: .question(value), held: true)
                 saveReview(question)
             }
         }
@@ -425,7 +524,7 @@ final class NativeTaskRequests {
         // These bounded review copies contain presentation data, never runtime action references.
         let bytes = NativeTaskPresentation.byteCount(content, response: presentation.questionResponses[reference.id.uuidString])
         receipts.append(.init(connectionID: reference.connectionID, sessionKey: reference.sessionKey, key: key, held: held,
-            message: .init(id: id, author: .system, content: [content]), bytes: bytes))
+            message: .init(id: id, author: .system, content: [content]), bytes: bytes, historyEpoch: epoch(reference)))
         while receipts.count > 32 || receipts.reduce(0, { $0 + $1.bytes }) > 8 * 1_024 * 1_024 { receipts.removeFirst() }
     }
 
@@ -438,16 +537,16 @@ final class NativeTaskRequests {
         return ""
     }
     private func saveReview(_ value: RuntimeApproval, held: Bool = true, outcome: ApprovalPresentation.Outcome? = nil) {
-        journal?.upsertReview(key: value.reviewKey, connectionID: value.reference.connectionID,
+        journal?.upsertReview(key: localKey(value.reviewKey, reference: value.reference), connectionID: value.reference.connectionID,
             sessionID: value.reference.sessionKey, held: held,
-            content: .approval(NativeJournalProjection.approval(value, outcome: outcome)))
+            content: .approval(NativeJournalProjection.approval(value, outcome: outcome)), historyEpoch: epoch(value.reference))
     }
     private func saveReview(_ value: RuntimeQuestion, held: Bool = true, accepted: Bool = false, expired: Bool = false) {
-        journal?.upsertReview(key: value.draftKey, connectionID: value.reference.connectionID,
+        journal?.upsertReview(key: localKey(value.draftKey, reference: value.reference), connectionID: value.reference.connectionID,
             sessionID: value.reference.sessionKey, held: held,
             content: .question(NativeJournalProjection.question(value,
                 response: presentation.questionResponses[value.id.uuidString] ?? NativeTaskPresentation.initialResponse(value),
-                accepted: accepted, expired: expired)))
+                accepted: accepted, expired: expired)), historyEpoch: epoch(value.reference))
     }
     private static var uncertainText: String { String(localized: "The result could not be confirmed. Reconnect to check this request.") }
 }

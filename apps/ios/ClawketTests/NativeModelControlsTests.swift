@@ -142,6 +142,37 @@ final class NativeModelControlsTests: XCTestCase, @unchecked Sendable {
         try await wait { model.modelControls?.id == id && model.modelControls?.phase == .ready }; return id
     }
 
+    @MainActor func testPhysicalRetirementFencesLateNativeAckAndKeepsUnknownInputBarrier() async throws {
+        let (controller, model, runtime, host) = fixture()
+        await runtime.configure(hold: true)
+        let id = try await open(controller, model)
+        controller.choose(id, choice: .fastMode(true))
+        try await wait { await runtime.writes.count == 1 }
+        let snapshots = host.snapshots.count
+        controller.retireSession(route)
+        XCTAssertFalse(controller.permitsInput(route)); XCTAssertTrue(controller.isImageModelUnconfirmed(route))
+        await runtime.releaseWrite()
+        for _ in 0..<20 { await Task.yield() }
+        XCTAssertEqual(host.snapshots.count, snapshots)
+        XCTAssertFalse(controller.permitsInput(route))
+        _ = try await open(controller, model)
+        XCTAssertTrue(controller.permitsInput(route)); XCTAssertFalse(controller.isImageModelUnconfirmed(route))
+    }
+
+    @MainActor func testOtherPhysicalSessionRetirementDoesNotCancelGlobalHermesModelWrite() async throws {
+        let (controller, model, runtime, host) = fixture(controlsValue(backend: .hermes, global: true, native: false))
+        await runtime.configure(hold: true)
+        let id = try await open(controller, model)
+        controller.choose(id, choice: .model(try NativeModelControls.modelKey(.init(id: "n", name: "Next", provider: "p", selected: false))))
+        try await wait { await runtime.writes.count == 1 }
+        let before = host.snapshots.count
+        controller.retireSession(.init(connectionID: "c", agentID: "a", sessionID: "other"))
+        await runtime.releaseWrite()
+        try await wait { host.snapshots.count > before }
+        XCTAssertTrue(controller.permitsInput(route))
+        let writes = await runtime.writes; XCTAssertEqual(writes.count, 1)
+    }
+
     @MainActor func testMissingActionsAndForeignChoicesCannotReachNativeWrites() async throws {
         let (controller, model, runtime, _) = fixture(controlsValue(actions: []))
         let id = try await open(controller, model)

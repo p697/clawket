@@ -5,6 +5,16 @@
   - 核对原生工程开始前的 b2df9a25 到当前主线 165810d7：`apps/mobile` 与根 `package-lock.json` 无差异。现有默认 `mobile:start` / `mobile:ios` / `mobile:android` 仍走 React Native/Expo，商店身份仍为 `com.p697.clawket`。独立 Swift 工程在 `apps/ios`，模块在 `packages/apple`，开发身份为 `com.p697.clawket.nativeqa`、名称 Clawket Native，沙盒与 Keychain service 独立；无需回滚原生源码就能继续使用原 React Native 客户端。
   - 共存边界已写入根 AGENTS 与 native PLAN：保留 RN 源码、UI、默认命令、Expo/EAS 与商店/发布路径；原生探索不得降低 RN 连接稳定性或共享协议兼容性。本任务仅更新规则和文档，不改应用、构建配置、版本或服务，不执行设备安装、分发或发布。
 
+- 2026-10-16 Native physical history 宿主、旧请求隔离与附件epoch缓存（候选，完整CI/设备验收待续）。
+  - 当前head实际物理ID变化或捕获reset/delete ACK才归档并替换本机epoch；ACK即使后续catalog失败也单次消费，receipt中的旧physical ID不冒充新ID。旧raw原样保存、draft/资源并发编辑保留、旧outbox原render/key/epoch保留并hold，unknown不重发。原始hash+revision+epoch的bind API让ACK后的held input原地绑定首次真实ID，不重复归档。
+  - reset/delete前durable unconfirmed intent跨冷启动保留；仅真实ACK或old/new非nil真实ID精确变化清锁，nil/首次known/legacy本地归档不当远端成功。实际host回归覆盖已提交后wire失效仍采用current、未知存储锁单route、旧cache读取跨断线/重入不得覆盖新draft。只按scope/epoch/当前input/实际receipt/accepted head接live，裸旧run不借新input洗白；超过128新run滚动更新近期证据，overflow旧run保守回head。
+  - 旧work按物理epoch隔离仍可只读查看；同scope canonical Unicode opaque IDs精确区分。审批/问题在critical preparation暂停仅目标session，冻结Always不复活；epoch相关本地draft key不重绑旧答案。fresh-list捕获epoch后才登记新请求UUID，迟到旧push/读不获新scope权限，其他session与global authority保留。
+  - 生成附件cache新增可选historyEpoch（legacy nil兼容，RPC不变/配额仍按逻辑session/24h）；artifact resource pointer与thumbnail直读不能绕过key，image-only final带当前epoch，旧档案只读原epoch缓存。已接受send/final后排新的实际head RPC修复早于receipt的终态/文本；本地reserve/receipt也推进live修订，旧read不清新run。
+  - heavy/jobs2串行actual-source proof逐文件通过Binding6、Requests19、Journal15、Models19与实际MediaLibrary10；未跑完整本地suite或启动模拟器。真实App及217个测试方法Strict Swift6/iOS16.4双架构generic build-for-testing成功（新测试DTO/import错误按实际API修正，保留断言）；217个App实际执行及完整旧客户端门禁仍须最终重基head CI。无发行/上传/生产变更。
+
+- 2026-10-16 Native #254 精确head验收完成并继续physical host实现。
+  - source d6f26006/base201f4全13 CI首次绿：actual App193/193零失败/跳过，16.638秒（wall18.839）；package397=59 XCTest+338 SwiftTesting，19语7,904编译值精确一致，Mobile三分片、types/static、v1与双桌面均绿。current-main/CLEAN核对后自行squash合5c9f9fb7并finish；原primary未跟踪node_modules保留。
+  - 指定USB测试机第三次基础设施检查先成功activate独立QA App，仍63.561秒在XCTest启用automation mode超时；无WDA session/新chat请求，host/device自有runner均验零，ios/heavy释放。不把驱动未就绪算App/OC连接失败，不再无状态变化重复尝试。Appium官方列出的设备UI Automation开关信息已异步询问，继续独立实现，不操作无线个人手机或镜像、不更改全机安全设置。
 - 2026-10-16 Native live final 元数据与系统终态（实际 consumer 已接，完整 App 门禁继续）。
   - 仅保留实际 final.message 的 providedID/参与者/时钟/真实 transcriptPosition 与 turn/input lineage；OpenClaw 2026.10.2 安装源可保留真实 message，普通 Codex/Claude/Pi/Hermes/local-model live producer 没有消息 ID，明确留 nil，不把 run/turn/段序号当来源。既有 SDK history 生成器直接调用真实 Codex failure producer，并锁定实际 service wrapper，新增三份匿名合成终态向量；不是手机捕获或服务修改。
   - Host 实际文本/final/附件路径改独立 render UUID 与 exact UTF8 run/segment/current epoch 匹配；歧义不选最后一行，已知作者/lineage/source 冲突不赋来源或附件。实际 error terminalMessage 独立 system row，保留已有 partial assistant，旧客户端兼容 assistant 副本仅逐字节相等才抑制；旧 Codex fallback 没有伪造 source ID/Now。五条 Mobile 固定错误文案复用全19语译文，缓存保留原文，非 system 或任意后端 prose 不改。
@@ -2334,6 +2344,7 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 
 | 编号 | 事项 | 怎么做 | 验证方法 | 状态 |
 |---|---|---|---|---|
+| HT-NATIVE-WDA-1016 | 指定 USB 测试机 WebDriver 前置开关信息 | 仅在指定USB测试iPhone查看设置→开发者→启用UI自动化；异步回复已开/刚开启/稍后查看，不涉及个人无线手机。 | 实际WDA ready并建立QA session后才继续手机验收；开关状态或host Developer mode均不单独证明故障原因。 | 已询问，驱动三轮启用automation mode超时；独立native实现/模拟器/CI继续，无整机设置改变。 |
 | HT-NATIVE-UPGRADE-1016 | Native iOS 同 bundle 原安装升级验收与发布授权 | 所有原生数据消费者接入后，由负责人选择原签名/entitlement 的升级测试路径及发布阶段；独立 QA App 不覆盖商店 App。 | 保留原设备身份/六后端连接/作用域令牌/购买身份与一次性权益、草稿/缓存/未发送资源；失败可重试且原数据未删，实际升级后两后端重连与基础功能通过。 | ClawketUpgrade 只读来源/事务保全模块25项通过；host 激活与签名同 bundle 连续性待后续，未制作分发包或发布。 |
 | HT-DUO-INPUT-1013 | Duo 真实交互验收的备用自动化授权 | 回答已发送的异步问题，明确允许使用苹果 XCTest/XCUITest 在专用本地模拟器输入、长按、滚动与断言。CUA 坐标/拖动持续 noWindowsAvailable，键盘未生效；工具规则要求用户明确指定其他 UI 自动化后才能使用。 | 真实选图完成隔离配对，再验证中文草稿、长按、分屏、折叠/旋转和恢复；结果不能由单元测试替代。 | 已解决：负责人明确允许XCTest/XCUITest；原生交互证据已完成，session06/08正常退出。最终主分支交付与负责人验收见PR #220及本机acceptance.html。 |
 | HT-DUO-TOOLCHAIN-1013 | Duo 工具链的本机认证与系统重启 | 已授权下载 macOS26.7.1、同意 Xcode27.1/SDK 许可；负责人完成本机管理员认证，并确认安装/重启时机。无需在聊天提供密码。 | 升级后 macOS≥26.6，Xcode27.1 初始化成功，可安装官方 Duo runtime 并继续分支原生验收。 | 已完成：负责人授权重启后macOS26.7.1、Xcode27.1初始化与Duo runtime安装成功，首个Debug包已运行；原生体验验收继续。 |

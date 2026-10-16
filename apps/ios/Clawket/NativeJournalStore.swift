@@ -101,13 +101,13 @@ actor NativeJournalStore {
                 for raw in [step.input, step.output].compactMap({ $0 }) { _ = try FrameCodec.encode(raw) }
             }
         }
-        var correlations = Set<String>()
+        var correlations = Set<Data>()
         for review in document.reviews {
             try identity(review.id); try order(review.order)
             guard !review.connectionID.isEmpty, review.connectionID.utf8.count <= 1_024,
                   review.correlationKey.utf8.count == 64,
                   review.correlationKey.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }),
-                  correlations.insert(review.correlationKey).inserted else { throw StoreFailure.invalidDocument }
+                  correlations.insert(Data((review.correlationKey + ":" + (review.historyEpoch?.uuidString ?? "")).utf8)).inserted else { throw StoreFailure.invalidDocument }
             try text(review.sessionID, limit: 1_024)
             switch review.content {
             case let .approval(value):

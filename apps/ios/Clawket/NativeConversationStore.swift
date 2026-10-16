@@ -63,6 +63,7 @@ struct NativeConversation: Codable, Sendable {
     var draftResourceIDs: [UUID] = []
     var historyEpoch: UUID? = nil
     var physicalSessionID: String? = nil
+    var physicalMutationUnconfirmed: Bool? = nil
 
     mutating func holdForEditing(messageID: String) throws -> NativePendingEdit {
         guard let index = editableIndex(messageID: messageID), let key = messages[index].idempotencyKey else {

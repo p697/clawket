@@ -78,6 +78,28 @@ final class NativeModelControls {
             value.refresh = .unsupported; presentation.modelControls = value
         }
     }
+    /// Retire only authority addressed to this physical session. Global model
+    /// writes remain global; an in-flight native write keeps its unknown barrier.
+    func retireSession(_ route: ConversationID) {
+        reads.removeValue(forKey: route); legacyReads.removeValue(forKey: route)
+        let affected = operations.filter { _, value in
+            guard historySame(value.authority.route.connectionID, route.connectionID),
+                  case let .session(sessionID) = value.authority.value.scope else { return false }
+            return historySame(sessionID, route.sessionID)
+        }
+        for (key, operation) in affected {
+            operations.removeValue(forKey: key)
+            unconfirmedModels.insert(key)
+            if operation.pausesInput {
+                unconfirmedInputs.insert(inputKey(route)); barriers[inputKey(route)] = .unconfirmed
+            }
+        }
+        if authority?.route == route || confirmation?.authority.route == route {
+            let id = authority?.reviewID ?? confirmation?.authority.reviewID
+            fail(id, text: String(localized: "Review model settings before sending."), uncertain: !affected.isEmpty)
+        }
+        onChange()
+    }
     func permitsInput(_ route: ConversationID) -> Bool { barriers[inputKey(route)] == nil && !unconfirmedInputs.contains(inputKey(route)) && operationFor(route)?.pausesInput != true }
     func verifyInput(_ route: ConversationID) async throws {
         guard ready, route.connectionID == connectionID else { throw RuntimeFailure(.notConnected) }

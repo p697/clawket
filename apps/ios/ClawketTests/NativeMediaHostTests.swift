@@ -1,6 +1,7 @@
 import ClawketMedia
 import ClawketPersistence
 import ClawketRuntime
+import ClawketTransport
 import ClawketUI
 import CoreGraphics
 import Foundation
@@ -200,6 +201,43 @@ final class NativeMediaHostTests: XCTestCase, @unchecked Sendable {
         XCTAssertNil(expired)
         try Data("bad".utf8).write(to: url)
         do { _ = try await reopened.resolve(reference, route: .init(connectionID: "c", agentID: "a", sessionID: "s"), runtime: nil); XCTFail("Corrupt cache must not be previewed") } catch { }
+    }
+
+    func testGeneratedResourcePointerCannotBypassPhysicalEpochOrLogicalScopeCacheBinding() async throws {
+        let directory = root(); defer { try? FileManager.default.removeItem(at: directory) }
+        let controller = try NativeMediaController(directory: directory), first = UUID(), second = UUID()
+        let route = ConversationID(connectionID: "c", agentID: "a", sessionID: "s")
+        let oldKey = MediaArtifactKey(connectionID: "c", sessionKey: "s", artifactID: "same", historyEpoch: first)
+        let original = try await controller.library.cacheArtifact(key: oldKey, name: "old.txt", mimeType: "text/plain", size: 3) { _ in Data("old".utf8) }
+        var reference = NativeMediaReference(resource: original, isImage: false); reference.artifactID = "same"
+        do { _ = try await controller.resolve(reference, route: route, runtime: nil, historyEpoch: second); XCTFail("Old pointer is not current cache authority") } catch { }
+        let newKey = MediaArtifactKey(connectionID: "c", sessionKey: "s", artifactID: "same", historyEpoch: second)
+        let current = try await controller.library.cacheArtifact(key: newKey, name: "new.txt", mimeType: "text/plain", size: 3) { _ in Data("new".utf8) }
+        let loaded = try await controller.resolve(reference, route: route, runtime: nil, historyEpoch: second)
+        XCTAssertEqual(loaded.id, current.id); XCTAssertNotEqual(loaded.id, original.id)
+        let archived = try await controller.resolve(reference, route: route, runtime: nil, historyEpoch: first)
+        XCTAssertEqual(archived.id, original.id)
+        let wrong = ConversationID(connectionID: "other", agentID: "a", sessionID: "s")
+        do { _ = try await controller.resolve(reference, route: wrong, runtime: nil, historyEpoch: first); XCTFail("Pointer cannot escape logical scope") } catch { }
+    }
+
+    @MainActor func testImageOnlyFinalKeepsCurrentPhysicalEpochAndCannotChooseOldEpochRow() throws {
+        let model = NativeAppModel(), route = ConversationID(connectionID: "c", agentID: "a", sessionID: "s")
+        let old = UUID(), current = UUID()
+        model.documents[route] = .init(messages: [.init(id: "old", role: .assistant, text: "old", runID: "reused", historyEpoch: old)], historyEpoch: current)
+        let attachment: JSONValue = .object(["type": .string("image"), "mimeType": .string("image/png"), "artifactId": .string("same")])
+        let raw: JSONValue = .object(["message": .object(["role": .string("assistant"), "attachments": .array([attachment])])])
+        let update = RuntimeSessionUpdate.runFinished(sessionKey: "s", runID: "reused", reason: "end_turn", segmentID: "segment", raw: raw)
+        XCTAssertEqual(update.finalAttachments.count, 1)
+        var document = try XCTUnwrap(model.documents[route])
+        let target = NativeLiveMessages.finish(runID: "reused", segmentID: "segment",
+            metadata: update.finalMessageMetadata(backend: .openclaw), notice: update.terminalNotice(backend: .openclaw),
+            hasAttachments: !update.finalAttachments.isEmpty, in: &document, epoch: current)
+        model.documents[route] = document
+        model.bindFinalMedia(update, route: route, messageID: target)
+        let rows = try XCTUnwrap(model.documents[route]?.messages)
+        XCTAssertEqual(rows.count, 2); XCTAssertTrue(rows[0].media.isEmpty)
+        XCTAssertEqual(rows[1].historyEpoch, current); XCTAssertEqual(rows[1].media.first?.artifactID, "same")
     }
 
     @MainActor func testOldMediaLoadCompletionCannotRemoveReplacementOperation() {

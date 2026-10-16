@@ -52,8 +52,27 @@ public struct MediaArtifactKey: Codable, Sendable, Hashable {
     public let connectionID: String
     public let sessionKey: String
     public let artifactID: String
-    public init(connectionID: String, sessionKey: String, artifactID: String) {
+    /// Local cache generation only; never sent to an artifact RPC.
+    public let historyEpoch: UUID?
+    public init(connectionID: String, sessionKey: String, artifactID: String, historyEpoch: UUID? = nil) {
         self.connectionID = connectionID; self.sessionKey = sessionKey; self.artifactID = artifactID
+        self.historyEpoch = historyEpoch
+    }
+    public static func == (left: Self, right: Self) -> Bool {
+        mediaScopeEqual(left.connectionID, right.connectionID) && mediaScopeEqual(left.sessionKey, right.sessionKey) &&
+            mediaScopeEqual(left.artifactID, right.artifactID) && left.historyEpoch == right.historyEpoch
+    }
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(Data(connectionID.utf8)); hasher.combine(Data(sessionKey.utf8))
+        hasher.combine(Data(artifactID.utf8)); hasher.combine(historyEpoch)
+    }
+}
+
+func mediaScopeEqual(_ left: String?, _ right: String?) -> Bool {
+    switch (left, right) {
+    case (nil, nil): true
+    case let (left?, right?): left.utf8.elementsEqual(right.utf8)
+    default: false
     }
 }
 

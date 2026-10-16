@@ -4,6 +4,76 @@ import Foundation
 enum NativeHistoryFault: Sendable, Equatable { case stagePrepared, intentPublished, archivePublished, metadataPublished, rollbackWritten, currentWritten, currentVerified, intentRemoved }
 
 extension NativeConversationStore {
+    func historyStoredVersion(scope: NativeHistoryScope) async throws -> NativeHistoryStoredVersion? {
+        await acquireMediaSnapshot(); defer { releaseMediaSnapshot() }
+        try await recoverHistory(); try scope.validate()
+        let key = try scopedKey(scope.connectionID, scope.agentID, scope.sessionID)
+        guard let raw = try await historyCurrentBytes(key) else { return nil }
+        let value = try decodeHistoryConversation(raw)
+        return .init(revision: value.revision, epoch: value.historyEpoch,
+                     physicalSessionID: value.physicalSessionID, sha256: historyHash(raw))
+    }
+
+    /// After a proven local reset, bind its first observed physical ID without
+    /// reassigning the old pending messages to it or manufacturing a second reset.
+    func bindPhysicalSession(scope: NativeHistoryScope, expectedRevision: Int64, epoch: UUID,
+                             expectedCurrentHash: String, physicalSessionID: String) async throws -> NativeConversation {
+        await acquireMediaSnapshot(); defer { releaseMediaSnapshot() }
+        try await recoverHistory(); try scope.validate()
+        guard expectedRevision >= 0, expectedRevision < 9_007_199_254_740_990,
+              historyDigest(expectedCurrentHash), !physicalSessionID.isEmpty,
+              physicalSessionID.utf8.count <= 2_048 else { throw NativeHistoryFailure.invalid }
+        let key = try scopedKey(scope.connectionID, scope.agentID, scope.sessionID)
+        guard let raw = try await historyCurrentBytes(key) else { throw NativeHistoryFailure.missing }
+        let current = try decodeHistoryConversation(raw)
+        let original: Data
+        let previous: NativeConversation
+        let isRetry: Bool
+        if historyHash(raw) == expectedCurrentHash {
+            original = raw; previous = current; isRetry = false
+        } else {
+            // Matching metadata alone cannot recognize a completed write: a
+            // third document may have the same revision, epoch and physical ID.
+            guard let rollback = try await values.read(key + ".rollback"),
+                  historyHash(rollback) == expectedCurrentHash else { throw NativeHistoryFailure.changed }
+            original = rollback; previous = try decodeHistoryConversation(rollback); isRetry = true
+        }
+        guard previous.revision == expectedRevision, previous.historyEpoch == epoch,
+              previous.physicalSessionID == nil,
+              previous.messages.allSatisfy({ $0.isOwnedUser && !$0.streaming && $0.idempotencyKey?.isEmpty == false &&
+                  [.held, .uncertain, .failed].contains($0.delivery) }) else { throw NativeHistoryFailure.changed }
+        var next = previous
+        next.revision += 1; next.physicalSessionID = physicalSessionID
+        // Preserve unrecognized cache fields while changing only this metadata.
+        guard var object = try JSONSerialization.jsonObject(with: original) as? [String: Any] else {
+            throw NativeHistoryFailure.invalid
+        }
+        object["revision"] = next.revision
+        object["physicalSessionID"] = physicalSessionID
+        let replacement = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys, .withoutEscapingSlashes])
+        guard replacement.count <= NativeHistoryLimits.recordBytes else { throw NativeHistoryFailure.full }
+        if isRetry {
+            guard raw == replacement else { throw NativeHistoryFailure.changed }
+            latestRevision[key] = max(latestRevision[key, default: 0], next.revision)
+            return next
+        }
+        let rollbackSize = try await values.read(key + ".rollback")?.count ?? 0
+        let footprint = try historyFiles.inventory().values.reduce(0, +) +
+            2 * original.count + rollbackSize + replacement.count + NativeHistoryLimits.metadataReserve
+        guard footprint <= NativeHistoryLimits.physicalBytes else { throw NativeHistoryFailure.full }
+        try Task.checkCancellation()
+        do {
+            try await values.write(original, for: key + ".rollback")
+            guard try await values.read(key + ".rollback") == original else { throw NativeHistoryFailure.unavailable }
+            try historyFault(.rollbackWritten)
+            try await values.write(replacement, for: key); try historyFault(.currentWritten)
+            guard try await values.read(key) == replacement else { throw NativeHistoryFailure.unavailable }
+            try historyFault(.currentVerified)
+            latestRevision[key] = next.revision
+            return next
+        } catch { historyUnavailable = true; throw NativeHistoryFailure.commitUncertain }
+    }
+
     /// Bind an observed first physical scope only when no transcript can be lost or reassigned.
     func establishHistoryScope(scope: NativeHistoryScope, expectedRevision: Int64, epoch: UUID,
                                physicalSessionID: String?) async throws -> NativeConversation {
@@ -63,7 +133,7 @@ extension NativeConversationStore {
               expectedCurrentHash == nil || historyHash(original) == expectedCurrentHash else { throw NativeHistoryFailure.changed }
         let retained = current.messages.filter { retainingMessageIDs.contains($0.id) }
         guard retained.count == retainingMessageIDs.count,
-              retained.allSatisfy({ $0.local && $0.role == .user && $0.idempotencyKey?.isEmpty == false &&
+              retained.allSatisfy({ $0.isOwnedUser && $0.idempotencyKey?.isEmpty == false &&
                   [.queued, .held, .sending, .uncertain, .failed].contains($0.delivery) }) else { throw NativeHistoryFailure.invalid }
         var next = current
         next.messages = retained; next.revision += 1; next.historyEpoch = toEpoch
@@ -154,7 +224,7 @@ extension NativeConversationStore {
             let retainedIDs = Set(next.messages.map(\.id))
             guard old.messages.filter({ retainedIDs.contains($0.id) }).count == next.messages.count,
                   try historyEncode(old.messages.filter { retainedIDs.contains($0.id) }) == historyEncode(next.messages),
-                  next.messages.allSatisfy({ $0.local && $0.role == .user && $0.idempotencyKey?.isEmpty == false &&
+                  next.messages.allSatisfy({ $0.isOwnedUser && $0.idempotencyKey?.isEmpty == false &&
                       [.queued, .held, .sending, .uncertain, .failed].contains($0.delivery) }) else { throw NativeHistoryFailure.invalid }
             try historyFiles.put(raw, name: NativeHistoryFiles.name(archive.id, "body")); try historyFault(.archivePublished)
             try historyFiles.put(try historyEncode(archive), name: NativeHistoryFiles.name(archive.id, "meta")); try historyFault(.metadataPublished)

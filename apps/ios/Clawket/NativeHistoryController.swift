@@ -84,10 +84,10 @@ final class NativeHistoryController {
         return .init(url: file.url, shareLease: file.lease)
     }
 
-    func cachedPreview(_ reference: NativeMediaReference, scope: NativeHistoryScope) async throws -> NativeMediaPreview {
+    func cachedPreview(_ reference: NativeMediaReference, scope: NativeHistoryScope, historyEpoch: UUID? = nil) async throws -> NativeMediaPreview {
         guard let media else { throw NativeHistoryFailure.unavailable }
         // Persisted artifact/session IDs are display context, never wire authority.
-        let resource = try await media.resolve(reference, route: scope.route, runtime: nil)
+        let resource = try await media.resolve(reference, route: scope.route, runtime: nil, historyEpoch: historyEpoch)
         try Task.checkCancellation()
         let display = try await media.display(resource.id, input: reference.artifactID == nil)
         try Task.checkCancellation()

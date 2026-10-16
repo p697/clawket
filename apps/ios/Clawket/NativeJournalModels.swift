@@ -7,6 +7,19 @@ struct NativeJournalScope: Codable, Hashable, Sendable {
     let connectionID: String
     let agentID: String
     let sessionID: String
+    var historyEpoch: UUID? = nil
+
+    static func == (left: Self, right: Self) -> Bool {
+        historySame(left.connectionID, right.connectionID) && historySame(left.agentID, right.agentID) &&
+            historySame(left.sessionID, right.sessionID) && left.historyEpoch == right.historyEpoch
+    }
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(Data(connectionID.utf8)); hasher.combine(Data(agentID.utf8))
+        hasher.combine(Data(sessionID.utf8)); hasher.combine(historyEpoch)
+    }
+    func sameRoute(as other: Self) -> Bool {
+        historySame(connectionID, other.connectionID) && historySame(agentID, other.agentID) && historySame(sessionID, other.sessionID)
+    }
 }
 
 enum NativeWorkStatus: String, Codable, Sendable {
@@ -24,8 +37,13 @@ struct NativeWorkLineage: Codable, Equatable, Sendable {
     func conflicts(with other: Self) -> Bool {
         [(runID, other.runID), (turnID, other.turnID), (inputMessageID, other.inputMessageID),
          (inputMessageKey, other.inputMessageKey)].contains { left, right in
-            left != nil && right != nil && left != right
+            left != nil && right != nil && !historySame(left, right)
         }
+    }
+
+    static func == (left: Self, right: Self) -> Bool {
+        historySame(left.runID, right.runID) && historySame(left.turnID, right.turnID) &&
+            historySame(left.inputMessageID, right.inputMessageID) && historySame(left.inputMessageKey, right.inputMessageKey)
     }
 
     mutating func enrich(with other: Self) {
@@ -141,6 +159,7 @@ struct NativeReviewRecord: Codable, Identifiable, Sendable {
     var order: Int64
     var held: Bool
     var content: Content
+    var historyEpoch: UUID? = nil
 }
 
 struct NativeJournalDocument: Codable, Sendable {

@@ -14,18 +14,18 @@ enum NativeWorkReducer {
         }
         let hasStrong = lineage.turnID != nil || lineage.inputMessageID != nil || lineage.inputMessageKey != nil
         let reusedRun = lineage.runID != nil && document.runs.contains {
-            $0.scope == scope && $0.lineage.runID == lineage.runID && $0.lineage.conflicts(with: lineage)
+            $0.scope == scope && historySame($0.lineage.runID, lineage.runID) && $0.lineage.conflicts(with: lineage)
         }
         let candidates = document.runs.indices.filter {
             let run = document.runs[$0]
             guard run.scope == scope, !run.lineage.conflicts(with: lineage) else { return false }
-            if reusedRun && hasStrong && !strongPairs(run.lineage).contains(where: { $0.0 != nil && $0.0 == $0.1 }) {
+            if reusedRun && hasStrong && !strongPairs(run.lineage).contains(where: { $0.0 != nil && historySame($0.0, $0.1) }) {
                 return false // Earlier partial events cannot be retroactively assigned to this reused input.
             }
-            if let historyAnchor, run.historyAnchor == historyAnchor { return true }
+            if let historyAnchor, historySame(run.historyAnchor, historyAnchor) { return true }
             return [(run.lineage.runID, lineage.runID), (run.lineage.turnID, lineage.turnID),
                     (run.lineage.inputMessageID, lineage.inputMessageID),
-                    (run.lineage.inputMessageKey, lineage.inputMessageKey)].contains { a, b in a != nil && a == b }
+                    (run.lineage.inputMessageKey, lineage.inputMessageKey)].contains { a, b in a != nil && historySame(a, b) }
         }
         let exact = candidates.filter { document.runs[$0].lineage == lineage }
         let isPartial = lineage.turnID == nil && lineage.inputMessageID == nil && lineage.inputMessageKey == nil
@@ -49,7 +49,7 @@ enum NativeWorkReducer {
             inputMessageID: update.inputMessageID, inputMessageKey: update.inputMessageKey)
         let knownItem = document.runs.contains { run in
             run.scope == scope && !run.lineage.conflicts(with: lineage) &&
-            run.steps.contains { $0.sourceItemID == update.itemID && update.itemID != nil }
+            run.steps.contains { historySame($0.sourceItemID, update.itemID) && update.itemID != nil }
         }
         let fresh = update.historyMessageID == nil && (update.kind == .runStart || !knownItem && [.toolCall, .toolUpdate].contains(update.kind))
         guard let index = index(&document, scope: scope, lineage: lineage, historyAnchor: update.historyMessageID,
@@ -71,7 +71,7 @@ enum NativeWorkReducer {
         case .runStart: .activity
         }
         let stepIndex: Int
-        if let item = update.itemID, let existing = document.runs[index].steps.firstIndex(where: { $0.kind == kind && $0.sourceItemID == item }) {
+        if let item = update.itemID, let existing = document.runs[index].steps.firstIndex(where: { $0.kind == kind && historySame($0.sourceItemID, item) }) {
             stepIndex = existing
         } else {
             guard let order = document.allocateOrder() else { return nil }

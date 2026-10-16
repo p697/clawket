@@ -13,7 +13,7 @@ extension NativeAppModel {
     }
 
     func ownsMedia(_ scope: NativeMediaScope) -> Bool {
-        scope.route == presentation.selectedConversation && scope.route.connectionID == activeConnectionID &&
+        physicalPermitsLocalChanges(scope.route) && scope.route == presentation.selectedConversation && scope.route.connectionID == activeConnectionID &&
             scope == mediaScope(scope.route) && documents[scope.route] != nil
     }
 
@@ -52,12 +52,12 @@ extension NativeAppModel {
     }
 
     func mediaPrompt(_ route: ConversationID, text: String, ids: [UUID], idempotencyKey: String) async throws -> RuntimePrompt {
-        guard let runtime else { throw StoreFailure.unavailable }
-        let activation = activationRevision, wire = wireRevision
+        guard physicalPermitsInput(route), let runtime else { throw StoreFailure.unavailable }
+        let activation = activationRevision, wire = wireRevision, epoch = documents[route]?.historyEpoch
         try await modelControls?.verifyInput(route)
         let prepared = try await media?.prepare(ids) ?? []
         try await modelControls?.verifyInput(route)
-        guard activation == activationRevision, wire == wireRevision else { throw RuntimeFailure(.superseded) }
+        guard physicalPermitsInput(route), documents[route]?.historyEpoch == epoch, activation == activationRevision, wire == wireRevision else { throw RuntimeFailure(.superseded) }
         guard prepared.count == ids.count else { throw MediaFailure.missing }
         try validateMediaModel(route, hasImages: prepared.contains(where: \.isImage))
         let input = RuntimePrompt(text: text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !prepared.isEmpty
@@ -65,7 +65,7 @@ extension NativeAppModel {
             attachments: prepared.map { .init(type: $0.isImage ? .image : .file, mimeType: $0.mimeType, content: $0.data, name: $0.resource.name) })
         try await runtime.validatePrompt(sessionKey: route.sessionID, input: input)
         try await modelControls?.verifyInput(route)
-        guard activation == activationRevision, wire == wireRevision else { throw RuntimeFailure(.superseded) }
+        guard physicalPermitsInput(route), documents[route]?.historyEpoch == epoch, activation == activationRevision, wire == wireRevision else { throw RuntimeFailure(.superseded) }
         return input
     }
 
@@ -299,27 +299,27 @@ extension NativeAppModel {
             mediaDisplays.removeValue(forKey: key)
         }
 
-        guard route == mediaVisibleRoute, route == presentation.selectedConversation, route.connectionID == activeConnectionID,
+        guard physicalPermitsLocalChanges(route), route == mediaVisibleRoute, route == presentation.selectedConversation, route.connectionID == activeConnectionID,
               let media else { return }
         let recent = Array((documents[route]?.messages ?? []).flatMap { message in
-            message.media.map { (reference: $0, input: message.isOwnedUser) }
+            message.media.map { (reference: $0, input: message.isOwnedUser, epoch: message.historyEpoch) }
         }.suffix(6))
         for item in recent where mediaDisplays[item.reference.id] == nil && mediaLoads[item.reference.id] == nil {
             guard mediaLoads.count < 2 else { return }
             let reference = item.reference
-            if let id = reference.resourceID {
+            if reference.artifactID == nil, let id = reference.resourceID {
                 loadMediaDisplay(id, referenceID: reference.id, route: route, input: item.input)
             } else if reference.kind == .image, ["image/png", "image/jpeg", "image/gif", "image/webp"].contains(reference.mimeType), reference.artifactID != nil {
                 let activation = activationRevision, wire = wireRevision, selection = selectionRevision, token = UUID()
                 mediaLoadRevisions[reference.id] = token
                 mediaDisplays[reference.id] = .init(id: reference.id, name: reference.name, kind: .image, phase: .preparing)
-                let runtime = state.phase == .ready && state.capabilities.artifacts ? runtime : nil
+                let runtime = physicalPermitsInput(route) && state.phase == .ready && state.capabilities.artifacts ? runtime : nil
                 mediaLoads[reference.id] = Task {
                     defer { finishMediaLoad(reference.id, token: token) }
                     do {
                         let barrier = mediaInvalidationTask; await barrier?.value
                         guard !Task.isCancelled, activation == activationRevision, wire == wireRevision, selection == selectionRevision else { return }
-                        let resource = try await media.resolve(reference, route: route, runtime: runtime)
+                        let resource = try await media.resolve(reference, route: route, runtime: runtime, historyEpoch: item.epoch)
                         let display = try await media.display(resource.id, pixels: 320)
                         guard !Task.isCancelled, activation == activationRevision, wire == wireRevision, selection == selectionRevision else { return }
                         mediaDisplays[reference.id] = .init(id: reference.id, name: resource.name, kind: display.image == nil ? .file : .image,
@@ -341,12 +341,13 @@ extension NativeAppModel {
         guard destination == nil, mediaPreview == nil, let route = presentation.selectedConversation, route.connectionID == activeConnectionID,
               let media, mediaLoads[id] == nil else { return }
         let reference: NativeMediaReference?
+        let referenceEpoch: UUID?
         let localInput: Bool
         if let uuid = UUID(uuidString: id), documents[route]?.draftResourceIDs.contains(uuid) == true {
-            reference = nil; localInput = true
+            reference = nil; referenceEpoch = nil; localInput = true
         } else {
             let message = documents[route]?.messages.first { $0.media.contains(where: { $0.id == id }) }
-            reference = message?.media.first { $0.id == id }; localInput = message?.isOwnedUser == true
+            reference = message?.media.first { $0.id == id }; referenceEpoch = message?.historyEpoch; localInput = message?.isOwnedUser == true
             guard reference != nil else { return }
         }
         if let previous = mediaPreviewRequest {
@@ -368,7 +369,7 @@ extension NativeAppModel {
                 guard !Task.isCancelled, mediaPreviewRequest?.token == previewRequest, activation == activationRevision,
                       selection == selectionRevision else { return }
                 let resource: MediaResource
-                if let reference { resource = try await media.resolve(reference, route: route, runtime: state.phase == .ready ? runtime : nil) }
+                if let reference { resource = try await media.resolve(reference, route: route, runtime: physicalPermitsInput(route) && state.phase == .ready ? runtime : nil, historyEpoch: referenceEpoch) }
                 else if let uuid = UUID(uuidString: id) { resource = try await media.library.resource(uuid) }
                 else { throw MediaFailure.missing }
                 let display = try await media.display(resource.id, input: localInput)
@@ -411,7 +412,7 @@ extension NativeAppModel {
             guard let id = acceptedHistoryIDs[position],
                   let message = documents[route]?.messages.first(where: { $0.id == id }) else { continue }
             for (index, reference) in message.media.enumerated() {
-                if let resource = reference.resourceID { loadMediaDisplay(resource, referenceID: reference.id, route: route, input: message.isOwnedUser) }
+                if reference.artifactID == nil, let resource = reference.resourceID { loadMediaDisplay(resource, referenceID: reference.id, route: route, input: message.isOwnedUser) }
                 else if reference.artifactID == nil {
                     hydrateInlineMedia(route: route, messageID: message.id, reference: reference) { try raw.inlineAttachmentData(at: index) }
                 }
@@ -423,7 +424,8 @@ extension NativeAppModel {
         let attachments = update.finalAttachments
         guard !attachments.isEmpty, let messageID, var document = documents[route] else { return }
         let matches = document.messages.indices.filter { document.messages[$0].id.utf8.elementsEqual(messageID.utf8) }
-        guard matches.count == 1, let index = matches.first, document.messages[index].role == .assistant else { return }
+        guard matches.count == 1, let index = matches.first, document.messages[index].role == .assistant,
+              document.messages[index].historyEpoch == document.historyEpoch else { return }
         document.messages[index].media = attachments.enumerated().map { offset, attachment in
             .init(id: (try? DocumentStore.scopedKey(namespace: "attachment", parts: [route.connectionID, route.agentID, route.sessionID, messageID, String(offset), attachment.artifactID ?? "inline"])) ?? UUID().uuidString, attachment: attachment)
         }

@@ -111,14 +111,13 @@ actor NativeMediaController {
         return try stager.stageData(data, name: name, mimeType: mimeType)
     }
 
-    func resolve(_ reference: NativeMediaReference, route: ConversationID, runtime: RuntimeCoordinator?) async throws -> MediaResource {
+    func resolve(_ reference: NativeMediaReference, route: ConversationID, runtime: RuntimeCoordinator?, historyEpoch: UUID? = nil) async throws -> MediaResource {
         try available()
-        if let id = reference.resourceID {
-            do { _ = try await library.resourceURL(id); return try await library.resource(id) }
-            catch { guard reference.artifactID != nil else { throw error } }
+        if reference.artifactID == nil, let id = reference.resourceID {
+            _ = try await library.resourceURL(id); return try await library.resource(id)
         }
         guard let artifactID = reference.artifactID else { throw MediaFailure.missing }
-        let key = MediaArtifactKey(connectionID: route.connectionID, sessionKey: route.sessionID, artifactID: artifactID)
+        let key = MediaArtifactKey(connectionID: route.connectionID, sessionKey: route.sessionID, artifactID: artifactID, historyEpoch: historyEpoch)
         do { if let cached = try await library.cachedArtifact(key: key) { return cached } }
         catch { guard runtime != nil else { throw error } }
         guard let runtime else { throw MediaFailure.missing }

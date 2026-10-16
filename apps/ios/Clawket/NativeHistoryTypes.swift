@@ -4,6 +4,13 @@ import Foundation
 
 enum NativeHistoryFailure: Error, Equatable { case invalid, full, changed, missing, unavailable, commitUncertain }
 
+struct NativeHistoryStoredVersion: Sendable {
+    let revision: Int64
+    let epoch: UUID?
+    let physicalSessionID: String?
+    let sha256: String
+}
+
 /// Presentation ownership only. A disappearing/reappearing view cannot adopt an
 /// earlier preparation or let its old defer unlock a replacement operation.
 struct NativeHistoryOperation: Sendable {

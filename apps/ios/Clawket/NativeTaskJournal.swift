@@ -14,6 +14,7 @@ final class NativeTaskJournal {
     private var saveToken = UUID()
     private var observed: [String: ContinuousClock.Instant] = [:]
     private var liveIDs: Set<String> = []
+    private var historyScopes: [NativeHistoryScope: UUID] = [:]
 
     init(store: NativeJournalStore, onFailure: @escaping @MainActor () -> Void) {
         self.store = store; self.onFailure = onFailure
@@ -29,15 +30,29 @@ final class NativeTaskJournal {
     var reviews: [NativeReviewRecord] { document.reviews }
 
     func upsertReview(key: String, connectionID: String, sessionID: String?, held: Bool,
-                      content: NativeReviewRecord.Content) {
-        if let index = document.reviews.firstIndex(where: { $0.correlationKey == key && $0.connectionID == connectionID }) {
+                      content: NativeReviewRecord.Content, historyEpoch: UUID? = nil) {
+        if let index = document.reviews.firstIndex(where: { $0.correlationKey == key && historySame($0.connectionID, connectionID) && $0.historyEpoch == historyEpoch }) {
             document.reviews[index].held = held; document.reviews[index].content = content
         } else {
             guard let order = document.allocateOrder() else { writable = false; onFailure(); return }
             document.reviews.append(.init(correlationKey: key, connectionID: connectionID,
-                sessionID: sessionID, order: order, held: held, content: content))
+                sessionID: sessionID, order: order, held: held, content: content, historyEpoch: historyEpoch))
         }
         changed()
+    }
+
+    func bindHistoryScope(_ route: ConversationID, epoch: UUID?) {
+        let old = scope(route)
+        if let epoch { historyScopes[NativeHistoryScope(route)] = epoch }
+        else { historyScopes.removeValue(forKey: NativeHistoryScope(route)) }
+        guard old != scope(route) else { return }
+        for index in document.runs.indices where document.runs[index].scope == old {
+            document.runs[index].recover()
+            for id in [document.runs[index].id] + document.runs[index].steps.map(\.id) {
+                observed.removeValue(forKey: id); liveIDs.remove(id)
+            }
+        }
+        changed(immediate: true)
     }
 
     func started(_ route: ConversationID, runID: String) {
@@ -51,7 +66,7 @@ final class NativeTaskJournal {
               let index = document.runs.firstIndex(where: { $0.id == id }) else { return }
         liveIDs.insert(id)
         observeRun(index, terminal: false)
-        if let item = update.itemID, let step = document.runs[index].steps.firstIndex(where: { $0.sourceItemID == item }) {
+        if let item = update.itemID, let step = document.runs[index].steps.firstIndex(where: { historySame($0.sourceItemID, item) }) {
             let id = document.runs[index].steps[step].id
             liveIDs.insert(id)
             var clock = document.runs[index].steps[step].clock
@@ -96,7 +111,7 @@ final class NativeTaskJournal {
                 guard let id = NativeWorkReducer.apply(work, scope: scope(route), document: &document),
                       let run = document.runs.first(where: { $0.id == id }) else { continue }
                 runs.append(id)
-                if let item = work.itemID, let step = run.steps.first(where: { $0.kind == .tool && $0.sourceItemID == item }) {
+                if let item = work.itemID, let step = run.steps.first(where: { $0.kind == .tool && historySame($0.sourceItemID, item) }) {
                     steps[id, default: []].append(step.id)
                 }
             }
@@ -107,11 +122,13 @@ final class NativeTaskJournal {
     }
 
     func work(for route: ConversationID) -> WorkDockPresentation? {
-        let runs = document.runs.filter { $0.scope == scope(route) }
-        guard let latest = runs.max(by: { $0.order < $1.order }) else { return nil }
+        let current = scope(route)
+        let runs = document.runs.filter { $0.scope.sameRoute(as: current) }
+        guard !runs.isEmpty else { return nil }
+        let latest = runs.filter { $0.scope == current }.max(by: { $0.order < $1.order })
         return .init(id: "work-" + routeScopeID(route), title: String(localized: "Work record"),
-            status: .init(rawValue: latest.status.rawValue) ?? .unknown,
-            clock: NativeJournalProjection.clock(latest.clock), inspect: .available,
+            status: latest.flatMap { .init(rawValue: $0.status.rawValue) } ?? .unknown,
+            clock: latest.map { NativeJournalProjection.clock($0.clock) } ?? .init(), inspect: .available,
             records: runs.map(NativeJournalProjection.run))
     }
 
@@ -188,7 +205,8 @@ final class NativeTaskJournal {
         }
     }
     private func scope(_ route: ConversationID) -> NativeJournalScope {
-        .init(connectionID: route.connectionID, agentID: route.agentID, sessionID: route.sessionID)
+        .init(connectionID: route.connectionID, agentID: route.agentID, sessionID: route.sessionID,
+              historyEpoch: historyScopes[NativeHistoryScope(route)])
     }
     private func routeScopeID(_ route: ConversationID) -> String {
         (try? DocumentStore.scopedKey(namespace: "work", parts: [route.connectionID, route.agentID, route.sessionID])) ?? ""

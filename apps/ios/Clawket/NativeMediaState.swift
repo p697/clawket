@@ -111,7 +111,7 @@ extension NativeMessage {
 
 extension NativeConversation {
     enum CodingKeys: String, CodingKey {
-        case version, revision, draft, messages, nextCursor, historyLimit, hasMore, draftResourceIDs, historyEpoch, physicalSessionID
+        case version, revision, draft, messages, nextCursor, historyLimit, hasMore, draftResourceIDs, historyEpoch, physicalSessionID, physicalMutationUnconfirmed
     }
 
     init(from decoder: any Decoder) throws {
@@ -125,7 +125,8 @@ extension NativeConversation {
             hasMore: try values.decode(Bool.self, forKey: .hasMore),
             draftResourceIDs: try values.decodeIfPresent([UUID].self, forKey: .draftResourceIDs) ?? [],
             historyEpoch: try values.decodeIfPresent(UUID.self, forKey: .historyEpoch),
-            physicalSessionID: try values.decodeIfPresent(String.self, forKey: .physicalSessionID))
+            physicalSessionID: try values.decodeIfPresent(String.self, forKey: .physicalSessionID),
+            physicalMutationUnconfirmed: try values.decodeIfPresent(Bool.self, forKey: .physicalMutationUnconfirmed))
         try validateMedia()
     }
 

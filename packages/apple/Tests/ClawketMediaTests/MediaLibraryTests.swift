@@ -163,6 +163,25 @@ struct MediaLibraryTests {
         await #expect(throws: MediaFailure.missing) { try await library.resource(second.id) }
     }
 
+    @Test func physicalEpochSeparatesReusedArtifactCacheAndPreservesLegacyKeys() async throws {
+        let fixture = try Fixture(), library = try MediaLibrary(directory: fixture.libraryURL)
+        let first = MediaArtifactKey(connectionID: "c", sessionKey: "s", artifactID: "same", historyEpoch: UUID())
+        let second = MediaArtifactKey(connectionID: "c", sessionKey: "s", artifactID: "same", historyEpoch: UUID())
+        let legacy = try JSONDecoder().decode(MediaArtifactKey.self, from: Data(#"{"connectionID":"c","sessionKey":"s","artifactID":"same"}"#.utf8))
+        #expect(legacy.historyEpoch == nil)
+        let old = try await library.cacheArtifact(key: first, name: "old.txt", mimeType: "text/plain", size: 3) { _ in Data("old".utf8) }
+        #expect(try await library.cachedArtifact(key: second) == nil)
+        #expect(try await library.cachedArtifact(key: legacy) == nil)
+        let new = try await library.cacheArtifact(key: second, name: "new.txt", mimeType: "text/plain", size: 3) { _ in Data("new".utf8) }
+        #expect(old.id != new.id)
+        let reopened = try MediaLibrary(directory: fixture.libraryURL)
+        #expect(try await reopened.cachedArtifact(key: first)?.id == old.id)
+        #expect(try await reopened.cachedArtifact(key: second)?.id == new.id)
+        let composed = MediaArtifactKey(connectionID: "é", sessionKey: "s", artifactID: "same")
+        let decomposed = MediaArtifactKey(connectionID: "e\u{301}", sessionKey: "s", artifactID: "same")
+        #expect(composed != decomposed); #expect(Set([composed, decomposed]).count == 2)
+    }
+
     @Test func malformedChunksAndScopeInvalidationNeverCommitPartialFiles() async throws {
         let fixture = try Fixture(), library = try MediaLibrary(directory: fixture.libraryURL)
         let key = MediaArtifactKey(connectionID: "a", sessionKey: "b", artifactID: "c")
