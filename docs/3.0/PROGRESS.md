@@ -1,5 +1,10 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-16 Native 预览修复闭环与连接表单诊断继续。
+  - #269 exact451f7318在current-main全13门禁绿后合e97a171d并finish：actual App300/300零失败/跳过（52.846秒test/88.685秒wall）、package459=59+400、19语9082精确编译值。开发app及私有证据已保存在SSD；primary仅保留既有node_modules，RN默认/源码、商店身份、共享服务与发布均不变。
+  - 新driver下改用自然时序：无新输入时先完整打开草稿图片预览，再由独立合成client触发完整回复。关闭后同一旧row y-299→-299（0pt），原UTF8和三draft引用不变、Latest保留；连接增量1恰为触发client本身，App没有额外重连。该次不冻结peer、不暂停心跳；早先冻结法不用于稳定性结论，source24/25的AX/driver失败不追加通过。真实后端/手机网络/VoiceOver/N5仍待。
+  - 独立本机canary只用非秘密固定ASCII、原生连接表单与真实connect序列化，始终拒绝、不连Gateway；两次观察分别为键入shorter/alphanumeric与系统Paste后token缺失，均非通过。SecureField掩码与成功UI命令不能证明实际输入完整；继续区分UIKit输入、SwiftUI绑定与自动化，不修改凭据、认证协议或共享服务。已停自有App/WDA/诊断peer并释放heavy/simulator，后续独立诊断重新持租约。
+
 - 2026-10-16 Native autosave 结果归属与取消提示（独立探索；RN 保持默认）。
   - 修复源码确定可达的竞态：新草稿/流式事件取消一个已进入存储等待的旧 save 时，原 catch 会把 CancellationError 当保存失败并留下提示。现在每 route 冻结操作 UUID、activation 与实际写入 revision/physical identity；取消前退休，旧结果不覆盖新提示。真实当前失败仍显示，只有最新已完成且仍对应当前文档的写入可清自己的存储提示，不清媒体/语音提示，不发送或重放。
   - 独立 NativeAutosaveTests 七方法复用真实 store FIFO/取消检查和临时目录故障，覆盖三文件/held 原项的真实写读回、取消/替代、当前失败/恢复、其他提示与 A→B→A/epoch/revision 围栏；没有新增测试专用存储接口。重基 993cc686 后源码发现 306 个 App 方法/32 个测试文件，报告下限及 305 缩减反例同步；docs 16 指令对/7 回归、报告 validator 3 回归与 PBX 实路径检查通过。候选 Swift 执行证据待本 head CI；本机未编译、执行 native 测试或使用设备/lease。
