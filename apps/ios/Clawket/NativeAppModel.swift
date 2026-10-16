@@ -1603,7 +1603,7 @@ final class NativeAppModel: ObservableObject {
                       autosaveAttempts[route]?.activation == activationRevision,
                       let write = autosaveAttempts[route]?.write, write.matches(documents[route]) else { return }
                 if let failure = autosaveFailureHints.removeValue(forKey: route),
-                   presentation.drafts[route] === failure.draft, failure.draft.hintRevision == failure.revision {
+                   presentation.draft(for: route) === failure.draft, failure.draft.hintRevision == failure.revision {
                     failure.draft.hint = nil
                 }
             } catch {

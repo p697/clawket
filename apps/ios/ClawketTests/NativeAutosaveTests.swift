@@ -39,7 +39,7 @@ final class NativeAutosaveTests: XCTestCase, @unchecked Sendable {
         }
     }
 
-    @MainActor private func seed(_ root: URL) async throws -> (NativeAppModel, NativeConversationStore, MediaLibrary) {
+    @MainActor private func seed(_ root: URL, boundDraft: Bool = false) async throws -> (NativeAppModel, NativeConversationStore, MediaLibrary) {
         let cache = try NativeConversationStore(directory: root.appendingPathComponent("Conversations"))
         let stager = try MediaImportStager(directory: root.appendingPathComponent("Imports"))
         let library = try MediaLibrary(directory: root.appendingPathComponent("Media"))
@@ -54,7 +54,8 @@ final class NativeAutosaveTests: XCTestCase, @unchecked Sendable {
         ], draftResourceIDs: resources, historyEpoch: epoch, physicalSessionID: "physical")
         try await cache.write(document, connectionID: route.connectionID, agentID: route.agentID, sessionID: route.sessionID)
         model.cache = cache; model.documents[route] = document
-        model.presentation.draft(for: route).text = document.draft
+        if boundDraft { model.presentation.drafts[route] = ComposerDraft(conversationID: route, text: document.draft) }
+        else { model.presentation.draft(for: route).text = document.draft }
         return (model, cache, library)
     }
 
@@ -126,18 +127,20 @@ final class NativeAutosaveTests: XCTestCase, @unchecked Sendable {
     }
 
     @MainActor func testCurrentStorageFailureRemainsVisibleUntilActualLatestWriteSucceeds() async throws {
-        let root = directory(); defer { try? FileManager.default.removeItem(at: root) }
-        let (model, _, library) = try await seed(root)
-        let original = try XCTUnwrap(model.documents[route])
-        _ = try await failCurrentSave(model, root: root)
-        XCTAssertEqual(model.documents[route]?.draftResourceIDs, original.draftResourceIDs)
-        let cache = try restoreDirectory(root); model.cache = cache
-        model.scheduleSave(route, immediate: true)
-        let task = try XCTUnwrap(model.saveTasks[route]); await task.value
-        XCTAssertNil(model.presentation.draft(for: route).hint)
-        let saved = try await cache.read(connectionID: route.connectionID, agentID: route.agentID, sessionID: route.sessionID)
-        XCTAssertEqual(try historyEncode(saved), try historyEncode(original))
-        for id in saved.draftResourceIDs { _ = try await library.resourceURL(id) }
+        for boundDraft in [false, true] {
+            let root = directory(); defer { try? FileManager.default.removeItem(at: root) }
+            let (model, _, library) = try await seed(root, boundDraft: boundDraft)
+            let original = try XCTUnwrap(model.documents[route])
+            _ = try await failCurrentSave(model, root: root)
+            XCTAssertEqual(model.documents[route]?.draftResourceIDs, original.draftResourceIDs)
+            let cache = try restoreDirectory(root); model.cache = cache
+            model.scheduleSave(route, immediate: true)
+            let task = try XCTUnwrap(model.saveTasks[route]); await task.value
+            XCTAssertNil(model.presentation.draft(for: route).hint)
+            let saved = try await cache.read(connectionID: route.connectionID, agentID: route.agentID, sessionID: route.sessionID)
+            XCTAssertEqual(try historyEncode(saved), try historyEncode(original))
+            for id in saved.draftResourceIDs { _ = try await library.resourceURL(id) }
+        }
     }
 
     @MainActor func testSuccessfulRetryCannotClearAReplacementMediaOrVoiceHint() async throws {
