@@ -169,9 +169,9 @@ struct NativeProView: View {
                 Spacer()
                 Button("Redeem code") { controller.redeem(reviewID: review.id) }.frame(minHeight: 44)
             }
-            .disabled(controller.phase.isWorking)
+            .disabled(controller.phase.isWorking || controller.phase == .success)
             if controller.customer?.subscriptions.contains(where: \.isActive) == true {
-                Button("Manage subscription") { Task { await controller.manage(reviewID: review.id) } }.frame(minHeight: 44).disabled(controller.phase.isWorking)
+                Button("Manage subscription") { Task { await controller.manage(reviewID: review.id) } }.frame(minHeight: 44).disabled(controller.phase.isWorking || controller.phase == .success)
             }
             if controller.phase == .redeeming { Text("Complete redemption in the store. Your Pro access will sync here.").font(.footnote).foregroundStyle(.secondary) }
         }.font(.footnote)
