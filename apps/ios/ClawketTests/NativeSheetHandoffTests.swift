@@ -41,8 +41,9 @@ final class NativeSheetHandoffTests: XCTestCase {
         try await waitUntil(fixture, "Root authentication alert appears") { fixture.alert?.message == notice }
         XCTAssertEqual(client.notice, notice)
         XCTAssertEqual(client.noticeRevision, noticeID, "Automatic binding dismissal did not acknowledge the error")
-        // The production OK action uses this same exact-generation acknowledgement.
-        try await acknowledge(client, fixture: fixture, noticeID: noticeID)
+        // Verified device-approval transitions can also clear the notice outside its OK action.
+        client.notice = nil
+        XCTAssertNil(client.notice)
         try await waitUntil(fixture, "Modal dismissal completes") { !fixture.hasPresentation }
         client.handle(.openDestination(.account, conversation: nil))
         try await waitUntil(fixture, "Settings navigation appears") { fixture.hasNavigationTitle(String(localized: "Settings")) }
@@ -50,7 +51,9 @@ final class NativeSheetHandoffTests: XCTestCase {
         let sheetNotice = try XCTUnwrap(client.notice)
         try await waitUntil(fixture, "Stable Settings authentication alert appears") { fixture.alert?.message == sheetNotice }
         XCTAssertEqual(client.destination?.id, "settings", "An error in a stable sheet keeps its navigation")
-        try await acknowledge(client, fixture: fixture, noticeID: client.noticeRevision)
+        // The production OK action uses this same exact-generation acknowledgement.
+        client.dismissNotice(id: client.noticeRevision)
+        XCTAssertNil(client.notice)
         try await waitUntil(fixture, "Settings alert dismissal completes") { fixture.alert == nil }
         XCTAssertTrue(fixture.hasNavigationTitle(String(localized: "Settings")))
     }
@@ -90,17 +93,6 @@ final class NativeSheetHandoffTests: XCTestCase {
         XCTAssertEqual(client.notice, "same fixed error", "An old OK cannot clear a same-text replacement")
         client.dismissNotice(id: currentNotice)
         XCTAssertNil(client.notice)
-    }
-
-    @MainActor private func acknowledge(_ client: NativeAppModel, fixture: Fixture, noticeID: UUID) async throws {
-        let displayed = try XCTUnwrap(fixture.alert)
-        client.dismissNotice(id: noticeID)
-        XCTAssertNil(client.notice)
-        // Calling the production acknowledgement is not tapping system OK. Exercise UIKit's
-        // actual dismissal/completion explicitly, rather than assuming a model write closes it.
-        await withCheckedContinuation { continuation in
-            displayed.dismiss(animated: true) { continuation.resume() }
-        }
     }
 
     @MainActor private func model() -> NativeAppModel {

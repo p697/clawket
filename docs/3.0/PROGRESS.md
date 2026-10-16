@@ -6,7 +6,7 @@
   - 新3个App方法覆盖实际root Settings→Add helper→实际onDismiss→Connect→重开Settings、真实Connect关闭同turn注入authenticationRequired→实际UIAlert→生产ack helper→重开Settings，以及context/A→B→A/同文案代次。没有伪称点了系统OK或接了真实服务；本机未编译/执行Swift或操作模拟器，heavy/simulator仍由主线程占用，完整验证交精确head CI。旧gear暂态在仅冷启自有QA后恢复，根因仍未证，未据此声称已修复现场原因。
   - 当前main993cc686上App并集302方法/32文件，报告minimum302/301缩减拒绝同步；本机仅轻量静态验证：docs16指令对+7回归、report3、19语474UI+4权限与diff通过。独立worktree维护，不改primary；未发行、部署或改生产。
   - PR #268/ca4b23ff完整CI已编译并实际执行302方法：旧299与Add真实root交接/context新两方法通过；认证提示/dismiss/reopen方法超时（2条失败含抛出的timeout），尚未通过。不放宽条件，补每次等待的阶段/展示controller诊断及去重遍历后继续CI定位；不把红归因到现场gear，也不猜认证或改服务。
-  - 3e092d2f同302方法再执行，阶段诊断确认Connect→实际root认证UIAlert已通过；超时在fixture仅调用ack后UIKit alert仍稳定显示，尚未走到Settings。保留所有条件，fixture明确执行系统OK原本还会做的公开UIAlertController.dismiss及真实completion，并断言model notice已精确清除；不把helper写入等同系统按钮点击，不改生产或猜现场原因。重基preview主线e97a171d保留其ReadingLayout11，当前并集303/32files、报告minimum303/302缩减拒绝同步，完整新headCI继续。
+  - 3e092d2f同302方法再执行，诊断确认Connect→实际root认证UIAlert通过，但notice消费后真实alert仍稳定显示，未走到Settings。临时fixture手动UIKit.dismiss会掩盖生产deviceApproval真实notice=nil消费者，独立review指出后移除；保留强external-nil→实际消失断言，生产改用原现代Bool alert API加冻结presenting Notice（不使用legacy item API），automatic false仍不消费、OK仍精确代次/owner。旧OK/new同文案模型隔离有回归，真实系统按钮激活及重新呈现另由后续WDA验收，不冒称已验。重基preview主线e97a171d保留ReadingLayout11，当前并集303/32files、minimum303/302缩减拒绝，继续精确head全CI。
 
 
 - 2026-10-16 Native 草稿预览阅读连续性（独立探索，组合验收继续）。

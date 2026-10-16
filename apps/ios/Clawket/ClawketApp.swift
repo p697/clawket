@@ -72,18 +72,19 @@ struct NativeAppRootView: View {
 
 @MainActor
 private struct NativeNoticeAlert: ViewModifier {
-    private struct Notice: Identifiable { let id: UUID; let text: String }
+    private struct Notice { let id: UUID; let text: String }
     @ObservedObject var client: NativeAppModel
     let canPresent: @MainActor () -> Bool
 
     func body(content: Content) -> some View {
-        content.alert(item: Binding(
-            get: { canPresent() ? client.notice.map { Notice(id: client.noticeRevision, text: $0) } : nil },
+        let notice = client.notice.map { Notice(id: client.noticeRevision, text: $0) }
+        content.alert("Clawket", isPresented: Binding(
+            get: { canPresent() && client.notice != nil },
             // Losing a presenter is not acknowledgement. Only the displayed OK consumes its own notice.
-            set: { _ in })) { notice in
-                Alert(title: Text("Clawket"), message: Text(notice.text), dismissButton: .cancel(Text("OK")) {
+            set: { _ in }), presenting: notice) { notice in
+                Button("OK", role: .cancel) {
                     if canPresent() { client.dismissNotice(id: notice.id) }
-                })
-            }
+                }
+            } message: { notice in Text(notice.text) }
     }
 }
