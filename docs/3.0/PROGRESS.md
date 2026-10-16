@@ -5,6 +5,7 @@
   - 共享生产NativeAppRootView供真实UIKit宿主复用，App独占start/scene观察；destination退休期间root不抢alert，稳定sheet内仍显示错误。notice有独立代次，自动binding nil不等于确认，只有当前owner的冻结OK精确消费，旧相同文案确认不清新提示。认证、device approval、后端/传输、RN默认均不改。
   - 新3个App方法覆盖实际root Settings→Add helper→实际onDismiss→Connect→重开Settings、真实Connect关闭同turn注入authenticationRequired→实际UIAlert→生产ack helper→重开Settings，以及context/A→B→A/同文案代次。没有伪称点了系统OK或接了真实服务；本机未编译/执行Swift或操作模拟器，heavy/simulator仍由主线程占用，完整验证交精确head CI。旧gear暂态在仅冷启自有QA后恢复，根因仍未证，未据此声称已修复现场原因。
   - 当前main993cc686上App并集302方法/32文件，报告minimum302/301缩减拒绝同步；本机仅轻量静态验证：docs16指令对+7回归、report3、19语474UI+4权限与diff通过。独立worktree维护，不改primary；未发行、部署或改生产。
+  - PR #268/ca4b23ff完整CI已编译并实际执行302方法：旧299与Add真实root交接/context新两方法通过；认证提示/dismiss/reopen方法超时（2条失败含抛出的timeout），尚未通过。不放宽条件，补每次等待的阶段/展示controller诊断及去重遍历后继续CI定位；不把红归因到现场gear，也不猜认证或改服务。
 
 
 - 2026-10-16 Native 草稿预览阅读连续性（独立探索，组合验收继续）。
