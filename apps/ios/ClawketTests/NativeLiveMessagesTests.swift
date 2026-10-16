@@ -157,7 +157,7 @@ final class NativeLiveMessagesTests: XCTestCase {
     @MainActor
     func testActualFinalMediaConsumerUsesOnlyTheExactReducerTargetAndMediaOnlyUsesUUID() throws {
         let model = NativeAppModel(), route = ConversationID(connectionID: "c", agentID: "a", sessionID: "session")
-        var document = NativeConversation(messages: [.init(id: "previous-paragraph", role: .assistant, text: "keep", runID: "run", segmentID: "earlier")])
+        var document = NativeConversation(messages: [.init(id: "previous-paragraph", role: .assistant, text: "keep", runID: "run", segmentID: "earlier")], historyEpoch: epoch)
         let target = try XCTUnwrap(finish(&document, segment: "image-only", metadata: .init(role: .assistant, providedID: "real-image"), attachments: true))
         XCTAssertNotNil(UUID(uuidString: target)); XCTAssertNotEqual(target, "media-run")
         model.documents[route] = document
