@@ -19,3 +19,9 @@ The independent history read uses only the QA route, compares its exact first ow
 Installed Hermes Stop and the Bridge agree on POST path, Bearer authentication, empty body and returned run/status fields. The Bridge's five-second upstream budget can be shorter than synchronous database/interrupt work inside the API, but the failed attempt's error category has not been captured. Do not guess a timeout fix, alter the shared service or mark cancellation passed.
 
 These checks do not establish Relay, phone-network, owner replacement, full backend parity, VoiceOver, same-bundle migration or store acceptance. React Native remains the default; there was no shared service restart, production configuration change, distribution build or release.
+
+## Later authentication diagnostics
+
+On the `0f648ece` development app, a private loopback application-frame observer forwarded original frames without adding credentials or issuing RPCs. It classified OpenClaw's response as `INVALID_REQUEST` / `AUTH_TOKEN_MISMATCH`, and an in-memory comparison found that the submitted `connect.auth.token` differed from the current local operator configuration. A fresh form with explicit secure-field focus, slower WebDriver input and transition waits produced the same classification. The secure field does not expose the literal value through accessibility, so its masked value does not establish which input reached the binding. Form entry, automation and credential selection still require diagnosis; no token or service configuration was changed.
+
+This observer terminates two WebSocket connections and uses a new local URL and credential scope. Its results diagnose those attempts only; they are not successful original-Direct, Relay or connection-stability acceptance. The private Hermes observer received no eligible Stop transaction, so it adds no cancellation evidence. Both diagnostic observers were stopped after preserving their bounded metadata results.

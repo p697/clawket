@@ -2,10 +2,10 @@
 
 - 2026-10-16 Native 草稿预览阅读连续性（独立探索，组合验收继续）。
   - 上一caret #265 exact0f648ece全13CI绿/current-main后合bdf98e7b并finish：App296/296零失败/跳过（38.404秒test/91.887秒wall）、package459=59+400、19语9063精确编译值；RN默认/源码与共享服务未改。
-  - WebDriver旧0f648ece实际系统Photos按顺序选三张本机fixture，保留草稿时由受控peer的独立client触发外部输入/流式回复；打开草稿预览后关闭，同一source19回复起点y70→-326（-396pt），复现仍自动跟随后移。非真实模型/Relay证据。现在每会话弱handle同步暂停当前可见UIKit表格，再向host原样转发open intent；不以following绑定假暂停。更新先解绑旧owner，旧dismantle不能清新owner，展开编辑器零高度不捕获空锚点；原初始化/apply/restoration保护不动。
-  - 新真实表格回归已写：同一production typed-forward helper在host回调前暂停，追加长回复保留anchor、显式Latest到底、零高无capture、换handle/双host旧退休隔离。静态独立review无阻挡；它没有实际点击Composer/Expand控件，WebDriver修后复验与本机编译/窄测仍待。重基复制反馈993cc686后当前源码300方法，完整门禁交精确head CI。
+  - WebDriver旧0f648ece实际系统Photos按顺序选三张本机fixture。初轮source19未冻结测量到点击间的输入，不独自证明预览时移动；随后冻结自有合成peer、稳定呈现后恢复流式的旧版source23对照，关闭后同一行y173→-300（-473pt）、Latest不出现。修复43552eb2受控source21关闭后y173→173（0pt）、Latest保留；两者同三draft引用/原UTF8、只新增一次受控输入，非真实模型/Relay证据。现在每会话弱handle同步暂停当前可见UIKit表格，再向host原样转发open intent；不以following绑定假暂停。更新先解绑旧owner，旧dismantle不能清新owner，展开编辑器零高度不捕获空锚点；原初始化/apply/restoration保护不动。
+  - strict Swift6/iOS16.4 actual App与300方法源码arm64/x86_64、YES/-开发build-for-testing通过；独占heavy/simulator、jobs2实际ReadingLayout11/11零失败/跳过（6.630秒），新case验证production typed-forward先暂停、追加保留anchor、显式Latest到底、零高无capture、换handle/双host退休隔离。随后增强同一可见长stream行增长及420→700→420 viewport，增量双架构编译与该项1/1再次通过（3.583秒）；19语9082精确编译值、docs16对/7、report3与diff通过；测试没有实际点Composer/Expand。新UI完整图片预览与显式Latest隐藏通过，Copy实际67×45pt、已复制辅助值/截图/原码尾换行通过；后续source24重复对照在WDA关闭后取AX超时，未计通过，已停自有runner待新driver复验。完整门禁交最终精确head CI。
   - 组合UI另见保存失败hint，当前保持现场。只读exact synthetic文档（不扫描其他会话）核revision1179/53412bytes、69消息、三唯一draft引用及对应文件存在、held1/queued0/sending0，证明后来已落盘，不倒推提示当次写成功或取消。源码明确存在被新live保存取消的旧save仍catch发布失败且不清的可达竞态，已另切独立autosave任务；不吞真存储错误，不删草稿/资源，不猜容量。
-  - 代码Copy实际50×45pt按钮精确复制原块含尾换行通过；后续live自动化因AX名称/可见标志与元素刷新未取得有效中途点击证据，保留未验，不能把completed Copy当stream通过。新增本机loopback应用帧观察工具只记allowlist错误分类/耗时，用于后续Hermes Stop/OpenClaw认证定位；代理新URL scope、心跳/来源均异于原Direct，不作原路径稳定性结论。无共享服务/凭据/版本/分发/发布变更。
+  - 旧代码Copy实际50×45pt按钮精确复制原块含尾换行通过；后续live自动化因AX名称/可见标志与元素刷新未取得有效中途点击证据，保留未验，不能把completed Copy当stream通过。新增本机loopback应用帧观察工具只记allowlist错误分类/耗时，用于后续Hermes Stop/OpenClaw认证定位；代理新URL scope、心跳/来源均异于原Direct，不作原路径稳定性结论。无共享服务/凭据/版本/分发/发布变更。
 
 - 2026-10-16 Native 代码/原文复制反馈（独立候选，执行验证待资源协调）。
   - 从 fresh bdf98e7b 创建独立工作树，仅代码卡片与 tool 原文 Copy 采用专用 native control；保留旧 AX ID、同按钮对象与最新原UTF8，严格先暂停跟随再写剪贴板，随后短暂 Copied、辅助值/系统播报与成功haptic。两种本地化标题按当前字体共同占位、44pt下限不变；不改 generic voice按钮、RN、协议或服务。

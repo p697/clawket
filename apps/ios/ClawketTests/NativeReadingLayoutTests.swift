@@ -12,6 +12,8 @@ final class NativeReadingLayoutTests: XCTestCase {
             MessagePresentation(id: "preview-\($0)", author: .agent(name: "Agent", label: nil),
                 content: [.markdown("Readable message \($0) 中文.\nSecond line.")])
         }
+        messages.append(.init(id: "reading-stream", author: .agent(name: "Agent", label: nil),
+            content: [.markdown(String(repeating: "Currently streamed readable content.\n", count: 28))], isStreaming: true))
         var captures: [ConversationReadingContext] = []
         func transcript(_ interaction: NativeTranscriptReadingInteraction, scroll: Int = 0) -> AnyView {
             AnyView(NativeTranscript(messages: messages, conversationID: route, model: model,
@@ -39,8 +41,18 @@ final class NativeReadingLayoutTests: XCTestCase {
         let reading = try XCTUnwrap(captures.last)
         XCTAssertFalse(reading.followsBottom)
         let id = try XCTUnwrap(reading.messageID)
+        XCTAssertEqual(id, "reading-stream", "The reader is inside the actual growing row")
         let index = try XCTUnwrap(source.indexPath(for: id))
         let offset = table.rectForRow(at: index).minY - table.contentOffset.y
+        messages[messages.count - 1].content = [.markdown(String(repeating: "Currently streamed readable content.\n", count: 52))]
+        host.rootView = transcript(firstInteraction)
+        for height in [CGFloat(420), 700, 420] {
+            await layout(host, width: 320, height: height)
+            XCTAssertEqual(table.rectForRow(at: index).minY - table.contentOffset.y, offset, accuracy: 2,
+                "Growing the same row and changing the preview/keyboard viewport must retain its reading offset")
+            XCTAssertEqual(captures.last?.messageID, id)
+            XCTAssertEqual(captures.last?.followsBottom, false)
+        }
         messages.append(.init(id: "new-reply", author: .agent(name: "Agent", label: nil),
             content: [.markdown(String(repeating: "New streamed content.\n", count: 18))], isStreaming: true))
         host.rootView = transcript(firstInteraction)
