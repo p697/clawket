@@ -4,11 +4,11 @@ from validate_xctest_result import validate_summary
 
 class NativeResultTests(unittest.TestCase):
     def setUp(self):
-        self.valid = {"result": "Passed", "totalTestCount": 312, "passedTests": 312,
+        self.valid = {"result": "Passed", "totalTestCount": 314, "passedTests": 314,
                       "failedTests": 0, "skippedTests": 0, "expectedFailures": 0}
 
     def test_complete_report(self):
-        self.assertEqual(validate_summary(self.valid), 312)
+        self.assertEqual(validate_summary(self.valid), 314)
 
     def test_rejects_missing_corrupt_counts_and_wrong_type(self):
         for field in ("totalTestCount", "passedTests", "failedTests", "skippedTests", "expectedFailures"):
@@ -26,6 +26,8 @@ class NativeResultTests(unittest.TestCase):
         for field in ("failedTests", "skippedTests", "expectedFailures"):
             with self.assertRaises(ValueError):
                 validate_summary({**self.valid, field: 1, "passedTests": 3})
+        with self.assertRaises(ValueError):
+            validate_summary({**self.valid, "totalTestCount": 313, "passedTests": 313})
         with self.assertRaises(ValueError):
             validate_summary({**self.valid, "totalTestCount": 311, "passedTests": 311})
         with self.assertRaises(ValueError):

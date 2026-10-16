@@ -3,10 +3,12 @@
 - 2026-10-16 Native Work 响应式入口（独立候选；RN 保持默认）。
   - 按会话外层实际可用高度响应：小于500pt或展开编辑器时，将同一workID/typed状态/inspect入口移至独立44pt原生导航栏控件，充足时恢复body dock。不按键盘焦点/设备名猜高度，不推断idle或修改host活动/队列/审批/协议；全六状态均保留一个入口，完整AX说明与暂不可用状态复用。
   - NativeReadingLayoutTests新增两方法，真实NavigationStack宿主核六状态与高低viewport反复切换时的同UITextView/table、UTF8草稿/选区/实际阅读锚点；320/402/768宽与最大字号核原生title/editor实际几何及inspect变更时编辑连续性。Work唯一入口/状态可达/44pt/Back与More不叠、点击与展开手势留实际WDA，不伪称unit已覆盖。
-  - 基于main2a0ba53c自有依赖与工作树；源码App方法312/33文件，报告minimum312与311缩减反例同步。文档16指令对/7回归、19语474UI键/4权限目的源码检查与diff通过；实际Swift编译/执行交本head CI；root照片托盘合并后须重基并集再跑完整精确门禁。本机不运行native构建/测试或操作模拟器，owner视觉与真实后端验收仍待。
+  - 基于main2a0ba53c自有依赖与工作树；源码App方法312/33文件，报告minimum312与311缩减反例同步。文档16指令对/7回归、19语474UI键/4权限目的源码检查与diff通过；实际Swift编译/执行交本head CI；root照片托盘合并后须重基并集再跑完整精确门禁。初稿未用本机native资源；后续root释放租约后的两项窄测另列，owner视觉与真实后端验收仍待。
 
   - 5dfb0418首轮完整CI其余12门绿；actual App312真正编译并执行，310既有方法通过，两新方法在公开AX定位阶段三断言红（roomy dock也未找到），尚未验证toolbar几何。补fixture同时读公开accessibilityElements数组与indexed container，并穿透未标识的generic可访问宿主；原唯一性/44pt/frame/编辑/阅读断言全部保留，下一精确head重验，不归因产品未渲染。
   - 563c45e8第二CI及本机租约下两项窄测继续在AX定位阶段红；真foreground/key UIWindowScene、公开array/indexed/automation容器遍历分别161/68对象仍无semantic节点，公开bar item也未语义确认Work。这是unit定位不可观测，不能判产品未渲染或VO通过。经负责人明确收窄两方法为实际navigation/table/editor/原字节/选区/reading和高低viewport连续性，保留真实可测几何；不引入私有桥或为测试重写生产控件。实际Work入口几何及操作交root后续WDA，窄测执行继续。
+  - #273照片exact3b624260全13CI绿后先合bd312dd7；本候选保留其两新方法/88pt及metadata producer并重基，实际App源码并集314/33文件，minimum314与313缩减拒绝同步。新的两项窄测/组合精确CI待下列执行，不以初稿312或照片312代替314。
+  - 重基bd312dd7后租约下窄跑这两方法2/2零失败（5.277秒test/5.285秒wall），保留实际UIKit导航/title/编辑器与reading断言；未本机全跑314。docs16对/7、报告validator3回归、314源码计数/33文件与diff通过。严格单synthetic文档前后同三资源顺序、空draft、held1/queued0/sending0不变，停止自己的QA app；development app按精确source head另作私有handoff，不发行。组合精确head全CI继续，Work入口实际验收由root接续。
 
 - 2026-10-16 Native 紧凑草稿照片（独立探索，本机验收通过，完整CI待续）。
   - 普通字号草稿图改88pt方形，完整名称/大小保留于辅助信息和原生长按Details；文件与224pt大字号卡片仍显示metadata，失败仍显示原因并可查看全文。Remove保持44pt但采用圆形触区以避开图心；tray本体88pt，外部原有间距14pt另计。RN默认/源码不变。
