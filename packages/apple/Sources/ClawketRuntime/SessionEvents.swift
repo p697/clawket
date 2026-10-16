@@ -139,6 +139,9 @@ struct SessionEvents: Sendable {
     }
 
     private mutating func complete(runID: String, reason: String, raw: JSONValue) -> [RuntimeSessionUpdate] {
+        if FinalMessageWire.hasConflictingLineage(raw, message: raw["message"] ?? .null) {
+            return finish(runID: runID, reason: reason, raw: raw)
+        }
         if let terminal = FinalMessageWire.terminal(raw, reason: reason),
            protocolText(raw["message"]?["content"]).utf8.elementsEqual(terminal.text.utf8) {
             // The Bridge sends this assistant copy for old clients. Its real

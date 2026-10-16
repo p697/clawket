@@ -68,14 +68,25 @@ struct FinalMessageMetadataTests {
         #expect(history.messages[0].transcriptPosition == metadata.transcriptPosition)
     }
 
-    @Test func malformedIDsPositionsAndConflictingLineageStayUnknownWithoutDroppingFinalText() throws {
+    @Test func malformedIDsPositionsStayUnknownAndConflictingLineageCannotBind() throws {
         for id in ["", "bad\nidentity", String(repeating: "a", count: 4_097)] {
             let update = final(["role": .string("assistant"), "id": .string(id), "content": .string("Keep"),
                 "turnId": .string("e\u{301}"), "__openclaw": .object(["transcriptPosition": .object([
                     "source": .string("source"), "rawSeq": .number(1.5)])])], extra: ["turnId": .string("é")])
             let metadata = try #require(update.finalMessageMetadata(backend: .openclaw))
             #expect(metadata.providedID == nil && metadata.transcriptPosition == nil && metadata.turnID == nil)
+            #expect(metadata.hasConflictingLineage)
         }
+        var events = SessionEvents()
+        let partial = frame(["type": .string("agent_message_chunk"), "sessionKey": .string("s"),
+            "runId": .string("r"), "text": .string("Keep partial"), "turnId": .string("A")])
+        #expect(try events.map(partial, connection: connection(.codex)).count == 1)
+        let conflict = frame(["type": .string("run_finished"), "sessionKey": .string("s"), "runId": .string("r"),
+            "turnId": .string("A"), "message": .object(["role": .string("assistant"), "id": .string("actual-B"),
+                "turnId": .string("B"), "content": .string("Different message")])])
+        let updates = try events.map(conflict, connection: connection(.codex))
+        #expect(updates.count == 1)
+        #expect(updates.first?.finalMessageMetadata(backend: .codex)?.hasConflictingLineage == true)
     }
 
     @Test func terminalNoticeRequiresExplicitErrorValidSystemIdentityAndNonemptyText() throws {

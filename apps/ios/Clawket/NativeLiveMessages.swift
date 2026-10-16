@@ -34,12 +34,12 @@ enum NativeLiveMessages {
                        epoch: UUID?, newID: () -> String = { UUID().uuidString }) -> String? {
         let matches = segment(runID, segmentID, in: document, epoch: epoch)
         var assistantIndex: Int?
-        if matches.count == 1 { assistantIndex = matches[0] }
-        else if matches.isEmpty && hasAttachments, let id = freshID(document, newID: newID) {
+        let canBind = metadata.map { $0.role == .assistant && !$0.hasConflictingLineage } ?? true
+        if canBind && matches.count == 1 { assistantIndex = matches[0] }
+        else if canBind && matches.isEmpty && hasAttachments, let id = freshID(document, newID: newID) {
             document.messages.append(.init(id: id, role: .assistant, text: "", runID: runID, segmentID: segmentID, historyEpoch: epoch))
             assistantIndex = document.messages.count - 1
         }
-        if let metadata, metadata.role != .assistant { assistantIndex = nil }
         if let index = assistantIndex, let metadata, metadata.role == .assistant {
             if compatible(document.messages[index].providedID, metadata.providedID),
                compatible(document.messages[index].turnID, metadata.turnID),
@@ -51,7 +51,8 @@ enum NativeLiveMessages {
                  || document.messages[index].transcriptPosition == metadata.transcriptPosition {
                 document.messages[index].providedID = metadata.providedID ?? document.messages[index].providedID
                 if let id = document.messages[index].providedID {
-                    document.messages[index].remoteID = id; document.messages[index].idSource = .provided
+                    document.messages[index].remoteID = id
+                    if document.messages[index].idSource != .ambiguousProvided { document.messages[index].idSource = .provided }
                     markAmbiguous(id, in: &document, epoch: epoch)
                 }
                 document.messages[index].timestampMs = metadata.timestampMs ?? document.messages[index].timestampMs

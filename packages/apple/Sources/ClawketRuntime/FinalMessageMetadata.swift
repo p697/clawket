@@ -13,14 +13,17 @@ public struct RuntimeFinalMessageMetadata: Sendable, Equatable {
     public let turnID: String?
     public let inputMessageID: String?
     public let inputMessageKey: String?
+    /// Present envelope/message lineage disagrees; absence alone is not a conflict.
+    public let hasConflictingLineage: Bool
 
     public init(role: RuntimeMessage.Role, providedID: String? = nil, timestampMs: Int64? = nil,
                 attribution: RuntimeMessageAttribution? = nil, transcriptPosition: RuntimeTranscriptPosition? = nil,
                 transcriptBoundary: RuntimeTranscriptBoundary? = nil, turnID: String? = nil,
-                inputMessageID: String? = nil, inputMessageKey: String? = nil) {
+                inputMessageID: String? = nil, inputMessageKey: String? = nil, hasConflictingLineage: Bool = false) {
         self.role = role; self.providedID = providedID; self.timestampMs = timestampMs; self.attribution = attribution
         self.transcriptPosition = transcriptPosition; self.transcriptBoundary = transcriptBoundary
         self.turnID = turnID; self.inputMessageID = inputMessageID; self.inputMessageKey = inputMessageKey
+        self.hasConflictingLineage = hasConflictingLineage
     }
 
     public static func == (left: Self, right: Self) -> Bool {
@@ -28,7 +31,7 @@ public struct RuntimeFinalMessageMetadata: Sendable, Equatable {
             && left.timestampMs == right.timestampMs && left.attribution == right.attribution
             && left.transcriptPosition == right.transcriptPosition && left.transcriptBoundary == right.transcriptBoundary
             && finalIdentityEqual(left.turnID, right.turnID) && finalIdentityEqual(left.inputMessageID, right.inputMessageID)
-            && finalIdentityEqual(left.inputMessageKey, right.inputMessageKey)
+            && finalIdentityEqual(left.inputMessageKey, right.inputMessageKey) && left.hasConflictingLineage == right.hasConflictingLineage
     }
 }
 
@@ -66,7 +69,8 @@ extension RuntimeSessionUpdate {
             transcriptBoundary: HistoryMessageIdentity.boundary(message, backend: backend, role: role),
             turnID: FinalMessageWire.lineage("turnId", raw: raw, message: message),
             inputMessageID: FinalMessageWire.lineage("inputMessageId", raw: raw, message: message),
-            inputMessageKey: FinalMessageWire.lineage("inputMessageKey", raw: raw, message: message))
+            inputMessageKey: FinalMessageWire.lineage("inputMessageKey", raw: raw, message: message),
+            hasConflictingLineage: FinalMessageWire.hasConflictingLineage(raw, message: message))
     }
 
     public func terminalNotice(backend: BackendKind) -> RuntimeTerminalNotice? {
@@ -90,9 +94,19 @@ enum FinalMessageWire {
         return .init(providedID: id, text: text, timestampMs: timestamp(message["timestampMs"]))
     }
 
+    static func hasConflictingLineage(_ raw: JSONValue, message: JSONValue) -> Bool {
+        ["turnId", "inputMessageId", "inputMessageKey"].contains { key in
+            guard let outer = identifier(raw[key]), let inner = identifier(message[key]) else { return false }
+            return !finalIdentityEqual(outer, inner)
+        }
+    }
+
+    private static func identifier(_ value: JSONValue?) -> String? {
+        MessageAttributionWire.identifier(value, maximum: 4_096).flatMap { $0.utf8.count <= 4_096 ? $0 : nil }
+    }
+
     static func lineage(_ key: String, raw: JSONValue, message: JSONValue) -> String? {
-        let outer = MessageAttributionWire.identifier(raw[key], maximum: 4_096).flatMap { $0.utf8.count <= 4_096 ? $0 : nil }
-        let inner = MessageAttributionWire.identifier(message[key], maximum: 4_096).flatMap { $0.utf8.count <= 4_096 ? $0 : nil }
+        let outer = identifier(raw[key]), inner = identifier(message[key])
         if let outer, let inner, !finalIdentityEqual(outer, inner) { return nil }
         return outer ?? inner
     }

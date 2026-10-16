@@ -4,6 +4,7 @@
   - 仅保留实际 final.message 的 providedID/参与者/时钟/真实 transcriptPosition 与 turn/input lineage；OpenClaw 2026.10.2 安装源可保留真实 message，普通 Codex/Claude/Pi/Hermes/local-model live producer 没有消息 ID，明确留 nil，不把 run/turn/段序号当来源。既有 SDK history 生成器直接调用真实 Codex failure producer，并锁定实际 service wrapper，新增三份匿名合成终态向量；不是手机捕获或服务修改。
   - Host 实际文本/final/附件路径改独立 render UUID 与 exact UTF8 run/segment/current epoch 匹配；歧义不选最后一行，已知作者/lineage/source 冲突不赋来源或附件。实际 error terminalMessage 独立 system row，保留已有 partial assistant，旧客户端兼容 assistant 副本仅逐字节相等才抑制；旧 Codex fallback 没有伪造 source ID/Now。五条 Mobile 固定错误文案复用全19语译文，缓存保留原文，非 system 或任意后端 prose 不改。
   - 独占 heavy/jobs2 严格 Swift6：FinalMessageMetadata 六方法/11参数输入、既有 WorkHistory10及RuntimeOperations六方法/12输入逐文件全绿；首轮仅测试 helper 未解包可选 event 名，改为实际 Codex 事件后通过，生产断言/能力未变。Node producer/checker4项全绿含空/错 wrapper/终态损坏反例，租约已释放。十项真实 App 回归与实际接收/媒体消费者已注册 PBX，尚未编译/执行，交本轮完整 CI；跨工具 cumulative prefix、无来源 live/history 精确合并与设备验收仍 pending。
+  - 最终重基已合并工具/花名册 a5ed76b3，保留 typed 工具原文阅读与真实主线206方法；组合实际216方法，PBX54生产/24测试源逐项核存在且无重复，报告下限/215减少反例同步。本地化实际并集422 UI+4用途/19语8,094值；原已标歧义 source 不因另一行移除而升级为唯一 authority。外/内 final lineage 的真实冲突另标 typed flag，保留原 partial 且拒绝冲突 snapshot/source/media，不把冲突压成未知再接受。该组合实际 App 执行仍交精确head CI。
   - 前一 #253 在 current-main 全13绿后合并4f0c0a22并finish：package408（59+349）、实际App193/193、19语7,904值。macOS旧local-model-supervisor并发进程测试单项exit1，保留无额外stderr的固定证据，仅同head失败job重跑一次通过；未改断言/timeout/CLI，不用偶然通过抹去原红。新切片不改Mobile/Bridge/Worker协议、凭据、版本或发行。
 
 - 2026-10-16 Native 工具输出阅读收拢（原生consumer已编译，实际交互交CI/设备验收）。

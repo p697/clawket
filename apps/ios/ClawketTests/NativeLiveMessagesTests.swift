@@ -84,6 +84,13 @@ final class NativeLiveMessagesTests: XCTestCase {
             XCTAssertEqual(document.messages[0].attribution, author); XCTAssertNil(document.messages[0].providedID)
             XCTAssertEqual(document.messages[0].text, "original")
         }
+        var document = NativeConversation(messages: [.init(id: "kept", role: .assistant, text: "partial", runID: "run",
+            segmentID: "paragraph", streaming: true, historyEpoch: epoch, turnID: "A")])
+        XCTAssertNil(finish(&document, metadata: .init(role: .assistant, providedID: "actual-B", hasConflictingLineage: true), attachments: true))
+        XCTAssertNil(document.messages[0].providedID); XCTAssertEqual(document.messages[0].text, "partial")
+        var empty = NativeConversation()
+        XCTAssertNil(finish(&empty, metadata: .init(role: .assistant, hasConflictingLineage: true), attachments: true))
+        XCTAssertTrue(empty.messages.isEmpty)
     }
 
     func testDuplicateActualSourceIDsRemainVisibleAndCannotBecomeUniqueHistoryAuthority() throws {
@@ -94,6 +101,11 @@ final class NativeLiveMessagesTests: XCTestCase {
         XCTAssertEqual(document.messages.count, 2)
         XCTAssertTrue(document.messages.allSatisfy { $0.providedID == "same" && $0.idSource == .ambiguousProvided })
         XCTAssertTrue(document.messages.allSatisfy { NativeHistoryIdentity.stored($0).sourceID == nil })
+        // Removing another row does not turn a formerly ambiguous source into authority.
+        document.messages.removeFirst(); document.messages[0].streaming = true
+        _ = finish(&document, metadata: .init(role: .assistant, providedID: "same"))
+        XCTAssertEqual(document.messages[0].idSource, .ambiguousProvided)
+        XCTAssertNil(NativeHistoryIdentity.stored(document.messages[0]).sourceID)
     }
 
     func testTerminalSystemNoticeKeepsPartialReplyAndReusesItsActualSourceAcrossHistory() throws {
