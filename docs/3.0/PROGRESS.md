@@ -4,6 +4,10 @@
   - #272 exactd6b033a2/basebd312dd7全13项CI绿/current-main/CLEAN后合76bc45b9并finish；actual App314/314零失败/跳过（55.397秒test/77.954秒wall）、package459=59+400、19语两表9082精确编译值。primary既有node_modules保留，开发副本在SSD独占保存。
   - 此生产源码实际WebDriver：402pt中文键盘下仅一个导航Work、body dock消失；中心与四向±19pt坐标均打开工作记录。真实系统Paste的140字符中/日/NFD长草稿在展开→Work→关闭→收起后原UTF8/三资源引用不变；最大字号Work实际AX44×44、Back/标题/Work/More互不重叠，Work与Back→Studio重开均保留草稿。普通字号AX glyph边框较小，不能据源码称44pt已实测；选区/同UIView由独立UIKit回归证明，不冒称WDA已测。
   - 实际toolbar外层Other已有完整Work label/value，但内部装饰checkmark另作“已选择”Button；首候选隐藏装饰glyph并给外层明确button trait，保留原disabled/openIntent。2142473e真实双arch开发编译通过（117.2秒），16指令对/7回归通过；实际WDA外层已Button且label/value正确，但仍有无名子Button，严格断言未过，不能合并。下一候选去掉额外AX容器，属性直接给真实Button，继续真实验证。More早期仅依AX可见/精确文案过滤判未开无效，旧版截图已确认菜单实际打开；三份新XML本身无菜单证据，具体快照时序/可见性原因未证，不据此改toolbar或宣称产品回归。
+  - d793fb2c直接给真实Button属性，实际Dock/Nav各唯一有名Button、完整label/value且无child Button，真实打开Work与Done返回通过；双arch增量开发编译8.5秒。该head全13 CI绿（App314/314零失败/跳过，34.788秒test/37.271秒wall；package459、19语9082编译值），不替代下一组合head门禁。普通字号菜单实际进入连接设置通过；最大字号Work→Done后，经实际点击/新rect中心/固定已见坐标及截图仍无菜单，属于新的真实观察，区别于早期仅AX过滤误判，系统根因未证。
+  - 35daf3bb将Work/More拆成独立ToolbarItem，仅3加1减，不改条件、权限、action、sheet或host。双arch开发编译9.76秒/codesign通过；稳定最大字号+键盘下Work44×44、title/Work/More不叠、无子Button，连续两次真实Work→Done→菜单→连接设置→Done通过。首次字号切换早期快照仍含过渡几何，不计最终44pt/无重叠证明。最终精确head CI及文档收口继续。
+  - 额外一次外部受控合成输入后实际Work→Done→Stop，peer确认accepted增1/aborted增1/active0，连接增1恰为触发client、无额外App重连，原stream间隔已恢复。该窗口Work仍呈既有“已完成”记录，因此不能声称运行中ProgressView/全部工作状态已实测；也不能替代先前真实Hermes Stop失败或Relay/手机/VoiceOver/N5验收。
+  - 最终35daf3bb开发binary冷启普通字号后仅body dock/无键盘、More无空占位；唯一有名dock无child Button，实际Dock→Done→菜单→连接设置→Done通过。Back重开本身保留键盘，故早期roomy断言未过仅为前置条件错误，冷启后才核足高窗口。严格单合成文档原draft hash/三资源顺序与held1/queued0/sending0再核不变。仅自有QA app/WDA已停（runner75）、own模拟器Shutdown，heavy/simulator均释放；既有peer保留，源码/开发副本与证据存SSD。docs16指令对/7回归及diff通过，最终精确head全CI继续。
 
 - 2026-10-16 Native Work 响应式入口（独立候选；RN 保持默认）。
   - 按会话外层实际可用高度响应：小于500pt或展开编辑器时，将同一workID/typed状态/inspect入口移至独立44pt原生导航栏控件，充足时恢复body dock。不按键盘焦点/设备名猜高度，不推断idle或修改host活动/队列/审批/协议；全六状态均保留一个入口，完整AX说明与暂不可用状态复用。
