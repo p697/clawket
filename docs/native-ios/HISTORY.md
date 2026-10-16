@@ -2,6 +2,8 @@
 
 The iOS host keeps three different records: its current working conversation, immutable device-local physical transcript copies, and explicit public saved conversations. None restores backend readiness, send receipts, approvals, model permissions or connection credentials.
 
+Autosave presentation has its own per-route operation UUID, activation and actual-write revision/physical identity. Replacing or explicitly cancelling a scheduled save retires that UUID before waking its storage wait. Expected cancellation and late results cannot publish a draft failure or clear a newer hint. A current real storage failure remains visible; only the latest completed write of the still-current document can clear its own storage hint, leaving replacement media/voice hints intact. Storage transactions, physical gates, files and outbox identities are unchanged. Six host regressions exercise the real conversation-store lock, cancelled replacement writes, actual filesystem failures and verified retry/readback; compilation/execution is reported separately from source review.
+
 ## Physical transcript transactions
 
 `NativeConversationStore` serializes current/rollback reads and writes, voice draft verification, media import recovery, archive rollover and reference snapshots through the same FIFO. `NativeConversation.historyEpoch` is a local storage generation; `physicalSessionID` contains only an actually observed producer value. Both decode as nil in existing v1 documents. Ordinary writes cannot change either identity. Opaque scope components and physical IDs compare by UTF-8 bytes, including canonically equivalent display strings.

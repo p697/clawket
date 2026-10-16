@@ -268,7 +268,7 @@ extension NativeAppModel {
     }
 
     func releaseMediaAfterCommit(_ route: ConversationID, ids: Set<UUID>) {
-        saveTasks[route]?.cancel()
+        cancelScheduledSave(route)
         Task {
             do {
                 try await media?.releaseWhenUnreferenced(ids)

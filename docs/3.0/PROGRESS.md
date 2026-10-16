@@ -1,5 +1,10 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-16 Native autosave 结果归属与取消提示（独立探索；RN 保持默认）。
+  - 修复源码确定可达的竞态：新草稿/流式事件取消一个已进入存储等待的旧 save 时，原 catch 会把 CancellationError 当保存失败并留下提示。现在每 route 冻结操作 UUID、activation 与实际写入 revision/physical identity；取消前退休，旧结果不覆盖新提示。真实当前失败仍显示，只有最新已完成且仍对应当前文档的写入可清自己的存储提示，不清媒体/语音提示，不发送或重放。
+  - 独立 NativeAutosaveTests 六方法复用真实 store FIFO/取消检查和临时目录故障，覆盖三文件/held 原项的真实写读回、取消/替代、当前失败/恢复、其他提示与 A→B→A/epoch/revision 围栏；没有新增测试专用存储接口。重基 993cc686 后源码发现 305 个 App 方法/32 个测试文件，报告下限及 304 缩减反例同步；docs 16 指令对/7 回归、报告 validator 3 回归与 PBX 实路径检查通过。候选 Swift 执行证据待本 head CI；本机未编译、执行 native 测试或使用设备/lease。
+  - 触发调查的合成 QA 快照只证明后来三资源引用已落盘、文件存在；现场当次抛出的错误未捕获，不把可达竞态当已证明现场根因。无 RN、默认入口、共享服务、凭据、发布或同 bundle 升级变更。
+
 - 2026-10-16 Native 根 sheet 交接（独立候选，完整CI执行待续）。
   - 旧QA app实际WebDriver已复现 Settings→内嵌Connections→Add 仍停Settings、连接表单未出现。Add改为关闭真正拥有它的root destination，在实际onDismiss消费精确request/原presentation UUID及activation/selection后打开Connect；重复Add幂等，替换destination取消，Pro续办复用，不再350ms猜关闭时机。
   - 共享生产NativeAppRootView供真实UIKit宿主复用，App独占start/scene观察；destination退休期间root不抢alert，稳定sheet内仍显示错误。notice有独立代次，自动binding nil不等于确认，只有当前owner的冻结OK精确消费，旧相同文案确认不清新提示。认证、device approval、后端/传输、RN默认均不改。
@@ -21,6 +26,7 @@
   - 普通流式更新只换下一次Copy载荷，不重启提示；重复点击取消旧reset且以独立generation隔离，控件移出window/退休即取消。timer只恢复标题，不再次复制/播报/震动。Copied复用Mobile chat既有19语真实译文，加入native catalog与inventory。
   - 独立actual UIKit回归3方法已写：assistant真实fence与最大字号前后同bounds/同按钮及NFC→NFD新正文、tool CRLF字节与pause顺序、可控等待下重复点击/换identity/移出window/禁用空内容。App实际方法并集299、报告minimum与298缩减反例同步；单文件静态核对19语474UI+4权限、16指令对及diff通过，独立只读review无具体blocker。本机heavy/simulator由主线程WebDriver独占，本机未编译或执行候选测试，不把源码断言当已验反馈；负责人授权先由精确head CI执行完整门禁，不抢本机资源。未发行或改生产。
   - PR #266首轮f5f056a6 CI实际编译/执行299方法：assistant最大字号/不挤动/最新字节和tool原文两方法通过；生命周期方法在最后空控件分支有5条断言失败，其余298方法通过。空控件的实际UIKit按钮仍可触发空写；保留全部断言，以专用Copy外层.disabled(empty)明确环境，并在点击处理独立复核enabled/非空载荷，不依赖UIControl属性单独授复制。完整新head门禁继续CI，无本机执行。
+
 
 - 2026-10-16 Native 输入光标与真实 Direct 验收（独立探索继续，React Native 保持默认）。
   - 实际 UIKit 最大字号/三附件/长草稿暴露嵌套滚动裁切：光标几何超过 TextKit 惰性 contentSize，单次异步滚动也早于 viewport 新尺寸落地。现在按 input view 坐标、实际 viewport、输入/选区变化做每请求最多三轮补正；内层可达范围至少含实际光标，外层仍按真实内容限位，不写 contentSize、不退 TextKit1、不改正文/选区/marked text。普通重复 layout 和内外手势不抢回附件阅读。

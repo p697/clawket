@@ -135,6 +135,29 @@ final class NativeAppModel: ObservableObject {
     private var lastNetworkHint: ContinuousClock.Instant?
     private var running: [ConversationID: String] = [:]
     var saveTasks: [ConversationID: Task<Void, Never>] = [:]
+    struct AutosaveWrite {
+        let revision: Int64
+        let epoch: UUID?
+        let physicalID: String?
+        init(_ document: NativeConversation) {
+            revision = document.revision; epoch = document.historyEpoch; physicalID = document.physicalSessionID
+        }
+        func matches(_ document: NativeConversation?) -> Bool {
+            guard let document else { return false }
+            return revision == document.revision && epoch == document.historyEpoch && historySame(physicalID, document.physicalSessionID)
+        }
+    }
+    struct AutosaveAttempt {
+        let id: UUID
+        let activation: UUID
+        var write: AutosaveWrite?
+    }
+    private struct AutosaveFailureHint {
+        let draft: ComposerDraft
+        let text: String
+    }
+    var autosaveAttempts: [ConversationID: AutosaveAttempt] = [:]
+    private var autosaveFailureHints: [ConversationID: AutosaveFailureHint] = [:]
     private var sendTasks: [ConversationID: Task<Void, Never>] = [:]
     private var finishedRuns: [ConversationID: [String]] = [:]
     private var liveRevisions: [ConversationID: Int64] = [:]
@@ -988,7 +1011,7 @@ final class NativeAppModel: ObservableObject {
         document.revision += 1; documents[route] = document
         applyHistoryActivity(history, route: route, earlier: earlier, liveRevision: liveRevision)
         taskJournal?.history(history, route: route, earlier: earlier, acceptedHistoryIDs: projection.acceptedHistoryIDs)
-        updatePresentation(route); saveTasks[route]?.cancel()
+        updatePresentation(route); cancelScheduledSave(route)
         try await persist(route)
         guard activation == activationRevision, wire == wireRevision, historyRevisions[route] == revision else { throw RuntimeFailure(.superseded) }
         if !earlier {
@@ -1526,7 +1549,7 @@ final class NativeAppModel: ObservableObject {
         var updated = original
         try updated.apply(edit, text: text, media: selectedMedia)
         documents[route] = updated; updatePresentation(route)
-        saveTasks[route]?.cancel()
+        cancelScheduledSave(route)
         let released = Set(edit.originalMedia.compactMap(\.resourceID)).subtracting((selectedMedia ?? edit.originalMedia).compactMap(\.resourceID))
         do {
             try await media?.releaseWhenUnreferenced(released)
@@ -1551,14 +1574,49 @@ final class NativeAppModel: ObservableObject {
 
     func changed(_ route: ConversationID) { documents[route]?.revision += 1 }
 
+    func cancelScheduledSave(_ route: ConversationID) {
+        // Retire ownership before cancellation can resume the old actor wait.
+        autosaveAttempts.removeValue(forKey: route)
+        saveTasks.removeValue(forKey: route)?.cancel()
+    }
+
     func scheduleSave(_ route: ConversationID, immediate: Bool = false) {
-        saveTasks[route]?.cancel()
-        saveTasks[route] = Task {
+        cancelScheduledSave(route)
+        let id = UUID(), activation = activationRevision
+        autosaveAttempts[route] = .init(id: id, activation: activation)
+        saveTasks[route] = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                if autosaveAttempts[route]?.id == id {
+                    autosaveAttempts.removeValue(forKey: route); saveTasks.removeValue(forKey: route)
+                }
+            }
             if !immediate { try? await Task.sleep(for: .milliseconds(350)) }
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, autosaveAttempts[route]?.id == id,
+                  autosaveAttempts[route]?.activation == activationRevision else { return }
             guard physicalOperations[NativeHistoryScope(route)] == nil else { return }
-            do { try await persist(route) }
-            catch { presentation.draft(for: route).hint = String(localized: "This draft could not be saved. Keep Clawket open and try again.") }
+            guard let document = documents[route] else { return }
+            autosaveAttempts[route]?.write = AutosaveWrite(document)
+            do {
+                try await persist(route)
+                guard !Task.isCancelled, autosaveAttempts[route]?.id == id,
+                      autosaveAttempts[route]?.activation == activationRevision,
+                      let write = autosaveAttempts[route]?.write, write.matches(documents[route]) else { return }
+                if let failure = autosaveFailureHints.removeValue(forKey: route),
+                   presentation.drafts[route] === failure.draft, failure.draft.hint == failure.text {
+                    failure.draft.hint = nil
+                }
+            } catch {
+                // Cancellation at the store's pre-write checkpoint is an expected
+                // retired operation, not evidence that storage rejected a draft.
+                if error is CancellationError && Task.isCancelled { return }
+                guard autosaveAttempts[route]?.id == id, autosaveAttempts[route]?.activation == activationRevision,
+                      let write = autosaveAttempts[route]?.write, write.matches(documents[route]) else { return }
+                let draft = presentation.draft(for: route)
+                let text = String(localized: "This draft could not be saved. Keep Clawket open and try again.")
+                draft.hint = text
+                autosaveFailureHints[route] = .init(draft: draft, text: text)
+            }
         }
     }
 
@@ -1774,12 +1832,12 @@ final class NativeAppModel: ObservableObject {
             NativePhysicalHistoryPolicy.hold(&document)
             // The durable intent is conservative on a crash between dispatch and ACK.
             document.physicalMutationUnconfirmed = true; document.revision += 1
-            documents[route] = document; saveTasks[route]?.cancel()
+            documents[route] = document; cancelScheduledSave(route)
             try await persist(route, physicalOperation: target.id)
         } else if target.action == .archive, var document = documents[route] {
             guard sendTasks[route] == nil, !mediaSendPreparations.contains(route) else { throw RuntimeFailure(.requestBusy) }
             if try document.holdForSessionMutation() {
-                documents[route] = document; saveTasks[route]?.cancel(); try await persist(route)
+                documents[route] = document; cancelScheduledSave(route); try await persist(route)
             }
         }
         guard target.host.sameConnection(as: sessionHostContext), state.phase == .ready, proPermitsInput(target.route),

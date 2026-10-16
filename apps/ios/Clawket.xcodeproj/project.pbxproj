@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		1105805ECCAD4187B7BCB60F /* NativeSheetHandoffTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8A1FBE5D38349058377C79A /* NativeSheetHandoffTests.swift */; };
+		AF3B279C7FFB4B5B98A7D001 /* NativeAutosaveTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF3B279C7FFB4B5B98A7D002 /* NativeAutosaveTests.swift */; };
 		01F9992A338E02BA7EAA6B60 /* RevenueCat in Frameworks */ = {isa = PBXBuildFile; productRef = 6C47D1E6BA85AB7CC921CB05 /* RevenueCat */; };
 		0574330CD3CC536CC9024757 /* NativePreferencesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA9D050D6BEFAF3FFF804C48 /* NativePreferencesStore.swift */; };
 		0666E5214AE34FA582FA21BC /* ClawketMedia in Frameworks */ = {isa = PBXBuildFile; productRef = B6A6C2405DAB4BAA85179F4E /* ClawketMedia */; };
@@ -139,6 +140,7 @@
 
 /* Begin PBXFileReference section */
 		F8A1FBE5D38349058377C79A /* NativeSheetHandoffTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeSheetHandoffTests.swift; sourceTree = "<group>"; };
+		AF3B279C7FFB4B5B98A7D002 /* NativeAutosaveTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeAutosaveTests.swift; sourceTree = "<group>"; };
 		011A69617709B5C695D9297F /* NativeHistorySharingTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeHistorySharingTests.swift; sourceTree = "<group>"; };
 		0454238B468906AC9C04FD5A /* NativeHistoryWorkOrder.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeHistoryWorkOrder.swift; sourceTree = "<group>"; };
 		0554506F42E9A1B5B5F38950 /* NativeSettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeSettingsView.swift; sourceTree = "<group>"; };
@@ -394,6 +396,7 @@
 		F8EE034C70E7F18A15468525 /* ClawketTests */ = {
 			isa = PBXGroup;
 			children = (
+				AF3B279C7FFB4B5B98A7D002 /* NativeAutosaveTests.swift */,
 				6FF75C712705FEE8D68C249C /* NativeHistoryApplicationTests.swift */,
 				87379612AAFDE5BE9821CD4A /* NativeHistoryReconciliationTests.swift */,
 				A64F710CB5FCC70667CC26AE /* NativeHistoryIdentityTests.swift */,
@@ -573,6 +576,7 @@
 				FC97262FAE513625C28FE893 /* NativeModelPreferencesTests.swift in Sources */,
 				367A5790C5CDA6DAA969E678 /* NativeModelControlsTests.swift in Sources */,
 				0965FDA079959C9465C271AD /* NativeConversationStoreTests.swift in Sources */,
+				AF3B279C7FFB4B5B98A7D001 /* NativeAutosaveTests.swift in Sources */,
 				8B15DDB46A3D105034AC29C6 /* NativeQuestionDraftStoreTests.swift in Sources */,
 				72620A6CA1CBC261C9D08231 /* NativeTaskRequestsTests.swift in Sources */,
 				6AB1932CB11F21EA620C8A3B /* NativeTaskJournalTests.swift in Sources */,
