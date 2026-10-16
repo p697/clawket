@@ -2,8 +2,9 @@
 
 - 2026-10-16 Native Hermes 实时增量语义修复（独立切片；RN 保持默认）。
   - 当前Bridge的`message.delta`经`stream-mapping.ts`只把单fragment放入`chat.delta.message.content`，native却统一按snapshot替换；这能解释实时正文只剩末token，不能据此解释Stop前的generic Alert或宣称Stop已修。仅将Hermes该事件映射为.delta且不带snapshotMetadata；OpenClaw累计snapshot、全量final、SDK textMode、原segment/终态/身份与共享协议均保持。
-  - 新5个纯SPM方法（7个参数化case）用该producer结构的合成帧核Direct/Relay同语义、原空白/NFD/emoji片段、工具段边界、final-only/完整final及实际ID不升级fragment身份；既有App文件新增1方法，将真实SessionEvents.map输出送入NativeLiveMessages，逐段核完整原UTF8、独立render UUID、final替换不重复prefix及草稿不变，不用测试自制append reducer冒充消费者。
-  - fresh main8afa5784独立工作树`codex/native-hermes-live-deltas`，App并集315方法/33文件，minimum315与314缩减反例同步。root独占原生资源，本机尚未编译/测试/操作设备；源码与独立静态复核、轻量检查及完整精确head CI继续。未改Bridge/RN/服务/凭据/版本或发布。
+  - 新6个纯SPM方法（8个参数化case）用该producer结构的合成帧核Direct/Relay同语义、原空白/NFD/emoji片段、工具段边界、final-only/完整final及实际ID不升级fragment身份；既有App文件新增1方法，将真实SessionEvents.map输出送入NativeLiveMessages，核单segment逐token原UTF8、同render UUID、整run fullfinal替换不重复prefix、终态及草稿不变，不用测试自制append reducer冒充消费者。只有Hermes rawdelta绕过累计silentPrefix规则，`NO`→`RMAL`和分片`NO_REPLY`均保原字节，完整final/OC/SDK/subagent规则不改。
+  - 首7c74e584本机5SPM方法/7case、旧App文件11/11与双arch315源码编译已过；root复核指出tool后final夹具只含尾段，未对应真实aggregate，所以该旧窗口不作最终producer/累计证明。App新case已收窄单segment真fullfinal，SPM tool例改用含前段的aggregate并仅断mapper契约；跨tool aggregate如何落到最新段的既有正文归并风险明确保留，未造split/clear规则。
+  - fresh main8afa5784独立工作树`codex/native-hermes-live-deltas`，App并集315方法/33文件，minimum315与314缩减反例同步。已从root接heavy/simulator租约，后续精确增量SPM/该App1方法与开发binary继续，未本机全跑315；两个独立静态复核与docs16对/7回归通过，最终精确head CI仍待。未改Bridge/RN/服务/凭据/版本或发布。
 
 - 2026-10-16 Native Work 组合验收与辅助语义（独立探索；RN 保持默认）。
   - #272 exactd6b033a2/basebd312dd7全13项CI绿/current-main/CLEAN后合76bc45b9并finish；actual App314/314零失败/跳过（55.397秒test/77.954秒wall）、package459=59+400、19语两表9082精确编译值。primary既有node_modules保留，开发副本在SSD独占保存。

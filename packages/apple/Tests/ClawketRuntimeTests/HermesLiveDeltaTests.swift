@@ -68,19 +68,51 @@ struct HermesLiveDeltaTests {
         #expect(Data(try #require(update.inputMessageKey).utf8) == Data("e\u{301}".utf8))
     }
 
+    @Test func hermesFragmentsCannotAuthorizeSilentRepliesWhileOtherFiltersStayUnchanged() throws {
+        var events = SessionEvents()
+        for (index, chunk) in ["NO", "RMAL", " ", "NO", "_", "REPLY", "NO_REPLY"].enumerated() {
+            let update = try text(events.map(chat(chunk, seq: index + 1), connection: connection()))
+            #expect(update.mode == .delta && update.snapshotMetadata == nil)
+            #expect(Data(update.text.utf8) == Data(chunk.utf8))
+        }
+        for backend in [BackendKind.hermes, .openclaw] {
+            var finalOnly = SessionEvents()
+            let final = try finalOnly.map(chat("NO_REPLY", state: "final"), connection: connection(backend))
+            #expect(final.count == 1)
+            guard case .runFinished = try #require(final.first) else {
+                Issue.record("Full-final silent-reply handling changed"); return
+            }
+        }
+        var openClaw = SessionEvents()
+        #expect(try openClaw.map(chat("NO"), connection: connection(.openclaw)).isEmpty)
+        for backend in [BackendKind.codex, .claudeCode, .pi, .localModel] {
+            for mode in ["delta", "snapshot"] {
+                var sdk = SessionEvents()
+                let frame: JSONValue = .object(["type": .string("event"),
+                    "event": .string(try #require(BackendProfile.profile(for: backend).updateEvent)), "payload": .object([
+                        "type": .string("agent_message_chunk"), "runId": .string("fixture-run"),
+                        "sessionKey": .string("main"), "textMode": .string(mode), "text": .string("NO")])])
+                #expect(try sdk.map(frame, connection: connection(backend)).isEmpty)
+            }
+        }
+    }
+
     @Test func hermesToolBoundariesRetainSegmentsAndFinalSnapshotTargetsLatestSegment() throws {
         var events = SessionEvents()
-        let before = try text(events.map(chat("Before tool"), connection: connection()))
+        let before = try text(events.map(chat("Before tool\n"), connection: connection()))
         _ = try events.map(toolStart("fixture-tool-1"), connection: connection())
         let after = try text(events.map(chat("After ", seq: 2), connection: connection()))
         _ = try events.map(toolStart("fixture-tool-1"), connection: connection())
         let tail = try text(events.map(chat("tool", seq: 3), connection: connection()))
         #expect(before.mode == .delta && after.mode == .delta && tail.mode == .delta)
         #expect(before.segmentID != after.segmentID && after.segmentID == tail.segmentID)
-        let completed = try events.map(chat("After tool — final correction", state: "final", seq: 4), connection: connection())
+        // The real producer may return the aggregate of earlier tool segments.
+        // Pin the mapper contract only; this does not prove UI reconciliation.
+        let full = "Before tool\nAfter tool — final correction"
+        let completed = try events.map(chat(full, state: "final", seq: 4), connection: connection())
         #expect(completed.count == 2)
         let final = try text(completed)
-        #expect(final.mode == .snapshot && final.text == "After tool — final correction")
+        #expect(final.mode == .snapshot && final.text == full)
         #expect(final.segmentID == tail.segmentID && final.segmentID != before.segmentID)
         guard case let .runFinished(key, runID, reason, segmentID, _) = completed[1] else {
             Issue.record("Missing authoritative final after the full snapshot"); return
