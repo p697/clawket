@@ -534,10 +534,12 @@ struct NativeConversationView: View {
                 .accessibilityIdentifier("conversation-sessions")
             } else { headerTitle(showChevron: false) }
         }
-        ToolbarItemGroup(placement: .navigationBarTrailing) {
+        ToolbarItem(placement: .navigationBarTrailing) {
             if toolbarWork, let work = conversation.work, work.inspect.isVisible, !work.id.isEmpty {
                 NativeWorkToolbarButton(work: work) { openWork(work) }
             }
+        }
+        ToolbarItem(placement: .navigationBarTrailing) {
             if hasMoreActions {
                 Menu {
                     if conversation.availability(.sessionManagement).isVisible {
