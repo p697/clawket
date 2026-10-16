@@ -650,18 +650,28 @@
       "mobileTerm": null
     },
     {
+      "key": "Copied",
+      "sources": [
+        "packages/apple/Sources/ClawketUI/NativeCopyButton.swift:46"
+      ],
+      "mobileTerm": "chat.Copied"
+    },
+    {
       "key": "Copy",
       "sources": [
         "packages/apple/Sources/ClawketUI/MessageContentView.swift:109",
         "packages/apple/Sources/ClawketUI/MessageContentView.swift:122",
-        "packages/apple/Sources/ClawketUI/MessageContentView.swift:416"
+        "packages/apple/Sources/ClawketUI/MessageContentView.swift:416",
+        "packages/apple/Sources/ClawketUI/NativeCopyButton.swift:20",
+        "packages/apple/Sources/ClawketUI/NativeCopyButton.swift:25",
+        "packages/apple/Sources/ClawketUI/NativeCopyButton.swift:46"
       ],
       "mobileTerm": "config.Copy"
     },
     {
       "key": "Copy code",
       "sources": [
-        "packages/apple/Sources/ClawketUI/MessageContentView.swift:110"
+        "packages/apple/Sources/ClawketUI/MessageContentView.swift:168"
       ],
       "mobileTerm": null
     },

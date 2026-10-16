@@ -130,9 +130,8 @@ struct NativeMessageRow: View {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Spacer(minLength: 0)
-                        NativeTextActionButton(String(localized: "Copy"), accessibilityIdentifier: "copy-tool-output-\(id)") {
+                        NativeCopyButton(text: text, accessibilityIdentifier: "copy-tool-output-\(id)") {
                             onReadingInteraction()
-                            UIPasteboard.general.string = text
                         }
                         .fixedSize(horizontal: false, vertical: true)
                     }
@@ -166,11 +165,9 @@ struct NativeMessageRow: View {
                 Text(language ?? String(localized: "Code")).font(.caption.weight(.medium)).foregroundStyle(.secondary)
                     .lineLimit(1).truncationMode(.tail)
                 Spacer(minLength: 8)
-                NativeTextActionButton(String(localized: "Copy"), accessibilityIdentifier: "copy-code-\(id)") {
+                NativeCopyButton(text: text, accessibilityIdentifier: "copy-code-\(id)", accessibilityLabel: String(localized: "Copy code")) {
                     onReadingInteraction()
-                    UIPasteboard.general.string = text
                 }
-                .accessibilityLabel("Copy code")
                 .disabled(text.isEmpty)
             }
             SelectableMessageText(text: text, monospaced: true, fontSize: model.appearance.chatFontSize,

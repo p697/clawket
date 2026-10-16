@@ -1,5 +1,10 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-16 Native 代码/原文复制反馈（独立候选，执行验证待资源协调）。
+  - 从 fresh bdf98e7b 创建独立工作树，仅代码卡片与 tool 原文 Copy 采用专用 native control；保留旧 AX ID、同按钮对象与最新原UTF8，严格先暂停跟随再写剪贴板，随后短暂 Copied、辅助值/系统播报与成功haptic。两种本地化标题按当前字体共同占位、44pt下限不变；不改 generic voice按钮、RN、协议或服务。
+  - 普通流式更新只换下一次Copy载荷，不重启提示；重复点击取消旧reset且以独立generation隔离，控件移出window/退休即取消。timer只恢复标题，不再次复制/播报/震动。Copied复用Mobile chat既有19语真实译文，加入native catalog与inventory。
+  - 独立actual UIKit回归3方法已写：assistant真实fence与最大字号前后同bounds/同按钮及NFC→NFD新正文、tool CRLF字节与pause顺序、可控等待下重复点击/换identity/移出window/禁用空内容。App实际方法并集299、报告minimum与298缩减反例同步；单文件静态核对19语474UI+4权限、16指令对及diff通过，独立只读review无具体blocker。本机heavy/simulator由主线程WebDriver独占，本候选尚未编译或执行测试，不把源码断言当已验反馈；负责人授权先由精确head CI执行完整门禁，不抢本机资源。未发行或改生产。
+
 - 2026-10-16 Native 输入光标与真实 Direct 验收（独立探索继续，React Native 保持默认）。
   - 实际 UIKit 最大字号/三附件/长草稿暴露嵌套滚动裁切：光标几何超过 TextKit 惰性 contentSize，单次异步滚动也早于 viewport 新尺寸落地。现在按 input view 坐标、实际 viewport、输入/选区变化做每请求最多三轮补正；内层可达范围至少含实际光标，外层仍按真实内容限位，不写 contentSize、不退 TextKit1、不改正文/选区/marked text。普通重复 layout 和内外手势不抢回附件阅读。
   - 新真实 UIWindowScene 回归覆盖340→150→340pt、同UITextView/原draft/selection、手动看附件后layout保持、实际编辑重新可见与中文marked range保留；最终组合窄测通过，旧HEAD生产组件实际编译后跑同case有7个断言失败，负向进程已结束并恢复最终文件。早期候选真实裁切红保留，未放宽可见性断言；一轮失败后的xcode诊断采集进程已终止，后续禁用自动诊断采集。重基代码块主线cc95f9d5，actual App296方法/strict Swift6/iOS16.4双架构开发编译成功，不是本机全跑；最终窄回归与完整精确head门禁分别记录。
