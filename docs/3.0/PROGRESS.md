@@ -7,6 +7,8 @@
   - ffb7a57f 首轮CI的 package/原客户端12门通过；actual App编译定位新测试两处 draftChanged 缺 text: 参数标签，候选测试尚未执行。已修 fixture 的真实 typed intent 调用，保留所有断言，下一精确 head 重新完整门禁；未把编译失败称为验收通过。
   - 41c51ec1 actual CI成功编译并执行306项：299既有及4项新回归通过，3项在相同恢复fixture重开Store时抛 unavailable、尚未进入后续断言。fixture恢复路径此前在普通file占位时构造URL后原样复用；改为新的显式directory URL并清资源属性缓存，不改产品store或断言，精确新head继续门禁。
   - 2c4b2342 actual CI306项中304通过，恢复Store均成功；两条保留的hint清理断言抓到候选只查bound drafts字典、漏public draft(for:)稳定transient值。改用同一真实accessor比较对象与hint mutation，并在现有positive回归分别验证bound/transient；仍七方法/306，精确新head继续门禁，不改产品store或弱化断言。
+  - 0eb73e22 精确head全13 CI绿：actual App306/306零失败/跳过（56.152秒test/90.930秒wall），七项新host回归全部通过；package459=59+400、19语两表9082编译值精确匹配。此为旧base993的执行证据，后续main组合仍单列验证，不用于宣称合成现场原因。
+  - 随 #269 合并重基 e97a171d，保留真实表格pause/reading helper与全部11项布局回归；App实际源码并集307/32文件，报告minimum307与306缩减反例同步。旧head执行证据不代替此新组合，完整精确head CI继续；RN默认/现有接线未变。
   - 触发调查的合成 QA 快照只证明后来三资源引用已落盘、文件存在；现场当次抛出的错误未捕获，不把可达竞态当已证明现场根因。无 RN、默认入口、共享服务、凭据、发布或同 bundle 升级变更。
 
 - 2026-10-16 Native 根 sheet 交接（独立候选，完整CI执行待续）。
