@@ -1,5 +1,13 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-16 Native 真实 Hermes Stop 定位与复验（独立探索；RN 保持默认）。
+  - #274 exactca7f9393/base76bc45b9在current-main/CLEAN、全13 CI绿后合8afa5784并finish；App314/314零失败/跳过（57.765秒test/80.504秒wall）、package459、19语两表9082精确编译值。primary既有node_modules保留，自有开发副本/证据保存在SSD，不发行。工作入口/菜单实际验收边界见下条，不以CI替代真实后端。
+  - 新任务从fresh main独立工作树开始，仅用既有owner QA route与baseline physical/首条自有输入比对。原生registry只在QA独立Keychain，未扫Vault或按剩余Hermes行猜observer身份；未启动原observer或覆写旧结果。独立loopback probe前后各定向history，先确认无活动，单次send，等真实非空delta，再核samephysical/inFlightRun精确归属后唯一次Stop。20秒绝对RPC预算、总145秒、事件只保留本QA的128KiB/256条紧凑类别/布尔，未知不重试，凭据只内存、不输出URL/正文。
+  - 实际独立probe发送1/停止1，7毫秒收到ACK，随后真实aborted且samephysical/hasActiveRun=false，取消通过该桥接窗口。不是Native UI、原Direct、Relay或稳定性证明；先前真实App Stop失败的原因仍未证，没有据此修改超时/认证/服务。后续实际App复验继续，保留原QA草稿与合成Studio资源/held项。
+  - source35（与main8afa的Swift/PBX完全相同）实际App复验：原saved-connection精确ID、导航偏好精确QA route、samephysical和原16字草稿均核对；系统Paste固定非秘密prompt原UTF8/落盘匹配后只点Send一次。被动独立reader在预检noactive后绑定本次唯一新owned input的实际receipt runID，确收该run非空delta，后续Work检查阶段未通过（unknown，控件visible=false）；尚未点Stop，不能称本轮Stop失败。该份XML无Alert节点，稍后截图实际出现Runtime类通用错误提示，不能倒推其准确出现时点；同窗只读head已samephysical/noactive，本地新reply仍1字符/streaming=true。
+  - 两个只读审查确认Hermes生产Bridge转发的是incremental delta，Native却固定.snapshot覆盖；这是1/2字符的确定缺陷，独立#275修复/真mapper→consumer回归继续，不用它解释尚未采到类别的Alert。首次LLDB仅断点位置存在，stdin continue异步后5表达式均process_running，无真实breakpoint hit/typed值，已detach；不是capacity/调用阶段证据，下轮先同步continue并验证真实stop reason。
+  - 未重发/追加Stop。实际系统OK后恢复原16字draft与0refs、held0/queued0/sending0，Studio原空draft/三refs/held1亦不变；私有失败原文档保留。自有QA app/WDA停、runner75、ownSIM Shutdown、两lease释放给#275窄测/开发编译；真实App Stop、提前Alert/stream恢复仍未通过，RN默认/服务/凭据/发布均未变。
+
 - 2026-10-16 Native Hermes 实时增量语义修复（独立切片；RN 保持默认）。
   - 当前Bridge的`message.delta`经`stream-mapping.ts`只把单fragment放入`chat.delta.message.content`，native却统一按snapshot替换；这能解释实时正文只剩末token，不能据此解释Stop前的generic Alert或宣称Stop已修。仅将Hermes该事件映射为.delta且不带snapshotMetadata；OpenClaw累计snapshot、全量final、SDK textMode、原segment/终态/身份与共享协议均保持。
   - 新6个纯SPM方法（8个参数化case）用该producer结构的合成帧核Direct/Relay同语义、原空白/NFD/emoji片段、工具段边界、final-only/完整final及实际ID不升级fragment身份；既有App文件新增1方法，将真实SessionEvents.map输出送入NativeLiveMessages，核单segment逐token原UTF8、同render UUID、整run fullfinal替换不重复prefix、终态及草稿不变，不用测试自制append reducer冒充消费者。只有Hermes rawdelta绕过累计silentPrefix规则，`NO`→`RMAL`和分片`NO_REPLY`均保原字节，完整final/OC/SDK/subagent规则不改。
