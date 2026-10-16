@@ -1,5 +1,10 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-16 Native source-backed snapshot/history handoff（独立候选，尚未编译/执行）。
+  - 只处理实际完整 `chat.message` 累计快照：复用 final/history 的实际消息 ID、role、原UTF8、run/turn/input冲突解析；缺ID、真delta、SDK跨item聚合仍无snapshot来源，不按run/正文猜合并。保留原render UUID、physical gates、媒体目标与owned outbox；RN、默认入口、共享服务与协议均不改。
+  - Live/source与segment候选必须唯一且相容；history-first仅实际当前活动与真实run匹配才有候选资格，只有真正accepted snapshot晋级live。活动/unknown head不回退accepted正文与final媒体；合法final目标明确terminal并拒绝迟snapshot。128条epoch-scoped字节精确歧义记忆保留已观测同source矛盾及unique/empty/cold/reappearance，overflow关闭source join而不驱逐旧证据。typed negative-only结果须持久化歧义但不授正文/journal/running/proof；缺/坏activity不当终态，同时保留实际runId无bool的既有正向契约。
+  - 独立14个App方法、6个SPM方法/参数矩阵已写；本树实际275方法/29测试文件，待UI主线合入后按实际并集更新。只完成PBX语法/路径与diff静态复核，未编译/执行，不占用root的heavy/simulator。实际宿主仍须在重基后携带并原子采用sourceAmbiguity、采用negative-only结果并对running/Stop/queue使用三态activity，之后执行实际host与窄回归和current-head CI；不把候选或合成wire当六后端推理、Relay、手机或完整视觉验收。
+
 - 2026-10-16 Native 独立聊天/UI 打磨与模拟器验收（本地验证完成，精确 head CI 待续）。
   - React Native 默认、源码、Expo/EAS、商店身份与共享服务不变。累计50分钟以上研究记录在 native RESEARCH；本轮收敛为统一输入面板、独立44pt操作、连续图片画廊、稳定上传顺序与明确失败原因。同一 UITextView 保留选区/marked text；键盘可用高度内，附件/正文可滚动，操作固定可达，Work/模型保持真实入口。 最终截图复核发现最大字号文件名截断相似，辅助字号卡片改224pt/两行文件名（普通144pt不变），该增量交精确head CI及后续手势复验。
   - WebDriver仅操作新建独立 iPhone17/iOS27.0合成模拟器；真实App/Runtime/socket接本机受控Hermes兼容peer。实测系统Photos三图顺序/移除/原图、显式粘贴、Files TXT/PDF与冷恢复，修复UIKit先关闭绑定而丢失文件结果；超大/损坏文件明确失败、移除恢复发送且独立草稿保留。真实中文拼音候选跨展开/收起保留，三图发送后清空已接收草稿；最大辅助字号+深色+增强对比+键盘仍有44pt操作，手势到达模型/第三图、模型/工作sheet可打开。Arabic RTL及日/英/中冷启动实际draft值保持。

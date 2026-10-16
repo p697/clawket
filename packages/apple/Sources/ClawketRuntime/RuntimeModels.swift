@@ -251,11 +251,18 @@ public struct RuntimeHistory: Codable, Sendable, Equatable {
     public let thinkingLevel: String?
     /// Physical history identity only when the producer actually supplies sessionId.
     public let sessionID: String?
+    /// Explicit producer activity or a valid scoped run snapshot. The legacy
+    /// hasActiveRun false default is never terminal evidence.
+    public let activeRunEvidence: Bool?
+    /// A validated actual snapshot ID, never a synthetic recovery run name.
+    public var activeRunID: String? { HistoryRunWire.id(activeRun, key: key) }
     public init(key: String, messages: [RuntimeMessage], nextCursor: String?, hasMore: Bool?, pagination: Pagination,
-                hasActiveRun: Bool, activeRun: JSONValue?, thinkingLevel: String? = nil, sessionID: String? = nil) {
+                hasActiveRun: Bool, activeRun: JSONValue?, thinkingLevel: String? = nil, sessionID: String? = nil,
+                activeRunEvidence: Bool? = nil) {
         self.key = key; self.messages = messages; self.nextCursor = nextCursor; self.hasMore = hasMore
         self.pagination = pagination; self.hasActiveRun = hasActiveRun; self.activeRun = activeRun; self.thinkingLevel = thinkingLevel
         self.sessionID = sessionID
+        self.activeRunEvidence = activeRunEvidence
     }
 }
 
@@ -320,10 +327,15 @@ public struct RuntimeTextUpdate: Sendable, Equatable {
     public let turnID: String?
     public let inputMessageID: String?
     public let inputMessageKey: String?
+    /// Actual message metadata only for a complete chat.message snapshot.
+    /// Delta fragments and SDK cross-item aggregates never carry this evidence.
+    public let snapshotMetadata: RuntimeFinalMessageMetadata?
     public init(sessionKey: String, runID: String, segmentID: String, text: String, mode: Mode,
-                turnID: String? = nil, inputMessageID: String? = nil, inputMessageKey: String? = nil) {
+                turnID: String? = nil, inputMessageID: String? = nil, inputMessageKey: String? = nil,
+                snapshotMetadata: RuntimeFinalMessageMetadata? = nil) {
         self.sessionKey = sessionKey; self.runID = runID; self.segmentID = segmentID; self.text = text; self.mode = mode
         self.turnID = turnID; self.inputMessageID = inputMessageID; self.inputMessageKey = inputMessageKey
+        self.snapshotMetadata = snapshotMetadata
     }
 }
 

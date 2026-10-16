@@ -27,21 +27,30 @@ enum NativeHistoryIdentity {
         let locallyOwned: Bool
         let author: Author
         let epoch: UUID?
+        var runID: String? = nil
+        var turnID: String? = nil
+        var inputMessageID: String? = nil
+        var inputMessageKey: String? = nil
+        var attribution: RuntimeMessageAttribution? = nil
     }
 
-    static func incoming(_ message: RuntimeMessage, epoch: UUID?) -> Row {
-        .init(role: message.role, sourceID: message.idSource == .provided ? message.providedID : nil,
+    static func incoming(_ message: RuntimeMessage, epoch: UUID?, sourceAmbiguous: Bool = false) -> Row {
+        .init(role: message.role, sourceID: message.idSource == .provided && !sourceAmbiguous ? message.providedID : nil,
               position: message.transcriptPosition,
-              sendKey: message.idSource == .ambiguousProvided ? nil : message.idempotencyKey,
-              locallyOwned: false, author: author(message.attribution, role: message.role), epoch: epoch)
+              sendKey: message.idSource == .ambiguousProvided || sourceAmbiguous ? nil : message.idempotencyKey,
+              locallyOwned: false, author: author(message.attribution, role: message.role), epoch: epoch,
+              runID: message.runID, turnID: message.turnID,
+              inputMessageID: message.inputMessageID, inputMessageKey: message.inputMessageKey, attribution: message.attribution)
     }
 
-    static func stored(_ message: NativeMessage) -> Row {
-        .init(role: message.role, sourceID: message.idSource == .provided ? message.providedID : nil,
+    static func stored(_ message: NativeMessage, sourceAmbiguous: Bool = false) -> Row {
+        .init(role: message.role, sourceID: message.idSource == .provided && !sourceAmbiguous ? message.providedID : nil,
               position: message.transcriptPosition,
-              sendKey: message.idSource == .ambiguousProvided ? nil : message.idempotencyKey,
+              sendKey: message.idSource == .ambiguousProvided || sourceAmbiguous ? nil : message.idempotencyKey,
               locallyOwned: message.isOwnedUser,
-              author: author(message.attribution, role: message.role), epoch: message.historyEpoch)
+              author: author(message.attribution, role: message.role), epoch: message.historyEpoch,
+              runID: message.runID, turnID: message.turnID,
+              inputMessageID: message.inputMessageID, inputMessageKey: message.inputMessageKey, attribution: message.attribution)
     }
 
     private static func author(_ value: RuntimeMessageAttribution?, role: RuntimeMessage.Role) -> Author {
@@ -54,6 +63,12 @@ enum NativeHistoryIdentity {
     private enum Evidence { case absent, unique(Int), conflict }
     private enum Namespace: Hashable { case provided, position, send }
     private struct Key: Hashable { let epoch: UUID?; let namespace: Namespace; let value: Data }
+
+    /// A source cannot lose its contradictory evidence merely because a head
+    /// will remove the older row. Unknown fields alone are not contradictions.
+    static func sourceCompatible(_ left: Row, _ right: Row) -> Bool {
+        compatible(left, right, allowUnknownSender: !left.locallyOwned && !right.locallyOwned)
+    }
 
     static func matches(incoming: [Row], stored: [Row]) -> [Int: Match] {
         let oldSources = index(stored, key: sourceKey)
@@ -102,6 +117,15 @@ enum NativeHistoryIdentity {
 
     private static func compatible(_ left: Row, _ right: Row, allowUnknownSender: Bool = false) -> Bool {
         guard left.role == right.role, left.epoch == right.epoch else { return false }
+        for (left, right) in [(left.runID, right.runID), (left.turnID, right.turnID),
+                              (left.inputMessageID, right.inputMessageID), (left.inputMessageKey, right.inputMessageKey)] {
+            if left != nil, right != nil, !bytesEqual(left, right) { return false }
+        }
+        if let position = left.position, let previous = right.position, position != previous { return false }
+        if left.role == .assistant, let author = left.attribution, let previous = right.attribution {
+            guard bytesEqual(author.channel, previous.channel), bytesEqual(author.accountID, previous.accountID),
+                  bytesEqual(author.sender?.id, previous.sender?.id) else { return false }
+        }
         // A missing index entry is absence, not permission to contradict known
         // producer/send evidence on the candidate itself.
         if left.sourceID != nil, right.sourceID != nil, !bytesEqual(left.sourceID, right.sourceID) { return false }

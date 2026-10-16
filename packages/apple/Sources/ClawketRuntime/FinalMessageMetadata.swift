@@ -59,18 +59,8 @@ extension RuntimeMessage {
 extension RuntimeSessionUpdate {
     public func finalMessageMetadata(backend: BackendKind) -> RuntimeFinalMessageMetadata? {
         guard case let .runFinished(key, _, _, _, raw) = self,
-              let message = raw["message"], message.object != nil,
-              let role = message["role"]?.stringValue.flatMap(RuntimeMessage.Role.init(rawValue:)) else { return nil }
-        var clock = timestamp(message["timestampMs"] ?? message["timestamp"] ?? message["ts"] ?? message["createdAt"])
-        if backend == .openclaw || backend == .hermes, let value = clock, value > 0, value < 10_000_000_000 { clock = value * 1_000 }
-        return .init(role: role, providedID: HistoryMessageIdentity.provided(message), timestampMs: clock,
-            attribution: MessageAttributionWire.read(message, key: key, backend: backend, role: role),
-            transcriptPosition: HistoryMessageIdentity.position(message, backend: backend),
-            transcriptBoundary: HistoryMessageIdentity.boundary(message, backend: backend, role: role),
-            turnID: FinalMessageWire.lineage("turnId", raw: raw, message: message),
-            inputMessageID: FinalMessageWire.lineage("inputMessageId", raw: raw, message: message),
-            inputMessageKey: FinalMessageWire.lineage("inputMessageKey", raw: raw, message: message),
-            hasConflictingLineage: FinalMessageWire.hasConflictingLineage(raw, message: message))
+              let metadata = FinalMessageWire.metadata(raw, sessionKey: key, backend: backend) else { return nil }
+        return metadata
     }
 
     public func terminalNotice(backend: BackendKind) -> RuntimeTerminalNotice? {
@@ -86,6 +76,22 @@ extension RuntimeSessionUpdate {
 }
 
 enum FinalMessageWire {
+    /// Shared with source-backed chat snapshots; never reads an envelope event/item ID.
+    static func metadata(_ raw: JSONValue, sessionKey: String, backend: BackendKind) -> RuntimeFinalMessageMetadata? {
+        guard let message = raw["message"], message.object != nil,
+              let role = message["role"]?.stringValue.flatMap(RuntimeMessage.Role.init(rawValue:)) else { return nil }
+        var clock = timestamp(message["timestampMs"] ?? message["timestamp"] ?? message["ts"] ?? message["createdAt"])
+        if backend == .openclaw || backend == .hermes, let value = clock, value > 0, value < 10_000_000_000 { clock = value * 1_000 }
+        return .init(role: role, providedID: HistoryMessageIdentity.provided(message), timestampMs: clock,
+            attribution: MessageAttributionWire.read(message, key: sessionKey, backend: backend, role: role),
+            transcriptPosition: HistoryMessageIdentity.position(message, backend: backend),
+            transcriptBoundary: HistoryMessageIdentity.boundary(message, backend: backend, role: role),
+            turnID: FinalMessageWire.lineage("turnId", raw: raw, message: message),
+            inputMessageID: FinalMessageWire.lineage("inputMessageId", raw: raw, message: message),
+            inputMessageKey: FinalMessageWire.lineage("inputMessageKey", raw: raw, message: message),
+            hasConflictingLineage: FinalMessageWire.hasConflictingLineage(raw, message: message))
+    }
+
     static func terminal(_ raw: JSONValue, reason: String) -> RuntimeTerminalNotice? {
         guard reason == "error", let message = raw["terminalMessage"], message["role"]?.stringValue == "system",
               let id = MessageAttributionWire.identifier(message["id"], maximum: 256), id.utf8.count <= 1_024,
@@ -95,7 +101,7 @@ enum FinalMessageWire {
     }
 
     static func hasConflictingLineage(_ raw: JSONValue, message: JSONValue) -> Bool {
-        ["turnId", "inputMessageId", "inputMessageKey"].contains { key in
+        ["runId", "turnId", "inputMessageId", "inputMessageKey"].contains { key in
             guard let outer = identifier(raw[key]), let inner = identifier(message[key]) else { return false }
             return !finalIdentityEqual(outer, inner)
         }

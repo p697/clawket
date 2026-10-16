@@ -3,6 +3,36 @@ import ClawketRuntime
 import Foundation
 
 enum NativeDelivery: String, Codable, Sendable { case queued, held, sending, sent, delivered, uncertain, failed }
+/// Local handoff state only; it grants neither runtime readiness nor outbox ownership.
+enum NativeLiveSnapshotState: String, Codable, Sendable { case historyActive, active, terminal }
+
+/// Bounded source ambiguity survives absent heads within one physical epoch.
+/// Overflow disables source joins rather than evicting known ambiguous IDs.
+struct NativeSourceAmbiguity: Codable, Sendable, Equatable {
+    static let limit = 128
+    var epoch: UUID?
+    var sources: [Data] = []
+    var overflow = false
+    var isValid: Bool { sources.count <= Self.limit && sources.allSatisfy(Self.valid) && Set(sources).count == sources.count }
+
+    func scoped(to epoch: UUID?) -> Self { self.epoch == epoch ? self : .init(epoch: epoch) }
+    func rejects(_ source: String?) -> Bool {
+        guard let source else { return false }
+        return overflow || !isValid
+            || sources.contains(Data(source.utf8))
+    }
+    mutating func remember(_ source: String) {
+        let bytes = Data(source.utf8)
+        guard !overflow, Self.valid(bytes), sources.count <= Self.limit,
+              sources.allSatisfy(Self.valid) else { overflow = true; return }
+        guard !sources.contains(bytes) else { return }
+        guard sources.count < Self.limit else { overflow = true; return }
+        sources.append(bytes)
+    }
+    private static func valid(_ source: Data) -> Bool {
+        !source.isEmpty && source.count <= 4_096 && String(data: source, encoding: .utf8) != nil
+    }
+}
 
 struct NativeMessage: Codable, Sendable, Identifiable, Equatable {
     var id: String
@@ -28,6 +58,7 @@ struct NativeMessage: Codable, Sendable, Identifiable, Equatable {
     var turnID: String?
     var inputMessageID: String?
     var inputMessageKey: String?
+    var liveSnapshotState: NativeLiveSnapshotState?
     var isOwnedUser: Bool { local && role == .user && attribution == nil }
 
     static func == (left: Self, right: Self) -> Bool {
@@ -41,6 +72,7 @@ struct NativeMessage: Codable, Sendable, Identifiable, Equatable {
             && left.media == right.media && left.idSource == right.idSource && left.attribution == right.attribution
             && left.transcriptPosition == right.transcriptPosition && left.transcriptBoundary == right.transcriptBoundary
             && left.historyEpoch == right.historyEpoch && left.sourceRevisionHash == right.sourceRevisionHash
+            && left.liveSnapshotState == right.liveSnapshotState
     }
 
     private static func byteEqual(_ left: String?, _ right: String?) -> Bool {
@@ -64,6 +96,7 @@ struct NativeConversation: Codable, Sendable {
     var historyEpoch: UUID? = nil
     var physicalSessionID: String? = nil
     var physicalMutationUnconfirmed: Bool? = nil
+    var sourceAmbiguity: NativeSourceAmbiguity? = nil
 
     mutating func holdForEditing(messageID: String) throws -> NativePendingEdit {
         guard let index = editableIndex(messageID: messageID), let key = messages[index].idempotencyKey else {

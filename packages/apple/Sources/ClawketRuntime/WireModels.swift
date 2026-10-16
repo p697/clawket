@@ -170,10 +170,30 @@ enum WireModels {
         return RuntimeHistory(key: key, messages: messages, nextCursor: nextCursor,
                               hasMore: payload["hasMore"]?.boolValue, pagination: profile.cursorHistory ? .cursor : .limit,
                               hasActiveRun: payload["sessionInfo"]?["hasActiveRun"]?.boolValue ?? payload["hasActiveRun"]?.boolValue ?? false,
-                              activeRun: payload["activeRun"] ?? payload["inFlightRun"],
+                              activeRun: historyRunSnapshot(payload, key: key),
                               thinkingLevel: payload["thinkingLevel"]?.stringValue.flatMap { ModelControlsWire.levels.contains($0) ? $0 : nil },
                               sessionID: MessageAttributionWire.identifier(payload["sessionId"], maximum: 1_024)
-                                .flatMap { $0.utf8.count <= 1_024 ? $0 : nil })
+                                .flatMap { $0.utf8.count <= 1_024 ? $0 : nil },
+                              activeRunEvidence: historyActivityEvidence(payload, key: key))
+    }
+
+    private static func historyActivityEvidence(_ payload: JSONValue, key: String) -> Bool? {
+        let flags = [payload["sessionInfo"]?["hasActiveRun"], payload["hasActiveRun"]].compactMap { $0 }
+        let runs = [payload["activeRun"], payload["inFlightRun"]].compactMap { $0 }.filter { $0 != .null }
+        let ids = runs.compactMap { HistoryRunWire.id($0, key: key) }
+        if let first = ids.first, ids.contains(where: { !first.utf8.elementsEqual($0.utf8) }) { return nil }
+        // The existing Gateway adapter recovers activity from an actual run ID
+        // when legacy producers omit the optional bool. Nothing else substitutes.
+        if flags.isEmpty { return !runs.isEmpty && ids.count == runs.count ? true : nil }
+        guard flags.allSatisfy({ $0.boolValue != nil }),
+              let value = flags.first?.boolValue, flags.allSatisfy({ $0.boolValue == value }) else { return nil }
+        if !value, !runs.isEmpty { return nil }
+        return value
+    }
+
+    private static func historyRunSnapshot(_ payload: JSONValue, key: String) -> JSONValue? {
+        let runs = [payload["activeRun"], payload["inFlightRun"]].compactMap { $0 }
+        return runs.first(where: { HistoryRunWire.id($0, key: key) != nil }) ?? runs.first
     }
 
     private static func avatar(_ value: JSONValue?, base: URL) -> URL? {
@@ -186,5 +206,16 @@ enum WireModels {
         }
         guard let url = URL(string: text), ["http", "https", "data"].contains(url.scheme?.lowercased() ?? "") else { return nil }
         return url
+    }
+}
+
+enum HistoryRunWire {
+    static func id(_ run: JSONValue?, key: String) -> String? {
+        guard let run, run.object != nil,
+              let id = MessageAttributionWire.identifier(run["runId"], maximum: 256), id.utf8.count <= 256 else { return nil }
+        if let session = run["sessionKey"], session != .null {
+            guard let session = session.stringValue, session.utf8.elementsEqual(key.utf8) else { return nil }
+        }
+        return id
     }
 }

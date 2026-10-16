@@ -8,6 +8,7 @@ enum NativeHistoryReconciliation {
         let identity: NativeHistoryIdentity.Row
         let preserveWhenAbsent: Bool
         let changedAfterRead: Bool
+        var preserveMatchingContent = false
     }
     enum Entry: Equatable {
         case history(index: Int, previous: Int?, id: String)
@@ -37,7 +38,7 @@ enum NativeHistoryReconciliation {
             if let previous = matches[position]?.storedIndex {
                 if earlier { continue }
                 let old = stored[previous]
-                if old.changedAfterRead { base.append(.preserved(index: previous, id: old.id)) }
+                if old.changedAfterRead || old.preserveMatchingContent { base.append(.preserved(index: previous, id: old.id)) }
                 else {
                     base.append(.history(index: position, previous: previous, id: old.id))
                     accepted[position] = old.id

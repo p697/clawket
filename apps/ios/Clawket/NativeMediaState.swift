@@ -149,7 +149,7 @@ extension NativeMessage {
         case id, remoteID, role, local, text, runID, segmentID, idempotencyKey, timestampMs
         case delivery, streaming, isWork, media
         case providedID, idSource, attribution, transcriptPosition, transcriptBoundary, historyEpoch, sourceRevisionHash
-        case turnID, inputMessageID, inputMessageKey
+        case turnID, inputMessageID, inputMessageKey, liveSnapshotState
     }
 
     init(from decoder: any Decoder) throws {
@@ -176,13 +176,15 @@ extension NativeMessage {
             sourceRevisionHash: try values.decodeIfPresent(String.self, forKey: .sourceRevisionHash),
             turnID: try values.decodeIfPresent(String.self, forKey: .turnID),
             inputMessageID: try values.decodeIfPresent(String.self, forKey: .inputMessageID),
-            inputMessageKey: try values.decodeIfPresent(String.self, forKey: .inputMessageKey))
+            inputMessageKey: try values.decodeIfPresent(String.self, forKey: .inputMessageKey),
+            liveSnapshotState: try values.decodeIfPresent(NativeLiveSnapshotState.self, forKey: .liveSnapshotState))
     }
 }
 
 extension NativeConversation {
     enum CodingKeys: String, CodingKey {
         case version, revision, draft, messages, nextCursor, historyLimit, hasMore, draftResourceIDs, historyEpoch, physicalSessionID, physicalMutationUnconfirmed
+        case sourceAmbiguity
     }
 
     init(from decoder: any Decoder) throws {
@@ -197,7 +199,8 @@ extension NativeConversation {
             draftResourceIDs: try values.decodeIfPresent([UUID].self, forKey: .draftResourceIDs) ?? [],
             historyEpoch: try values.decodeIfPresent(UUID.self, forKey: .historyEpoch),
             physicalSessionID: try values.decodeIfPresent(String.self, forKey: .physicalSessionID),
-            physicalMutationUnconfirmed: try values.decodeIfPresent(Bool.self, forKey: .physicalMutationUnconfirmed))
+            physicalMutationUnconfirmed: try values.decodeIfPresent(Bool.self, forKey: .physicalMutationUnconfirmed),
+            sourceAmbiguity: try values.decodeIfPresent(NativeSourceAmbiguity.self, forKey: .sourceAmbiguity))
         try validateMedia()
     }
 
@@ -211,6 +214,7 @@ extension NativeConversation {
         guard version == 1, revision >= 0, revision < 9_007_199_254_740_991, draftResourceIDs.count <= 6,
               Set(draftResourceIDs).count == draftResourceIDs.count,
               physicalSessionID == nil || (!physicalSessionID!.isEmpty && physicalSessionID!.utf8.count <= 2_048),
+              sourceAmbiguity?.isValid != false,
               Set(messages.map(\.id)).count == messages.count else { throw StoreFailure.invalidDocument }
         for message in messages {
             if let digest = message.sourceRevisionHash {

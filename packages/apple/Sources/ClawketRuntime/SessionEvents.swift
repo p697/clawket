@@ -38,7 +38,7 @@ struct SessionEvents: Sendable {
         if event == BackendProfile.profile(for: connection.backendKind).updateEvent {
             return try canonical(payload, connection: connection)
         }
-        if event == "chat" { return try chat(payload) }
+        if event == "chat" { return try chat(payload, backend: connection.backendKind) }
         if event == "agent" { return try agent(payload) }
         if event == "sessions.changed" { return [.other(frame)] }
         return [.other(frame)]
@@ -75,13 +75,15 @@ struct SessionEvents: Sendable {
         }
     }
 
-    private mutating func chat(_ payload: JSONValue) throws -> [RuntimeSessionUpdate] {
+    private mutating func chat(_ payload: JSONValue, backend: BackendKind) throws -> [RuntimeSessionUpdate] {
         guard let runID = payload["runId"]?.nonemptyString,
               let key = payload["sessionKey"]?.nonemptyString else { throw RuntimeFailure(.invalidResponse) }
         try register(runID: runID, sessionKey: key)
+        let metadata = FinalMessageWire.metadata(payload, sessionKey: key, backend: backend)
+            .flatMap { $0.providedID == nil ? nil : $0 }
         switch payload["state"]?.stringValue {
-        case "delta": return textEvent(protocolText(payload["message"]?["content"]), runID: runID, mode: .snapshot, raw: payload)
-        case "final": return complete(runID: runID, reason: "end_turn", raw: payload)
+        case "delta": return textEvent(protocolText(payload["message"]?["content"]), runID: runID, mode: .snapshot, raw: payload, snapshotMetadata: metadata)
+        case "final": return complete(runID: runID, reason: "end_turn", raw: payload, snapshotMetadata: metadata)
         case "aborted": return finish(runID: runID, reason: "cancelled", raw: payload)
         case "error": return finish(runID: runID, reason: "error", raw: payload)
         default: return [.other(payload)]
@@ -111,13 +113,16 @@ struct SessionEvents: Sendable {
         return [.other(payload)]
     }
 
-    private mutating func textEvent(_ text: String, runID: String, mode: RuntimeTextUpdate.Mode, raw: JSONValue) -> [RuntimeSessionUpdate] {
+    private mutating func textEvent(_ text: String, runID: String, mode: RuntimeTextUpdate.Mode, raw: JSONValue,
+                                   snapshotMetadata: RuntimeFinalMessageMetadata? = nil) -> [RuntimeSessionUpdate] {
         let text = openClawArtifacts ? RuntimeAttachmentProjection.stripMediaDirectives(text) : text
         guard var run = runs[Data(runID.utf8)], !run.terminal, !text.isEmpty, !silentPrefix(text) else { return [] }
         run.hasText = true; runs[Data(runID.utf8)] = run
         return [.text(RuntimeTextUpdate(sessionKey: run.sessionKey, runID: runID, segmentID: "\(runID):reply:\(run.segment)",
-                                       text: text, mode: mode, turnID: raw["turnId"]?.stringValue,
-                                       inputMessageID: raw["inputMessageId"]?.stringValue, inputMessageKey: raw["inputMessageKey"]?.stringValue))]
+                                       text: text, mode: mode, turnID: snapshotMetadata == nil ? raw["turnId"]?.stringValue : snapshotMetadata?.turnID,
+                                       inputMessageID: snapshotMetadata == nil ? raw["inputMessageId"]?.stringValue : snapshotMetadata?.inputMessageID,
+                                       inputMessageKey: snapshotMetadata == nil ? raw["inputMessageKey"]?.stringValue : snapshotMetadata?.inputMessageKey,
+                                       snapshotMetadata: snapshotMetadata))]
     }
 
     private mutating func boundary(runID: String, toolID: String?) throws {
@@ -138,7 +143,8 @@ struct SessionEvents: Sendable {
                              segmentID: "\(runID):reply:\(run.segment)", raw: raw)]
     }
 
-    private mutating func complete(runID: String, reason: String, raw: JSONValue) -> [RuntimeSessionUpdate] {
+    private mutating func complete(runID: String, reason: String, raw: JSONValue,
+                                   snapshotMetadata: RuntimeFinalMessageMetadata? = nil) -> [RuntimeSessionUpdate] {
         if FinalMessageWire.hasConflictingLineage(raw, message: raw["message"] ?? .null) {
             return finish(runID: runID, reason: reason, raw: raw)
         }
@@ -149,7 +155,7 @@ struct SessionEvents: Sendable {
             return finish(runID: runID, reason: reason, raw: raw)
         }
         let text = RuntimeAttachmentProjection.displayText(raw["message"] ?? .null, fallback: protocolText(raw["message"]?["content"]), enabled: artifactsEnabled)
-        return textEvent(text, runID: runID, mode: .snapshot, raw: raw) + finish(runID: runID, reason: reason, raw: raw)
+        return textEvent(text, runID: runID, mode: .snapshot, raw: raw, snapshotMetadata: snapshotMetadata) + finish(runID: runID, reason: reason, raw: raw)
     }
 
     private func silentPrefix(_ value: String) -> Bool {
