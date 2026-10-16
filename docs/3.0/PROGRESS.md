@@ -2,7 +2,8 @@
 
 - 2026-10-16 Native autosave 结果归属与取消提示（独立探索；RN 保持默认）。
   - 修复源码确定可达的竞态：新草稿/流式事件取消一个已进入存储等待的旧 save 时，原 catch 会把 CancellationError 当保存失败并留下提示。现在每 route 冻结操作 UUID、activation 与实际写入 revision/physical identity；取消前退休，旧结果不覆盖新提示。真实当前失败仍显示，只有最新已完成且仍对应当前文档的写入可清自己的存储提示，不清媒体/语音提示，不发送或重放。
-  - 独立 NativeAutosaveTests 六方法复用真实 store FIFO/取消检查和临时目录故障，覆盖三文件/held 原项的真实写读回、取消/替代、当前失败/恢复、其他提示与 A→B→A/epoch/revision 围栏；没有新增测试专用存储接口。重基 993cc686 后源码发现 305 个 App 方法/32 个测试文件，报告下限及 304 缩减反例同步；docs 16 指令对/7 回归、报告 validator 3 回归与 PBX 实路径检查通过。候选 Swift 执行证据待本 head CI；本机未编译、执行 native 测试或使用设备/lease。
+  - 独立 NativeAutosaveTests 七方法复用真实 store FIFO/取消检查和临时目录故障，覆盖三文件/held 原项的真实写读回、取消/替代、当前失败/恢复、其他提示与 A→B→A/epoch/revision 围栏；没有新增测试专用存储接口。重基 993cc686 后源码发现 306 个 App 方法/32 个测试文件，报告下限及 305 缩减反例同步；docs 16 指令对/7 回归、报告 validator 3 回归与 PBX 实路径检查通过。候选 Swift 执行证据待本 head CI；本机未编译、执行 native 测试或使用设备/lease。
+  - 只读 peer 抓到并修复两个候选边界：activation 仅隔离迟到提示，不阻止切换前排定的离线草稿写入；ComposerDraft 每次 hint 赋值都有 UUID，同文案的后续 voice 失败也不能被 autosave 清除。七项包含生产 debounce 前切换后的真实磁盘读回与同文案替换反例；候选执行仍交新 head CI。
   - 触发调查的合成 QA 快照只证明后来三资源引用已落盘、文件存在；现场当次抛出的错误未捕获，不把可达竞态当已证明现场根因。无 RN、默认入口、共享服务、凭据、发布或同 bundle 升级变更。
 
 - 2026-10-16 Native 根 sheet 交接（独立候选，完整CI执行待续）。

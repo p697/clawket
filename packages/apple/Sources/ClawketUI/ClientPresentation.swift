@@ -585,7 +585,9 @@ public final class ComposerDraft: ObservableObject {
     }
     @Published public private(set) var editRevision = UUID()
     @Published public var voice: VoicePresentation?
-    @Published public var hint: String?
+    @Published public var hint: String? { didSet { hintRevision = UUID() } }
+    /// Each assignment owns its result, including replacement hints with identical copy.
+    public private(set) var hintRevision = UUID()
     /// A real local outbox insertion, independent from wire delivery or a send-button tap.
     @Published public var acceptedLocalInputID: String?
     /// Explicit host paste/dictation uses the current native selection and undo

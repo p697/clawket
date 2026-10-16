@@ -154,7 +154,7 @@ final class NativeAppModel: ObservableObject {
     }
     private struct AutosaveFailureHint {
         let draft: ComposerDraft
-        let text: String
+        let revision: UUID
     }
     var autosaveAttempts: [ConversationID: AutosaveAttempt] = [:]
     private var autosaveFailureHints: [ConversationID: AutosaveFailureHint] = [:]
@@ -1592,8 +1592,8 @@ final class NativeAppModel: ObservableObject {
                 }
             }
             if !immediate { try? await Task.sleep(for: .milliseconds(350)) }
-            guard !Task.isCancelled, autosaveAttempts[route]?.id == id,
-                  autosaveAttempts[route]?.activation == activationRevision else { return }
+            // A connection switch retires UI result authority, not an offline draft write.
+            guard !Task.isCancelled, autosaveAttempts[route]?.id == id else { return }
             guard physicalOperations[NativeHistoryScope(route)] == nil else { return }
             guard let document = documents[route] else { return }
             autosaveAttempts[route]?.write = AutosaveWrite(document)
@@ -1603,7 +1603,7 @@ final class NativeAppModel: ObservableObject {
                       autosaveAttempts[route]?.activation == activationRevision,
                       let write = autosaveAttempts[route]?.write, write.matches(documents[route]) else { return }
                 if let failure = autosaveFailureHints.removeValue(forKey: route),
-                   presentation.drafts[route] === failure.draft, failure.draft.hint == failure.text {
+                   presentation.drafts[route] === failure.draft, failure.draft.hintRevision == failure.revision {
                     failure.draft.hint = nil
                 }
             } catch {
@@ -1615,7 +1615,7 @@ final class NativeAppModel: ObservableObject {
                 let draft = presentation.draft(for: route)
                 let text = String(localized: "This draft could not be saved. Keep Clawket open and try again.")
                 draft.hint = text
-                autosaveFailureHints[route] = .init(draft: draft, text: text)
+                autosaveFailureHints[route] = .init(draft: draft, revision: draft.hintRevision)
             }
         }
     }
