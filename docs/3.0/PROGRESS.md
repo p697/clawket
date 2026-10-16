@@ -10,7 +10,7 @@
   - #273照片exact3b624260全13CI绿后先合bd312dd7；本候选保留其两新方法/88pt及metadata producer并重基，实际App源码并集314/33文件，minimum314与313缩减拒绝同步。新的两项窄测/组合精确CI待下列执行，不以初稿312或照片312代替314。
   - 重基bd312dd7后租约下窄跑这两方法2/2零失败（5.277秒test/5.285秒wall），保留实际UIKit导航/title/编辑器与reading断言；未本机全跑314。docs16对/7、报告validator3回归、314源码计数/33文件与diff通过。严格单synthetic文档前后同三资源顺序、空draft、held1/queued0/sending0不变，停止自己的QA app；development app按精确source head另作私有handoff，不发行。组合精确head全CI继续，Work入口实际验收由root接续。
 
-- 2026-10-16 Native 紧凑草稿照片（独立探索，本机验收通过，完整CI待续）。
+- 2026-10-16 Native 紧凑草稿照片（独立探索，本机与CI通过，组合验收继续）。
   - 普通字号草稿图改88pt方形，完整名称/大小保留于辅助信息和原生长按Details；文件与224pt大字号卡片仍显示metadata，失败仍显示原因并可查看全文。Remove保持44pt但采用圆形触区以避开图心；tray本体88pt，外部原有间距14pt另计。RN默认/源码不变。
   - 已知image provider、文档扩展类型与相机只传递临时布局hint；原有字节检查、模型/Runtime预检、原始资源/动作ID和选择顺序不改。预览准备保留原显示类型/名称/大小，成功重建补回实际byte count，避免开过一次就丢Details大小。没有据mediaDisplays赋值声称draft spinner已发布。
   - 新actual NativeComposer宿主方法检查402pt三图非空完整容纳、preparing→ready同UITextView/原UTF8/选区，另保留大字号横滚和文件metadata高度。已有宿主投影回归补image hint/default file/准备不授预览；初稿App并集311方法/33文件；初稿仅静态计数，后续执行与WebDriver证据见下。
@@ -19,6 +19,8 @@
   - 实际系统Photos只选已知首张fixture，3→4引用后真实横拖使新增Remove全触区可见，实际删除恢复原三引用；实际Files选45B无效PNG触发失败、Send禁用，点完整原因alert见原名/完整固定原因，系统OK与Remove后Send恢复。两流程原中英文draft与held1不变；从未点Send/重放held。未知命令/反向scroll未作有效拖动，最终实际坐标drag及完整结果另有私有证据。真实后端/手机/VoiceOver与N5仍未完成，RN默认未改。
   - 收口补实际prepared类型的原名/bytes/.preparing display缓存并显式启动原loadMediaDisplay，避免已知file从144→88→144；未知cold资源默认file占位，待实际inspection，未承诺冷恢复未知图无尺寸变化。新增实际host同步占位回归，最终App并集312/33files，minimum312/311反例；最终生产与312测试源码双架构开发编译通过（17.06秒wall），该新项和既有顺序投影2/2实际通过（0.846秒test/37.27秒wall），并非全跑312。
   - 最终typed开发二进制另用实际Files导入397B TXT：144×84文件预览及可见原名/397字节、完整原文件预览、返回后bytes、实际Remove全部通过，恢复原三resource引用和原draft hash。最终严格单文档再核held1/queued0/sending0，测试中英文文字已只清自己恢复原草稿、剪贴板恢复非秘密中性文字。自有App/WDA退出75、own模拟器Shutdown并释放simulator；未碰既有两合成peer。只记录通过窗口，首次脚本漏空格的本地化byte等值断言不计产品失败；完整CI仍待本分支最终head。
+
+  - #273 exact3b624260/base2a0ba53c 在current-main/CLEAN、全13项CI绿后合为bd312dd7；actual App312/312零失败/跳过（49.446秒test/95.573秒wall）。finish已ff primary并移除工作树/分支，既有node_modules保留。完整UI/真实后端/手机网络/VoiceOver与N5仍待，接续响应式工作入口的组合验收；RN默认、共享服务、商店身份与发布不变。
 
 - 2026-10-16 Native Direct SecureField 非秘密输入对照（独立诊断；RN 保持默认）。
   - 在独立工作树复用已验证的 `451f7318` development app 与唯一指定 QA 模拟器，私有 loopback canary 每次 fresh scope 发真实 OpenClaw challenge，只内存比较固定非秘密 ASCII token，固定拒绝并关闭，不连真 Gateway、不授 ready、不收 chat/session；结果仅固定分类/计数，无 token/hash/请求 ID/URL。
