@@ -33,3 +33,21 @@ On the `0f648ece` development app, a private loopback application-frame observer
 This observer terminates two WebSocket connections and uses a new local URL and credential scope. Its results diagnose those attempts only; they are not successful original-Direct, Relay or connection-stability acceptance. The private Hermes observer received no eligible Stop transaction, so it adds no cancellation evidence. Both diagnostic observers were stopped after preserving their bounded metadata results.
 
 A separate loopback canary subsequently exercised the same native form and actual connect serialization using only a fixed, non-secret ASCII input. It always rejects authentication and never connects to a Gateway. Its initial two attempts recorded a shorter alphanumeric token after synthetic typing and a missing token after the system Paste attempt. Neither passed. Masked accessibility values and successful WebDriver commands cannot establish the submitted value; native input, binding and automation remain under investigation. No real credential was placed on the clipboard or changed, and these canary results do not establish a backend defect.
+
+## Nonsecret SecureField input comparison
+
+A later isolated check used the existing `451f7318` development app, the dedicated QA simulator and a separate loopback canary peer. Each comparison used a fresh connection scope and a fixed nonsecret ASCII value. The peer sent the actual OpenClaw challenge, compared only `connect.auth.token` in memory, returned a fixed authentication rejection and closed. It never connected to a real Gateway, returned ready or accepted a chat/session request. Private results contain fixed comparison categories and counts, without token values, hashes, request IDs or URLs.
+
+The address field matched the canary endpoint before every submission. A read-only debugger observation selected exactly one visible native `UITextField` with the token identifier and returned equality/field-state metadata only; every observation detached before the UI continued. These are actual controls in the unchanged form, rather than accessibility-mask lengths or a replacement test form.
+
+| Input path | Native token text before Connect | Actual connect token |
+|---|---|---|
+| WebDriver batch typing at frequency 10 | Not equal to the canary | Shorter; alphanumeric |
+| WebDriver character-by-character keys | Not equal to the canary | Shorter; alphanumeric |
+| WebDriver pasteboard write followed by the actual system Paste menu item | Exactly equal to the canary | Exact match; alphanumeric |
+
+All three native observations found secure entry, the default keyboard type and no marked text. The successful Paste path used the real edit-menu `MenuItem`; neither opening a menu nor accepting a pasteboard command alone counted as insertion. An earlier unverified simulator-pasteboard attempt and a preliminary reproduction without a usable debugger result add no successful input evidence.
+
+In these tested windows, incomplete keyboard input already existed in UIKit before submission. The full native-text/Paste-to-wire match provides no evidence of serialization truncation and does not justify changing authentication or requiring an ASCII keyboard. It does not establish the exact input/automation mechanism, validate every ordinary human or hardware-keyboard path, or turn the earlier real OpenClaw rejection into successful Direct authentication. Those acceptance items remain pending.
+
+The synthetic Studio connection was selected again through the actual UI. An exact, independently guarded synthetic-document read confirmed the same route, three draft resources, one held item and no queued/sending items. The QA app, owned canary and WebDriver runner were stopped, the dedicated simulator shut down and both exclusive leases released; the existing synthetic peers were left running. No Swift source, credentials, shared services, React Native defaults or release configuration changed, and no native build or test suite was run locally for this diagnostic.

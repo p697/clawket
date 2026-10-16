@@ -1,5 +1,11 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-16 Native Direct SecureField 非秘密输入对照（独立诊断；RN 保持默认）。
+  - 在独立工作树复用已验证的 `451f7318` development app 与唯一指定 QA 模拟器，私有 loopback canary 每次 fresh scope 发真实 OpenClaw challenge，只内存比较固定非秘密 ASCII token，固定拒绝并关闭，不连真 Gateway、不授 ready、不收 chat/session；结果仅固定分类/计数，无 token/hash/请求 ID/URL。
+  - 三组提交前真实 UIKit/实际 wire 对照：WDA 批次频率10与逐字 keys 的唯一可见 token UITextField 均 nativeExact=false，随后 wire 均 shorter/alphanumeric；由 WDA 写非秘密 pasteboard 并点击真实系统 MenuItem「粘贴」后 nativeExact=true，wire=match/alphanumeric。三组均 secure/default keyboard/marked=false，调试器每次明确 detach；地址控件每次精确匹配独立 canary endpoint。早期未验证的 pasteboard/无有效 debugger 结果不算成功对照。
+  - 这定位了本轮不完整输入在 UIKit 提交前已存在，完整 Paste 原生→wire 对照不支持序列化截断或盲改认证/ASCII keyboard；未独自证明全部人工/硬件键入都正常，也未确定输入法/自动化的具体机制，真实 OpenClaw Direct 仍未通过。不改 Swift/认证/凭据/共享服务或默认客户端。
+  - 实际 UI 已返 Studio；严格固定 synthetic 文档读取再次确认 same route、3 draft refs、held1/queued0/sending0。自有 NativeQA/canary/WDA 全停、LLDB 进程0、own simulator Shutdown、heavy/simulator 两租约释放，既有两个 synthetic peer 保留。仅私有 owner600 工具与本记录；本机未编译或运行 native suite。文档检查16指令对/7回归与diff通过，完整精确head门禁交本PR。
+
 - 2026-10-16 Native 预览修复闭环与连接表单诊断继续。
   - #269 exact451f7318在current-main全13门禁绿后合e97a171d并finish：actual App300/300零失败/跳过（52.846秒test/88.685秒wall）、package459=59+400、19语9082精确编译值。开发app及私有证据已保存在SSD；primary仅保留既有node_modules，RN默认/源码、商店身份、共享服务与发布均不变。
   - #268 exact48b42844/basee97在current-main/CLEAN及全13 CI绿后合78fbf034并finish：actual App303/303零失败/跳过（37.802秒test/47.498秒wall），新增3方法均过；package459=59+400、19语两表9082精确编译值。真实UIKit宿主证明生产root/helper的sheet交接、external notice=nil后的实际UIAlert消失及Settings重开；不是实际点系统OK/VoiceOver或连接后端，旧gear暂态原因仍未证。
