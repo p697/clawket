@@ -374,6 +374,127 @@ final class NativeLiveSnapshotIdentityTests: XCTestCase {
     }
 
     @MainActor
+    func testActualHostPersistsRejectedSourceEvidenceWithoutRunActivityOrStreamingProofAndAcceptsValidText() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("snapshot-host-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        var capabilities = RuntimeCapabilities(); capabilities.chat = true; capabilities.abort = true
+        let queued = NativeMessage(id: "owned", role: .user, local: true, text: "Queued", idempotencyKey: "owned-key",
+            delivery: .queued, historyEpoch: epoch)
+        let cached = NativeMessage(id: "display", role: .assistant, text: "Cached body", runID: "run", segmentID: "segment",
+            streaming: true, providedID: "source", idSource: .provided, historyEpoch: epoch,
+            turnID: "turn", inputMessageID: "input", inputMessageKey: "key", liveSnapshotState: .active)
+        let seed = NativeConversation(revision: 10, draft: "Independent draft", messages: [queued, cached], historyEpoch: epoch)
+        let model = NativeAppModel()
+        model.cache = try NativeConversationStore(directory: directory.appendingPathComponent("negative"))
+        model.state = .init(connectionID: route.connectionID, phase: .ready, capabilities: capabilities)
+        model.documents[route] = seed
+        XCTAssertFalse(model.present(cached, agentName: "Agent", route: route).isStreaming)
+        XCTAssertEqual(model.adoptIncomingLiveText(update("Rejected body", turn: "conflicting-turn"), route: route), .sourceAmbiguityChanged)
+        let adopted = try XCTUnwrap(model.documents[route])
+        XCTAssertEqual(adopted.messages.map(\.id), seed.messages.map(\.id))
+        XCTAssertEqual(adopted.messages.map(\.text), seed.messages.map(\.text))
+        XCTAssertEqual(adopted.messages[0], queued); XCTAssertEqual(adopted.draft, seed.draft)
+        XCTAssertEqual(adopted.revision, seed.revision + 1)
+        XCTAssertTrue(adopted.sourceAmbiguity?.rejects("source") == true)
+        XCTAssertEqual(adopted.messages[1].idSource, .ambiguousProvided)
+        let negativeUI = try XCTUnwrap(model.presentation.conversations[route])
+        XCTAssertEqual(negativeUI.sendLabel, String(localized: "Send"))
+        XCTAssertFalse(negativeUI.availability(.stop).isVisible)
+        XCTAssertFalse(negativeUI.messages.contains(where: \.isStreaming))
+        let negativeSave = try XCTUnwrap(model.saveTasks[route]); await negativeSave.value
+        let reopened = try NativeConversationStore(directory: directory.appendingPathComponent("negative"))
+        let saved = try await reopened.read(connectionID: route.connectionID, agentID: route.agentID, sessionID: route.sessionID)
+        XCTAssertTrue(saved.sourceAmbiguity?.rejects("source") == true)
+        XCTAssertEqual(saved.messages.map(\.id), seed.messages.map(\.id))
+        XCTAssertEqual(saved.messages.map(\.text), seed.messages.map(\.text))
+        XCTAssertEqual(saved.messages[0].idempotencyKey, queued.idempotencyKey)
+        XCTAssertEqual(saved.messages[0].delivery, .held) // Existing cold-recovery rule, never a dispatch.
+        XCTAssertEqual(saved.draft, seed.draft)
+        model.saveTasks.removeValue(forKey: route)
+        XCTAssertEqual(model.adoptIncomingLiveText(update("Still rejected"), route: route), .rejected)
+        XCTAssertEqual(model.documents[route]?.revision, adopted.revision); XCTAssertNil(model.saveTasks[route])
+
+        let positive = NativeAppModel()
+        positive.cache = try NativeConversationStore(directory: directory.appendingPathComponent("positive"))
+        positive.state = model.state
+        var historyFirst = seed
+        historyFirst.messages[1].streaming = false; historyFirst.messages[1].segmentID = nil
+        historyFirst.messages[1].liveSnapshotState = .historyActive
+        positive.documents[route] = historyFirst
+        XCTAssertEqual(positive.adoptIncomingLiveText(update("Accepted complete body"), route: route), .accepted)
+        let accepted = try XCTUnwrap(positive.documents[route])
+        XCTAssertEqual(accepted.messages.map(\.id), seed.messages.map(\.id))
+        XCTAssertEqual(accepted.messages[0], queued); XCTAssertEqual(accepted.messages[1].text, "Accepted complete body")
+        XCTAssertTrue(positive.present(accepted.messages[1], agentName: "Agent", route: route).isStreaming)
+        let positiveUI = try XCTUnwrap(positive.presentation.conversations[route])
+        XCTAssertEqual(positiveUI.sendLabel, String(localized: "Add to queue"))
+        XCTAssertTrue(positiveUI.availability(.stop).isVisible)
+        let positiveSave = try XCTUnwrap(positive.saveTasks[route]); await positiveSave.value
+    }
+
+    @MainActor
+    func testActualHostUnknownHistoryActivityPreservesStopQueueAndDraftUntilExplicitTerminalEvidence() throws {
+        var capabilities = RuntimeCapabilities(); capabilities.chat = true; capabilities.abort = true
+        let model = NativeAppModel()
+        model.state = .init(connectionID: route.connectionID, phase: .ready, capabilities: capabilities)
+        let queued = NativeMessage(id: "queued", role: .user, local: true, text: "Next input", idempotencyKey: "next-key",
+            delivery: .queued, historyEpoch: epoch)
+        model.documents[route] = .init(draft: "Third independent input", messages: [queued], historyEpoch: epoch)
+        let positive = RuntimeHistory(key: route.sessionID, messages: [], nextCursor: nil, hasMore: false, pagination: .limit,
+            hasActiveRun: false, activeRun: .object(["runId": .string("actual-run")]), activeRunEvidence: true)
+        model.applyHistoryActivity(positive, route: route, earlier: false, liveRevision: 0)
+        model.updatePresentation(route)
+        XCTAssertEqual(model.presentation.conversations[route]?.sendLabel, String(localized: "Add to queue"))
+        XCTAssertTrue(try XCTUnwrap(model.presentation.conversations[route]).availability(.stop).isVisible)
+        let unknowns = [
+            RuntimeHistory(key: route.sessionID, messages: [], nextCursor: nil, hasMore: false, pagination: .limit,
+                hasActiveRun: false, activeRun: nil),
+            RuntimeHistory(key: route.sessionID, messages: [], nextCursor: nil, hasMore: false, pagination: .limit,
+                hasActiveRun: false, activeRun: .object(["runId": .string("conflicting-run")]), activeRunEvidence: nil)
+        ]
+        for history in unknowns {
+            model.applyHistoryActivity(history, route: route, earlier: false, liveRevision: 0)
+            model.updatePresentation(route)
+            let ui = try XCTUnwrap(model.presentation.conversations[route])
+            XCTAssertEqual(ui.sendLabel, String(localized: "Add to queue")); XCTAssertTrue(ui.availability(.stop).isVisible)
+            XCTAssertEqual(model.documents[route]?.messages, [queued])
+            XCTAssertEqual(model.documents[route]?.draft, "Third independent input")
+        }
+        let terminal = RuntimeHistory(key: route.sessionID, messages: [], nextCursor: nil, hasMore: false, pagination: .limit,
+            hasActiveRun: false, activeRun: nil, activeRunEvidence: false)
+        model.applyHistoryActivity(terminal, route: route, earlier: false, liveRevision: 0)
+        model.updatePresentation(route)
+        XCTAssertEqual(model.presentation.conversations[route]?.sendLabel, String(localized: "Send"))
+        XCTAssertFalse(try XCTUnwrap(model.presentation.conversations[route]).availability(.stop).isVisible)
+        XCTAssertEqual(model.documents[route]?.messages, [queued]); XCTAssertEqual(model.documents[route]?.draft, "Third independent input")
+    }
+
+    @MainActor
+    func testActualHostEarlierOrStaleActivityCannotRetireAcceptedLiveRunAndNegativeOnlyDoesNotAdvanceLiveRevision() throws {
+        var capabilities = RuntimeCapabilities(); capabilities.chat = true; capabilities.abort = true
+        let model = NativeAppModel()
+        model.state = .init(connectionID: route.connectionID, phase: .ready, capabilities: capabilities)
+        model.documents[route] = .init(historyEpoch: epoch)
+        XCTAssertEqual(model.adoptIncomingLiveText(update("Accepted body"), route: route), .accepted)
+        defer { model.saveTasks.values.forEach { $0.cancel() } }
+        let terminal = RuntimeHistory(key: route.sessionID, messages: [], nextCursor: nil, hasMore: false, pagination: .limit,
+            hasActiveRun: false, activeRun: nil, activeRunEvidence: false)
+        for (earlier, revision) in [(false, Int64(0)), (true, Int64(1))] {
+            model.applyHistoryActivity(terminal, route: route, earlier: earlier, liveRevision: revision)
+            model.updatePresentation(route)
+            XCTAssertEqual(model.presentation.conversations[route]?.sendLabel, String(localized: "Add to queue"))
+            XCTAssertTrue(try XCTUnwrap(model.presentation.conversations[route]).availability(.stop).isVisible)
+        }
+        XCTAssertEqual(model.adoptIncomingLiveText(update("Rejected contradiction", turn: "different"), route: route), .sourceAmbiguityChanged)
+        model.applyHistoryActivity(terminal, route: route, earlier: false, liveRevision: 1)
+        model.updatePresentation(route)
+        XCTAssertEqual(model.presentation.conversations[route]?.sendLabel, String(localized: "Send"))
+        XCTAssertFalse(try XCTUnwrap(model.presentation.conversations[route]).availability(.stop).isVisible)
+        XCTAssertEqual(model.documents[route]?.messages.map(\.text), ["Accepted body"])
+        XCTAssertTrue(model.documents[route]?.sourceAmbiguity?.rejects("source") == true)
+    }
+
+    @MainActor
     func testSnapshotHandoffPreservesLocalOutboxMediaTargetsAndLegacyCacheDecoding() throws {
         let old = try JSONDecoder().decode(NativeMessage.self, from: Data(#"{"id":"old","role":"assistant","text":"cache"}"#.utf8))
         XCTAssertNil(old.liveSnapshotState)

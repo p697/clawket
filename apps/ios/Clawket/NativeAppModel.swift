@@ -926,7 +926,8 @@ final class NativeAppModel: ObservableObject {
         }
         guard var document = documents[route] else { throw RuntimeFailure(.superseded) }
         let projection = try NativeHistoryApplication.prepare(history, stored: document.messages,
-            readSnapshot: readSnapshot, epoch: document.historyEpoch, route: route, earlier: earlier)
+            readSnapshot: readSnapshot, epoch: document.historyEpoch, route: route, earlier: earlier,
+            sourceAmbiguity: document.sourceAmbiguity)
         // A release intent must be durable before any consumer can save a document
         // that drops the old reference. A concurrent edit/live event keeps that
         // reference and makes this read stale, including across the journal await.
@@ -938,12 +939,10 @@ final class NativeAppModel: ObservableObject {
               documents[route]?.revision == document.revision else { throw RuntimeFailure(.superseded) }
         retireChangedHistoryMedia(old: document.messages, new: projection.messages)
         document.messages = projection.messages
+        document.sourceAmbiguity = projection.sourceAmbiguity
         document.nextCursor = history.nextCursor; document.hasMore = history.hasMore ?? false
         document.revision += 1; documents[route] = document
-        if !earlier, liveRevisions[route, default: 0] == liveRevision {
-            if history.hasActiveRun { running[route] = history.activeRun?["runId"]?.stringValue ?? running[route] ?? "" }
-            else { running.removeValue(forKey: route) }
-        }
+        applyHistoryActivity(history, route: route, earlier: earlier, liveRevision: liveRevision)
         taskJournal?.history(history, route: route, earlier: earlier, acceptedHistoryIDs: projection.acceptedHistoryIDs)
         updatePresentation(route); saveTasks[route]?.cancel()
         try await persist(route)
@@ -955,11 +954,23 @@ final class NativeAppModel: ObservableObject {
             }
             physicalReady.insert(scope); taskRequests?.refresh(route: route); updatePresentation(route)
         }
-        if !earlier, history.hasActiveRun, let runID = history.activeRun?["runId"]?.stringValue {
+        if !earlier, history.activeRunEvidence == true, let runID = history.activeRunID {
             physicalLiveEvidence[NativeHistoryScope(route)]?.admit(runID)
         }
         hydrateHistoryMedia(history, route: route, acceptedHistoryIDs: projection.acceptedHistoryIDs)
         if !projection.retiringResources.isEmpty, let media, let cache { try await media.reclaim(cache: cache) }
+    }
+
+    /// A missing compatibility flag cannot retire an observed current run.
+    /// Older pages and heads captured before accepted live text remain inert.
+    func applyHistoryActivity(_ history: RuntimeHistory, route: ConversationID, earlier: Bool, liveRevision: Int64) {
+        guard !earlier, historySame(history.key, route.sessionID), documents[route] != nil,
+              liveRevisions[route, default: 0] == liveRevision else { return }
+        switch history.activeRunEvidence {
+        case true: running[route] = history.activeRunID ?? running[route] ?? ""
+        case false: running.removeValue(forKey: route)
+        case nil: break
+        }
     }
 
     private func loadEarlier(_ route: ConversationID) {
@@ -1174,15 +1185,7 @@ final class NativeAppModel: ObservableObject {
         case let .text(update):
             for route in documents.keys where historySame(route.connectionID, connectionID) && historySame(route.sessionID, update.sessionKey) {
                 guard acceptPhysicalLive(route, runID: update.runID, inputKey: update.inputMessageKey) else { continue }
-                taskJournal?.text(update, route: route)
-                liveRevisions[route, default: 0] += 1
-                guard var document = documents[route] else { continue }
-                let previous = document.messages
-                let epoch = document.historyEpoch
-                guard applyLiveText(update, in: &document, route: route, epoch: epoch) else { continue }
-                retireChangedHistoryMedia(old: previous, new: document.messages)
-                documents[route] = document
-                running[route] = update.runID; changed(route); updatePresentation(route); scheduleSave(route)
+                adoptIncomingLiveText(update, route: route)
             }
         case let .runFinished(key, runID, reason, segmentID, _):
             for route in documents.keys where historySame(route.connectionID, connectionID) && historySame(route.sessionID, key) {
@@ -1375,20 +1378,45 @@ final class NativeAppModel: ObservableObject {
     /// Keep persisted segment state intact so resumed text still updates its row.
     func applyLiveText(_ update: RuntimeTextUpdate, in document: inout NativeConversation,
                        route: ConversationID, epoch: UUID?) -> Bool {
-        guard NativeLiveMessages.text(update, in: &document, epoch: epoch) else { return false }
+        reduceLiveText(update, in: &document, route: route, epoch: epoch) == .accepted
+    }
+
+    @discardableResult
+    func adoptIncomingLiveText(_ update: RuntimeTextUpdate, route: ConversationID) -> NativeLiveMessages.TextReduction {
+        guard historySame(update.sessionKey, route.sessionID), var document = documents[route] else { return .rejected }
+        let previous = document.messages
+        let epoch = document.historyEpoch
+        let result = reduceLiveText(update, in: &document, route: route, epoch: epoch)
+        guard result != .rejected else { return result }
+        if result == .accepted {
+            taskJournal?.text(update, route: route)
+            liveRevisions[route, default: 0] += 1
+            retireChangedHistoryMedia(old: previous, new: document.messages)
+            running[route] = update.runID
+        }
+        // Negative provenance is durable, but is never accepted text/activity.
+        documents[route] = document
+        changed(route); updatePresentation(route); scheduleSave(route)
+        return result
+    }
+
+    private func reduceLiveText(_ update: RuntimeTextUpdate, in document: inout NativeConversation,
+                                route: ConversationID, epoch: UUID?) -> NativeLiveMessages.TextReduction {
+        let result = NativeLiveMessages.reduceText(update, in: &document, epoch: epoch)
+        guard result == .accepted else { return result }
         if streamingPresentationWire != wireRevision {
             streamingPresentationRows.removeAll(); streamingPresentationWire = wireRevision
         }
         let live = document.messages.filter { $0.historyEpoch == epoch && $0.role == .assistant && !$0.local && $0.streaming }
         let matches = live.filter { historySame($0.runID, update.runID) && historySame($0.segmentID, update.segmentID) }
-        guard matches.count == 1, let row = matches.first else { return true }
+        guard matches.count == 1, let row = matches.first else { return result }
         if streamingPresentationRows[route] == nil && streamingPresentationRows.count >= 128 { streamingPresentationRows.removeAll() }
         let current = Set(live.map { Data($0.id.utf8) })
         var ids = streamingPresentationRows[route].flatMap { $0.epoch == epoch ? $0.ids : nil } ?? []
         ids.formIntersection(current)
         if ids.count >= 256 { ids.removeAll() }
         ids.insert(Data(row.id.utf8)); streamingPresentationRows[route] = (epoch, ids)
-        return true
+        return result
     }
 
     private func presentsLiveStreaming(_ message: NativeMessage, route: ConversationID?) -> Bool {

@@ -1,9 +1,11 @@
 # PROGRESS · Clawket 3.0 进度日志
 
-- 2026-10-16 Native source-backed snapshot/history handoff（独立候选，尚未编译/执行）。
+- 2026-10-16 Native source-backed snapshot/history handoff（独立候选，窄验证通过，WDA/精确head CI待续）。
   - 只处理实际完整 `chat.message` 累计快照：复用 final/history 的实际消息 ID、role、原UTF8、run/turn/input冲突解析；缺ID、真delta、SDK跨item聚合仍无snapshot来源，不按run/正文猜合并。保留原render UUID、physical gates、媒体目标与owned outbox；RN、默认入口、共享服务与协议均不改。
   - Live/source与segment候选必须唯一且相容；history-first仅实际当前活动与真实run匹配才有候选资格，只有真正accepted snapshot晋级live。活动/unknown head不回退accepted正文与final媒体；合法final目标明确terminal并拒绝迟snapshot。128条epoch-scoped字节精确歧义记忆保留已观测同source矛盾及unique/empty/cold/reappearance，overflow关闭source join而不驱逐旧证据。typed negative-only结果须持久化歧义但不授正文/journal/running/proof；缺/坏activity不当终态，同时保留实际runId无bool的既有正向契约。
-  - 独立14个App方法、6个SPM方法/参数矩阵已写；本树实际275方法/29测试文件，待UI主线合入后按实际并集更新。只完成PBX语法/路径与diff静态复核，未编译/执行，不占用root的heavy/simulator。实际宿主仍须在重基后携带并原子采用sourceAmbiguity、采用negative-only结果并对running/Stop/queue使用三态activity，之后执行实际host与窄回归和current-head CI；不把候选或合成wire当六后端推理、Relay、手机或完整视觉验收。
+  - 独立14个reducer/planner与3个实际host App方法、6个SPM方法/参数矩阵已写；重基最新UI候选后的实际并集290方法/29测试文件，报告下限/289缩减反例同步。实际receive在原physical gate后采用typed outcome，negative-only持久化且不推进accepted liveRevision/journal/running/stream proof；mergeHistory原子传收sourceAmbiguity并以三态activity保留unknown下Stop/queue，原await/revision/epoch fences保留。实际store回归等待saveTask完成后重开，验证歧义记忆与原body/UUID/outbox；不把候选或合成wire当六后端推理、Relay、手机或完整视觉验收。
+  - memory55%/无竞争预检，独占heavy/jobs2逐文件SPM LiveSnapshotMetadata6与既有FinalMessageMetadata6/参数矩阵首轮全绿；dfe900e3 UI+caea5fef实际源码strict Swift6/iOS16.4、arm64+x86_64、YES/-本地adhoc generic build-for-testing首编成功。仅授权QA模拟器57998577串行8文件94方法全部通过、零失败/跳过：SnapshotIdentity17、LiveMessages10、HistoryIdentity11、Reconciliation8、HistoryApplication7、ConversationStore10、MediaHost22、ReadingLayout9。未跑本地290全suite；docs16对/7、report3、19语9063编译值与diff通过，模拟器正常shutdown、heavy/simulator均释放，交主线程WDA实际验收。
+  - 前一UI #262 的精确dfe900e3已全13门禁绿并自行squash合入e530323b：actual App273/273零失败/跳过，23.278秒测试/38.248秒wall、19语9063编译值；package446（59 XCTest+387 SwiftTesting）、v1、双桌面与Mobile三分片均绿。当前source切片已用 `--onto origin/main dfe900e3` 仅重放自身两提交，核apps/ios与packages/apple与已测caea5fef完全相同，不重跑未变代码；RN源码/默认入口、lockfile、版本与服务无改。WDA新增证据与本切片完整CI仍待续。
 
 - 2026-10-16 Native 独立聊天/UI 打磨与模拟器验收（本地验证完成，精确 head CI 待续）。
   - React Native 默认、源码、Expo/EAS、商店身份与共享服务不变。累计50分钟以上研究记录在 native RESEARCH；本轮收敛为统一输入面板、独立44pt操作、连续图片画廊、稳定上传顺序与明确失败原因。同一 UITextView 保留选区/marked text；键盘可用高度内，附件/正文可滚动，操作固定可达，Work/模型保持真实入口。 最终截图复核发现最大字号文件名截断相似，辅助字号卡片改224pt/两行文件名（普通144pt不变），该增量交精确head CI及后续手势复验。
