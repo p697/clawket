@@ -6,7 +6,7 @@ import ClawketTransport
 public actor RuntimeCoordinator {
     var historyExportPending = 0
     public nonisolated let events: AsyncThrowingStream<RuntimeEvent, any Error>
-    let eventContinuation: AsyncThrowingStream<RuntimeEvent, any Error>.Continuation
+    let eventBuffer: RuntimeEventBuffer
     let credentials: any DeviceCredentialProvider
     let socketFactory: any WebSocketFactory
     let clock: any TransportClock
@@ -59,7 +59,6 @@ public actor RuntimeCoordinator {
     var historyPending = 0
     var controlWaiter: ControlWaiter?
     var controlDispatches: [String: Task<Void, Never>] = [:]
-    var eventWeights: [Int] = []
     var streamAvailable = true
     public private(set) var state = RuntimeConnectionState()
 
@@ -85,9 +84,10 @@ public actor RuntimeCoordinator {
               ["iphone", "ipad"].contains(client.deviceFamily) else { throw RuntimeFailure(.invalidConnection) }
         self.credentials = credentials; self.socketFactory = socketFactory; self.clock = clock; self.client = client
         self.artifactHTTP = artifactHTTP
-        let stream = AsyncThrowingStream<RuntimeEvent, any Error>.makeStream(bufferingPolicy: .bufferingOldest(64))
-        events = stream.stream; eventContinuation = stream.continuation
-        eventContinuation.onTermination = { @Sendable [weak self] _ in Task { await self?.disconnect() } }
+        let buffer = RuntimeEventBuffer()
+        eventBuffer = buffer
+        events = AsyncThrowingStream(unfolding: { try await buffer.next() })
+        buffer.onTermination { @Sendable [weak self] in Task { await self?.eventStreamTerminated() } }
     }
 
     /// Waits for verified backend readiness. Repeated calls join the active connection.
@@ -430,20 +430,22 @@ public actor RuntimeCoordinator {
 
     func emit(_ value: RuntimeEvent, weight: Int = 128) {
         guard streamAvailable else { return }
-        eventWeights.append(weight)
-        let result = eventContinuation.yield(value)
-        if case .enqueued(let remaining) = result {
-            let buffered = max(0, 64 - remaining)
-            if eventWeights.count > buffered { eventWeights.removeFirst(eventWeights.count - buffered) }
-            if eventWeights.reduce(0, +) <= 16 * 1_024 * 1_024 { return }
-        }
-        streamAvailable = false; stopped = true
-        let old = retire()
-        eventContinuation.finish(throwing: RuntimeFailure(.capacity))
+        let context = RuntimeEventBuffer.Context(epoch: epoch, attempt: attempt, authentication: authentication, generation: generation)
+        let result = eventBuffer.offer(value, weight: weight, context: context)
+        if case .accepted = result { return }
+        eventStreamTerminated()
+    }
+
+    private func eventStreamTerminated() {
+        guard streamAvailable else { return }
+        streamAvailable = false
+        let old = retire(); stopped = true; connection = nil
+        publishState(.idle)
         Task { await old?.disconnect() }
     }
 
     deinit {
+        eventBuffer.finish()
         readerTask?.cancel(); openTask?.cancel(); handshakeTask?.cancel(); retryTask?.cancel()
         periodicProbeTask?.cancel(); probeTask?.cancel(); catalogTask?.cancel(); controlWaiter?.timeout.cancel()
         consentExpiryTask?.cancel()
@@ -451,6 +453,5 @@ public actor RuntimeCoordinator {
         controlWaiter?.continuation.resume(throwing: RuntimeFailure(.superseded))
         for waiter in waiters.values { waiter.resume(throwing: RuntimeFailure(.superseded)) }
         let transport = transport; Task { await transport?.disconnect() }
-        eventContinuation.finish()
     }
 }
