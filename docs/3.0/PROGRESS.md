@@ -2,8 +2,11 @@
 
 - 2026-10-16 Native 预览修复闭环与连接表单诊断继续。
   - #269 exact451f7318在current-main全13门禁绿后合e97a171d并finish：actual App300/300零失败/跳过（52.846秒test/88.685秒wall）、package459=59+400、19语9082精确编译值。开发app及私有证据已保存在SSD；primary仅保留既有node_modules，RN默认/源码、商店身份、共享服务与发布均不变。
+  - #268 exact48b42844/basee97在current-main/CLEAN及全13 CI绿后合78fbf034并finish：actual App303/303零失败/跳过（37.802秒test/47.498秒wall），新增3方法均过；package459=59+400、19语两表9082精确编译值。真实UIKit宿主证明生产root/helper的sheet交接、external notice=nil后的实际UIAlert消失及Settings重开；不是实际点系统OK/VoiceOver或连接后端，旧gear暂态原因仍未证。
+  - #267 exact876f104b/base78fb在current-main/CLEAN及全13 CI绿后合625597d1并finish：actual App310/310零失败/跳过（58.608秒test/84.391秒wall），七项新host回归全部通过；package459=59+400、19语两表9082精确编译值。被替代/取消保存与越代提示已围栏，真实失败保持可见、最新验证写入只清自己的hint mutation；activation切换仍保存旧route离线草稿，原资源/outbox不重放。两任务各自删除工作树/分支、依次ff primary，既有node_modules未改；首个合成现场当次错误仍未捕获，不把CI证明当现场根因。
+  - #270文档接管重基625597d1，保留上述实现记录与所有未通过实机/后端项；本机仅docs16指令对/7回归、report3与diff轻量检查通过，无native编译/测试/设备/重资源或服务操作。完整适用CI按新head闭环，不把旧文档head绿替代本组合。
   - 新driver下改用自然时序：无新输入时先完整打开草稿图片预览，再由独立合成client触发完整回复。关闭后同一旧row y-299→-299（0pt），原UTF8和三draft引用不变、Latest保留；连接增量1恰为触发client本身，App没有额外重连。该次不冻结peer、不暂停心跳；早先冻结法不用于稳定性结论，source24/25的AX/driver失败不追加通过。真实后端/手机网络/VoiceOver/N5仍待。
-  - 独立本机canary只用非秘密固定ASCII、原生连接表单与真实connect序列化，始终拒绝、不连Gateway；两次观察分别为键入shorter/alphanumeric与系统Paste后token缺失，均非通过。SecureField掩码与成功UI命令不能证明实际输入完整；继续区分UIKit输入、SwiftUI绑定与自动化，不修改凭据、认证协议或共享服务。已停自有App/WDA/诊断peer并释放heavy/simulator，后续独立诊断重新持租约。
+  - 独立本机canary只用非秘密固定ASCII、原生连接表单与真实connect序列化，始终拒绝、不连Gateway；最初两次观察分别为键入shorter/alphanumeric与系统Paste后token缺失，均非通过。SecureField掩码与成功UI命令不能证明实际输入完整；继续区分UIKit输入、SwiftUI绑定与自动化，不修改凭据、认证协议或共享服务。该窗口已停自有App/WDA/诊断peer并释放heavy/simulator，后续独立诊断重新持租约。
 
 - 2026-10-16 Native autosave 结果归属与取消提示（独立探索；RN 保持默认）。
   - 修复源码确定可达的竞态：新草稿/流式事件取消一个已进入存储等待的旧 save 时，原 catch 会把 CancellationError 当保存失败并留下提示。现在每 route 冻结操作 UUID、activation 与实际写入 revision/physical identity；取消前退休，旧结果不覆盖新提示。真实当前失败仍显示，只有最新已完成且仍对应当前文档的写入可清自己的存储提示，不清媒体/语音提示，不发送或重放。
