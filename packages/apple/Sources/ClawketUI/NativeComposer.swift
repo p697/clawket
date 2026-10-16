@@ -516,7 +516,8 @@ private final class NativeInputController: NSObject, ObservableObject, UITextVie
             guard !scroll.isTracking, !scroll.isDragging, !scroll.isDecelerating else { return true }
             textView.layoutIfNeeded()
             var caret = textView.textInputView.convert(textView.caretRect(for: selection.end), to: textView)
-            guard !caret.isNull, !caret.isInfinite, caret.height > 0 else { return false }
+            guard caret.minX.isFinite, caret.maxX.isFinite, caret.minY.isFinite, caret.maxY.isFinite,
+                  !caret.isNull, caret.height > 0 else { return false }
             if caret.maxY > textView.contentSize.height + 0.5,
                let manager = textView.textLayoutManager, let content = manager.textContentManager {
                 // A lazy TextKit estimate may still understate a distant caret
@@ -525,6 +526,8 @@ private final class NativeInputController: NSObject, ObservableObject, UITextVie
                 textView.setNeedsLayout(); textView.layoutIfNeeded()
                 caret = textView.textInputView.convert(textView.caretRect(for: selection.end), to: textView)
             }
+            guard caret.minX.isFinite, caret.maxX.isFinite, caret.minY.isFinite, caret.maxY.isFinite,
+                  caret.height > 0 else { return false }
             if textView.isScrollEnabled { reveal(caret, in: textView, allowingEstimatedExtent: true) }
             let target = textView.textInputView.convert(textView.caretRect(for: selection.end), to: scroll)
             reveal(target, in: scroll)

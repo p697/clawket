@@ -80,6 +80,10 @@ Apple 的[编辑推荐说明](https://developer.apple.com/app-store/getting-feat
 
 Apple [Photos picker 分享](https://developer.apple.com/videos/play/wwdc2022/10023/)强调长耗时资源应先占位、逐项处理失败；因此本轮保留选择顺序和真实资源身份，在附件本身显示固定错误原因，不用整页阻塞或虚构进度。适度提升图片/文件预览，移除与预览各有独立命中区。[进度指示](https://developer.apple.com/design/human-interface-guidelines/progress-indicators)、[文字层级](https://developer.apple.com/design/human-interface-guidelines/typography)与[菜单](https://developer.apple.com/design/human-interface-guidelines/menus)用于约束细节。发送点击本身不再触发滚动；只有 host 确实插入新的本地 outbox 后，才允许回到底部。
 
+## TextKit 编辑可见性复核（2026-10-16）
+
+Apple 的 [TextKit 2 分享](https://developer.apple.com/videos/play/wwdc2022/10090/)、[布局 API](https://developer.apple.com/documentation/uikit/nstextlayoutmanager)和 [textInputView 坐标约定](https://developer.apple.com/documentation/uikit/uitextinput/textinputview)补充了实际输入区验收：光标几何属于 input view，不能默认等于 UITextView 本体；不要为了测量隐式退回 TextKit 1。本机真实 UIKit 窗口里，最大字号的实际光标曾超过惰性 contentSize 估计，单次 Task.yield 也早于外层 viewport 落地。补正因此跟随实际输入/选区和测得的 viewport，每次请求最多三轮，内层可达范围至少包含已知光标，外层仍按真实内容限位；不写 contentSize、不改选区或组合文字。普通布局和用户手势不创建新的追踪请求。具体执行与负向对照见本轮 MEDIA 与进度记录，不能用 API 推理代替设备结果。
+
 ## 实施验收
 
 每屏必须回答：当前 Agent/会话是谁，哪里需要操作，下一步是什么。最小宽度、键盘、长文、附件、审批命令和最大字号都可用；读历史时流式/重连不抢位置；所有可见功能均有真实动作和能力来源。漂亮截图但缺少模型/语音/队列/分享/恢复仍是原型。

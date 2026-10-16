@@ -1,5 +1,12 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-16 Native 输入光标与真实 Direct 验收（独立探索继续，React Native 保持默认）。
+  - 实际 UIKit 最大字号/三附件/长草稿暴露嵌套滚动裁切：光标几何超过 TextKit 惰性 contentSize，单次异步滚动也早于 viewport 新尺寸落地。现在按 input view 坐标、实际 viewport、输入/选区变化做每请求最多三轮补正；内层可达范围至少含实际光标，外层仍按真实内容限位，不写 contentSize、不退 TextKit1、不改正文/选区/marked text。普通重复 layout 和内外手势不抢回附件阅读。
+  - 新真实 UIWindowScene 回归覆盖340→150→340pt、同UITextView/原draft/selection、手动看附件后layout保持、实际编辑重新可见与中文marked range保留；最终组合窄测通过，旧HEAD生产组件实际编译后跑同case有7个断言失败，负向进程已结束并恢复最终文件。早期候选真实裁切红保留，未放宽可见性断言；一轮失败后的xcode诊断采集进程已终止，后续禁用自动诊断采集。重基代码块主线cc95f9d5，actual App296方法/strict Swift6/iOS16.4双架构开发编译成功，不是本机全跑；最终窄回归与完整精确head门禁分别记录。
+  - 最终组合依次通过caret新case1项（4.571秒）、ReadingLayout10项（7.585秒），均零失败/跳过；report3（296门槛/295缩减拒绝）、docs16指令对/7回归、diff通过。完整296执行和原客户端门禁交本PR current-main精确head CI，最终WebDriver组合验收仍单列，不由source/UI单测推定完成。
+  - 真Hermes Direct经真实表单、新建receipt、专用空会话，文本送达/模型回复、同render UUID冷启和独立草稿恢复通过；离线草稿保存/Send禁用通过。一次真实live Stop弹操作失败，不能记成功；后来完整长回复4行与独立head逐UTF8相同、samephysical/hasActiveRun=false、684ms，只证明最终恢复，不倒推当次加载耗时或Stop原因。OpenClaw Direct停在凭据认证，未到当前设备审批；只读排除literal token的env/dotenv/SecretRef来源差异。未猜测修改超时、放开physical门、重放、审批或改共享服务。详见 `docs/native-ios/BACKEND-ACCEPTANCE.md`，两后端恢复/N5仍待续。
+  - 前两切片已闭环：source #263/695ee378全13CI绿后合4c00d504（App294/294、package452、19语9063精确编译值）；代码块 #264/efbedb73全13绿后合cc95f9d5（App295/295、package459=59+400、19语9063值）。两者均已finish，primary仅保留既有node_modules。RN默认/商店App、版本、生产、分发与发布不变。
+
 - 2026-10-16 Native assistant Markdown 代码卡片（独立候选，完整CI待续）。
   - 实际 assistant Markdown 在原 message/content 内按 fence 源字节偏移展示已有原生代码容器、语言栏与独立44pt Copy；正文/媒体顺序、原消息身份、缓存与协议不变。Copy先暂停阅读跟随，再复制该块原字节，保留缩进/CRLF/Unicode；不由代码推工作状态。
   - 开fence等换行、完整闭fence可在EOF识别；短/无效尾标记保留原文。解析只依赖原文字节，不把spinner/proof失效当正文final；已开启而未闭合时保留当前body，不伪造完成。仅markdown/code的Eq/Hash采用字节精确比较，防canonical alias修正留旧复制内容，其他case语义不变。7个纯parser方法和1个真实UIWindow/assistant row/UIButton回归已写；App方法下限295及294缩减反例同步。独立只读审查指出spinner失效不等于正文final后，已以纯正文EOF规则修复并补actualrow不变回归，复核无新阻挡。React Native默认与源码、服务/凭据/版本/发布均未改。
