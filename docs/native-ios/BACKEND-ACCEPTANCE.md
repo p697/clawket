@@ -1,5 +1,25 @@
 # Native backend acceptance
 
+## 2026-10-17: OpenClaw on the verified USB iPhone
+
+The owner requested a development install and OpenClaw connection for their own testing. IORegistry contained one USB iPhone; its hardware identifier exactly matched CoreDevice's wired record for an iPhone Air on iOS 27.0.1. Existing pairing, Developer Mode and the WebDriver profile were verified. No wireless phone or iPhone Mirroring was used.
+
+Fresh main `0ceb1edf` built in its own SSD worktree with two jobs and the iOS/heavy leases (69.9 seconds). Deep strict signing, the QA bundle and the profile's hardware coverage were checked before installing `com.p697.clawket.nativeqa`, version 3.1.2. This updated the independent development app without uninstalling or clearing it, replacing React Native, or creating an Archive/IPA. Only the owned QA simulator was shut down before the build.
+
+WebDriver used the actual Direct form. The known LAN endpoint was rechecked against this Mac's current interface and existing Gateway port. The current operator credential was read in memory from its known configuration, entered through the actual system Paste menu, and removed from the phone's temporary clipboard afterward. No credential is included in this document or command output. Saving reused the existing matching URL/transport connection and retained its label and the other connections. This is `backend=openclaw`, `transport=custom`, over LAN; no Gateway binding, TLS, authentication setting or service was changed.
+
+The app reached a current device-approval context. Its displayed public fingerprint matched one pending device and SHA-256 of that device's 32-byte Ed25519 public key; its operator role and seven scopes exactly matched the native source. A CLI `--url` attempt rejected environment-only authentication before the request. Default JSON listing can use local fallback and therefore did not establish Gateway RPC authentication. An initial exact approval returned nonzero without retained error details, so its cause is unproven and it was not blindly replayed.
+
+The standard CLI was then given the verified loopback URL and token through its subprocess environment, without a token in argv. An authenticated read found neither the old pending request nor a paired entry for this identity. Explicit Check again in the app produced a different request ID less than 30 seconds old. The current app fingerprint, public key, role and scopes were matched again before approving only that exact new request. The CLI returned success, followed by the app's ordinary handshake recheck.
+
+| Scenario | Observed evidence | Result |
+|---|---|---|
+| USB OpenClaw authentication and approval | Current signed identity matched before the one successful exact approval; actual app displayed Connected and four OpenClaw Agents, with ready-only Refresh available and no Alert. | Passed for this LAN connection. |
+| Saved connection after cold restart | Terminated and launched only the QA app; four OpenClaw Agents and the authenticated ready state returned without an Alert. The screenshot was inspected. | Passed for this cold reconnect. |
+| Owner message/inference test | No test message was sent. The phone was left at the OpenClaw Agent list. | Awaiting owner testing; no inference claim. |
+
+The owned WebDriver run was stopped and confirmed exited; iOS/heavy leases were released before handing over the phone. The Gateway authorization change was approval of this exact native client. There was no shared service reconfiguration, backend credential rotation or release. These bounded phone results do not establish OpenClaw inference, Stop, uploads, weak-network/Relay recovery, full parity or owner acceptance of the native UI. React Native remains the default. Earlier simulator authentication failures below remain historical evidence.
+
 ## 2026-10-16: real Direct connections on the isolated iPhone simulator
 
 WebDriver drove the independent `com.p697.clawket.nativeqa` app on a dedicated standard iPhone simulator. The local development app was built from `90e84ce1`; merged `695ee378` changes only the explicit Optional-Bool switch syntax for the older CI compiler. This is separate from the synthetic-peer matrix in [MEDIA](MEDIA.md).

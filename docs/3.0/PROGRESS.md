@@ -1,5 +1,11 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-17 Native USB iPhone OpenClaw 连接交付测试（RN 保持默认）。
+  - 按 owner 明确要求安装真机开发版。唯一 USB iPhone 的 IORegistry 硬件标识与 CoreDevice wired 记录完全匹配，目标为 iPhone Air/iOS27.0.1；现有开发者模式、配对及 WDA profile 均有效。fresh main0ceb1edf 独立工作树、ios/heavy 租约及 jobs2 开发编译69.9秒通过，校验QA bundle、deep strict codesign和profile包含该硬件后，仅更新安装 com.p697.clawket.nativeqa/3.1.2。未卸载、清数据、替换RN或打Archive/IPA；仅关闭自有QA模拟器，未碰其他模拟器/无线手机。
+  - 实际有线WebDriver使用产品Direct表单；已知LAN endpoint仍对应本机当前接口/既有Gateway端口，不改bind/TLS/认证或重启服务。令牌只由当前已知operator配置在进程内读取，经系统Paste填入SecureField，随后手机临时剪贴板改为中性文本；保存复用同URL/transport的已有Native连接与label，其他连接保留。凭据通过后出现真实当前device-approval context，不再是上轮AUTH_TOKEN_MISMATCH。
+  - 当前App公钥指纹与唯一pending的32字节公钥SHA256、operator角色及Native默认7 scopes逐项匹配。首个CLI --url+env-auth在参数校验被拒；默认list可能local fallback，不能算Gateway RPC认证。首次approve返回1且错误未保留，原因未证，未盲重放。改用子进程env URL+token的正式loopback shared-auth读取，确认旧pending/paired均无该身份，再由App显式Check again取得不同requestId、30秒内新请求，同当前UI指纹/角色/scopes再核后仅批准该精确请求，CLI返回0，再走正常握手。
+  - 真机实际显示已连接及4个OpenClaw Agent；只重启QA App后再次达到ready、4项目录、无Alert，截图已实际查看。未发测试消息，推理/Stop/上传/弱网/Relay/完整N5不据此通过，留给owner在该开发版先测。自有WDA已定向停止并确认runner75，ios/heavy已释放，手机留在OpenClaw目录；Gateway仅新增该Native客户端的精确设备批准，无共享服务配置/凭据轮换/发布变更。
+
 - 2026-10-17 Native 第一轮 UI 初验独立入口（RN 保持默认）。
   - 原合成peer进程已退出，原Studio当前只有缓存/正在重连；不以新peer冒充原physical恢复。另起专用UI peer、新physical及新saved connection，显示名「Clawket · UI 体验」，已实际通过产品连接表单建立。WebDriver仅发送一次文字与三张已知fixture图片，独立stats为acceptedSends1/completedRuns1/active0/images3/dedupe0；完成窗口App无Alert/Stop，一张新回复图片实际原生QuickLook→完成通过。这是新合成UI窗口，不是真模型或原连接恢复验收。
   - 原Studio空draft原UTF8及三资源ID/顺序与baseline完全一致，未发held。真实Hermes长回复已通过，Native Stop、OpenClaw认证、Relay/弱网恢复仍未通过；VoiceOver/完整N5与owner接受未完成，不以文档/CI替代UI或模型验收。
