@@ -1,5 +1,10 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-16 Native Hermes 实时增量语义修复（独立切片；RN 保持默认）。
+  - 当前Bridge的`message.delta`经`stream-mapping.ts`只把单fragment放入`chat.delta.message.content`，native却统一按snapshot替换；这能解释实时正文只剩末token，不能据此解释Stop前的generic Alert或宣称Stop已修。仅将Hermes该事件映射为.delta且不带snapshotMetadata；OpenClaw累计snapshot、全量final、SDK textMode、原segment/终态/身份与共享协议均保持。
+  - 新5个纯SPM方法（7个参数化case）用该producer结构的合成帧核Direct/Relay同语义、原空白/NFD/emoji片段、工具段边界、final-only/完整final及实际ID不升级fragment身份；既有App文件新增1方法，将真实SessionEvents.map输出送入NativeLiveMessages，逐段核完整原UTF8、独立render UUID、final替换不重复prefix及草稿不变，不用测试自制append reducer冒充消费者。
+  - fresh main8afa5784独立工作树`codex/native-hermes-live-deltas`，App并集315方法/33文件，minimum315与314缩减反例同步。root独占原生资源，本机尚未编译/测试/操作设备；源码与独立静态复核、轻量检查及完整精确head CI继续。未改Bridge/RN/服务/凭据/版本或发布。
+
 - 2026-10-16 Native Work 组合验收与辅助语义（独立探索；RN 保持默认）。
   - #272 exactd6b033a2/basebd312dd7全13项CI绿/current-main/CLEAN后合76bc45b9并finish；actual App314/314零失败/跳过（55.397秒test/77.954秒wall）、package459=59+400、19语两表9082精确编译值。primary既有node_modules保留，开发副本在SSD独占保存。
   - 此生产源码实际WebDriver：402pt中文键盘下仅一个导航Work、body dock消失；中心与四向±19pt坐标均打开工作记录。真实系统Paste的140字符中/日/NFD长草稿在展开→Work→关闭→收起后原UTF8/三资源引用不变；最大字号Work实际AX44×44、Back/标题/Work/More互不重叠，Work与Back→Studio重开均保留草稿。普通字号AX glyph边框较小，不能据源码称44pt已实测；选区/同UIView由独立UIKit回归证明，不冒称WDA已测。

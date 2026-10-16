@@ -82,7 +82,12 @@ struct SessionEvents: Sendable {
         let metadata = FinalMessageWire.metadata(payload, sessionKey: key, backend: backend)
             .flatMap { $0.providedID == nil ? nil : $0 }
         switch payload["state"]?.stringValue {
-        case "delta": return textEvent(protocolText(payload["message"]?["content"]), runID: runID, mode: .snapshot, raw: payload, snapshotMetadata: metadata)
+        case "delta":
+            // Hermes forwards each message.delta fragment; OpenClaw sends the
+            // cumulative message. A fragment never supplies snapshot identity.
+            let mode: RuntimeTextUpdate.Mode = backend == .hermes ? .delta : .snapshot
+            return textEvent(protocolText(payload["message"]?["content"]), runID: runID, mode: mode, raw: payload,
+                             snapshotMetadata: mode == .snapshot ? metadata : nil)
         case "final": return complete(runID: runID, reason: "end_turn", raw: payload, snapshotMetadata: metadata)
         case "aborted": return finish(runID: runID, reason: "cancelled", raw: payload)
         case "error": return finish(runID: runID, reason: "error", raw: payload)
