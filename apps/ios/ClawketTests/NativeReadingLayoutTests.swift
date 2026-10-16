@@ -28,7 +28,13 @@ final class NativeReadingLayoutTests: XCTestCase {
         let editor = try XCTUnwrap(descendants(host.view, of: UITextView.self).first)
         editor.selectedRange = NSRange(location: 3, length: 5)
         func tray() throws -> UIScrollView {
-            let scrolls = descendants(host.view, of: UIScrollView.self).filter { !($0 is UITextView) }
+            // The existing descendants helper stops at the first matching
+            // UIKit class. Traverse inside scroll views to find the real tray.
+            func scrollViews(in view: UIView) -> [UIScrollView] {
+                ((view as? UIScrollView).map { [$0] } ?? [])
+                    + view.subviews.flatMap { scrollViews(in: $0) }
+            }
+            let scrolls = scrollViews(in: host.view).filter { !($0 is UITextView) }
             // The actual composer contains one outer vertical viewport and its
             // single nested attachment scroll view, even when all tiles fit.
             let nested = scrolls.filter { candidate in

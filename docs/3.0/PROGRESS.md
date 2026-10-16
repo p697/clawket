@@ -1,9 +1,14 @@
 # PROGRESS · Clawket 3.0 进度日志
 
-- 2026-10-16 Native 紧凑草稿照片（独立探索候选，尚待执行验收）。
+- 2026-10-16 Native 紧凑草稿照片（独立探索，本机验收通过，完整CI待续）。
   - 普通字号草稿图改88pt方形，完整名称/大小保留于辅助信息和原生长按Details；文件与224pt大字号卡片仍显示metadata，失败仍显示原因并可查看全文。Remove保持44pt但采用圆形触区以避开图心；tray本体88pt，外部原有间距14pt另计。RN默认/源码不变。
-  - 已知image provider与相机只传递临时布局hint；原有字节检查、模型/Runtime预检、原始资源/动作ID和选择顺序不改。预览准备保留原显示类型/名称/大小，成功重建补回实际byte count，避免开过一次就丢Details大小。
-  - 新actual NativeComposer宿主方法检查402pt三图非空完整容纳、preparing→ready同UITextView/原UTF8/选区，另保留大字号横滚和文件metadata高度。已有宿主投影回归补image hint/default file/准备不授预览；App并集311方法/33文件，报告minimum311及310缩减拒绝同步。这些是候选源码，尚未宣称本机或CI执行、真实按钮命中/Details查看或视觉验收通过；当前模拟器由独立输入诊断独占。
+  - 已知image provider、文档扩展类型与相机只传递临时布局hint；原有字节检查、模型/Runtime预检、原始资源/动作ID和选择顺序不改。预览准备保留原显示类型/名称/大小，成功重建补回实际byte count，避免开过一次就丢Details大小。没有据mediaDisplays赋值声称draft spinner已发布。
+  - 新actual NativeComposer宿主方法检查402pt三图非空完整容纳、preparing→ready同UITextView/原UTF8/选区，另保留大字号横滚和文件metadata高度。已有宿主投影回归补image hint/default file/准备不授预览；初稿App并集311方法/33文件；初稿仅静态计数，后续执行与WebDriver证据见下。
+  - 后续独占heavy/simulator：项目原配置Swift6/strict complete/iOS16.4生产源及App测试初稿双架构开发build-for-testing通过；首轮误加全局Swift6覆盖第三方SDK报错，已纠正命令、未改依赖或放松自有配置。首轮新test用旧helper停在外层ScrollView而取不到tray；保留全部几何/原文/选区断言，修正仅该test递归后实际ReadingLayout12/12零失败/跳过（8.047秒test/27.44秒wall），其中新项0.574秒；实际host投影窄项1/1（0.007秒test/6.79秒wall）。docs16对/7、report3、19语9082精确编译值与diff通过。本机未全跑App并集，完整门禁交精确head CI。
+  - 新开发app实际WebDriver：402pt/软件键盘下三图同时完整可见，tray AX88–89pt（像素取整），Preview约88pt方形、Remove44pt下限及Add/Model/Send44pt；系统Paste原中英文两行精确匹配，三图中心/±4pt近邻都开正确完整预览、关闭后原草稿/三引用保持。每张预览后再实际长按Details/系统OK，完整原名与33/10/54KB值均显示。早期89pt精确等值脚本预检及一次过期AX引用未作产品失败/通过，稳定菜单重读后逐项验证。
+  - 实际系统Photos只选已知首张fixture，3→4引用后真实横拖使新增Remove全触区可见，实际删除恢复原三引用；实际Files选45B无效PNG触发失败、Send禁用，点完整原因alert见原名/完整固定原因，系统OK与Remove后Send恢复。两流程原中英文draft与held1不变；从未点Send/重放held。未知命令/反向scroll未作有效拖动，最终实际坐标drag及完整结果另有私有证据。真实后端/手机/VoiceOver与N5仍未完成，RN默认未改。
+  - 收口补实际prepared类型的原名/bytes/.preparing display缓存并显式启动原loadMediaDisplay，避免已知file从144→88→144；未知cold资源默认file占位，待实际inspection，未承诺冷恢复未知图无尺寸变化。新增实际host同步占位回归，最终App并集312/33files，minimum312/311反例；最终生产与312测试源码双架构开发编译通过（17.06秒wall），该新项和既有顺序投影2/2实际通过（0.846秒test/37.27秒wall），并非全跑312。
+  - 最终typed开发二进制另用实际Files导入397B TXT：144×84文件预览及可见原名/397字节、完整原文件预览、返回后bytes、实际Remove全部通过，恢复原三resource引用和原draft hash。最终严格单文档再核held1/queued0/sending0，测试中英文文字已只清自己恢复原草稿、剪贴板恢复非秘密中性文字。自有App/WDA退出75、own模拟器Shutdown并释放simulator；未碰既有两合成peer。只记录通过窗口，首次脚本漏空格的本地化byte等值断言不计产品失败；完整CI仍待本分支最终head。
 
 - 2026-10-16 Native Direct SecureField 非秘密输入对照（独立诊断；RN 保持默认）。
   - 在独立工作树复用已验证的 `451f7318` development app 与唯一指定 QA 模拟器，私有 loopback canary 每次 fresh scope 发真实 OpenClaw challenge，只内存比较固定非秘密 ASCII token，固定拒绝并关闭，不连真 Gateway、不授 ready、不收 chat/session；结果仅固定分类/计数，无 token/hash/请求 ID/URL。

@@ -145,6 +145,11 @@ extension NativeAppModel {
                 guard ownsMedia(request.scope), mediaImports[request.id] != nil else {
                     try await media.releaseWhenUnreferenced([resource.id]); if let cache { try await media.reclaim(cache: cache) }; return
                 }
+                let resourceKey = resource.id.uuidString.lowercased()
+                mediaDisplays[resourceKey] = .init(id: resourceKey, name: resource.name, kind: value.isImage ? .image : .file,
+                    detail: ByteCountFormatter.string(fromByteCount: Int64(resource.byteCount), countStyle: .file),
+                    phase: .preparing, canRemove: true)
+                loadMediaDisplay(resource.id, referenceID: resourceKey, route: request.scope.route, input: true, scope: request.scope)
                 mediaDraftOrder[request.scope.route, default: .init()].complete(importID: request.id, resourceID: resource.id)
                 documents[request.scope.route]?.draftResourceIDs.append(resource.id)
                 if let ids = documents[request.scope.route]?.draftResourceIDs {
@@ -241,7 +246,7 @@ extension NativeAppModel {
             }
             if var existing = mediaDisplays[key] { existing.canRemove = true; return existing }
             loadMediaDisplay(id, referenceID: key, route: route, input: true, scope: scope)
-            return .init(id: key, name: String(localized: "Attachment"), kind: .image, phase: .preparing, canRemove: true)
+            return .init(id: key, name: String(localized: "Attachment"), kind: .file, phase: .preparing, canRemove: true)
         }
         let pending = mediaImports.values.filter { $0.scope.route == route }.sorted { $0.id.uuidString < $1.id.uuidString }.map { request in
             mediaDisplays[request.id.uuidString] ?? .init(id: request.id.uuidString, name: request.name, kind: request.displayKind, phase: .preparing, canRemove: true)
