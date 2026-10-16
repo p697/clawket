@@ -971,11 +971,11 @@ final class NativeAppModel: ObservableObject {
         guard !earlier, historySame(history.key, route.sessionID), documents[route] != nil,
               liveRevisions[route, default: 0] == liveRevision else { return }
         switch history.activeRunEvidence {
-        case true:
+        case .some(true):
             if let runID = history.activeRunID, hasFinishedRun(runID, route: route) { return }
             running[route] = history.activeRunID ?? running[route] ?? ""
-        case false: running.removeValue(forKey: route)
-        case nil: break
+        case .some(false): running.removeValue(forKey: route)
+        case .none: break
         }
     }
 
