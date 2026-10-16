@@ -6,6 +6,7 @@
   - 共存边界已写入根 AGENTS 与 native PLAN：保留 RN 源码、UI、默认命令、Expo/EAS 与商店/发布路径；原生探索不得降低 RN 连接稳定性或共享协议兼容性。本任务仅更新规则和文档，不改应用、构建配置、版本或服务，不执行设备安装、分发或发布。
 
 - 2026-10-16 Native physical history 宿主、旧请求隔离与附件epoch缓存（候选，完整CI/设备验收待续）。
+  - 按负责人最新共存决定重基#261主线04f12a95，仅收口原生独立工程已在验的变更，不改React Native、默认入口、商店身份或发布配置。7b3ae190 CI实际240项中239通过，一项final媒体正例fixture未设置document epoch而reducer使用已知epoch，生产guard正确拒绝；只修正fixture为同epoch，保留断言与guard。9e0b后续v1在Registry health非2xx断言失败（其余43项/真实wire replay均通过，具体HTTP状态无日志），未放宽探测/断言；最终重基head重新跑全门禁。
   - 已整合#253 consent/#256 roster/#257 tool/#259 live provenance主线165810d7；实际发现240 App方法，报告minimum与239缩减反例同步，PBX55生产/26测试实际路径无重无缺。upstream物理gate后才进入真实UUID LiveMessages reducer与exact final媒体target，旧lastIndex分支已删；本机217编译证据不冒充此240执行，完整组合交CI。
   - 当前head实际物理ID变化或捕获reset/delete ACK才归档并替换本机epoch；ACK即使后续catalog失败也单次消费，receipt中的旧physical ID不冒充新ID。旧raw原样保存、draft/资源并发编辑保留、旧outbox原render/key/epoch保留并hold，unknown不重发。原始hash+revision+epoch的bind API让ACK后的held input原地绑定首次真实ID，不重复归档。
   - reset/delete前durable unconfirmed intent跨冷启动保留；仅真实ACK或old/new非nil真实ID精确变化清锁，nil/首次known/legacy本地归档不当远端成功。实际host回归覆盖已提交后wire失效仍采用current、未知存储锁单route、旧cache读取跨断线/重入不得覆盖新draft。只按scope/epoch/当前input/实际receipt/accepted head接live，新input tuple不让裸旧run获得后续权限；超过128新run滚动更新近期证据，overflow旧run保守回head。
