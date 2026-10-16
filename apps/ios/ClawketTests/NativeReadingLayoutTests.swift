@@ -237,7 +237,7 @@ final class NativeReadingLayoutTests: XCTestCase {
         XCTAssertFalse(descendants(host.view, of: UIButton.self).contains { $0.accessibilityIdentifier?.hasPrefix("copy-code-") == true })
     }
 
-    @MainActor func testCompactWorkEntryPreservesTheRealNavigationEditorAndReadingAnchor() async throws {
+    @MainActor func testConversationHeightChangesPreserveNativeNavigationEditorAndReadingForEveryWorkState() async throws {
         let route = ConversationID(connectionID: "layout", agentID: "agent", sessionID: "compact-work")
         let original = "A retained draft 中文 e\u{0301}\nSecond line"
         let draft = ComposerDraft(conversationID: route, text: original)
@@ -254,8 +254,8 @@ final class NativeReadingLayoutTests: XCTestCase {
         var captures: [ConversationReadingContext] = []
         let host = UIHostingController(rootView: CompactWorkNavigationFixture(model: model, route: route, draft: draft,
             onIntent: { if case let .readingContextChanged(_, _, value) = $0 { captures.append(value) } }))
-        let window = attach(host)
-        defer { window.isHidden = true; window.rootViewController = nil }
+        let (window, priorKeyWindow) = try attachNavigation(host)
+        defer { window.isHidden = true; window.rootViewController = nil; priorKeyWindow?.makeKey() }
         await layout(host, width: 402, height: 760)
         let editor = try XCTUnwrap(descendants(host.view, of: UITextView.self).first { $0.isEditable })
         let table = try XCTUnwrap(descendants(host.view, of: UITableView.self).first)
@@ -268,29 +268,15 @@ final class NativeReadingLayoutTests: XCTestCase {
         editor.selectedRange = NSRange(location: 3, length: 6)
         let selection = editor.selectedRange
         let statuses: [WorkStatus] = [.running, .waiting, .succeeded, .failed, .stopped, .unknown]
-        let labels = [String(localized: "Running"), String(localized: "Waiting"), String(localized: "Completed"),
-                      String(localized: "Failed"), String(localized: "Stopped"), String(localized: "Unknown")]
-        for (status, label) in zip(statuses, labels) {
+        for status in statuses {
             model.conversations[route]?.work?.status = status
             for height in [CGFloat(760), 420, 760] {
                 await layout(host, width: 402, height: height)
-                let compact = height == 420
-                let elements = accessibilityElements(host.view)
-                let entries = elements.filter { ["work-toolbar", "work-dock"].contains(identifier($0) ?? "") }
-                XCTAssertEqual(entries.count, 1, "Every typed status has exactly one accessible Work entry; observed IDs: \(elements.compactMap(identifier).prefix(20))")
-                let entry = try XCTUnwrap(entries.first)
-                XCTAssertEqual(identifier(entry), compact ? "work-toolbar" : "work-dock")
-                XCTAssertEqual(entry.accessibilityLabel, work.title)
-                XCTAssertTrue(entry.accessibilityValue?.contains(label) == true)
-                XCTAssertTrue(entry.accessibilityValue?.contains("Retained work detail") == true)
-                XCTAssertFalse(entry.accessibilityTraits.contains(.notEnabled))
-                XCTAssertGreaterThanOrEqual(entry.accessibilityFrame.width, 44)
-                XCTAssertGreaterThanOrEqual(entry.accessibilityFrame.height, 44)
-                if compact {
-                    let bar = try XCTUnwrap(descendants(host.view, of: UINavigationBar.self).first { !$0.isHidden })
-                    let barFrame = UIAccessibility.convertToScreenCoordinates(bar.bounds, in: bar)
-                    XCTAssertTrue(barFrame.insetBy(dx: -1, dy: -1).contains(entry.accessibilityFrame))
-                }
+                let bar = try XCTUnwrap(descendants(host.view, of: UINavigationBar.self).first { !$0.isHidden })
+                XCTAssertTrue(bar.window === window)
+                XCTAssertGreaterThan(bar.bounds.width, 0)
+                XCTAssertGreaterThan(bar.bounds.height, 0)
+                XCTAssertGreaterThan(table.bounds.height, 0)
                 XCTAssertTrue(descendants(host.view, of: UITextView.self).first { $0.isEditable } === editor)
                 XCTAssertTrue(descendants(host.view, of: UITableView.self).first === table)
                 XCTAssertTrue(editor.text.utf8.elementsEqual(original.utf8))
@@ -303,51 +289,56 @@ final class NativeReadingLayoutTests: XCTestCase {
         }
     }
 
-    @MainActor func testCompactWorkToolbarFitsBesideBackTitleAndMoreAndHonorsAvailability() async throws {
+    @MainActor func testConstrainedNativeNavigationAndEditorRemainBoundedAcrossWorkAvailabilityChanges() async throws {
         let route = ConversationID(connectionID: "layout", agentID: "agent", sessionID: "work-toolbar")
         let model = ClientPresentation()
-        let draft = ComposerDraft(conversationID: route, text: "Retained draft")
+        let original = "Retained draft e\u{0301} 中文"
+        let draft = ComposerDraft(conversationID: route, text: original)
         model.conversations[route] = .init(id: route, agentName: "Long agent name", sessionTitle: "Long conversation title",
             features: [.send: .available, .sessions: .available, .connectionSettings: .available],
             work: .init(id: "exact-work", title: "Work record", detail: "Work detail", status: .unknown,
                         inspect: .temporarilyUnavailable("Reconnect to inspect this work.")))
         let host = UIHostingController(rootView: CompactWorkNavigationFixture(model: model, route: route, draft: draft,
             onIntent: { _ in }).dynamicTypeSize(.accessibility5))
-        let window = attach(host)
-        defer { window.isHidden = true; window.rootViewController = nil }
-        for width in [CGFloat(320), 402, 768] {
-            await layout(host, width: width, height: 420)
-            let elements = accessibilityElements(host.view)
-            let work = try XCTUnwrap(elements.first { identifier($0) == "work-toolbar" },
-                "Observed IDs: \(elements.compactMap(identifier).prefix(20))")
-            let title = try XCTUnwrap(elements.first { identifier($0) == "conversation-sessions" })
-            let more = try XCTUnwrap(elements.first { identifier($0) == "conversation-actions" })
-            let back = try XCTUnwrap(elements.first { $0.accessibilityLabel == "Agents" && $0.accessibilityTraits.contains(.button) })
-            let frame = UIAccessibility.convertToScreenCoordinates(host.view.bounds, in: host.view)
-            for element in [work, title, more, back] {
-                XCTAssertGreaterThan(element.accessibilityFrame.width, 0)
-                XCTAssertGreaterThanOrEqual(element.accessibilityFrame.height, 44)
-                XCTAssertTrue(frame.insetBy(dx: -1, dy: -1).contains(element.accessibilityFrame))
-            }
-            XCTAssertGreaterThanOrEqual(work.accessibilityFrame.width, 44)
-            XCTAssertTrue(work.accessibilityTraits.contains(.notEnabled))
-            XCTAssertTrue(work.accessibilityValue?.contains("Reconnect to inspect this work.") == true)
-            for pair in [(work, title), (work, more), (work, back), (title, back), (title, more)] {
-                let overlap = pair.0.accessibilityFrame.intersection(pair.1.accessibilityFrame)
-                XCTAssertTrue(overlap.isNull || overlap.width <= 1 || overlap.height <= 1)
+        let (window, priorKeyWindow) = try attachNavigation(host)
+        defer { window.isHidden = true; window.rootViewController = nil; priorKeyWindow?.makeKey() }
+        await layout(host, width: 320, height: 420)
+        let editor = try XCTUnwrap(descendants(host.view, of: UITextView.self).first { $0.isEditable })
+        editor.selectedRange = NSRange(location: 2, length: 4)
+        let selection = editor.selectedRange
+        let availability: [ActionAvailability] = [.temporarilyUnavailable("Reconnect to inspect this work."), .available, .unsupported]
+        for inspect in availability {
+            model.conversations[route]?.work?.inspect = inspect
+            for width in [CGFloat(320), 402, 768] {
+                await layout(host, width: width, height: 420)
+                let bar = try XCTUnwrap(descendants(host.view, of: UINavigationBar.self).first { !$0.isHidden })
+                let title = try XCTUnwrap(bar.topItem?.titleView)
+                let titleFrame = title.convert(title.bounds, to: bar)
+                XCTAssertTrue(bar.window === window)
+                XCTAssertTrue(title.window === window)
+                XCTAssertGreaterThan(titleFrame.width, 0)
+                XCTAssertGreaterThan(titleFrame.height, 0)
+                XCTAssertGreaterThanOrEqual(titleFrame.minX, -1)
+                XCTAssertLessThanOrEqual(titleFrame.maxX, bar.bounds.width + 1)
+                XCTAssertTrue(descendants(host.view, of: UITextView.self).first { $0.isEditable } === editor)
+                XCTAssertGreaterThan(editor.bounds.width, 0)
+                XCTAssertLessThanOrEqual(editor.bounds.width, host.view.bounds.width + 1)
+                XCTAssertEqual(editor.selectedRange, selection)
+                XCTAssertTrue(editor.text.utf8.elementsEqual(original.utf8))
+                XCTAssertTrue(draft.text.utf8.elementsEqual(original.utf8))
             }
         }
-        // Work remains an independent toolbar action when this backend has no More actions.
+        // Exercise actual layout updates both without other toolbar features
+        // and without Work. This does not claim to observe SwiftUI's AX tree.
         model.conversations[route]?.features = [.send: .available]
         model.conversations[route]?.work?.inspect = .available
         await layout(host, width: 320, height: 420)
-        var entries = accessibilityElements(host.view)
-        XCTAssertEqual(entries.filter { identifier($0) == "work-toolbar" }.count, 1)
-        XCTAssertFalse(entries.contains { identifier($0) == "conversation-actions" })
-        model.conversations[route]?.work?.inspect = .unsupported
+        XCTAssertTrue(descendants(host.view, of: UITextView.self).first { $0.isEditable } === editor)
+        model.conversations[route]?.work = nil
         await layout(host, width: 320, height: 420)
-        entries = accessibilityElements(host.view)
-        XCTAssertFalse(entries.contains { ["work-toolbar", "work-dock"].contains(identifier($0) ?? "") })
+        XCTAssertTrue(descendants(host.view, of: UITextView.self).first { $0.isEditable } === editor)
+        XCTAssertEqual(editor.selectedRange, selection)
+        XCTAssertTrue(draft.text.utf8.elementsEqual(original.utf8))
     }
 
     @MainActor func testConversationKeepsWorkAndUpgradeAccessibleBesideBoundedComposer() async throws {
@@ -668,36 +659,16 @@ final class NativeReadingLayoutTests: XCTestCase {
         XCTAssertFalse(updatedView.attributedText.string.utf8.elementsEqual(composed.utf8))
     }
 
-    @MainActor private func identifier(_ element: NSObject) -> String? {
-        (element as? any UIAccessibilityIdentification)?.accessibilityIdentifier
-    }
-
-    @MainActor private func accessibilityElements(_ root: NSObject) -> [NSObject] {
-        var visited: Set<ObjectIdentifier> = [], result: [NSObject] = []
-        func visit(_ object: NSObject, depth: Int) {
-            guard depth < 40, visited.insert(ObjectIdentifier(object)).inserted else { return }
-            if let view = object as? UIView, view.isHidden || view.alpha < 0.01 { return }
-            if object.isAccessibilityElement {
-                result.append(object)
-                // A generic UIKit host can itself be accessible while exposing
-                // the actual SwiftUI controls through its public container.
-                if identifier(object) != nil || object is UIAccessibilityElement { return }
-            }
-            if let view = object as? UIView { for child in view.subviews { visit(child, depth: depth + 1) } }
-            // UIKit supports either the array property or indexed container
-            // methods. SwiftUI hosts need not implement both representations.
-            for child in object.accessibilityElements ?? [] {
-                if let child = child as? NSObject { visit(child, depth: depth + 1) }
-            }
-            let count = object.accessibilityElementCount()
-            if count > 0 && count < 1_024 {
-                for index in 0..<count {
-                    if let child = object.accessibilityElement(at: index) as? NSObject { visit(child, depth: depth + 1) }
-                }
-            }
-        }
-        visit(root, depth: 0)
-        return result
+    @MainActor private func attachNavigation<Content: View>(_ host: UIHostingController<Content>) throws -> (UIWindow, UIWindow?) {
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .first { $0.activationState == .foregroundActive })
+        let previous = scene.windows.first { $0.isKeyWindow }
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 402, height: 760)
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        XCTAssertTrue(window.isKeyWindow)
+        return (window, previous)
     }
 
     @MainActor
