@@ -9,6 +9,7 @@
   - 2c4b2342 actual CI306项中304通过，恢复Store均成功；两条保留的hint清理断言抓到候选只查bound drafts字典、漏public draft(for:)稳定transient值。改用同一真实accessor比较对象与hint mutation，并在现有positive回归分别验证bound/transient；仍七方法/306，精确新head继续门禁，不改产品store或弱化断言。
   - 0eb73e22 精确head全13 CI绿：actual App306/306零失败/跳过（56.152秒test/90.930秒wall），七项新host回归全部通过；package459=59+400、19语两表9082编译值精确匹配。此为旧base993的执行证据，后续main组合仍单列验证，不用于宣称合成现场原因。
   - 随 #269 合并重基 e97a171d，保留真实表格pause/reading helper与全部11项布局回归；App实际源码并集307/32文件，报告minimum307与306缩减反例同步。旧head执行证据不代替此新组合，完整精确head CI继续；RN默认/现有接线未变。
+  - ef55adcc/basee97 精确全13 CI通过（App307、package459、9082编译值），随后 #268 先合78fbf034；现保留modern Bool/presenting snapshot、真实onDismiss与3项handoff回归再重基。实际源码并集310/33文件，minimum310/309缩减拒绝、docs7/report3/PBX实路径轻量再核；本head组合完整CI继续，不用先前绿色代替当前组合。
   - 触发调查的合成 QA 快照只证明后来三资源引用已落盘、文件存在；现场当次抛出的错误未捕获，不把可达竞态当已证明现场根因。无 RN、默认入口、共享服务、凭据、发布或同 bundle 升级变更。
 
 - 2026-10-16 Native 根 sheet 交接（独立候选，完整CI执行待续）。
