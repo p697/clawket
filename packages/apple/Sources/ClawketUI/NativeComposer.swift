@@ -344,6 +344,8 @@ private struct ComposerAttachmentView: View {
     let onOpen: () -> Void
     let onRemove: () -> Void
     @State private var showingFailure = false
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    private var cardWidth: CGFloat { dynamicTypeSize.isAccessibilitySize ? 224 : 144 }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -351,7 +353,7 @@ private struct ComposerAttachmentView: View {
                 Color(uiColor: .tertiarySystemBackground)
                 if let data = attachment.thumbnailData, let image = UIImage(data: data) {
                     Image(uiImage: image).resizable().scaledToFill()
-                        .frame(width: 144, height: 84).clipped()
+                        .frame(width: cardWidth, height: 84).clipped()
                         .accessibilityHidden(true)
                 } else {
                     Image(systemName: attachment.kind == .image ? "photo" : "doc.text")
@@ -362,11 +364,13 @@ private struct ComposerAttachmentView: View {
                         .accessibilityLabel(Text("Preparing \(attachment.name)"))
                 }
             }
-            .frame(width: 144, height: 84)
+            .frame(width: cardWidth, height: 84)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .modifier(AttachmentPreviewInteraction(canOpen: attachment.canOpen, name: attachment.name, open: onOpen))
             VStack(alignment: .leading, spacing: 3) {
-                Text(attachment.name).font(.caption.weight(.medium)).lineLimit(1).truncationMode(.middle)
+                Text(attachment.name).font(.caption.weight(.medium))
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1).truncationMode(.middle)
+                    .fixedSize(horizontal: false, vertical: true)
                 if case .failed(let reason) = attachment.phase {
                     Button { showingFailure = true } label: {
                         HStack(alignment: .top, spacing: 4) {
@@ -386,9 +390,9 @@ private struct ComposerAttachmentView: View {
                         .accessibilityHidden(attachment.detail == nil)
                 }
             }
-            .frame(width: 136, alignment: .leading).padding(.horizontal, 4)
+            .frame(width: cardWidth - 8, alignment: .leading).padding(.horizontal, 4)
         }
-        .frame(width: 144, alignment: .topLeading)
+        .frame(width: cardWidth, alignment: .topLeading)
         .overlay(alignment: .topTrailing) {
             if attachment.canRemove {
                 Button(action: onRemove) {

@@ -1,7 +1,7 @@
 # PROGRESS · Clawket 3.0 进度日志
 
 - 2026-10-16 Native 独立聊天/UI 打磨与模拟器验收（本地验证完成，精确 head CI 待续）。
-  - React Native 默认、源码、Expo/EAS、商店身份与共享服务不变。累计50分钟以上研究记录在 native RESEARCH；本轮收敛为统一输入面板、独立44pt操作、连续图片画廊、稳定上传顺序与明确失败原因。同一 UITextView 保留选区/marked text；键盘可用高度内，附件/正文可滚动，操作固定可达，Work/模型保持真实入口。
+  - React Native 默认、源码、Expo/EAS、商店身份与共享服务不变。累计50分钟以上研究记录在 native RESEARCH；本轮收敛为统一输入面板、独立44pt操作、连续图片画廊、稳定上传顺序与明确失败原因。同一 UITextView 保留选区/marked text；键盘可用高度内，附件/正文可滚动，操作固定可达，Work/模型保持真实入口。 最终截图复核发现最大字号文件名截断相似，辅助字号卡片改224pt/两行文件名（普通144pt不变），该增量交精确head CI及后续手势复验。
   - WebDriver仅操作新建独立 iPhone17/iOS27.0合成模拟器；真实App/Runtime/socket接本机受控Hermes兼容peer。实测系统Photos三图顺序/移除/原图、显式粘贴、Files TXT/PDF与冷恢复，修复UIKit先关闭绑定而丢失文件结果；超大/损坏文件明确失败、移除恢复发送且独立草稿保留。真实中文拼音候选跨展开/收起保留，三图发送后清空已接收草稿；最大辅助字号+深色+增强对比+键盘仍有44pt操作，手势到达模型/第三图、模型/工作sheet可打开。Arabic RTL及日/英/中冷启动实际draft值保持。
   - A运行/B排队/C独立草稿、未知receipt重连/冷启不重发、断线hold B、Stop只停止A均实测；peer累计11个接收、10个完成、1个中止、0个去重重放、15图/2文档载荷校验。后台返回仅证明恢复就绪，不宣称同一socket存活。开原图暂停跟随，关闭后阅读位置偏移0；手动翻旧消息后显式回最新能到底并隐藏。修复真实UITableView估高校正后尾部残留偏移，保留2pt回归断言。
   - 独占heavy/simulator、jobs2串行：ReadingLayout9、ReadingRestoration4、MediaHost22方法通过；actual 273 App方法（原261+12）严格Swift6、iOS16.4双架构开发模拟器全部编译，非273本地全跑。22真实UI源码typecheck、19语473 UI+4权限/9063编译值精确核对、report3（273门槛/272缩减拒绝）、docs16指令对/7回归与diff通过；完整精确head门禁交CI。实测限合成peer，不冒充六后端/Relay/模型推理、真机VoiceOver或相机云文件验收；live/head重复另切片处理，不猜来源身份、不宣布N5完成，无发行/上传/生产改动。
