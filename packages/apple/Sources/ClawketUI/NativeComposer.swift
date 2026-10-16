@@ -67,6 +67,7 @@ struct NativeComposer: View {
                 .scrollBounceBehavior(.basedOnSize)
                 .scrollDismissesKeyboard(.never)
                 .frame(height: expanded ? availableContentHeight : min(naturalContentHeight, availableContentHeight))
+                .composerHeight("viewport")
                 .accessibilityIdentifier("composer-content")
                 HStack(spacing: 4) {
                     if hasAddActions { addMenu }
@@ -106,7 +107,10 @@ struct NativeComposer: View {
             let measured = values.filter { $0.value.isFinite && $0.value >= 0 }
             guard measured.keys != contentHeights.keys || measured.contains(where: { abs($0.value - (contentHeights[$0.key] ?? 0)) > 0.5 }) else { return }
             contentHeights = measured
+            input.requestSelectionReveal()
         }
+        .onChange(of: maximumHeight) { _ in input.requestSelectionReveal() }
+        .onChange(of: expanded) { _ in input.requestSelectionReveal() }
         .onChange(of: draft.insertion?.id) { _ in
             guard let insertion = draft.insertion else { return }
             if insertion.expectedRevision != nil { input.commitMarkedText() }
@@ -439,6 +443,9 @@ private final class NativeInputController: NSObject, ObservableObject, UITextVie
     @Published var lineCount = 1
     var expanded = false
     var onChange: ((String) -> Void)?
+    private var selectionRevealPending = false
+    private var selectionRevealScheduled = false
+    private var selectionRevealAttempts = 0
     lazy var textView: GrowingTextView = {
         let view = GrowingTextView()
         view.backgroundColor = .clear
@@ -452,13 +459,99 @@ private final class NativeInputController: NSObject, ObservableObject, UITextVie
         view.setContentHuggingPriority(.defaultLow, for: .horizontal)
         view.keyboardDismissMode = .interactive
         view.accessibilityLabel = String(localized: "Message")
-        view.onLayout = { [weak self] in self?.measure() }
+        view.onLayout = { [weak self] in
+            self?.measure()
+            self?.scheduleSelectionReveal()
+        }
         return view
     }()
 
     func textViewDidChange(_ textView: UITextView) {
         onChange?(textView.text)
         measure()
+        requestSelectionReveal()
+    }
+
+    func textViewDidBeginEditing(_ textView: UITextView) { requestSelectionReveal() }
+    func textViewDidChangeSelection(_ textView: UITextView) { requestSelectionReveal() }
+
+    func requestSelectionReveal() {
+        guard textView.isFirstResponder else { return }
+        selectionRevealPending = true
+        selectionRevealAttempts = 0
+        scheduleSelectionReveal()
+    }
+
+    private func scheduleSelectionReveal() {
+        guard selectionRevealPending, !selectionRevealScheduled else { return }
+        selectionRevealScheduled = true
+        Task { @MainActor [weak self] in
+            await Task.yield()
+            guard let self else { return }
+            self.selectionRevealScheduled = false
+            guard self.selectionRevealPending else { return }
+            self.selectionRevealAttempts += 1
+            if self.revealSelection() || self.selectionRevealAttempts >= 3 {
+                self.selectionRevealPending = false
+            } else {
+                // TextKit and SwiftUI may finish their viewport layouts on
+                // different turns. Only this active request earns correction.
+                self.textView.setNeedsLayout()
+            }
+        }
+    }
+
+    private func revealSelection() -> Bool {
+        guard textView.isFirstResponder, textView.window != nil,
+              !textView.isTracking, !textView.isDragging, !textView.isDecelerating,
+              let selection = textView.selectedTextRange else { return true }
+        // TextKit follows its caret inside the editor. The bounded composer
+        // also scrolls attachments and model details, so reveal that same caret
+        // in its enclosing viewport without changing selection or marked text.
+        var ancestor = textView.superview
+        while let view = ancestor {
+            defer { ancestor = view.superview }
+            guard let scroll = view as? UIScrollView else { continue }
+            guard scroll.bounds.height > 0 else { return false }
+            guard !scroll.isTracking, !scroll.isDragging, !scroll.isDecelerating else { return true }
+            textView.layoutIfNeeded()
+            var caret = textView.textInputView.convert(textView.caretRect(for: selection.end), to: textView)
+            guard !caret.isNull, !caret.isInfinite, caret.height > 0 else { return false }
+            if caret.maxY > textView.contentSize.height + 0.5,
+               let manager = textView.textLayoutManager, let content = manager.textContentManager {
+                // A lazy TextKit estimate may still understate a distant caret
+                // after a font/width change. Do not force TextKit 1 fallback.
+                manager.ensureLayout(for: content.documentRange)
+                textView.setNeedsLayout(); textView.layoutIfNeeded()
+                caret = textView.textInputView.convert(textView.caretRect(for: selection.end), to: textView)
+            }
+            if textView.isScrollEnabled { reveal(caret, in: textView, allowingEstimatedExtent: true) }
+            let target = textView.textInputView.convert(textView.caretRect(for: selection.end), to: scroll)
+            reveal(target, in: scroll)
+            let innerVisible = textView.bounds.inset(by: textView.adjustedContentInset).insetBy(dx: -0.5, dy: -0.5)
+            let outerVisible = scroll.bounds.inset(by: scroll.adjustedContentInset).insetBy(dx: -0.5, dy: -0.5)
+            return innerVisible.contains(textView.textInputView.convert(textView.caretRect(for: selection.end), to: textView))
+                && outerVisible.contains(textView.textInputView.convert(textView.caretRect(for: selection.end), to: scroll))
+        }
+        return false
+    }
+
+    private func reveal(_ caret: CGRect, in scroll: UIScrollView, allowingEstimatedExtent: Bool = false) {
+        let visible = scroll.bounds.inset(by: scroll.adjustedContentInset)
+        let padding = min(8, max(0, (visible.height - caret.height) / 2))
+        let target = caret.insetBy(dx: 0, dy: -padding)
+        var offset = scroll.contentOffset.y
+        if target.minY < visible.minY { offset += target.minY - visible.minY }
+        else if target.maxY > visible.maxY { offset += target.maxY - visible.maxY }
+        let minimum = -scroll.adjustedContentInset.top
+        // UITextView's lazy contentSize can lag its actual TextKit caret.
+        // Never clamp a known caret back to that smaller estimate.
+        let extent = allowingEstimatedExtent ? max(scroll.contentSize.height, target.maxY) : scroll.contentSize.height
+        let maximum = max(minimum, extent - scroll.bounds.height + scroll.adjustedContentInset.bottom)
+        offset = min(maximum, max(minimum, offset))
+        if abs(offset - scroll.contentOffset.y) > 0.5 {
+            scroll.setContentOffset(CGPoint(x: scroll.contentOffset.x, y: offset), animated: false)
+        }
     }
 
     func sync(text: String, expanded: Bool) {
@@ -467,6 +560,7 @@ private final class NativeInputController: NSObject, ObservableObject, UITextVie
             let selection = textView.selectedRange
             textView.text = text
             textView.selectedRange = NSRange(location: min(selection.location, text.utf16.count), length: 0)
+            requestSelectionReveal()
         }
         measure()
     }
@@ -501,6 +595,7 @@ private final class NativeInputController: NSObject, ObservableObject, UITextVie
             self.height = newHeight
             self.lineCount = lines
             self.textView.isScrollEnabled = self.expanded || scrolls
+            self.requestSelectionReveal()
         }
     }
 }
