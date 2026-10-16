@@ -4,6 +4,178 @@ import XCTest
 @testable import ClawketUI
 
 final class NativeReadingLayoutTests: XCTestCase {
+    @MainActor func testConversationKeepsWorkAndUpgradeAccessibleBesideBoundedComposer() async throws {
+        let route = ConversationID(connectionID: "layout", agentID: "agent", sessionID: "accessories")
+        let draft = ComposerDraft(conversationID: route, text: "A retained draft\nSecond line\nThird line")
+        draft.attachments = (0..<3).map { .init(id: "accessory-\($0)", name: "Attachment \($0).png", kind: .image, detail: "4 KB") }
+        let conversation = ConversationPresentation(id: route, agentName: "Agent", sessionTitle: "Conversation",
+            features: [.pro: .available, .send: .available, .photos: .available],
+            work: .init(id: "work", title: "Current work record", status: .succeeded, inspect: .available))
+        let host = UIHostingController(rootView: NativeConversationView(model: ClientPresentation(), conversation: conversation,
+            draft: draft, obscured: false, onIntent: { _ in }, showSheet: { _ in }).dynamicTypeSize(.accessibility5))
+        host.safeAreaRegions = []
+        let window = attach(host)
+        defer { window.isHidden = true; window.rootViewController = nil }
+        await layout(host, width: 402, height: 340)
+        let editor = try XCTUnwrap(descendants(host.view, of: UITextView.self).first)
+        editor.font = UIFont.preferredFont(forTextStyle: .body,
+            compatibleWith: .init(preferredContentSizeCategory: .accessibilityExtraExtraExtraLarge))
+        for height in [CGFloat(340), 150] {
+            await layout(host, width: 402, height: height)
+            let vertical = descendants(host.view, of: UIScrollView.self).filter {
+                !($0 is UITextView) && !($0 is UITableView) && $0.bounds.width > 0 && $0.contentSize.width <= $0.bounds.width + 1
+            }
+            XCTAssertEqual(vertical.count, 2, "Both accessory and composer content remain separate reachable viewports")
+            for view in vertical {
+                let frame = view.convert(view.bounds, to: host.view)
+                XCTAssertGreaterThan(frame.height, 0)
+                XCTAssertGreaterThan(view.contentSize.height, 0)
+                XCTAssertGreaterThanOrEqual(frame.minY, -1)
+                XCTAssertLessThanOrEqual(frame.maxY, height + 1)
+            }
+        }
+    }
+
+    @MainActor func testLargestAccessibilityTextKeepsCompactEditorBoundedAndScrollable() async throws {
+        let route = ConversationID(connectionID: "layout", agentID: "agent", sessionID: "large")
+        let draft = ComposerDraft(conversationID: route, text: String(repeating: "Large editable draft 中文。", count: 12))
+        draft.attachments = (0..<3).map { .init(id: "large-\($0)", name: "Long attachment \($0).png", kind: .image,
+            detail: "4 KB", canOpen: true) }
+        let conversation = ConversationPresentation(id: route, agentName: "Agent", sessionTitle: "Conversation",
+            modelTitle: "Long current model name", features: [.send: .available, .models: .available, .photos: .available])
+        let host = UIHostingController(rootView: NativeComposer(draft: draft, conversation: conversation,
+            expanded: .constant(false), onIntent: { _ in }, showModels: {}, maximumHeight: 340).dynamicTypeSize(.accessibility5))
+        // The production parent already supplies the keyboard-safe viewport;
+        // do not add the test window's system safe area to that same budget.
+        host.safeAreaRegions = []
+        let window = attach(host)
+        defer { window.isHidden = true; window.rootViewController = nil }
+        await layout(host, width: 402, height: 340)
+        let editor = try XCTUnwrap(descendants(host.view, of: UITextView.self).first)
+        editor.font = UIFont.preferredFont(forTextStyle: .body,
+            compatibleWith: .init(preferredContentSizeCategory: .accessibilityExtraExtraExtraLarge))
+        editor.setNeedsLayout()
+        await layout(host, width: 402, height: 340)
+        XCTAssertGreaterThan(try XCTUnwrap(editor.font).pointSize, 40)
+        XCTAssertLessThanOrEqual(editor.bounds.height, 160)
+        XCTAssertTrue(editor.isScrollEnabled)
+        XCTAssertTrue(editor.isEditable); XCTAssertEqual(editor.text, draft.text)
+        XCTAssertLessThanOrEqual(host.sizeThatFits(in: CGSize(width: 402, height: 340)).height, 340.5)
+        XCTAssertTrue(descendants(host.view, of: UIScrollView.self).contains {
+            !($0 is UITextView) && $0.bounds.height > 0 && $0.contentSize.height > $0.bounds.height + 20
+        }, "Attachments and large text must scroll instead of displacing the action row")
+        editor.selectedRange = NSRange(location: 4, length: 8)
+        for expanded in [false, true] {
+            host.rootView = NativeComposer(draft: draft, conversation: conversation, expanded: .constant(expanded),
+                onIntent: { _ in }, showModels: {}, maximumHeight: 150).dynamicTypeSize(.accessibility5)
+            await layout(host, width: 402, height: 150)
+            let current = try XCTUnwrap(descendants(host.view, of: UITextView.self).first)
+            XCTAssertTrue(current === editor); XCTAssertEqual(current.selectedRange, NSRange(location: 4, length: 8))
+            XCTAssertEqual(current.text, draft.text)
+            XCTAssertLessThanOrEqual(host.sizeThatFits(in: CGSize(width: 402, height: 150)).height, 150.5)
+            XCTAssertGreaterThanOrEqual(current.bounds.height, try XCTUnwrap(current.font).lineHeight)
+        }
+    }
+
+    @MainActor func testJumpToLatestPublishesFollowingAndReadingEvenWhenNoMessageChanged() async throws {
+        let route = ConversationID(connectionID: "layout", agentID: "agent", sessionID: "jump")
+        let model = ClientPresentation(readingContexts: [route: .init(restoration: .init(followsBottom: false, messageID: "m3", offset: 0))])
+        let messages = (0..<30).map { MessagePresentation(id: "m\($0)", author: .local,
+            content: [.markdown(String(repeating: "Retained message \($0). ", count: 5))]) }
+        var following = false
+        var captures: [ConversationReadingContext] = []
+        func transcript(_ request: Int) -> NativeTranscript {
+            .init(messages: messages, conversationID: route, model: model,
+                  following: .init(get: { following }, set: { following = $0 }), scrollRequest: request,
+                  historyAvailability: .unsupported, isLoadingHistory: false, onIntent: {
+                      if case let .readingContextChanged(_, _, value) = $0 { captures.append(value) }
+                  })
+        }
+        let host = UIHostingController(rootView: transcript(0)), window = attach(host)
+        defer { window.isHidden = true; window.rootViewController = nil }
+        await layout(host, width: 420, height: 500)
+        let table = try XCTUnwrap(descendants(host.view, of: UITableView.self).first)
+        XCTAssertFalse(following); XCTAssertEqual(captures.last?.followsBottom, false)
+        host.rootView = transcript(1)
+        await layout(host, width: 420, height: 500)
+        // UIKit may replace an estimated tail height on a later run-loop turn.
+        // Require stable real geometry, not a fixed delay or a wider tolerance.
+        var settledFrames = 0
+        var lastGeometry: [CGFloat]?
+        for _ in 0..<30 {
+            host.view.layoutIfNeeded(); table.layoutIfNeeded(); CATransaction.flush()
+            let bottom = max(-table.adjustedContentInset.top,
+                table.contentSize.height - table.bounds.height + table.adjustedContentInset.bottom)
+            let geometry = [table.bounds.width, table.bounds.height, table.contentSize.height,
+                table.adjustedContentInset.top, table.adjustedContentInset.bottom, bottom]
+            let stable = lastGeometry.map { zip($0, geometry).allSatisfy { abs($0 - $1) <= 0.5 } } ?? false
+            settledFrames = stable && table.window === window && abs(table.contentOffset.y - bottom) <= 2 ? settledFrames + 1 : 0
+            lastGeometry = geometry
+            if settledFrames >= 3 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(descendants(host.view, of: UITableView.self).first === table)
+        XCTAssertTrue(following); XCTAssertEqual(captures.last?.followsBottom, true)
+        XCTAssertGreaterThanOrEqual(settledFrames, 3)
+        XCTAssertEqual(table.contentOffset.y, max(-table.adjustedContentInset.top,
+            table.contentSize.height - table.bounds.height + table.adjustedContentInset.bottom), accuracy: 2)
+    }
+
+    func testImageGroupsKeepOriginalContentOrderAndDisclosureIndicesWithoutNeedingPixels() throws {
+        let image = AttachmentPresentation(id: "same-reference", name: "Image", kind: .image, phase: .preparing)
+        let file = AttachmentPresentation(id: "file", name: "Notes", kind: .file)
+        let content: [MessageContent] = [.attachment(image), .attachment(image), .attachment(file),
+            .markdown("Between images"), .attachment(image), .toolOutput(.init(text: "Literal output")),
+            .attachment(image), .attachment(image)]
+        let groups = NativeMessageContentGroup.group(content)
+        XCTAssertEqual(groups.map(\.id), [0, 2, 3, 4, 5, 6])
+        guard case let .images(first) = groups[0], case let .item(fileIndex, fileContent) = groups[1],
+              case let .item(toolIndex, toolContent) = groups[4], case let .images(last) = groups[5] else {
+            return XCTFail("Only adjacent images belong in a gallery")
+        }
+        XCTAssertEqual(first.map(\.id), [0, 1])
+        XCTAssertEqual(first.map(\.attachment.id), [image.id, image.id])
+        XCTAssertEqual(fileIndex, 2); XCTAssertEqual(fileContent, .attachment(file))
+        XCTAssertEqual(toolIndex, 5); XCTAssertEqual(toolContent, .toolOutput(.init(text: "Literal output")))
+        XCTAssertEqual(last.map(\.id), [6, 7])
+        XCTAssertEqual(NativeMessageContentGroup.group([]).count, 0)
+        XCTAssertEqual(content.count, 8)
+    }
+
+    @MainActor
+    func testThreeTallImagesUseCompactGalleryInActualTranscriptCells() async throws {
+        let route = ConversationID(connectionID: "layout", agentID: "agent", sessionID: "session")
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 80, height: 400))
+        let pixels = renderer.pngData { context in
+            UIColor.systemTeal.setFill(); context.fill(CGRect(x: 0, y: 0, width: 80, height: 400))
+        }
+        let images: [MessageContent] = (0..<3).map {
+            .attachment(.init(id: "image-\($0)", name: "Image \($0).png", kind: .image,
+                              thumbnailData: pixels, aspectRatio: 0.2, canOpen: true))
+        }
+        for author in [MessageAuthor.local, .agent(name: "Agent", label: nil)] {
+            for width in [CGFloat(320), 420, 768] {
+                let message = MessagePresentation(id: "gallery", author: author, content: images)
+                let host = UIHostingController(rootView: NativeTranscript(messages: [message], conversationID: route,
+                    model: ClientPresentation(), following: .constant(false), scrollRequest: 0,
+                    historyAvailability: .unsupported, isLoadingHistory: false, onIntent: { _ in }))
+                let window = attach(host)
+                await layout(host, width: width, height: 900)
+                let table = try XCTUnwrap(descendants(host.view, of: UITableView.self).first)
+                for _ in 0..<20 {
+                    table.layoutIfNeeded(); CATransaction.flush()
+                    if table.cellForRow(at: IndexPath(row: 0, section: 0)) != nil { break }
+                    try await Task.sleep(for: .milliseconds(10))
+                }
+                XCTAssertNotNil(table.cellForRow(at: IndexPath(row: 0, section: 0)))
+                let height = table.rectForRow(at: IndexPath(row: 0, section: 0)).height
+                XCTAssertGreaterThan(height, 150)
+                XCTAssertLessThan(height, 600, "One image selection must not become three full-height posters")
+                window.isHidden = true; window.rootViewController = nil
+            }
+        }
+    }
+
     @MainActor
     func testLongComposerLeavesRoomForActionsAndKeepsTheSameExpandedEditor() async throws {
         let route = ConversationID(connectionID: "layout", agentID: "agent", sessionID: "session")
@@ -23,20 +195,20 @@ final class NativeReadingLayoutTests: XCTestCase {
             let frame = editor.convert(editor.bounds, to: host.view)
             XCTAssertGreaterThan(frame.width, 64)
             XCTAssertGreaterThanOrEqual(frame.minX, -1)
-            // Add, Send and Stop must fit next to the editor rather than outside the screen.
-            XCTAssertLessThanOrEqual(frame.maxX, width - 44)
+            // The editor uses the full surface width; actions occupy the separate bottom row.
+            XCTAssertLessThanOrEqual(frame.maxX, width - 12)
             XCTAssertGreaterThan(editor.contentSize.height, editor.font?.lineHeight ?? 0)
         }
         let editor = try XCTUnwrap(descendants(host.view, of: UITextView.self).first)
         editor.selectedRange = NSRange(location: 4, length: 8)
         host.rootView = NativeComposer(draft: draft, conversation: conversation,
-            expanded: .constant(true), onIntent: { _ in }, showModels: {})
+            expanded: .constant(true), onIntent: { _ in }, showModels: {}, maximumHeight: 500)
         await layout(host, width: 320, height: 500)
         let expanded = try XCTUnwrap(descendants(host.view, of: UITextView.self).first)
         XCTAssertTrue(expanded === editor)
         XCTAssertEqual(expanded.text, text)
         XCTAssertEqual(expanded.selectedRange, NSRange(location: 4, length: 8))
-        XCTAssertLessThanOrEqual(expanded.convert(expanded.bounds, to: host.view).maxX, 276)
+        XCTAssertLessThanOrEqual(expanded.convert(expanded.bounds, to: host.view).maxX, 308)
     }
 
     @MainActor

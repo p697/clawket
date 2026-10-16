@@ -6,6 +6,19 @@ import Foundation
 
 enum NativeMediaIssue: Error, Equatable { case textOnly, modelChanging }
 
+/// Fixed product copy only; provider/runtime error descriptions may contain private paths.
+func nativeMediaFailureLabel(_ error: any Error) -> String? {
+    let failure = error as? RuntimeFailure
+    if error as? MediaFailure == .tooLarge || (failure?.code == .capacity && failure?.delivery == .rejectedBeforeDispatch) {
+        return String(localized: "Choose smaller attachments before sending.")
+    }
+    if failure?.code == .unsupported { return String(localized: "This agent does not support this attachment.") }
+    if error as? NativeMediaIssue == .textOnly { return String(localized: "This model accepts text only.") }
+    if error as? NativeMediaIssue == .modelChanging { return String(localized: "Preparing attachments…") }
+    if error as? MediaFailure == .unsupported { return String(localized: "Attachment could not be added. Try again.") }
+    return nil
+}
+
 /// Display/storage metadata only. Remote references never carry live authority or URLs.
 struct NativeMediaReference: Codable, Sendable, Equatable, Identifiable {
     var id: String
@@ -48,12 +61,70 @@ struct NativeMediaImport: Identifiable, Sendable {
     let name: String
 }
 
+/// Ephemeral order and view correlation only. These IDs never grant resource ownership.
+struct NativeDraftMediaOrder {
+    private struct Slot {
+        var resource: UUID
+        let display: UUID
+    }
+    private var slots: [Slot] = []
+
+    mutating func complete(importID: UUID, resourceID: UUID) {
+        guard let index = slots.firstIndex(where: { $0.resource == importID }),
+              !slots.contains(where: { $0.resource == resourceID }) else { return }
+        slots[index].resource = resourceID
+    }
+
+    mutating func project(_ values: [AttachmentPresentation]) -> [AttachmentPresentation] {
+        let live = Set(values.compactMap { UUID(uuidString: $0.id) })
+        slots.removeAll { !live.contains($0.resource) }
+        for value in values {
+            guard let id = UUID(uuidString: value.id), !slots.contains(where: { $0.resource == id }), slots.count < 6 else { continue }
+            slots.append(.init(resource: id, display: id))
+        }
+        return values.enumerated().sorted {
+            let left = rank($0.element.id), right = rank($1.element.id)
+            return left == right ? $0.offset < $1.offset : left < right
+        }.map { item in
+            var value = item.element
+            if let id = UUID(uuidString: value.id), let slot = slots.first(where: { $0.resource == id }) {
+                value.presentationID = slot.display.uuidString.lowercased()
+            }
+            return value
+        }
+    }
+
+    func orderedResources(_ values: [UUID]) -> [UUID] {
+        values.enumerated().sorted {
+            let left = rank($0.element.uuidString), right = rank($1.element.uuidString)
+            return left == right ? $0.offset < $1.offset : left < right
+        }.map(\.element)
+    }
+
+    private func rank(_ value: String) -> Int {
+        guard let id = UUID(uuidString: value) else { return .max }
+        return slots.firstIndex { $0.resource == id } ?? .max
+    }
+}
+
 struct NativeMediaPickerRequest: Identifiable {
     let id = UUID()
     let scope: NativeMediaScope
     let source: AttachmentSource
     let remaining: Int
     let allowsFiles: Bool
+}
+
+/// UIKit may dismiss a document picker before delivering its selection.
+/// Presentation binding lifetime must not decide whether that result is current.
+struct NativeMediaPickerLifetime {
+    private var pending: NativeMediaPickerRequest?
+    mutating func present(_ request: NativeMediaPickerRequest) { pending = request }
+    mutating func consume(_ request: NativeMediaPickerRequest) -> Bool {
+        guard pending?.id == request.id, pending?.scope == request.scope else { return false }
+        pending = nil; return true
+    }
+    mutating func retire() { pending = nil }
 }
 
 struct NativePendingMediaImport: Codable, Sendable, Identifiable {

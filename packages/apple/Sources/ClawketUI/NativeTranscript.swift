@@ -98,7 +98,8 @@ struct NativeTranscript: UIViewRepresentable {
             }
             let appearanceChanged = appearance != parent.model.appearance
             appearance = parent.model.appearance
-            if parent.scrollRequest != lastScrollRequest {
+            let scrollRequested = parent.scrollRequest != lastScrollRequest
+            if scrollRequested {
                 lastScrollRequest = parent.scrollRequest
                 followsBottom = true
                 pendingRestoration = nil; retainedAnchor = nil
@@ -113,6 +114,7 @@ struct NativeTranscript: UIViewRepresentable {
             let previousIDs = dataSource?.snapshot().itemIdentifiers ?? []
             guard previousIDs != ids || !changed.isEmpty || !initialized else {
                 if followsBottom && parent.scrollRequest != 0 { scrollToBottom(table) }
+                if scrollRequested { publishFollowing(); captureReading() }
                 return
             }
             items = next
@@ -195,8 +197,14 @@ struct NativeTranscript: UIViewRepresentable {
         }
 
         private func scrollToBottom(_ table: UITableView) {
-            let y = max(-table.adjustedContentInset.top, table.contentSize.height - table.bounds.height + table.adjustedContentInset.bottom)
-            if abs(table.contentOffset.y - y) > 0.5 { table.setContentOffset(CGPoint(x: 0, y: y), animated: false) }
+            // Reaching the tail can replace estimated heights with real cell
+            // sizes. Settle that geometry before capturing the bottom anchor.
+            for _ in 0..<3 {
+                let y = max(-table.adjustedContentInset.top, table.contentSize.height - table.bounds.height + table.adjustedContentInset.bottom)
+                guard abs(table.contentOffset.y - y) > 0.5 else { break }
+                table.setContentOffset(CGPoint(x: 0, y: y), animated: false)
+                table.layoutIfNeeded()
+            }
         }
 
         func geometryChanged() {
@@ -205,7 +213,8 @@ struct NativeTranscript: UIViewRepresentable {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.geometryScheduled = false
-                guard let table = self.table, !self.applying, !table.isDragging, !table.isDecelerating else { return }
+                guard let table = self.table, table.window != nil, table.bounds.width > 0, table.bounds.height > 0,
+                      !self.applying, !table.isTracking, !table.isDragging, !table.isDecelerating else { return }
                 if self.followsBottom { self.scrollToBottom(table) }
                 else if let anchor = self.retainedAnchor { self.restore(anchor, in: table) }
                 self.captureReading()
@@ -238,6 +247,13 @@ struct NativeTranscript: UIViewRepresentable {
             if scrollView.isDragging || scrollView.isDecelerating {
                 if let table { retainedAnchor = readingAnchor(in: table) }
                 captureReading()
+            } else if followsBottom, !scrollView.isTracking, scrollView.bounds.width > 0, scrollView.bounds.height > 0 {
+                // UITableView can adjust an estimated-row offset without
+                // changing contentSize. Keep an explicit bottom request alive
+                // through that correction, without resuming a reader's scroll.
+                let bottom = max(-scrollView.adjustedContentInset.top,
+                    scrollView.contentSize.height - scrollView.bounds.height + scrollView.adjustedContentInset.bottom)
+                if abs(scrollView.contentOffset.y - bottom) > 0.5 { geometryChanged() }
             }
         }
         @objc func captureReading() {
@@ -264,6 +280,10 @@ final class TranscriptTableView: UITableView {
     var onGeometryChanged: (() -> Void)?
     private var lastSize = CGSize.zero
     private var lastContentSize = CGSize.zero
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window != nil { onGeometryChanged?() }
+    }
     override func layoutSubviews() {
         super.layoutSubviews()
         if bounds.size != lastSize || contentSize != lastContentSize {

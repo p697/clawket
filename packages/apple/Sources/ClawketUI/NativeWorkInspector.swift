@@ -11,6 +11,7 @@ struct NativeWorkDock: View {
         Button(action: open) {
             HStack(spacing: 10) {
                 WorkStatusGlyph(status: work.status)
+                    .font(.system(size: 18))
                     .frame(width: 20).accessibilityHidden(true)
                 Text(work.inspect.explanation ?? work.title).font(.subheadline.weight(.medium)).foregroundStyle(.primary)
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
@@ -18,7 +19,7 @@ struct NativeWorkDock: View {
                 if let duration = work.clock.durationLabel {
                     Text(duration).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                 }
-                Image(systemName: "chevron.up").font(.caption.weight(.semibold))
+                Image(systemName: "chevron.up").font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.tertiary).accessibilityHidden(true)
             }
             .padding(.horizontal, 14).frame(minHeight: 44)

@@ -114,10 +114,16 @@ final class NativeAppModel: ObservableObject {
     private var sendTasks: [ConversationID: Task<Void, Never>] = [:]
     private var finishedRuns: [ConversationID: [String]] = [:]
     private var liveRevisions: [ConversationID: Int64] = [:]
+    private var streamingPresentationWire: UUID?
+    private var streamingPresentationRows: [ConversationID: (epoch: UUID?, ids: Set<Data>)] = [:]
     var media: NativeMediaController?
-    @Published var mediaPicker: NativeMediaPickerRequest?
+    @Published var mediaPicker: NativeMediaPickerRequest? {
+        didSet { if let mediaPicker { mediaPickerLifetime.present(mediaPicker) } }
+    }
+    var mediaPickerLifetime = NativeMediaPickerLifetime()
     @Published var mediaPreview: NativeMediaPreview?
     var mediaImports: [UUID: NativeMediaImport] = [:]
+    var mediaDraftOrder: [ConversationID: NativeDraftMediaOrder] = [:]
     var mediaImportReceipts: [UUID: StagedMediaFile] = [:]
     var mediaImportResources: [UUID: UUID] = [:]
     var mediaImportTasks: [UUID: Task<Void, Never>] = [:]
@@ -1059,7 +1065,9 @@ final class NativeAppModel: ObservableObject {
                 documents[route] = current; mediaDraftRevisions[route] = UUID()
                 presentation.draft(for: route).text = ""; presentation.draft(for: route).attachments = []
                 presentation.draft(for: route).hint = nil
-                updatePresentation(route); scheduleSave(route, immediate: true); drainQueue(route)
+                updatePresentation(route)
+                presentation.draft(for: route).acceptedLocalInputID = id
+                scheduleSave(route, immediate: true); drainQueue(route)
             } catch {
                 if activation == activationRevision, wire == wireRevision, scope == mediaScope(route) { showMediaFailure(error, route: route) }
             }
@@ -1171,7 +1179,7 @@ final class NativeAppModel: ObservableObject {
                 guard var document = documents[route] else { continue }
                 let previous = document.messages
                 let epoch = document.historyEpoch
-                guard NativeLiveMessages.text(update, in: &document, epoch: epoch) else { continue }
+                guard applyLiveText(update, in: &document, route: route, epoch: epoch) else { continue }
                 retireChangedHistoryMedia(old: previous, new: document.messages)
                 documents[route] = document
                 running[route] = update.runID; changed(route); updatePresentation(route); scheduleSave(route)
@@ -1256,6 +1264,7 @@ final class NativeAppModel: ObservableObject {
 
     func updatePresentation(_ route: ConversationID) {
         guard let document = documents[route] else { return }
+        let previous = presentation.conversations[route]
         let name = agents.first { $0.agentID == route.agentID && $0.connectionID == route.connectionID }?.name ?? String(localized: "Agent")
         let session = sessions.first { $0.key == route.sessionID && $0.connectionID == route.connectionID }
         let connected = route.connectionID == activeConnectionID && state.phase == .ready && !navigationHeldRoutes.contains(NativeStoredRoute(route))
@@ -1302,9 +1311,24 @@ final class NativeAppModel: ObservableObject {
                 features[feature] = .temporarilyUnavailable(reason)
             }
         }
+        if historySame(state.connectionID, route.connectionID), state.phase != .ready {
+            // Retain only this conversation's previously advertised controls.
+            // This is disabled display continuity, never cached wire authority.
+            for feature in [ClientFeature.send, .models, .photos, .camera, .files, .paste, .stop]
+                where features[feature] == nil && previous?.availability(feature).isVisible == true {
+                if feature == .stop && running[route] == nil { continue }
+                let reason: String
+                switch feature {
+                case .send: reason = String(localized: "Reconnect to send. Your draft is saved.")
+                case .stop: reason = String(localized: "Reconnect to stop this run.")
+                case .models: reason = String(localized: "Reconnect to change models.")
+                default: reason = String(localized: "Reconnect to use attachments.")
+                }
+                features[feature] = .temporarilyUnavailable(reason)
+            }
+        }
         applyProFeatures(route, features: &features)
         prepareMessageMedia(route)
-        let previous = presentation.conversations[route]
         let hasParticipants = document.messages.contains { $0.role == .user && $0.attribution != nil }
         let transcript: [MessagePresentation] = document.messages.filter(NativeTranscriptPresentation.isVisible)
             .map { present($0, agentName: name, route: route, hasParticipants: hasParticipants) }
@@ -1342,7 +1366,36 @@ final class NativeAppModel: ObservableObject {
            modelControls?.permitsInput(route) != false { actions.append(.sendNow) }
         return .init(id: message.id, author: author, content: content,
                      timeLabel: NativeTranscriptPresentation.timeLabel(message.timestampMs),
-                     delivery: message.isOwnedUser ? delivery : nil, isStreaming: message.streaming, actions: actions)
+                     delivery: message.isOwnedUser ? delivery : nil,
+                     isStreaming: presentsLiveStreaming(message, route: route),
+                     actions: actions)
+    }
+
+    /// Display evidence only, recorded after the physical gate and actual reducer.
+    /// Keep persisted segment state intact so resumed text still updates its row.
+    func applyLiveText(_ update: RuntimeTextUpdate, in document: inout NativeConversation,
+                       route: ConversationID, epoch: UUID?) -> Bool {
+        guard NativeLiveMessages.text(update, in: &document, epoch: epoch) else { return false }
+        if streamingPresentationWire != wireRevision {
+            streamingPresentationRows.removeAll(); streamingPresentationWire = wireRevision
+        }
+        let live = document.messages.filter { $0.historyEpoch == epoch && $0.role == .assistant && !$0.local && $0.streaming }
+        let matches = live.filter { historySame($0.runID, update.runID) && historySame($0.segmentID, update.segmentID) }
+        guard matches.count == 1, let row = matches.first else { return true }
+        if streamingPresentationRows[route] == nil && streamingPresentationRows.count >= 128 { streamingPresentationRows.removeAll() }
+        let current = Set(live.map { Data($0.id.utf8) })
+        var ids = streamingPresentationRows[route].flatMap { $0.epoch == epoch ? $0.ids : nil } ?? []
+        ids.formIntersection(current)
+        if ids.count >= 256 { ids.removeAll() }
+        ids.insert(Data(row.id.utf8)); streamingPresentationRows[route] = (epoch, ids)
+        return true
+    }
+
+    private func presentsLiveStreaming(_ message: NativeMessage, route: ConversationID?) -> Bool {
+        guard message.streaming, state.phase == .ready, let route,
+              historySame(state.connectionID, route.connectionID), streamingPresentationWire == wireRevision,
+              let evidence = streamingPresentationRows[route], evidence.epoch == message.historyEpoch else { return false }
+        return evidence.ids.contains(Data(message.id.utf8))
     }
 
     private func messageAction(_ route: ConversationID, messageID: String, action: MessageAction) {

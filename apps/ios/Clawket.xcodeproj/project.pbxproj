@@ -119,6 +119,8 @@
 		FC97262FAE513625C28FE893 /* NativeModelPreferencesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79FDD4876580D84DDCBD865B /* NativeModelPreferencesTests.swift */; };
 		FE4BA71818051CEDD9C7204A /* ClawketUI in Frameworks */ = {isa = PBXBuildFile; productRef = E4FCEFB36539FD378035E5F5 /* ClawketUI */; };
 		FFEC089FBF61EAE1AFED818F /* NativeMediaController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A163A3B7B0C823A72CF0F2E /* NativeMediaController.swift */; };
+		10A980EEE6DC567CA08ED14F /* ClawketPairing in Frameworks */ = {isa = PBXBuildFile; productRef = 33B7E77EA7FA933905E0B143 /* ClawketPairing */; };
+		4CCB4818935635D891F98775 /* ClawketTransport in Frameworks */ = {isa = PBXBuildFile; productRef = B4C044EA0494E86FC66C2BA1 /* ClawketTransport */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -257,6 +259,8 @@
 				F54CB52E76F08F39810B272A /* Foundation.framework in Frameworks */,
 				525AC5AA6876B193A893CA1C /* ClawketPersistence in Frameworks */,
 				44DD38E10C3292EF4F89CD64 /* ClawketRuntime in Frameworks */,
+				10A980EEE6DC567CA08ED14F /* ClawketPairing in Frameworks */,
+				4CCB4818935635D891F98775 /* ClawketTransport in Frameworks */,
 				475F5B966EAA0E954DEFBCDB /* ClawketUI in Frameworks */,
 				6023E9AB20021B8FB7F5E049 /* ClawketMedia in Frameworks */,
 				D4FB07D7B8BF59CFF5869DFD /* ClawketSpeech in Frameworks */,
@@ -462,6 +466,8 @@
 			packageProductDependencies = (
 				F5775CE4CCE6F16F9D1400CE /* ClawketPersistence */,
 				B354D017C96AC77858BE7A91 /* ClawketRuntime */,
+				33B7E77EA7FA933905E0B143 /* ClawketPairing */,
+				B4C044EA0494E86FC66C2BA1 /* ClawketTransport */,
 				EE43E43C07082D0E9B174E3F /* ClawketUI */,
 				1EE0AEE4BF493835E5982FAD /* ClawketMedia */,
 				9669240F20934ABDA8E987FF /* ClawketSpeech */,
@@ -1012,6 +1018,16 @@
 			productName = ClawketPersistence;
 		};
 		FB889001F1244000EC725E25 /* ClawketTransport */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CD7AB3640BEDF49787C304FD /* XCLocalSwiftPackageReference "apple" */;
+			productName = ClawketTransport;
+		};
+		33B7E77EA7FA933905E0B143 /* ClawketPairing */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CD7AB3640BEDF49787C304FD /* XCLocalSwiftPackageReference "apple" */;
+			productName = ClawketPairing;
+		};
+		B4C044EA0494E86FC66C2BA1 /* ClawketTransport */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = CD7AB3640BEDF49787C304FD /* XCLocalSwiftPackageReference "apple" */;
 			productName = ClawketTransport;

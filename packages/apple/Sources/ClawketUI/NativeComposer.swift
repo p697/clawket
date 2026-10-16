@@ -9,76 +9,90 @@ struct NativeComposer: View {
     @Binding var expanded: Bool
     let onIntent: @MainActor (ClientIntent) -> Void
     let showModels: () -> Void
+    var maximumHeight: CGFloat = .infinity
     @StateObject private var input = NativeInputController()
+    @State private var contentHeights: [String: CGFloat] = [:]
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         VStack(spacing: 8) {
-            if expanded {
-                HStack {
-                    Text("Message").font(.headline)
-                    Spacer()
-                    Button { expanded = false } label: {
-                        Image(systemName: "chevron.down").frame(minWidth: 44, minHeight: 44)
-                    }.accessibilityLabel("Collapse editor")
-                }.padding(.horizontal, 8)
-            }
-            if let voice = draft.voice { voiceStatus(voice) }
-            if !draft.attachments.isEmpty { attachmentTray }
-            if let hint = draft.hint ?? conversation.availability(.send).explanation {
-                Text(hint).font(.caption).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 8)
-            }
-            HStack(alignment: .bottom, spacing: 8) {
-                if hasAddActions { addMenu }
-                VStack(alignment: .leading, spacing: 0) {
-                    ZStack(alignment: .topLeading) {
+            VStack(alignment: .leading, spacing: 0) {
+                ScrollView(.vertical, showsIndicators: naturalContentHeight > availableContentHeight) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        VStack(spacing: 8) {
+                            if expanded {
+                                HStack {
+                                    Text("Message").font(.headline)
+                                    Spacer()
+                                    Button { expanded = false } label: {
+                                        Image(systemName: "chevron.down").font(.system(size: 17, weight: .medium))
+                                            .frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
+                                    }.accessibilityLabel("Collapse editor").buttonStyle(.plain)
+                                }.padding(.horizontal, 8)
+                            }
+                            if let voice = draft.voice { voiceStatus(voice) }
+                            if !draft.attachments.isEmpty {
+                                attachmentTray.padding(.top, 10).padding(.bottom, 4)
+                            }
+                        }.composerHeight("before")
                         PersistentTextInput(controller: input, text: draft.text, expanded: expanded) { text in
                             draft.text = text
                             onIntent(.draftChanged(conversation.id, text: text))
                         }
                         .frame(minWidth: 0, maxWidth: .infinity)
-                        .frame(height: expanded ? nil : input.height)
-                        .frame(maxHeight: expanded ? .infinity : nil)
+                        .frame(height: editorHeight)
                         .accessibilityIdentifier("message-input")
-                        if draft.text.isEmpty {
-                            Text("Message \(conversation.agentName)")
-                                .font(.body).foregroundStyle(.tertiary)
-                                .padding(.top, 13).padding(.horizontal, 12)
-                                .allowsHitTesting(false).accessibilityHidden(true)
-                        }
-                    }
-                    HStack(spacing: 0) {
-                        if conversation.availability(.models).isVisible, let modelTitle = conversation.modelTitle {
-                            Button(action: showModels) {
-                                HStack(spacing: 5) {
-                                    Text(modelTitle).lineLimit(1).truncationMode(.middle)
-                                    Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
-                                }.font(.caption).foregroundStyle(.secondary)
-                                    .padding(.horizontal, 12).frame(minHeight: 36)
-                                    .contentShape(Rectangle())
+                        .overlay(alignment: .topLeading) {
+                            if draft.text.isEmpty {
+                                Text("Message \(conversation.agentName)")
+                                    .font(.body).foregroundStyle(.tertiary).lineLimit(1)
+                                    .padding(.top, 13).padding(.horizontal, 12)
+                                    .allowsHitTesting(false).accessibilityHidden(true)
                             }
-                            .disabled(!conversation.availability(.models).isEnabled)
-                            .accessibilityLabel(Text("Model: \(modelTitle)"))
-                            .accessibilityHint(conversation.modelScopeLabel ?? "")
-                            .accessibilityIdentifier("composer-model")
                         }
-                        Spacer(minLength: 0)
-                        if expanded || input.lineCount >= 3 {
-                            Button { expanded.toggle() } label: {
-                                Image(systemName: expanded ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
-                                    .font(.caption).foregroundStyle(.secondary).frame(minWidth: 44, minHeight: 36)
+                        VStack(alignment: .leading, spacing: 0) {
+                            if dynamicTypeSize.isAccessibilitySize {
+                                modelButton.fixedSize(horizontal: false, vertical: true)
+                                    .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 8)
                             }
-                            .accessibilityLabel(expanded ? String(localized: "Collapse editor") : String(localized: "Expand editor"))
-                            .accessibilityIdentifier("composer-expand")
-                        }
+                            if let hint = draft.hint ?? conversation.availability(.send).explanation {
+                                Text(hint).font(.caption).foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.horizontal, 12).padding(.top, 4).padding(.bottom, 8)
+                            }
+                        }.composerHeight("after")
                     }
-                    .frame(minHeight: hasBottomControls ? 36 : 0)
-                    .opacity(hasBottomControls ? 1 : 0)
                 }
-                .frame(minWidth: 0, maxWidth: .infinity)
-                .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 25, style: .continuous))
-                primaryAction
+                .scrollBounceBehavior(.basedOnSize)
+                .scrollDismissesKeyboard(.never)
+                .frame(height: expanded ? availableContentHeight : min(naturalContentHeight, availableContentHeight))
+                .accessibilityIdentifier("composer-content")
+                HStack(spacing: 4) {
+                    if hasAddActions { addMenu }
+                    if !dynamicTypeSize.isAccessibilitySize { modelButton }
+                    Spacer(minLength: 0)
+                    if expanded || input.lineCount >= 3 {
+                        Button { expanded.toggle() } label: {
+                            Image(systemName: expanded ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
+                                .font(.system(size: 14, weight: .medium)).foregroundStyle(Color(uiColor: .secondaryLabel))
+                                .frame(width: 44, height: 44).contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(expanded ? String(localized: "Collapse editor") : String(localized: "Expand editor"))
+                        .accessibilityIdentifier("composer-expand")
+                    }
+                    primaryAction
+                }
+                .padding(.horizontal, 2).padding(.bottom, 4)
+            }
+            .padding(.horizontal, 4)
+            .frame(minWidth: 0, maxWidth: .infinity)
+            .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .strokeBorder(Color(uiColor: .separator).opacity(0.13), lineWidth: 0.5)
+                    .allowsHitTesting(false)
             }
         }
         .padding(.horizontal, 12)
@@ -88,6 +102,11 @@ struct NativeComposer: View {
         .frame(maxWidth: .infinity)
         .frame(maxHeight: expanded ? .infinity : nil, alignment: .bottom)
         .background(Color(uiColor: .systemBackground))
+        .onPreferenceChange(NativeComposerHeightKey.self) { values in
+            let measured = values.filter { $0.value.isFinite && $0.value >= 0 }
+            guard measured.keys != contentHeights.keys || measured.contains(where: { abs($0.value - (contentHeights[$0.key] ?? 0)) > 0.5 }) else { return }
+            contentHeights = measured
+        }
         .onChange(of: draft.insertion?.id) { _ in
             guard let insertion = draft.insertion else { return }
             if insertion.expectedRevision != nil { input.commitMarkedText() }
@@ -103,13 +122,44 @@ struct NativeComposer: View {
         }
     }
 
+    private var availableContentHeight: CGFloat {
+        // The conversation supplies its actual remaining height after keyboard
+        // and accessory layout. Only the body scrolls; actions retain 44 points.
+        let bound = maximumHeight.isFinite ? maximumHeight : 600
+        return max(0, bound - 16 - 48)
+    }
+    private var editorHeight: CGFloat {
+        let oneLine = (input.textView.font?.lineHeight ?? 24)
+            + input.textView.textContainerInset.top + input.textView.textContainerInset.bottom
+        return expanded ? max(max(48, oneLine), availableContentHeight - (contentHeights["before"] ?? 0) - (contentHeights["after"] ?? 0)) : input.height
+    }
+    private var naturalContentHeight: CGFloat {
+        (contentHeights["before"] ?? 0) + editorHeight + (contentHeights["after"] ?? 0)
+    }
+
+    @ViewBuilder private var modelButton: some View {
+        if conversation.availability(.models).isVisible, let modelTitle = conversation.modelTitle {
+            Button(action: showModels) {
+                HStack(spacing: 5) {
+                    Text(modelTitle).lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1).truncationMode(.middle)
+                    Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
+                }
+                .font(.caption.weight(.medium)).foregroundStyle(Color(uiColor: .secondaryLabel))
+                .padding(.horizontal, 8).frame(minWidth: 44, minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!conversation.availability(.models).isEnabled)
+            .accessibilityLabel(Text("Model: \(modelTitle)"))
+            .accessibilityHint(conversation.modelScopeLabel ?? "")
+            .accessibilityIdentifier("composer-model")
+        }
+    }
+
     private var hasContent: Bool {
         !draft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !draft.attachments.isEmpty
     }
     private var attachmentsReady: Bool { draft.attachments.allSatisfy { $0.phase == .ready } }
-    private var hasBottomControls: Bool {
-        (conversation.availability(.models).isVisible && conversation.modelTitle != nil) || input.lineCount >= 3 || expanded
-    }
     private var hasAddActions: Bool {
         [ClientFeature.photos, .camera, .files, .paste, .voice, .skills, .commands, .schedule, .tools, .sessionFiles]
             .contains { conversation.availability($0).isVisible }
@@ -139,15 +189,16 @@ struct NativeComposer: View {
                 destinationAction("Conversation files", symbol: "folder", feature: .sessionFiles, destination: .sessionFiles)
             }
         } label: {
-            Image(systemName: "plus").font(.title3)
-                .frame(width: 44, height: 48).contentShape(Rectangle())
+            Image(systemName: "plus").font(.system(size: 20, weight: .regular)).foregroundStyle(Color(uiColor: .label))
+                .frame(width: 44, height: 44).contentShape(Rectangle())
         }
+        .tint(Color(uiColor: .label))
         .accessibilityLabel("Add attachment or action")
         .accessibilityIdentifier("composer-add")
     }
 
     @ViewBuilder private var primaryAction: some View {
-        VStack(spacing: 8) {
+        HStack(spacing: 4) {
             if conversation.availability(.stop).isVisible { stopButton }
             if hasContent && conversation.availability(.send).isVisible {
                 sendButton
@@ -157,24 +208,26 @@ struct NativeComposer: View {
                     if action == .start { input.commitMarkedText() }
                     onIntent(.voice(conversation.id, action: action))
                 }
-                .frame(width: 44, height: 48)
+                .frame(width: 44, height: 44)
                 .accessibilityIdentifier("composer-voice")
+            } else if !conversation.availability(.stop).isVisible && conversation.availability(.send).isVisible {
+                sendButton
             }
         }
-        .padding(.bottom, 2)
     }
 
     private var stopButton: some View {
         Button { onIntent(.stop(conversation.id)) } label: {
-            Group {
-                if conversation.availability(.stop).isEnabled { Image(systemName: "stop.fill").font(.body) }
-                else { ProgressView().tint(hasContent ? Color.primary : Color(uiColor: .systemBackground)) }
-            }.frame(width: 44, height: 44)
+            Image(systemName: "stop.fill").font(.system(size: 14, weight: .semibold))
+                .frame(width: 34, height: 34)
                 .foregroundStyle(hasContent ? Color.primary : Color(uiColor: .systemBackground))
-                .background(hasContent ? Color(uiColor: .secondarySystemBackground) : Color.primary, in: Circle())
+                .background(hasContent ? Color(uiColor: .tertiarySystemFill) : Color.primary, in: Circle())
+                .frame(width: 44, height: 44).contentShape(Rectangle())
         }
         .disabled(!conversation.availability(.stop).isEnabled)
-        .accessibilityLabel(conversation.availability(.stop).isEnabled ? String(localized: "Stop task") : String(localized: "Stopping task"))
+        .opacity(conversation.availability(.stop).isEnabled ? 1 : 0.35)
+        .accessibilityLabel("Stop task")
+        .accessibilityHint(conversation.availability(.stop).explanation ?? "")
         .accessibilityIdentifier("composer-stop")
     }
 
@@ -183,13 +236,14 @@ struct NativeComposer: View {
             input.commitMarkedText()
             onIntent(.send(conversation.id))
         } label: {
-            Image(systemName: "arrow.up").font(.body.weight(.semibold))
-                .frame(width: 44, height: 44)
+            Image(systemName: "arrow.up").font(.system(size: 17, weight: .semibold))
+                .frame(width: 34, height: 34)
                 .foregroundStyle(Color(uiColor: .systemBackground))
                 .background(Color.primary, in: Circle())
+                .frame(width: 44, height: 44).contentShape(Rectangle())
         }
-        .disabled(!conversation.availability(.send).isEnabled || !attachmentsReady)
-        .opacity(conversation.availability(.send).isEnabled && attachmentsReady ? 1 : 0.35)
+        .disabled(!hasContent || !conversation.availability(.send).isEnabled || !attachmentsReady)
+        .opacity(hasContent && conversation.availability(.send).isEnabled && attachmentsReady ? 1 : 0.25)
         .accessibilityLabel(conversation.sendLabel)
         .help(conversation.sendLabel)
         .accessibilityIdentifier("composer-send")
@@ -198,15 +252,17 @@ struct NativeComposer: View {
     private var attachmentTray: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(alignment: .top, spacing: 10) {
-                ForEach(draft.attachments) { attachment in
+                ForEach(draft.attachments, id: \.displayID) { attachment in
                     ComposerAttachmentView(attachment: attachment, onOpen: {
                         onIntent(.openAttachment(attachmentID: attachment.id))
                     }, onRemove: {
                         onIntent(.removeAttachment(conversation.id, attachmentID: attachment.id))
                     })
                 }
-            }.padding(.horizontal, 4)
+            }.padding(.horizontal, 8)
+                .fixedSize(horizontal: false, vertical: true).composerHeight("attachments")
         }
+        .frame(height: contentHeights["attachments"] ?? 0)
     }
 
     private func voiceStatus(_ voice: VoicePresentation) -> some View {
@@ -267,48 +323,91 @@ struct NativeComposer: View {
     }
 }
 
+private struct NativeComposerHeightKey: PreferenceKey {
+    static let defaultValue: [String: CGFloat] = [:]
+    static func reduce(value: inout [String: CGFloat], nextValue: () -> [String: CGFloat]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+    }
+}
+
+private extension View {
+    func composerHeight(_ name: String) -> some View {
+        background(GeometryReader { geometry in
+            Color.clear.preference(key: NativeComposerHeightKey.self, value: [name: geometry.size.height])
+        })
+    }
+}
+
 @MainActor
 private struct ComposerAttachmentView: View {
     let attachment: AttachmentPresentation
     let onOpen: () -> Void
     let onRemove: () -> Void
+    @State private var showingFailure = false
+
     var body: some View {
-        HStack(spacing: 8) {
-            Group {
+        VStack(alignment: .leading, spacing: 6) {
+            ZStack {
+                Color(uiColor: .tertiarySystemBackground)
                 if let data = attachment.thumbnailData, let image = UIImage(data: data) {
                     Image(uiImage: image).resizable().scaledToFill()
+                        .frame(width: 144, height: 84).clipped()
+                        .accessibilityHidden(true)
                 } else {
-                    Image(systemName: attachment.kind == .image ? "photo" : "doc")
-                        .font(.title3).foregroundStyle(.secondary)
+                    Image(systemName: attachment.kind == .image ? "photo" : "doc.text")
+                        .font(.system(size: 28, weight: .light)).foregroundStyle(.secondary)
+                }
+                if attachment.phase == .preparing {
+                    ProgressView().padding(9).background(.regularMaterial, in: Circle())
+                        .accessibilityLabel(Text("Preparing \(attachment.name)"))
                 }
             }
-            .frame(width: 56, height: 56).clipped()
-            .background(Color(uiColor: .tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .accessibilityHidden(true)
+            .frame(width: 144, height: 84)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .modifier(AttachmentPreviewInteraction(canOpen: attachment.canOpen, name: attachment.name, open: onOpen))
-            if attachment.kind != .image {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(attachment.name).font(.caption.weight(.medium)).lineLimit(2)
-                    if let detail = attachment.detail { Text(detail).font(.caption2).foregroundStyle(.secondary) }
-                }.frame(maxWidth: 160, alignment: .leading)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(attachment.name).font(.caption.weight(.medium)).lineLimit(1).truncationMode(.middle)
+                if case .failed(let reason) = attachment.phase {
+                    Button { showingFailure = true } label: {
+                        HStack(alignment: .top, spacing: 4) {
+                            Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.red)
+                            Text(reason).lineLimit(2).foregroundStyle(.primary)
+                            Image(systemName: "chevron.right").font(.system(size: 8, weight: .semibold))
+                        }
+                        .font(.caption2).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .topLeading)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(Text("Attachment failed"))
+                    .accessibilityValue(reason)
+                } else {
+                    Text(attachment.detail ?? " ").font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                        .accessibilityHidden(attachment.detail == nil)
+                }
             }
-            switch attachment.phase {
-            case .preparing: ProgressView().accessibilityLabel(Text("Preparing \(attachment.name)"))
-            case .failed: Image(systemName: "exclamationmark.circle").foregroundStyle(.orange).accessibilityLabel("Attachment failed")
-            case .ready: EmptyView()
-            }
+            .frame(width: 136, alignment: .leading).padding(.horizontal, 4)
+        }
+        .frame(width: 144, alignment: .topLeading)
+        .overlay(alignment: .topTrailing) {
             if attachment.canRemove {
                 Button(action: onRemove) {
-                    Image(systemName: "xmark.circle.fill").font(.body).foregroundStyle(.secondary)
-                        .frame(width: 44, height: 56).contentShape(Rectangle())
-                }.accessibilityLabel(Text("Remove \(attachment.name)"))
+                    Image(systemName: "xmark").font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.primary).frame(width: 23, height: 23)
+                        .background(.regularMaterial, in: Circle())
+                        .frame(width: 44, height: 44).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text("Remove \(attachment.name)"))
             }
         }
-        .padding(4)
-        .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
         .accessibilityElement(children: .contain)
         .accessibilityLabel(attachment.name)
+        .alert("Attachment failed", isPresented: $showingFailure) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            if case .failed(let reason) = attachment.phase { Text(attachment.name + "\n\n" + reason) }
+        }
     }
 }
 
@@ -319,8 +418,12 @@ private struct AttachmentPreviewInteraction: ViewModifier {
     let open: () -> Void
     @ViewBuilder func body(content: Content) -> some View {
         if canOpen {
-            Button(action: open) { content }
+            Button(action: open) {
+                Label { Text("Preview \(name)") } icon: { content }
+                    .labelStyle(.iconOnly)
+            }
                 .buttonStyle(.plain)
+                .contentShape(Rectangle())
                 .accessibilityLabel(Text("Preview \(name)"))
         } else { content }
     }
@@ -361,7 +464,6 @@ private final class NativeInputController: NSObject, ObservableObject, UITextVie
             textView.text = text
             textView.selectedRange = NSRange(location: min(selection.location, text.utf16.count), length: 0)
         }
-        textView.isScrollEnabled = expanded || lineCount > 5
         measure()
     }
 
@@ -384,13 +486,17 @@ private final class NativeInputController: NSObject, ObservableObject, UITextVie
         let fitting = textView.sizeThatFits(CGSize(width: textView.bounds.width, height: .greatestFiniteMagnitude)).height
         let lineHeight = textView.font?.lineHeight ?? 21
         let lines = max(1, Int(ceil(max(lineHeight, fitting - 24) / lineHeight)))
-        let newHeight = max(48, min(fitting, lineHeight * 5 + 24))
-        guard abs(height - newHeight) > 0.5 || lineCount != lines else { return }
+        // At accessibility sizes five lines would cover the action row and
+        // keyboard. Keep whole readable lines in a bounded, scrollable editor.
+        let visibleLines = max(1, min(5, floor((160 - 24) / lineHeight)))
+        let newHeight = max(48, min(fitting, lineHeight * visibleLines + 24))
+        let scrolls = expanded || fitting > newHeight + 0.5
+        guard abs(height - newHeight) > 0.5 || lineCount != lines || textView.isScrollEnabled != scrolls else { return }
         Task { @MainActor [weak self] in
             guard let self else { return }
             self.height = newHeight
             self.lineCount = lines
-            self.textView.isScrollEnabled = self.expanded || lines > 5
+            self.textView.isScrollEnabled = self.expanded || scrolls
         }
     }
 }

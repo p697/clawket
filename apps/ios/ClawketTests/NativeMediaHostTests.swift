@@ -13,6 +13,163 @@ import XCTest
 final class NativeMediaHostTests: XCTestCase, @unchecked Sendable {
     private func root() -> URL { FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString) }
 
+    @MainActor func testSystemPickerDismissalKeepsItsExactSelectionConsumableOnlyOnce() {
+        let model = NativeAppModel(), route = ConversationID(connectionID: "c", agentID: "a", sessionID: "s")
+        let scope = NativeMediaScope(route: route, activation: UUID(), selection: UUID(), draft: UUID())
+        let request = NativeMediaPickerRequest(scope: scope, source: .files, remaining: 6, allowsFiles: true)
+        model.mediaPicker = request
+        // SwiftUI's binding may be cleared by UIKit's automatic dismissal.
+        model.mediaPicker = nil
+        XCTAssertTrue(model.mediaPickerLifetime.consume(request))
+        XCTAssertFalse(model.mediaPickerLifetime.consume(request))
+    }
+
+    @MainActor func testReplacedCancelledAndRetiredPickersCannotConsumeAnotherSelection() {
+        let model = NativeAppModel(), route = ConversationID(connectionID: "c", agentID: "a", sessionID: "s")
+        let scope = NativeMediaScope(route: route, activation: UUID(), selection: UUID(), draft: UUID())
+        let first = NativeMediaPickerRequest(scope: scope, source: .files, remaining: 6, allowsFiles: true)
+        let second = NativeMediaPickerRequest(scope: scope, source: .photos, remaining: 6, allowsFiles: true)
+        model.mediaPicker = first; model.mediaPicker = second
+        model.cancelMediaPicker(first)
+        XCTAssertEqual(model.mediaPicker?.id, second.id)
+        XCTAssertFalse(model.mediaPickerLifetime.consume(first))
+        model.cancelMediaPicker(second)
+        XCTAssertNil(model.mediaPicker); XCTAssertFalse(model.mediaPickerLifetime.consume(second))
+        model.mediaPicker = first
+        model.cancelMediaImports()
+        XCTAssertNil(model.mediaPicker); XCTAssertFalse(model.mediaPickerLifetime.consume(first))
+    }
+
+    @MainActor func testReconnectKeepsOnlyKnownScopedComposerControlsDisabledAndStopsClaimingLiveStreaming() throws {
+        let route = ConversationID(connectionID: "c", agentID: "a", sessionID: "s")
+        var capabilities = RuntimeCapabilities(); capabilities.chat = true; capabilities.models = true
+        let readyStates: [RuntimeConnectionState] = [
+            .init(connectionID: "c", phase: .ready, capabilities: capabilities, backendKind: .openclaw),
+            .init(connectionID: "c", phase: .ready, capabilities: capabilities, backendKind: .hermes)
+        ]
+        for ready in readyStates {
+            let model = NativeAppModel()
+            model.documents[route] = .init()
+            model.state = ready; model.updatePresentation(route)
+            XCTAssertTrue(try XCTUnwrap(model.presentation.conversations[route]).availability(.send).isVisible)
+            model.state = .init(connectionID: "c", phase: .reconnecting, backendKind: ready.backendKind)
+            model.updatePresentation(route)
+            let reconnecting = try XCTUnwrap(model.presentation.conversations[route])
+            for feature in [ClientFeature.send, .models] {
+                XCTAssertTrue(reconnecting.availability(feature).isVisible)
+                XCTAssertFalse(reconnecting.availability(feature).isEnabled)
+                XCTAssertNotNil(reconnecting.availability(feature).explanation)
+            }
+            XCTAssertFalse(reconnecting.availability(.camera).isVisible)
+            let epoch = UUID()
+            let partial = NativeMessage(id: "partial", role: .assistant, text: "Partial", runID: "run", segmentID: "segment", streaming: true, historyEpoch: epoch, turnID: "turn")
+            XCTAssertFalse(model.present(partial, agentName: "Agent", route: route).isStreaming)
+            model.state = ready
+            XCTAssertFalse(model.present(partial, agentName: "Agent", route: route).isStreaming)
+            var document = NativeConversation(); document.historyEpoch = epoch; document.messages = [partial]
+            let update = RuntimeTextUpdate(sessionKey: "s", runID: "run", segmentID: "segment", text: " continued", mode: .delta, turnID: "turn")
+            XCTAssertTrue(model.applyLiveText(update, in: &document, route: route, epoch: epoch))
+            XCTAssertEqual(document.messages.count, 1); XCTAssertEqual(document.messages[0].id, partial.id)
+            XCTAssertTrue(document.messages[0].streaming)
+            XCTAssertTrue(model.present(document.messages[0], agentName: "Agent", route: route).isStreaming)
+            model.wireRevision = UUID()
+            XCTAssertFalse(model.present(document.messages[0], agentName: "Agent", route: route).isStreaming)
+            let conflict = RuntimeTextUpdate(sessionKey: "s", runID: "run", segmentID: "segment", text: "wrong", mode: .delta, turnID: "other")
+            XCTAssertFalse(model.applyLiveText(conflict, in: &document, route: route, epoch: epoch))
+            XCTAssertFalse(model.present(document.messages[0], agentName: "Agent", route: route).isStreaming)
+            XCTAssertTrue(model.applyLiveText(update, in: &document, route: route, epoch: epoch))
+            XCTAssertTrue(model.present(document.messages[0], agentName: "Agent", route: route).isStreaming)
+            var oldEpoch = document.messages[0]; oldEpoch.historyEpoch = UUID()
+            XCTAssertFalse(model.present(oldEpoch, agentName: "Agent", route: route).isStreaming)
+            model.state = .init(connectionID: "other", phase: .reconnecting, backendKind: ready.backendKind)
+            model.updatePresentation(route)
+            XCTAssertFalse(try XCTUnwrap(model.presentation.conversations[route]).availability(.send).isVisible)
+            model.state = ready; model.updatePresentation(route)
+            model.state = .init(connectionID: "c", phase: .ready, backendKind: ready.backendKind)
+            model.updatePresentation(route)
+            XCTAssertFalse(try XCTUnwrap(model.presentation.conversations[route]).availability(.send).isVisible)
+        }
+    }
+
+    @MainActor func testFailedKnownImageKeepsGalleryKindAndOriginalNameWithoutGrantingPreviewAuthority() throws {
+        let directory = root(); defer { try? FileManager.default.removeItem(at: directory) }
+        let model = NativeAppModel()
+        let attachment = try JSONDecoder().decode(RuntimeMessageAttachment.self,
+            from: Data(#"{"type":"image","mimeType":"image/png","name":"original.png","artifactID":"artifact"}"#.utf8))
+        let reference = NativeMediaReference(id: "image", attachment: attachment)
+        XCTAssertEqual(model.mediaPresentation(reference).kind, .image)
+        XCTAssertFalse(model.mediaPresentation(reference).canOpen)
+        model.media = try NativeMediaController(directory: directory)
+        model.mediaDisplays[reference.id] = .init(id: reference.id, name: "Attachment", kind: .file,
+            phase: .failed("fixed reason"), canOpen: true, canRemove: true)
+        let failed = model.mediaPresentation(reference)
+        XCTAssertEqual(failed.id, reference.id); XCTAssertEqual(failed.name, reference.name)
+        XCTAssertEqual(failed.kind, .image); XCTAssertEqual(failed.phase, .failed("fixed reason"))
+        XCTAssertTrue(failed.canOpen); XCTAssertFalse(failed.canRemove)
+        var svg = reference; svg.mimeType = "image/svg+xml"
+        model.mediaDisplays[reference.id]?.kind = .image
+        XCTAssertEqual(model.mediaPresentation(svg).kind, .file)
+    }
+
+    func testImportFailureCopyUsesTypedReasonsAndNeverArbitraryErrorDescriptions() {
+        XCTAssertEqual(nativeMediaFailureLabel(MediaFailure.tooLarge), String(localized: "Choose smaller attachments before sending."))
+        XCTAssertEqual(nativeMediaFailureLabel(RuntimeFailure(.unsupported, delivery: .rejectedBeforeDispatch)),
+                       String(localized: "This agent does not support this attachment."))
+        XCTAssertEqual(nativeMediaFailureLabel(NativeMediaIssue.textOnly), String(localized: "This model accepts text only."))
+        XCTAssertNil(nativeMediaFailureLabel(RuntimeFailure(.network, delivery: .uncertain)))
+        XCTAssertNil(nativeMediaFailureLabel(NSError(domain: "private-path", code: 7, userInfo: [NSLocalizedDescriptionKey: "private-provider-content"])))
+    }
+
+    func testDraftMediaRetainsSelectionOrderAndDisplayIdentityAcrossReverseCompletion() {
+        let first = UUID(), second = UUID(), resourceA = UUID(), resourceB = UUID()
+        var order = NativeDraftMediaOrder()
+        func item(_ id: UUID, _ name: String) -> AttachmentPresentation {
+            .init(id: id.uuidString, name: name, kind: .image, canRemove: true)
+        }
+        let initial = order.project([item(first, "A"), item(second, "B")])
+        order.complete(importID: second, resourceID: resourceB)
+        let partial = order.project([item(resourceB, "B"), item(first, "A")])
+        XCTAssertEqual(partial.map(\.name), ["A", "B"])
+        XCTAssertEqual(partial.map(\.displayID), initial.map(\.displayID))
+        XCTAssertEqual(partial.map(\.id), [first.uuidString, resourceB.uuidString])
+        order.complete(importID: first, resourceID: resourceA)
+        let ready = order.project([item(resourceB, "B"), item(resourceA, "A")])
+        XCTAssertEqual(ready.map(\.displayID), initial.map(\.displayID))
+        XCTAssertEqual(ready.map(\.id), [resourceA.uuidString, resourceB.uuidString])
+        XCTAssertEqual(order.orderedResources([resourceB, resourceA]), [resourceA, resourceB])
+        _ = order.project([item(resourceB, "B")])
+        order.complete(importID: first, resourceID: UUID())
+        XCTAssertEqual(order.project([item(resourceB, "B")]).map(\.id), [resourceB.uuidString])
+    }
+
+    @MainActor
+    func testActualDraftMediaProjectionKeepsReadyAndPendingInTheirOriginalSlots() {
+        let model = NativeAppModel(), route = ConversationID(connectionID: "c", agentID: "a", sessionID: "s")
+        model.documents[route] = NativeConversation()
+        let first = UUID(), second = UUID(), resource = UUID()
+        let scope = NativeMediaScope(route: route, activation: UUID(), selection: UUID(), draft: UUID())
+        model.mediaImports[first] = .init(id: first, scope: scope, name: "A")
+        model.refreshDraftMedia(route)
+        let displayA = model.presentation.draft(for: route).attachments[0].displayID
+        model.mediaImports[second] = .init(id: second, scope: scope, name: "B")
+        model.refreshDraftMedia(route)
+        let displayB = model.presentation.draft(for: route).attachments[1].displayID
+        model.mediaDraftOrder[route]?.complete(importID: second, resourceID: resource)
+        model.documents[route]?.draftResourceIDs = [resource]
+        model.mediaImports.removeValue(forKey: second)
+        model.refreshDraftMedia(route)
+        let values = model.presentation.draft(for: route).attachments
+        XCTAssertEqual(values.map(\.id), [first.uuidString, resource.uuidString.lowercased()])
+        XCTAssertEqual(values.map(\.displayID), [displayA, displayB])
+        model.mediaImports.removeValue(forKey: first)
+        model.refreshDraftMedia(route)
+        XCTAssertEqual(model.presentation.draft(for: route).attachments.map(\.displayID), [displayB])
+        model.documents[route]?.draftResourceIDs = []
+        model.refreshDraftMedia(route)
+        XCTAssertTrue(model.presentation.draft(for: route).attachments.isEmpty)
+        XCTAssertNil(model.mediaDraftOrder[route])
+    }
+
     func testExistingV1DocumentReopensWithoutMediaKeysAndUnknownVersionFails() async throws {
         let directory = root(); defer { try? FileManager.default.removeItem(at: directory) }
         let values = try FileValueStore(directory: directory)

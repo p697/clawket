@@ -47,7 +47,12 @@ extension NativeAppModel {
         }
         if state.capabilities.chat { features[.paste] = available }
         if mediaSendPreparations.contains(route) || mediaImports.values.contains(where: { $0.scope.route == route }) {
-            features[.send] = .temporarilyUnavailable(String(localized: "Preparing attachments…"))
+            let failed = mediaImports.values.contains { request in
+                guard request.scope.route == route else { return false }
+                if case .failed? = mediaDisplays[request.id.uuidString]?.phase { return true }
+                return false
+            }
+            features[.send] = .temporarilyUnavailable(failed ? String(localized: "Attachment failed") : String(localized: "Preparing attachments…"))
         }
     }
 
@@ -92,6 +97,17 @@ extension NativeAppModel {
                             allowsFiles: state.capabilities.fileAttachments || state.capabilities.documentAttachments)
     }
 
+    func consumeMediaPicker(_ request: NativeMediaPickerRequest) -> Bool {
+        guard ownsMedia(request.scope), mediaPickerLifetime.consume(request) else { return false }
+        if mediaPicker?.id == request.id { mediaPicker = nil }
+        return true
+    }
+
+    func cancelMediaPicker(_ request: NativeMediaPickerRequest) {
+        guard mediaPickerLifetime.consume(request) else { return }
+        if mediaPicker?.id == request.id { mediaPicker = nil }
+    }
+
     func reserveMediaImport(_ scope: NativeMediaScope, name: String) -> NativeMediaImport? {
         guard ownsMedia(scope), (documents[scope.route]?.draftResourceIDs.count ?? 0) + mediaImports.values.filter({ $0.scope.route == scope.route }).count < 6 else {
             if ownsMedia(scope) { presentation.draft(for: scope.route).hint = String(localized: "Add up to six attachments.") }
@@ -129,7 +145,12 @@ extension NativeAppModel {
                 guard ownsMedia(request.scope), mediaImports[request.id] != nil else {
                     try await media.releaseWhenUnreferenced([resource.id]); if let cache { try await media.reclaim(cache: cache) }; return
                 }
-                documents[request.scope.route]?.draftResourceIDs.append(resource.id); changed(request.scope.route)
+                mediaDraftOrder[request.scope.route, default: .init()].complete(importID: request.id, resourceID: resource.id)
+                documents[request.scope.route]?.draftResourceIDs.append(resource.id)
+                if let ids = documents[request.scope.route]?.draftResourceIDs {
+                    documents[request.scope.route]?.draftResourceIDs = mediaDraftOrder[request.scope.route]?.orderedResources(ids) ?? ids
+                }
+                changed(request.scope.route)
                 published = true
                 mediaImports.removeValue(forKey: request.id)
                 refreshDraftMedia(request.scope.route); updatePresentation(request.scope.route)
@@ -153,14 +174,13 @@ extension NativeAppModel {
     func failMediaImport(_ request: NativeMediaImport, error: any Error) {
         guard ownsMedia(request.scope), mediaImports[request.id] != nil else { return }
         mediaDisplays[request.id.uuidString] = .init(id: request.id.uuidString, name: request.name, kind: .file,
-            phase: .failed(String(localized: "Attachment could not be added. Try again.")), canRemove: true)
+            phase: .failed(nativeMediaFailureLabel(error) ?? String(localized: "Attachment could not be added. Try again.")), canRemove: true)
         refreshDraftMedia(request.scope.route); updatePresentation(request.scope.route)
-        showMediaFailure(error, route: request.scope.route)
     }
 
     func cancelMediaImports() {
         let pending = Array(mediaImports.values)
-        mediaImports.removeAll(); mediaPicker = nil
+        mediaImports.removeAll(); mediaPickerLifetime.retire(); mediaPicker = nil
         for request in pending {
             retireMediaImport(request.id)
             mediaDisplays.removeValue(forKey: request.id.uuidString)
@@ -190,7 +210,7 @@ extension NativeAppModel {
         mediaLoads.removeAll(); mediaLoadRevisions.removeAll(); mediaPreviewRequest = nil; mediaPreview = nil
         if let route = mediaVisibleRoute { invalidateMedia(connectionID: route.connectionID, sessionKey: route.sessionID) }
         mediaVisibleRoute = nil
-        mediaDisplays.removeAll()
+        mediaDisplays.removeAll(); mediaDraftOrder.removeAll()
         for route in presentation.conversations.keys { updatePresentation(route) }
     }
 
@@ -226,7 +246,13 @@ extension NativeAppModel {
         let pending = mediaImports.values.filter { $0.scope.route == route }.sorted { $0.id.uuidString < $1.id.uuidString }.map { request in
             mediaDisplays[request.id.uuidString] ?? .init(id: request.id.uuidString, name: request.name, kind: .file, phase: .preparing, canRemove: true)
         }
-        presentation.draft(for: route).attachments = owned + pending
+        let values = owned + pending
+        if values.isEmpty {
+            mediaDraftOrder.removeValue(forKey: route)
+            presentation.draft(for: route).attachments = []
+        } else {
+            presentation.draft(for: route).attachments = mediaDraftOrder[route, default: .init()].project(values)
+        }
     }
 
     func removeMedia(_ route: ConversationID, id: String) {
@@ -280,12 +306,16 @@ extension NativeAppModel {
     }
 
     func mediaPresentation(_ reference: NativeMediaReference) -> AttachmentPresentation {
+        let kind: AttachmentPresentation.Kind = reference.kind == .image && reference.mimeType != "image/svg+xml" ? .image : .file
         guard media != nil else {
-            return .init(id: reference.id, name: reference.name, kind: .file,
+            return .init(id: reference.id, name: reference.name, kind: kind,
                 phase: .failed(String(localized: "Some attachments could not be recovered. Your files have been kept.")))
         }
-        if var ready = mediaDisplays[reference.id] { ready.canRemove = false; return ready }
-        return .init(id: reference.id, name: reference.name, kind: reference.kind == .image && reference.mimeType != "image/svg+xml" ? .image : .file,
+        if var ready = mediaDisplays[reference.id] {
+            ready.kind = kind; ready.name = reference.name; ready.canRemove = false
+            return ready
+        }
+        return .init(id: reference.id, name: reference.name, kind: kind,
                      detail: reference.artifactID == nil ? nil : String(localized: "Download"), canOpen: reference.resourceID != nil || reference.artifactID != nil)
     }
 
@@ -477,17 +507,7 @@ extension NativeAppModel {
     }
 
     func showMediaFailure(_ error: any Error, route: ConversationID) {
-        let failure = error as? RuntimeFailure
-        if failure?.delivery == .rejectedBeforeDispatch || error as? MediaFailure == .tooLarge {
-            presentation.draft(for: route).hint = String(localized: "Choose smaller attachments before sending.")
-        } else if failure?.code == .unsupported {
-            presentation.draft(for: route).hint = String(localized: "This agent does not support this attachment.")
-        } else if error as? NativeMediaIssue == .textOnly {
-            presentation.draft(for: route).hint = String(localized: "This model accepts text only.")
-        } else if error as? NativeMediaIssue == .modelChanging {
-            presentation.draft(for: route).hint = String(localized: "Preparing attachments…")
-        } else if error as? MediaFailure == .unsupported {
-            presentation.draft(for: route).hint = String(localized: "Attachment could not be added. Try again.")
-        } else { showFailure(error) }
+        if let label = nativeMediaFailureLabel(error) { presentation.draft(for: route).hint = label }
+        else { showFailure(error) }
     }
 }

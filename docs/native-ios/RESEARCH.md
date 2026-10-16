@@ -72,6 +72,14 @@ Apple 的[编辑推荐说明](https://developer.apple.com/app-store/getting-feat
 
 原始截图与自动化工具只在忽略的本机证据目录，不提交设备标识、账号资料或内容。公开资料截图与实际版本不同的地方，以带版本的实机观察为准。
 
+## 聊天界面二次打磨（2026-10-16）
+
+负责人保留 React Native 默认后的第二轮，另作约20分钟集中研究（UTC 01:06:52–01:26:57），结合此前约30分钟官方/社区研究与上面的有版本 USB 观察。重新核对 Grok/ChatGPT/Gemini 官方资料和已有研究截图；没有把旧截图称为本轮新实机体验，也没有操作 Claude。Grok 和 ChatGPT 资料版本与观察相同；Gemini 当前1.2026.4070303已晚于观察版本，因此仅引用能独立核对的交互原则。
+
+输入区采用一个安静的表面：附件在上、原生多行编辑器居中、Add/模型/展开/Stop/Send 对齐下缘。三行草稿、键盘和任务运行均不挤走主动作；大无障碍字号将完整模型入口移至单独一行。长 Agent 占位文字不参与高度测量。同一 UITextView 保留输入法组合、选区和撤销。Grok 的[官方上传说明](https://docs.x.ai/grok/faq)、ChatGPT 的[iOS 更新](https://help.openai.com/en/articles/6825453-chatgpt-release-notes)、Gemini 的[iOS 文件帮助](https://support.google.com/gemini/answer/14903178?co=GENIE.Platform%3DiOS&hl=en)支持把媒体入口放在聊天上下文中，但不能因此宣称已验证竞品的全部上传或重连行为。
+
+Apple [Photos picker 分享](https://developer.apple.com/videos/play/wwdc2022/10023/)强调长耗时资源应先占位、逐项处理失败；因此本轮保留选择顺序和真实资源身份，在附件本身显示固定错误原因，不用整页阻塞或虚构进度。适度提升图片/文件预览，移除与预览各有独立命中区。[进度指示](https://developer.apple.com/design/human-interface-guidelines/progress-indicators)、[文字层级](https://developer.apple.com/design/human-interface-guidelines/typography)与[菜单](https://developer.apple.com/design/human-interface-guidelines/menus)用于约束细节。发送点击本身不再触发滚动；只有 host 确实插入新的本地 outbox 后，才允许回到底部。
+
 ## 实施验收
 
 每屏必须回答：当前 Agent/会话是谁，哪里需要操作，下一步是什么。最小宽度、键盘、长文、附件、审批命令和最大字号都可用；读历史时流式/重连不抢位置；所有可见功能均有真实动作和能力来源。漂亮截图但缺少模型/语音/队列/分享/恢复仍是原型。

@@ -411,7 +411,7 @@ enum ClientSheet: Identifiable {
 }
 
 @MainActor
-private struct NativeConversationView: View {
+struct NativeConversationView: View {
     @ObservedObject var model: ClientPresentation
     let conversation: ConversationPresentation
     @ObservedObject var draft: ComposerDraft
@@ -421,6 +421,7 @@ private struct NativeConversationView: View {
     @State private var expanded = false
     @State private var following = true
     @State private var scrollRequest = 0
+    @State private var accessoryHeight: CGFloat = 0
     @State private var visibilityID = UUID()
     @State private var ownedReadingScope: UUID?
     @Environment(\.scenePhase) private var scenePhase
@@ -433,69 +434,55 @@ private struct NativeConversationView: View {
     private var canRead: Bool { !obscured && !expanded && scenePhase == .active }
 
     var body: some View {
-        VStack(spacing: 0) {
-            ZStack(alignment: .bottom) {
-                if conversation.messages.isEmpty {
-                    if conversation.isLoading {
-                        ProgressView("Loading conversation…")
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    } else {
-                        VStack(spacing: 12) {
-                            Text(conversation.agentName).font(.title2.weight(.semibold))
-                            Text("Start a conversation").font(.body).foregroundStyle(.secondary)
-                        }.frame(maxWidth: .infinity, maxHeight: .infinity)
-                    }
-                } else {
-                    NativeTranscript(messages: conversation.messages, conversationID: conversation.id,
-                                     model: model, following: $following, scrollRequest: scrollRequest,
-                                     historyAvailability: conversation.availability(.loadEarlier),
-                                     isLoadingHistory: conversation.isLoadingHistory,
-                                     onIntent: onIntent)
-                }
-                if !following && !conversation.messages.isEmpty {
-                    Button {
-                        scrollRequest += 1
-                    } label: {
-                        Label("Latest messages", systemImage: "arrow.down")
-                            .font(.footnote.weight(.medium)).padding(.horizontal, 14).frame(minHeight: 44)
-                    }
-                    .background(.regularMaterial, in: Capsule())
-                    .overlay(Capsule().stroke(Color(uiColor: .separator).opacity(0.25)))
-                    .padding(.bottom, 12)
-                    .accessibilityIdentifier("jump-to-latest")
-                }
-            }
-            .frame(maxHeight: expanded ? 0 : .infinity)
-            .opacity(expanded ? 0 : 1)
-            .accessibilityHidden(expanded)
-
-            if conversation.availability(.pro).isVisible {
-                Button {
-                    onIntent(.openDestination(.pro, conversation: conversation.id))
-                } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: "lock.open")
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("View the full conversation").font(.callout.weight(.semibold))
-                            Text("Latest messages · read-only preview").font(.caption).foregroundStyle(.secondary)
+        GeometryReader { geometry in
+            VStack(spacing: 0) {
+                ZStack(alignment: .bottom) {
+                    if conversation.messages.isEmpty {
+                        if conversation.isLoading {
+                            ProgressView("Loading conversation…")
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        } else {
+                            VStack(spacing: 12) {
+                                Text(conversation.agentName).font(.title2.weight(.semibold))
+                                Text("Start a conversation").font(.body).foregroundStyle(.secondary)
+                            }.frame(maxWidth: .infinity, maxHeight: .infinity)
                         }
-                        Spacer()
-                        Image(systemName: "chevron.right").font(.caption.weight(.semibold))
-                    }.frame(minHeight: 44).padding(.horizontal, 20).padding(.vertical, 8)
-                }.buttonStyle(.plain).accessibilityIdentifier("conversation-upgrade")
-            }
-            if let work = conversation.work, work.inspect.isVisible, !work.id.isEmpty {
-                NativeWorkDock(work: work) {
-                    guard let intent = work.openIntent(conversationID: conversation.id) else { return }
-                    onIntent(intent)
-                    showSheet(.work(conversation.id, workID: work.id))
+                    } else {
+                        NativeTranscript(messages: conversation.messages, conversationID: conversation.id,
+                                         model: model, following: $following, scrollRequest: scrollRequest,
+                                         historyAvailability: conversation.availability(.loadEarlier),
+                                         isLoadingHistory: conversation.isLoadingHistory,
+                                         onIntent: onIntent)
+                    }
+                    if !following && !conversation.messages.isEmpty {
+                        Button {
+                            scrollRequest += 1
+                        } label: {
+                            Label("Latest messages", systemImage: "arrow.down")
+                                .font(.footnote.weight(.medium)).padding(.horizontal, 14).frame(minHeight: 44)
+                        }
+                        .background(.regularMaterial, in: Capsule())
+                        .overlay(Capsule().stroke(Color(uiColor: .separator).opacity(0.25)))
+                        .padding(.bottom, 12)
+                        .accessibilityIdentifier("jump-to-latest")
+                    }
                 }
+                .frame(minHeight: 0, maxHeight: expanded ? 0 : .infinity)
+                .clipped()
+                .opacity(expanded ? 0 : 1)
+                .accessibilityHidden(expanded)
+
+                ScrollView(.vertical, showsIndicators: accessoryHeight > accessoryViewportHeight(geometry.size.height)) {
+                    conversationAccessories
+                }
+                .scrollBounceBehavior(.basedOnSize)
+                .scrollDismissesKeyboard(.never)
+                .frame(height: accessoryViewportHeight(geometry.size.height))
+                NativeComposer(draft: draft, conversation: conversation, expanded: $expanded,
+                               onIntent: onIntent, showModels: { showSheet(.models(conversation.id)) },
+                               maximumHeight: geometry.size.height - accessoryViewportHeight(geometry.size.height))
             }
-            NativeComposer(draft: draft, conversation: conversation, expanded: $expanded,
-                           onIntent: { intent in
-                               if case .send = intent { scrollRequest += 1 }
-                               onIntent(intent)
-                           }, showModels: { showSheet(.models(conversation.id)) })
+            .onPreferenceChange(NativeConversationAccessoryHeightKey.self) { accessoryHeight = $0 }
         }
         .background(Color(uiColor: .systemBackground))
         .onAppear {
@@ -505,6 +492,11 @@ private struct NativeConversationView: View {
         .onDisappear {
             onIntent(.conversationVisibilityChanged(conversation.id, viewID: visibilityID, visible: false))
             reportReadingVisibility(false)
+        }
+        .onChange(of: draft.acceptedLocalInputID) { id in
+            guard let id, let latest = model.conversations[conversation.id],
+                  latest.messages.contains(where: { $0.id == id && $0.author.isLocal }) else { return }
+            scrollRequest += 1
         }
         .onChange(of: canRead) { reportReadingVisibility($0) }
         .onChange(of: model.readingContexts[conversation.id]?.id) { _ in reportReadingVisibility(canRead) }
@@ -551,8 +543,11 @@ private struct NativeConversationView: View {
                                 .disabled(!conversation.availability(.loadEarlier).isEnabled || conversation.isLoadingHistory)
                         }
                     } label: {
-                        Image(systemName: "ellipsis").frame(minWidth: 44, minHeight: 44)
-                    }.accessibilityLabel("Conversation actions")
+                        Image(systemName: "ellipsis").foregroundStyle(Color(uiColor: .label))
+                            .frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
+                    }
+                    .tint(Color(uiColor: .label))
+                    .accessibilityLabel("Conversation actions")
                 }
             }
         }
@@ -566,6 +561,40 @@ private struct NativeConversationView: View {
                 .padding(.top, 4)
             }
         }
+    }
+
+    private var conversationAccessories: some View {
+        VStack(spacing: 0) {
+            if !expanded && conversation.availability(.pro).isVisible {
+                Button {
+                    onIntent(.openDestination(.pro, conversation: conversation.id))
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "lock.open")
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("View the full conversation").font(.callout.weight(.semibold))
+                            Text("Latest messages · read-only preview").font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.caption.weight(.semibold))
+                    }.frame(minHeight: 44).padding(.horizontal, 20).padding(.vertical, 8)
+                }.buttonStyle(.plain).accessibilityIdentifier("conversation-upgrade")
+            }
+            if !expanded, let work = conversation.work, work.inspect.isVisible, !work.id.isEmpty {
+                NativeWorkDock(work: work) {
+                    guard let intent = work.openIntent(conversationID: conversation.id) else { return }
+                    onIntent(intent)
+                    showSheet(.work(conversation.id, workID: work.id))
+                }
+            }
+        }
+        .background(GeometryReader { accessory in
+            Color.clear.preference(key: NativeConversationAccessoryHeightKey.self, value: accessory.size.height)
+        })
+    }
+
+    private func accessoryViewportHeight(_ height: CGFloat) -> CGFloat {
+        min(accessoryHeight, max(0, min(height * 0.35, height - 64)))
     }
 
     private var hasMoreActions: Bool {
@@ -582,7 +611,7 @@ private struct NativeConversationView: View {
             }
             Text(conversation.subtitle ?? conversation.sessionTitle)
                 .font(.caption).foregroundStyle(.secondary).lineLimit(1)
-        }.frame(minHeight: 44)
+        }.frame(minHeight: 44).contentShape(Rectangle())
     }
 
     @ViewBuilder
@@ -594,5 +623,10 @@ private struct NativeConversationView: View {
                 .disabled(!conversation.availability(feature).isEnabled)
         }
     }
+}
+
+private struct NativeConversationAccessoryHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }
 #endif

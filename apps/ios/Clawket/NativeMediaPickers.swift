@@ -126,7 +126,7 @@ struct NativeMediaPicker: View {
                                 .multilineTextAlignment(.center).foregroundStyle(.secondary)
                             Button("Open Settings") { if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) } }
                         }.padding(28)
-                        .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { if client.mediaPicker?.id == request.id { client.mediaPicker = nil } } } }
+                        .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { client.cancelMediaPicker(request) } } }
                     }
                 } else { ProgressView().task { cameraAllowed = await AVCaptureDevice.requestAccess(for: .video) } }
             case .paste: EmptyView()
@@ -151,8 +151,7 @@ private struct PhotoPicker: UIViewControllerRepresentable {
         let client: NativeAppModel; let request: NativeMediaPickerRequest
         init(client: NativeAppModel, request: NativeMediaPickerRequest) { self.client = client; self.request = request }
         func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
-            guard client.mediaPicker?.id == request.id, client.ownsMedia(request.scope) else { return }
-            client.mediaPicker = nil
+            guard client.consumeMediaPicker(request) else { return }
             NativeMediaPickerAdapter.providers(results.map(\.itemProvider), client: client, scope: request.scope)
         }
     }
@@ -172,11 +171,11 @@ private struct DocumentPicker: UIViewControllerRepresentable {
         let client: NativeAppModel; let request: NativeMediaPickerRequest
         init(client: NativeAppModel, request: NativeMediaPickerRequest) { self.client = client; self.request = request }
         func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-            guard client.mediaPicker?.id == request.id, client.ownsMedia(request.scope) else { return }
-            client.mediaPicker = nil; NativeMediaPickerAdapter.documents(urls, client: client, scope: request.scope)
+            guard client.consumeMediaPicker(request) else { return }
+            NativeMediaPickerAdapter.documents(urls, client: client, scope: request.scope)
         }
         func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
-            if client.mediaPicker?.id == request.id { client.mediaPicker = nil }
+            client.cancelMediaPicker(request)
         }
     }
 }
@@ -195,11 +194,10 @@ private struct CameraPicker: UIViewControllerRepresentable {
         let client: NativeAppModel; let request: NativeMediaPickerRequest
         init(client: NativeAppModel, request: NativeMediaPickerRequest) { self.client = client; self.request = request }
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
-            if client.mediaPicker?.id == request.id { client.mediaPicker = nil }
+            client.cancelMediaPicker(request)
         }
         func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
-            guard client.mediaPicker?.id == request.id, client.ownsMedia(request.scope) else { return }
-            client.mediaPicker = nil
+            guard client.consumeMediaPicker(request) else { return }
             guard let stager = client.media?.stager,
                   let job = client.reserveMediaImport(request.scope, name: "Photo.jpg") else { return }
             do {

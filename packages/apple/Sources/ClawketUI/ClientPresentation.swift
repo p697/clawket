@@ -252,6 +252,9 @@ public struct AttachmentPresentation: Identifiable, Hashable, Sendable {
     public enum Kind: String, Hashable, Sendable { case image, file, audio, video }
     public enum Phase: Hashable, Sendable { case preparing, ready, failed(String) }
     public var id: String
+    /// Local view identity only; actions continue to use the resource/import id.
+    public var presentationID: String?
+    public var displayID: String { presentationID ?? id }
     public var name: String
     public var kind: Kind
     public var detail: String?
@@ -263,8 +266,8 @@ public struct AttachmentPresentation: Identifiable, Hashable, Sendable {
 
     public init(id: String, name: String, kind: Kind, detail: String? = nil, phase: Phase = .ready,
                 thumbnailData: Data? = nil, aspectRatio: Double? = nil,
-                canOpen: Bool = false, canRemove: Bool = false) {
-        self.id = id; self.name = name; self.kind = kind; self.detail = detail; self.phase = phase
+                canOpen: Bool = false, canRemove: Bool = false, presentationID: String? = nil) {
+        self.id = id; self.presentationID = presentationID; self.name = name; self.kind = kind; self.detail = detail; self.phase = phase
         self.thumbnailData = thumbnailData; self.aspectRatio = aspectRatio
         self.canOpen = canOpen; self.canRemove = canRemove
     }
@@ -554,6 +557,8 @@ public final class ComposerDraft: ObservableObject {
     @Published public private(set) var editRevision = UUID()
     @Published public var voice: VoicePresentation?
     @Published public var hint: String?
+    /// A real local outbox insertion, independent from wire delivery or a send-button tap.
+    @Published public var acceptedLocalInputID: String?
     /// Explicit host paste/dictation uses the current native selection and undo
     /// stack. It is ephemeral UI work, never a second persisted text buffer.
     @Published public var insertion: ComposerTextInsertion?

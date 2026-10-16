@@ -15,8 +15,17 @@ struct NativeMessageRow: View {
             if message.author.isOutgoing { Spacer(minLength: 36) }
             VStack(alignment: .leading, spacing: 10) {
                 author
-                ForEach(Array(message.content.enumerated()), id: \.offset) { index, content in
-                    contentView(content, id: "\(message.id)-\(index)")
+                ForEach(NativeMessageContentGroup.group(message.content)) { group in
+                    switch group {
+                    case let .item(index, content):
+                        contentView(content, id: "\(message.id)-\(index)")
+                    case let .images(items):
+                        if items.count == 1, let item = items.first {
+                            contentView(.attachment(item.attachment), id: "\(message.id)-\(item.id)")
+                        } else {
+                            imageGallery(items)
+                        }
+                    }
                 }
                 if message.isStreaming {
                     HStack(spacing: 7) {
@@ -137,7 +146,7 @@ struct NativeMessageRow: View {
             .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .accessibilityIdentifier("tool-output-\(id)")
         case let .attachment(attachment):
-            MessageAttachmentView(attachment: attachment) { onIntent(.openAttachment(attachmentID: attachment.id)) }
+            MessageAttachmentView(attachment: attachment) { openAttachment(attachment) }
         case let .work(work):
             WorkContentView(work: work, expanded: expansion(id), onURL: { onIntent(.openURL($0)) }, onReadingInteraction: onReadingInteraction)
         case let .approval(approval):
@@ -147,6 +156,29 @@ struct NativeMessageRow: View {
         case let .notice(text):
             Label(text, systemImage: "info.circle").font(.footnote).foregroundStyle(.secondary)
         }
+    }
+
+    private func imageGallery(_ items: [NativeMessageContentGroup.ImageItem]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(Array(stride(from: 0, to: items.count, by: 2)), id: \.self) { start in
+                HStack(alignment: .top, spacing: 8) {
+                    ForEach(Array(items[start..<min(start + 2, items.count)])) { item in
+                        MessageAttachmentView(attachment: item.attachment, compactImage: true) {
+                            openAttachment(item.attachment)
+                        }
+                        .frame(minWidth: 0, maxWidth: .infinity, alignment: .topLeading)
+                    }
+                    if start + 1 == items.count {
+                        Color.clear.aspectRatio(1, contentMode: .fit).accessibilityHidden(true)
+                    }
+                }
+            }
+        }.frame(maxWidth: 420, alignment: .leading)
+    }
+
+    private func openAttachment(_ attachment: AttachmentPresentation) {
+        onReadingInteraction()
+        onIntent(.openAttachment(attachmentID: attachment.id))
     }
 
     private func expansion(_ id: String) -> Binding<Bool> {
@@ -159,12 +191,13 @@ struct NativeMessageRow: View {
     @ViewBuilder private var delivery: some View {
         if let delivery = message.delivery {
             HStack(alignment: .firstTextBaseline, spacing: 5) {
-                Image(systemName: delivery.symbol)
-                Text(delivery.label).fixedSize(horizontal: false, vertical: true)
+                Image(systemName: delivery.symbol).foregroundStyle(delivery.isWarning ? Color.orange : Color.secondary)
+                Text(delivery.label).foregroundStyle(delivery.isWarning ? Color.primary : Color.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                 if let time = message.timeLabel { Text(time).foregroundStyle(.tertiary) }
             }
             .font(.caption)
-            .foregroundStyle(delivery.isWarning ? Color.orange : Color.secondary)
+            .foregroundStyle(.secondary)
             .accessibilityElement(children: .combine)
         } else if let time = message.timeLabel {
             Text(time).font(.caption).foregroundStyle(.tertiary)
@@ -172,22 +205,92 @@ struct NativeMessageRow: View {
     }
 }
 
+/// Group only adjacent image content. Original indices remain the identity of
+/// every item, including tool disclosures and repeated attachment references.
+enum NativeMessageContentGroup: Identifiable {
+    struct ImageItem: Identifiable {
+        let id: Int
+        let attachment: AttachmentPresentation
+    }
+    case item(Int, MessageContent)
+    case images([ImageItem])
+
+    var id: Int {
+        switch self {
+        case let .item(index, _): index
+        case let .images(items): items[0].id
+        }
+    }
+
+    static func group(_ content: [MessageContent]) -> [Self] {
+        var result: [Self] = []
+        var images: [ImageItem] = []
+        for (index, item) in content.enumerated() {
+            if case let .attachment(attachment) = item, attachment.kind == .image {
+                images.append(.init(id: index, attachment: attachment))
+            } else {
+                if !images.isEmpty { result.append(.images(images)); images = [] }
+                result.append(.item(index, item))
+            }
+        }
+        if !images.isEmpty { result.append(.images(images)) }
+        return result
+    }
+}
+
 @MainActor
 private struct MessageAttachmentView: View {
     let attachment: AttachmentPresentation
+    var compactImage = false
     let onOpen: () -> Void
     var body: some View {
         Group {
-            if attachment.canOpen { Button(action: onOpen) { content }.buttonStyle(.plain) }
-            else { content }
+            if attachment.canOpen {
+                Button(action: onOpen) {
+                    Label { Text(attachment.name) } icon: { content }
+                        .labelStyle(.iconOnly)
+                }
+                    .buttonStyle(.plain).contentShape(Rectangle())
+                    .accessibilityLabel(accessibilityDescription)
+                    .accessibilityValue(accessibilityStatus)
+            }
+            else { content.accessibilityLabel(accessibilityDescription).accessibilityValue(accessibilityStatus) }
         }
-        .accessibilityLabel([attachment.name, attachment.detail].compactMap { $0 }.joined(separator: ", "))
+    }
+    private var accessibilityDescription: String { [attachment.name, attachment.detail].compactMap { $0 }.joined(separator: ", ") }
+    private var accessibilityStatus: String {
+        switch attachment.phase {
+        case .preparing: String(localized: "Preparing attachments…")
+        case let .failed(reason): reason
+        case .ready: ""
+        }
     }
     @ViewBuilder private var content: some View {
-        if attachment.kind == .image, let data = attachment.thumbnailData, let image = UIImage(data: data) {
+        if compactImage {
+            VStack(alignment: .leading, spacing: 4) {
+                Color(uiColor: .tertiarySystemBackground)
+                    .aspectRatio(1, contentMode: .fit)
+                    .overlay {
+                        if let data = attachment.thumbnailData, let image = UIImage(data: data) {
+                            Image(uiImage: image).resizable().scaledToFill().accessibilityHidden(true)
+                        } else {
+                            Image(systemName: "photo").font(.title2).foregroundStyle(.secondary)
+                        }
+                        if attachment.phase == .preparing { ProgressView() }
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                Text(attachment.name).font(.caption).foregroundStyle(.secondary)
+                    .lineLimit(1).truncationMode(.middle)
+                if case let .failed(reason) = attachment.phase {
+                    Label { Text(reason) } icon: { Image(systemName: "exclamationmark.circle").foregroundStyle(.orange) }
+                        .font(.caption).foregroundStyle(.primary).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        } else if attachment.kind == .image, let data = attachment.thumbnailData, let image = UIImage(data: data) {
             Image(uiImage: image).resizable().scaledToFit()
                 .frame(maxWidth: 420, maxHeight: 420)
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .accessibilityHidden(true)
         } else {
             HStack(spacing: 12) {
                 Image(systemName: attachment.kind == .image ? "photo" : attachment.kind == .audio ? "waveform" : "doc")
@@ -195,7 +298,7 @@ private struct MessageAttachmentView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(attachment.name).font(.subheadline.weight(.medium)).foregroundStyle(.primary)
                     if let detail = attachment.detail { Text(detail).font(.caption).foregroundStyle(.secondary) }
-                    if case let .failed(reason) = attachment.phase { Text(reason).font(.caption).foregroundStyle(.orange) }
+                    if case let .failed(reason) = attachment.phase { Text(reason).font(.caption).foregroundStyle(.primary) }
                 }
                 Spacer(minLength: 0)
                 if attachment.phase == .preparing { ProgressView() }
