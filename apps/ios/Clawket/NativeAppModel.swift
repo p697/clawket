@@ -821,6 +821,18 @@ final class NativeAppModel: ObservableObject {
                 markVisibleRosterRead()
             }
             presentation.conversations[route]?.isLoadingHistory = false
+            if document.historyEpoch != documents[route]?.historyEpoch,
+               let newReadingScope = presentation.readingContexts[route]?.id, newReadingScope != readingScope {
+                let epoch = documents[route]?.historyEpoch
+                Task {
+                    guard activation == activationRevision, wire == wireRevision,
+                          presentation.selectedConversation == route, presentation.readingContexts[route]?.id == newReadingScope,
+                          documents[route]?.historyEpoch == epoch else { return }
+                    // A new view scope earns its own read evidence; the preceding
+                    // head never marks a replacement reading context as read.
+                    await loadHistory(route)
+                }
+            }
         } catch {
             guard activation == activationRevision, wire == wireRevision, historyRevisions[route] == revision else { return }
             presentation.conversations[route]?.isLoadingHistory = false
