@@ -65,7 +65,7 @@ struct NativeConversationExportView: View {
         Task {
             defer { operationState.finish(operation) }
             do {
-                let prepared = try await controller.share(transcript, format: format)
+                let prepared = try await controller.share(transcript, request: request, format: format)
                 guard visible, operationState.owns(operation) else { await prepared.releaseIfUnpresented(); return }
                 share = prepared
             } catch { if visible && operationState.owns(operation) { notice = NativeHistoryController.failureText(error) } }

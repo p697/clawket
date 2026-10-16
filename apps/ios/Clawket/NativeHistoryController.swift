@@ -35,14 +35,14 @@ final class NativeHistoryController: ObservableObject {
     let conversations: NativeConversationStore
     let media: NativeMediaController?
     private let runtime: RuntimeCoordinator
-    private let exports: NativeHistoryExportCache
+    private let exports: any NativeHistoryExportPreparing
     private let current: (NativeHistoryExportContext) -> Bool
     /// The entitlement integration supplies verified features. A missing provider
     /// leaves Pro search/bulk export unavailable without inventing a purchase state.
     let access: () -> NativeHistoryAccess
 
     init(saved: NativeSavedConversations, conversations: NativeConversationStore, media: NativeMediaController?,
-         runtime: RuntimeCoordinator, exports: NativeHistoryExportCache,
+         runtime: RuntimeCoordinator, exports: any NativeHistoryExportPreparing,
          current: @escaping (NativeHistoryExportContext) -> Bool,
          access: @escaping () -> NativeHistoryAccess = { .init() }) {
         self.saved = saved; self.conversations = conversations; self.media = media
@@ -70,6 +70,17 @@ final class NativeHistoryController: ObservableObject {
             userLabel: String(localized: "User"), assistantLabel: String(localized: "Assistant"),
             loadedOnlyLabel: loadedOnly ? String(localized: "This copy includes only history loaded on this device.") : nil)
         return .init(url: file.url, shareLease: file.lease)
+    }
+
+    func share(_ value: NativePublicTranscript, request: NativeHistoryExportRequest,
+               format: NativeHistoryExportFormat) async throws -> NativeMediaShare {
+        guard isCurrent(request.context) else { throw NativeHistoryExportFailure.changed }
+        let prepared = try await share(value, format: format)
+        guard isCurrent(request.context) else {
+            await prepared.releaseIfUnpresented()
+            throw NativeHistoryExportFailure.changed
+        }
+        return prepared
     }
 
     func sharePhysical(_ conversation: NativeConversation, title: String, format: NativeHistoryExportFormat) async throws -> NativeMediaShare {

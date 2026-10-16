@@ -16,9 +16,17 @@ struct NativeHistoryExportFile: Sendable {
     let lease: NativeHistoryExportLease
 }
 
+protocol NativeHistoryExportPreparing: Sendable {
+    func prepare(_ transcript: NativePublicTranscript, format: NativeHistoryExportFormat,
+                 userLabel: String, assistantLabel: String, loadedOnlyLabel: String?) async throws -> NativeHistoryExportFile
+    func preparePhysical(_ conversation: NativeConversation, title: String, format: NativeHistoryExportFormat,
+                         userLabel: String, assistantLabel: String, loadedOnlyLabel: String) async throws -> NativeHistoryExportFile
+    func prepareBulk(_ values: [NativeSavedConversation]) async throws -> NativeHistoryExportFile
+}
+
 /// Explicit exports alone create share files. A system handoff retains one unique
 /// directory until completion; a killed app leaves bounded, age-cleanable copies.
-actor NativeHistoryExportCache {
+actor NativeHistoryExportCache: NativeHistoryExportPreparing {
     private let root: URL
     private var active: Set<URL> = []
     init(directory: URL? = nil) throws {

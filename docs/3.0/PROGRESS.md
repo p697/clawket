@@ -29,6 +29,7 @@
   - 再补当前 offering refresh 禁止旧 opaque package checkout，暂停 offering 的 Controller 单文件8项已在59%空闲/heavy/jobs2实测通过并释放。首次 revoked fixture 原等任意 timer 会误认 expiry wait，修为明确等待2秒finish wait后推进，保留原生产断言。随后重基已全绿 final metadata 主线165810d7，保留全部 turn/input/LiveMessages、新系统文本和10项 App；actual discovery234/233缩减拒绝、87源路径/唯一引用及473 UI+4权限/19语9,063源码值核对，当前组合实际执行与编译值继续交最新 head CI，旧224绿不替代新234。
   - 12aea4ca/base165810d7最终全13门禁绿：actual App234/234零失败/跳过（16.604秒测试/20.125秒wall）、package445（59 XCTest+386 SwiftTesting）、19语9,063精确编译值。负责人决定RN继续默认后，本切片只完成已授权独立工程闭环；RN源码/默认命令/Expo与商店身份、npm lockfile和共享服务均无改，不执行真实购买/账户、设备或分发动作，原生UI尚未验收。
   - 最后重基共存+physical主线59bd0039（#260 exact19272e1e已全13绿：240/240实际App、14.297秒测试/18.213秒wall、8,094编译值）。保留所有物理ACK单次消费、durable unknown/epoch及资源字段，派发与model mutation、远端完整导出合并physical+Pro实时门槛，Stop无付费门槛。实际源码并集258/28文件，报告minimum258及257缩减反例、PBX62生产/28测试唯一真实路径、473UI+4权限/19语9,063源码值、docs16对/7回归与报告3项通过；不做新本机构建/完整suite，当前组合执行交最后CI。
+  - 最后只读复核发现完整Export加载后Share未复验原request，补实际view→controller专用入口，在prepare前后重查同一physical+Pro context，失效释放未呈现文件；Saved/Previous本地单份分享保持免费。三项真实controller/cache回归覆盖加载后expiry拒绝、prepare暂停时expiry/epoch/activation变化及真实文件清理，源码方法并集/报告下限261与260缩减拒绝。新回归交最新head CI编译/执行，不把旧1de0的绿替代这次修复证明。
 
 - 2026-10-16 Native live final 元数据与系统终态（实际 consumer 已接，完整 App 门禁继续）。
   - 仅保留实际 final.message 的 providedID/参与者/时钟/真实 transcriptPosition 与 turn/input lineage；OpenClaw 2026.10.2 安装源可保留真实 message，普通 Codex/Claude/Pi/Hermes/local-model live producer 没有消息 ID，明确留 nil，不把 run/turn/段序号当来源。既有 SDK history 生成器直接调用真实 Codex failure producer，并锁定实际 service wrapper，新增三份匿名合成终态向量；不是手机捕获或服务修改。
