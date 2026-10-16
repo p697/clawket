@@ -9,6 +9,7 @@
   - 未重发/追加Stop。实际系统OK后恢复原16字draft与0refs、held0/queued0/sending0，Studio原空draft/三refs/held1亦不变；私有失败原文档保留。自有QA app/WDA停、runner75、ownSIM Shutdown、两lease释放给#275窄测/开发编译；真实App Stop、提前Alert/stream恢复仍未通过，RN默认/服务/凭据/发布均未变。
   - #275 production653开发包双arch/codesign通过后接续真实验收；冷启前轮全文与原草稿恢复。新专用prompt系统Paste/落盘原UTF8核对，只Send1/Stop1；被动reader绑定本次真实receipt并见非空live，最后terminal=final而非aborted，取消仍未通过。Native连续保留数段正文（本地355字节/streaming=true），不再只剩尾token，但实际Runtime通用失败提示仍出现；本轮observer固定快照落盘，不丢失失败时终态证据。
   - 同步LLDB这次真实命中showFailure，caller=event_stream；ACK并恢复原draft后只重选精确saved connection、Send0/Stop0，另次命中caller=activate。均已detach。Swift expression因本机SwiftUICore PCM/modulemap过期失败，未采到code/delivery/retryable，不能伪称capacity实测。源码唯一throwing eventContinuation.finish位于有界队列溢出，count/bytes未采样；独立runtime-buffer窄修复继续。未重启/改共享服务、未放大容量或猜重试。
+  - #275 finalcfa6a69a（Swift/PBX与production653完全等价）在current-main/CLEAN全13 CI绿后合3efd84b3并finish。App315/315零失败/跳过（80.696秒test/134.357秒wall）、package465=59+406、19语两表9082精确编译值；开发App/modules/dSYM/source copy独立保留，非发行或完整真实后端验收。
 
 - 2026-10-16 Native Hermes 实时增量语义修复（独立切片；RN 保持默认）。
   - 当前Bridge的`message.delta`经`stream-mapping.ts`只把单fragment放入`chat.delta.message.content`，native却统一按snapshot替换；这能解释实时正文只剩末token，不能据此解释Stop前的generic Alert或宣称Stop已修。仅将Hermes该事件映射为.delta且不带snapshotMetadata；OpenClaw累计snapshot、全量final、SDK textMode、原segment/终态/身份与共享协议均保持。
