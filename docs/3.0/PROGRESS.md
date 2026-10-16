@@ -1,5 +1,10 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-16 Native Work 组合验收与辅助语义（独立探索；RN 保持默认）。
+  - #272 exactd6b033a2/basebd312dd7全13项CI绿/current-main/CLEAN后合76bc45b9并finish；actual App314/314零失败/跳过（55.397秒test/77.954秒wall）、package459=59+400、19语两表9082精确编译值。primary既有node_modules保留，开发副本在SSD独占保存。
+  - 此生产源码实际WebDriver：402pt中文键盘下仅一个导航Work、body dock消失；中心与四向±19pt坐标均打开工作记录。真实系统Paste的140字符中/日/NFD长草稿在展开→Work→关闭→收起后原UTF8/三资源引用不变；最大字号Work实际AX44×44、Back/标题/Work/More互不重叠，Work与Back→Studio重开均保留草稿。普通字号AX glyph边框较小，不能据源码称44pt已实测；选区/同UIView由独立UIKit回归证明，不冒称WDA已测。
+  - 实际toolbar外层Other已有完整Work label/value，但内部装饰checkmark另作“已选择”Button；候选隐藏装饰glyph并给外层明确button trait，保留原disabled/openIntent。候选真实重编/辅助树与激活验证待续，不从源码或无AX的unit保证成功。More早期visible=true过滤漏掉最大字号菜单，旧版截图已确认菜单实际打开；不据错误过滤改toolbar或宣称产品回归，后续以画面及实际菜单动作核验。
+
 - 2026-10-16 Native Work 响应式入口（独立候选；RN 保持默认）。
   - 按会话外层实际可用高度响应：小于500pt或展开编辑器时，将同一workID/typed状态/inspect入口移至独立44pt原生导航栏控件，充足时恢复body dock。不按键盘焦点/设备名猜高度，不推断idle或修改host活动/队列/审批/协议；全六状态均保留一个入口，完整AX说明与暂不可用状态复用。
   - NativeReadingLayoutTests新增两方法，真实NavigationStack宿主核六状态与高低viewport反复切换时的同UITextView/table、UTF8草稿/选区/实际阅读锚点；320/402/768宽与最大字号核原生title/editor实际几何及inspect变更时编辑连续性。Work唯一入口/状态可达/44pt/Back与More不叠、点击与展开手势留实际WDA，不伪称unit已覆盖。
