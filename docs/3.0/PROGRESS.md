@@ -1,5 +1,10 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-16 Native 紧凑草稿照片（独立探索候选，尚待执行验收）。
+  - 普通字号草稿图改88pt方形，完整名称/大小保留于辅助信息和原生长按Details；文件与224pt大字号卡片仍显示metadata，失败仍显示原因并可查看全文。Remove保持44pt但采用圆形触区以避开图心；tray本体88pt，外部原有间距14pt另计。RN默认/源码不变。
+  - 已知image provider与相机只传递临时布局hint；原有字节检查、模型/Runtime预检、原始资源/动作ID和选择顺序不改。预览准备保留原显示类型/名称/大小，成功重建补回实际byte count，避免开过一次就丢Details大小。
+  - 新actual NativeComposer宿主方法检查402pt三图非空完整容纳、preparing→ready同UITextView/原UTF8/选区，另保留大字号横滚和文件metadata高度。已有宿主投影回归补image hint/default file/准备不授预览；App并集311方法/33文件，报告minimum311及310缩减拒绝同步。这些是候选源码，尚未宣称本机或CI执行、真实按钮命中/Details查看或视觉验收通过；当前模拟器由独立输入诊断独占。
+
 - 2026-10-16 Native Direct SecureField 非秘密输入对照（独立诊断；RN 保持默认）。
   - 在独立工作树复用已验证的 `451f7318` development app 与唯一指定 QA 模拟器，私有 loopback canary 每次 fresh scope 发真实 OpenClaw challenge，只内存比较固定非秘密 ASCII token，固定拒绝并关闭，不连真 Gateway、不授 ready、不收 chat/session；结果仅固定分类/计数，无 token/hash/请求 ID/URL。
   - 三组提交前真实 UIKit/实际 wire 对照：WDA 批次频率10与逐字 keys 的唯一可见 token UITextField 均 nativeExact=false，随后 wire 均 shorter/alphanumeric；由 WDA 写非秘密 pasteboard 并点击真实系统 MenuItem「粘贴」后 nativeExact=true，wire=match/alphanumeric。三组均 secure/default keyboard/marked=false，调试器每次明确 detach；地址控件每次精确匹配独立 canary endpoint。早期未验证的 pasteboard/无有效 debugger 结果不算成功对照。

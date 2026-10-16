@@ -267,6 +267,7 @@ struct NativeComposer: View {
                 .fixedSize(horizontal: false, vertical: true).composerHeight("attachments")
         }
         .frame(height: contentHeights["attachments"] ?? 0)
+        .accessibilityIdentifier("composer-attachments")
     }
 
     private func voiceStatus(_ voice: VoicePresentation) -> some View {
@@ -347,9 +348,19 @@ private struct ComposerAttachmentView: View {
     let attachment: AttachmentPresentation
     let onOpen: () -> Void
     let onRemove: () -> Void
-    @State private var showingFailure = false
+    private struct Information {
+        let title: String
+        let message: String
+    }
+    @State private var information: Information?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    private var cardWidth: CGFloat { dynamicTypeSize.isAccessibilitySize ? 224 : 144 }
+    private var compactImage: Bool { attachment.kind == .image && !dynamicTypeSize.isAccessibilitySize }
+    private var cardWidth: CGFloat { dynamicTypeSize.isAccessibilitySize ? 224 : compactImage ? 88 : 144 }
+    private var thumbnailHeight: CGFloat { compactImage ? 88 : 84 }
+    private var showsMetadata: Bool {
+        if case .failed = attachment.phase { return true }
+        return !compactImage
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -357,7 +368,7 @@ private struct ComposerAttachmentView: View {
                 Color(uiColor: .tertiarySystemBackground)
                 if let data = attachment.thumbnailData, let image = UIImage(data: data) {
                     Image(uiImage: image).resizable().scaledToFill()
-                        .frame(width: cardWidth, height: 84).clipped()
+                        .frame(width: cardWidth, height: thumbnailHeight).clipped()
                         .accessibilityHidden(true)
                 } else {
                     Image(systemName: attachment.kind == .image ? "photo" : "doc.text")
@@ -368,33 +379,51 @@ private struct ComposerAttachmentView: View {
                         .accessibilityLabel(Text("Preparing \(attachment.name)"))
                 }
             }
-            .frame(width: cardWidth, height: 84)
+            .frame(width: cardWidth, height: thumbnailHeight)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .modifier(AttachmentPreviewInteraction(canOpen: attachment.canOpen, name: attachment.name, open: onOpen))
-            VStack(alignment: .leading, spacing: 3) {
-                Text(attachment.name).font(.caption.weight(.medium))
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1).truncationMode(.middle)
-                    .fixedSize(horizontal: false, vertical: true)
-                if case .failed(let reason) = attachment.phase {
-                    Button { showingFailure = true } label: {
-                        HStack(alignment: .top, spacing: 4) {
-                            Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.red)
-                            Text(reason).lineLimit(2).foregroundStyle(.primary)
-                            Image(systemName: "chevron.right").font(.system(size: 8, weight: .semibold))
+            .modifier(AttachmentPreviewInteraction(canOpen: attachment.canOpen, name: attachment.name,
+                detail: attachment.detail, open: onOpen))
+            .contextMenu {
+                if compactImage {
+                    Button {
+                        let message: String
+                        switch attachment.phase {
+                        case .preparing: message = String(localized: "Preparing \(attachment.name)")
+                        case .failed(let reason): message = reason
+                        case .ready: message = attachment.detail ?? String(localized: "Attachment")
                         }
-                        .font(.caption2).foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .topLeading)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(Text("Attachment failed"))
-                    .accessibilityValue(reason)
-                } else {
-                    Text(attachment.detail ?? " ").font(.caption2).foregroundStyle(.secondary).lineLimit(1)
-                        .accessibilityHidden(attachment.detail == nil)
+                        information = .init(title: attachment.name, message: message)
+                    } label: { Label("Details", systemImage: "info.circle") }
                 }
             }
-            .frame(width: cardWidth - 8, alignment: .leading).padding(.horizontal, 4)
+            if showsMetadata {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(attachment.name).font(.caption.weight(.medium))
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1).truncationMode(.middle)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if case .failed(let reason) = attachment.phase {
+                        Button {
+                            information = .init(title: String(localized: "Attachment failed"), message: attachment.name + "\n\n" + reason)
+                        } label: {
+                            HStack(alignment: .top, spacing: 4) {
+                                Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.red)
+                                Text(reason).lineLimit(2).foregroundStyle(.primary)
+                                Image(systemName: "chevron.right").font(.system(size: 8, weight: .semibold))
+                            }
+                            .font(.caption2).foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .topLeading)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(Text("Attachment failed"))
+                        .accessibilityValue(reason)
+                    } else {
+                        Text(attachment.detail ?? " ").font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                            .accessibilityHidden(attachment.detail == nil)
+                    }
+                }
+                .frame(width: cardWidth - 8, alignment: .leading).padding(.horizontal, 4)
+            }
         }
         .frame(width: cardWidth, alignment: .topLeading)
         .overlay(alignment: .topTrailing) {
@@ -403,7 +432,7 @@ private struct ComposerAttachmentView: View {
                     Image(systemName: "xmark").font(.system(size: 10, weight: .bold))
                         .foregroundStyle(.primary).frame(width: 23, height: 23)
                         .background(.regularMaterial, in: Circle())
-                        .frame(width: 44, height: 44).contentShape(Rectangle())
+                        .frame(width: 44, height: 44).contentShape(Circle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(Text("Remove \(attachment.name)"))
@@ -411,10 +440,12 @@ private struct ComposerAttachmentView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(attachment.name)
-        .alert("Attachment failed", isPresented: $showingFailure) {
-            Button("OK", role: .cancel) { }
+        .alert(Text(information?.title ?? ""), isPresented: Binding(
+            get: { information != nil }, set: { if !$0 { information = nil } }
+        )) {
+            Button("OK", role: .cancel) { information = nil }
         } message: {
-            if case .failed(let reason) = attachment.phase { Text(attachment.name + "\n\n" + reason) }
+            Text(information?.message ?? "")
         }
     }
 }
@@ -423,6 +454,7 @@ private struct ComposerAttachmentView: View {
 private struct AttachmentPreviewInteraction: ViewModifier {
     let canOpen: Bool
     let name: String
+    let detail: String?
     let open: () -> Void
     @ViewBuilder func body(content: Content) -> some View {
         if canOpen {
@@ -433,6 +465,7 @@ private struct AttachmentPreviewInteraction: ViewModifier {
                 .buttonStyle(.plain)
                 .contentShape(Rectangle())
                 .accessibilityLabel(Text("Preview \(name)"))
+                .accessibilityValue(detail ?? "")
         } else { content }
     }
 }

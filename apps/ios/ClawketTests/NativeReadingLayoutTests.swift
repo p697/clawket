@@ -4,6 +4,74 @@ import XCTest
 @testable import ClawketUI
 
 final class NativeReadingLayoutTests: XCTestCase {
+    @MainActor func testThreeDraftPhotosFitWithoutReplacingTheEditorOrHidingFileAndAccessibilityMetadata() async throws {
+        let route = ConversationID(connectionID: "layout", agentID: "agent", sessionID: "photos")
+        let text = "Preserved e\u{301} 中文 draft"
+        let draft = ComposerDraft(conversationID: route, text: text)
+        let pixels = UIGraphicsImageRenderer(size: CGSize(width: 4, height: 4)).pngData { context in
+            UIColor.systemBlue.setFill(); context.fill(CGRect(x: 0, y: 0, width: 4, height: 4))
+        }
+        draft.attachments = (0..<3).map {
+            .init(id: "import-\($0)", name: "Original photo \($0).png", kind: .image,
+                phase: .preparing, canRemove: true, presentationID: "slot-\($0)")
+        }
+        let conversation = ConversationPresentation(id: route, agentName: "Agent", sessionTitle: "Conversation",
+            features: [.send: .available, .photos: .available])
+        func composer(_ size: DynamicTypeSize) -> some View {
+            NativeComposer(draft: draft, conversation: conversation, expanded: .constant(false),
+                onIntent: { _ in }, showModels: {}, maximumHeight: 340).dynamicTypeSize(size)
+        }
+        let host = UIHostingController(rootView: composer(.large)), window = attach(host)
+        host.safeAreaRegions = []
+        defer { window.isHidden = true; window.rootViewController = nil }
+        await layout(host, width: 402, height: 340)
+        let editor = try XCTUnwrap(descendants(host.view, of: UITextView.self).first)
+        editor.selectedRange = NSRange(location: 3, length: 5)
+        func tray() throws -> UIScrollView {
+            let scrolls = descendants(host.view, of: UIScrollView.self).filter { !($0 is UITextView) }
+            // The actual composer contains one outer vertical viewport and its
+            // single nested attachment scroll view, even when all tiles fit.
+            let nested = scrolls.filter { candidate in
+                scrolls.contains { outer in outer !== candidate && candidate.isDescendant(of: outer) }
+            }
+            XCTAssertEqual(nested.count, 1)
+            return try XCTUnwrap(nested.first)
+        }
+        for ready in [false, true] {
+            if ready {
+                draft.attachments = (0..<3).map {
+                    .init(id: "resource-\($0)", name: "Original photo \($0).png", kind: .image, detail: "4 KB",
+                        thumbnailData: pixels, canOpen: true, canRemove: true, presentationID: "slot-\($0)")
+                }
+            }
+            await layout(host, width: 402, height: 340)
+            let images = try tray()
+            XCTAssertGreaterThanOrEqual(images.contentSize.width, 299, "An empty tray must not pass the fit check")
+            XCTAssertLessThanOrEqual(images.contentSize.width, images.bounds.width + 1)
+            XCTAssertGreaterThanOrEqual(images.bounds.height, 88)
+            XCTAssertLessThanOrEqual(images.bounds.height, 96, "Measure the scroll view itself, excluding its 14pt outer spacing")
+            XCTAssertTrue(try XCTUnwrap(descendants(host.view, of: UITextView.self).first) === editor)
+            XCTAssertTrue(editor.text.utf8.elementsEqual(text.utf8))
+            XCTAssertEqual(editor.selectedRange, NSRange(location: 3, length: 5))
+        }
+        host.rootView = composer(.accessibility5)
+        await layout(host, width: 402, height: 340)
+        let accessible = try tray()
+        XCTAssertGreaterThanOrEqual(accessible.contentSize.width, 707)
+        XCTAssertGreaterThan(accessible.contentSize.width, accessible.bounds.width)
+        XCTAssertGreaterThan(accessible.bounds.height, 88, "Large text retains filename and size rows")
+
+        draft.attachments = [.init(id: "file", name: "Original document.pdf", kind: .file, detail: "40 KB", canOpen: true)]
+        host.rootView = composer(.large)
+        await layout(host, width: 402, height: 340)
+        let file = try tray()
+        XCTAssertGreaterThanOrEqual(file.contentSize.width, 159)
+        XCTAssertGreaterThan(file.bounds.height, 88, "File metadata stays visible")
+        XCTAssertTrue(try XCTUnwrap(descendants(host.view, of: UITextView.self).first) === editor)
+        XCTAssertTrue(editor.text.utf8.elementsEqual(text.utf8))
+        XCTAssertEqual(editor.selectedRange, NSRange(location: 3, length: 5))
+    }
+
     @MainActor func testPreviewPauseKeepsTheRealTranscriptAnchorAndRetiresOnlyItsOwner() async throws {
         let route = ConversationID(connectionID: "layout", agentID: "agent", sessionID: "preview")
         let model = ClientPresentation(readingContexts: [route: .init()])

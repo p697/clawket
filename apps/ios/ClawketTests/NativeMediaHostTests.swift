@@ -148,12 +148,16 @@ final class NativeMediaHostTests: XCTestCase, @unchecked Sendable {
         model.documents[route] = NativeConversation()
         let first = UUID(), second = UUID(), resource = UUID()
         let scope = NativeMediaScope(route: route, activation: UUID(), selection: UUID(), draft: UUID())
-        model.mediaImports[first] = .init(id: first, scope: scope, name: "A")
+        model.mediaImports[first] = .init(id: first, scope: scope, name: "A", displayKind: .image)
         model.refreshDraftMedia(route)
         let displayA = model.presentation.draft(for: route).attachments[0].displayID
+        XCTAssertEqual(model.presentation.draft(for: route).attachments[0].kind, .image)
+        XCTAssertEqual(model.presentation.draft(for: route).attachments[0].phase, .preparing)
+        XCTAssertFalse(model.presentation.draft(for: route).attachments[0].canOpen)
         model.mediaImports[second] = .init(id: second, scope: scope, name: "B")
         model.refreshDraftMedia(route)
         let displayB = model.presentation.draft(for: route).attachments[1].displayID
+        XCTAssertEqual(model.presentation.draft(for: route).attachments[1].kind, .file)
         model.mediaDraftOrder[route]?.complete(importID: second, resourceID: resource)
         model.documents[route]?.draftResourceIDs = [resource]
         model.mediaImports.removeValue(forKey: second)

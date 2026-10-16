@@ -31,7 +31,7 @@ enum NativeMediaPickerAdapter {
             }
             guard let identifier, let type = UTType(identifier) else { continue }
             let name = NativeMediaNames.safe(provider.suggestedName ?? String(localized: "Attachment"), type: type)
-            guard let request = client.reserveMediaImport(scope, name: name) else { break }
+            guard let request = client.reserveMediaImport(scope, name: name, displayKind: type.conforms(to: .image) ? .image : .file) else { break }
             let mime = type.preferredMIMEType ?? "application/octet-stream"
             let progress = provider.loadFileRepresentation(forTypeIdentifier: identifier) { [weak client] url, _ in
                 let result: Result<StagedMediaFile, MediaFailure>
@@ -63,7 +63,7 @@ enum NativeMediaPickerAdapter {
             guard url.isFileURL else { continue }
             let type = UTType(filenameExtension: url.pathExtension)
             let name = NativeMediaNames.safe(url.lastPathComponent, type: type)
-            guard let request = client.reserveMediaImport(scope, name: name) else { break }
+            guard let request = client.reserveMediaImport(scope, name: name, displayKind: type?.conforms(to: .image) == true ? .image : .file) else { break }
             let mime = type?.preferredMIMEType ?? "application/octet-stream"
             client.mediaImportTasks[request.id] = Task {
                 do {
@@ -199,7 +199,7 @@ private struct CameraPicker: UIViewControllerRepresentable {
         func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
             guard client.consumeMediaPicker(request) else { return }
             guard let stager = client.media?.stager,
-                  let job = client.reserveMediaImport(request.scope, name: "Photo.jpg") else { return }
+                  let job = client.reserveMediaImport(request.scope, name: "Photo.jpg", displayKind: .image) else { return }
             do {
                 guard let image = info[.originalImage] as? UIImage,
                       image.size.width * image.scale * image.size.height * image.scale <= 100_000_000,

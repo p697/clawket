@@ -59,6 +59,8 @@ struct NativeMediaImport: Identifiable, Sendable {
     let id: UUID
     let scope: NativeMediaScope
     let name: String
+    /// Picker-provided layout hint only; inspected bytes still decide accepted media type.
+    var displayKind: AttachmentPresentation.Kind = .file
 }
 
 /// Ephemeral order and view correlation only. These IDs never grant resource ownership.

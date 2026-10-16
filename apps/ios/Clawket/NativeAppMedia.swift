@@ -108,12 +108,12 @@ extension NativeAppModel {
         if mediaPicker?.id == request.id { mediaPicker = nil }
     }
 
-    func reserveMediaImport(_ scope: NativeMediaScope, name: String) -> NativeMediaImport? {
+    func reserveMediaImport(_ scope: NativeMediaScope, name: String, displayKind: AttachmentPresentation.Kind = .file) -> NativeMediaImport? {
         guard ownsMedia(scope), (documents[scope.route]?.draftResourceIDs.count ?? 0) + mediaImports.values.filter({ $0.scope.route == scope.route }).count < 6 else {
             if ownsMedia(scope) { presentation.draft(for: scope.route).hint = String(localized: "Add up to six attachments.") }
             return nil
         }
-        let request = NativeMediaImport(id: UUID(), scope: scope, name: name)
+        let request = NativeMediaImport(id: UUID(), scope: scope, name: name, displayKind: displayKind)
         mediaImports[request.id] = request
         refreshDraftMedia(scope.route); updatePresentation(scope.route)
         return request
@@ -173,7 +173,7 @@ extension NativeAppModel {
 
     func failMediaImport(_ request: NativeMediaImport, error: any Error) {
         guard ownsMedia(request.scope), mediaImports[request.id] != nil else { return }
-        mediaDisplays[request.id.uuidString] = .init(id: request.id.uuidString, name: request.name, kind: .file,
+        mediaDisplays[request.id.uuidString] = .init(id: request.id.uuidString, name: request.name, kind: request.displayKind,
             phase: .failed(nativeMediaFailureLabel(error) ?? String(localized: "Attachment could not be added. Try again.")), canRemove: true)
         refreshDraftMedia(request.scope.route); updatePresentation(request.scope.route)
     }
@@ -244,7 +244,7 @@ extension NativeAppModel {
             return .init(id: key, name: String(localized: "Attachment"), kind: .image, phase: .preparing, canRemove: true)
         }
         let pending = mediaImports.values.filter { $0.scope.route == route }.sorted { $0.id.uuidString < $1.id.uuidString }.map { request in
-            mediaDisplays[request.id.uuidString] ?? .init(id: request.id.uuidString, name: request.name, kind: .file, phase: .preparing, canRemove: true)
+            mediaDisplays[request.id.uuidString] ?? .init(id: request.id.uuidString, name: request.name, kind: request.displayKind, phase: .preparing, canRemove: true)
         }
         let values = owned + pending
         if values.isEmpty {
@@ -386,7 +386,10 @@ extension NativeAppModel {
         }
         let previewRequest = UUID(); mediaPreviewRequest = (id, previewRequest)
         let activation = activationRevision, selection = selectionRevision, wire = wireRevision
-        mediaDisplays[id] = .init(id: id, name: reference?.name ?? String(localized: "Attachment"), kind: .file, phase: .preparing)
+        var opening = mediaDisplays[id] ?? .init(id: id, name: reference?.name ?? String(localized: "Attachment"),
+            kind: reference?.kind == .image ? .image : .file)
+        opening.phase = .preparing; opening.canOpen = false
+        mediaDisplays[id] = opening
         updatePresentation(route)
         let token = UUID(); mediaLoadRevisions[id] = token
         mediaLoads[id] = Task {
@@ -412,12 +415,14 @@ extension NativeAppModel {
                 let thumbnail = try await media.display(resource.id, input: localInput, pixels: 320)
                 guard !Task.isCancelled, mediaPreviewRequest?.token == previewRequest else { return }
                 mediaDisplays[id] = .init(id: id, name: resource.name, kind: thumbnail.image == nil ? .file : .image,
+                    detail: ByteCountFormatter.string(fromByteCount: Int64(resource.byteCount), countStyle: .file),
                     thumbnailData: thumbnail.image, aspectRatio: thumbnail.aspectRatio, canOpen: true)
                 refreshDraftMedia(route); updatePresentation(route)
             } catch {
                 if !Task.isCancelled, mediaPreviewRequest?.token == previewRequest, mediaLoadRevisions[id] == token, activation == activationRevision, selection == selectionRevision {
-                    mediaDisplays[id] = .init(id: id, name: reference?.name ?? String(localized: "Attachment"), kind: .file,
-                        phase: .failed(String(localized: "Attachment could not be loaded. Try again.")), canOpen: true)
+                    var failed = mediaDisplays[id] ?? opening
+                    failed.phase = .failed(String(localized: "Attachment could not be loaded. Try again.")); failed.canOpen = true
+                    mediaDisplays[id] = failed
                     updatePresentation(route); showMediaFailure(error, route: route)
                 }
             }
