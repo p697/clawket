@@ -68,7 +68,11 @@ final class NativeAutosaveTests: XCTestCase, @unchecked Sendable {
         let folder = root.appendingPathComponent("Conversations")
         try FileManager.default.removeItem(at: folder)
         try FileManager.default.moveItem(at: root.appendingPathComponent("Preserved"), to: folder)
-        return try NativeConversationStore(directory: folder)
+        // The earlier URL was constructed while this path was a regular file.
+        // Reopening must query the restored directory, not cached URL properties.
+        var restored = URL(fileURLWithPath: folder.path, isDirectory: true)
+        restored.removeAllCachedResourceValues()
+        return try NativeConversationStore(directory: restored)
     }
 
     @MainActor private func failCurrentSave(_ model: NativeAppModel, root: URL) async throws -> String {

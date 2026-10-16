@@ -5,6 +5,7 @@
   - 独立 NativeAutosaveTests 七方法复用真实 store FIFO/取消检查和临时目录故障，覆盖三文件/held 原项的真实写读回、取消/替代、当前失败/恢复、其他提示与 A→B→A/epoch/revision 围栏；没有新增测试专用存储接口。重基 993cc686 后源码发现 306 个 App 方法/32 个测试文件，报告下限及 305 缩减反例同步；docs 16 指令对/7 回归、报告 validator 3 回归与 PBX 实路径检查通过。候选 Swift 执行证据待本 head CI；本机未编译、执行 native 测试或使用设备/lease。
   - 只读 peer 抓到并修复两个候选边界：activation 仅隔离迟到提示，不阻止切换前排定的离线草稿写入；ComposerDraft 每次 hint 赋值都有 UUID，同文案的后续 voice 失败也不能被 autosave 清除。七项包含生产 debounce 前切换后的真实磁盘读回与同文案替换反例；候选执行仍交新 head CI。
   - ffb7a57f 首轮CI的 package/原客户端12门通过；actual App编译定位新测试两处 draftChanged 缺 text: 参数标签，候选测试尚未执行。已修 fixture 的真实 typed intent 调用，保留所有断言，下一精确 head 重新完整门禁；未把编译失败称为验收通过。
+  - 41c51ec1 actual CI成功编译并执行306项：299既有及4项新回归通过，3项在相同恢复fixture重开Store时抛 unavailable、尚未进入后续断言。fixture恢复路径此前在普通file占位时构造URL后原样复用；改为新的显式directory URL并清资源属性缓存，不改产品store或断言，精确新head继续门禁。
   - 触发调查的合成 QA 快照只证明后来三资源引用已落盘、文件存在；现场当次抛出的错误未捕获，不把可达竞态当已证明现场根因。无 RN、默认入口、共享服务、凭据、发布或同 bundle 升级变更。
 
 - 2026-10-16 Native 根 sheet 交接（独立候选，完整CI执行待续）。
