@@ -3,7 +3,8 @@
 - 2026-10-16 Native 代码/原文复制反馈（独立候选，执行验证待资源协调）。
   - 从 fresh bdf98e7b 创建独立工作树，仅代码卡片与 tool 原文 Copy 采用专用 native control；保留旧 AX ID、同按钮对象与最新原UTF8，严格先暂停跟随再写剪贴板，随后短暂 Copied、辅助值/系统播报与成功haptic。两种本地化标题按当前字体共同占位、44pt下限不变；不改 generic voice按钮、RN、协议或服务。
   - 普通流式更新只换下一次Copy载荷，不重启提示；重复点击取消旧reset且以独立generation隔离，控件移出window/退休即取消。timer只恢复标题，不再次复制/播报/震动。Copied复用Mobile chat既有19语真实译文，加入native catalog与inventory。
-  - 独立actual UIKit回归3方法已写：assistant真实fence与最大字号前后同bounds/同按钮及NFC→NFD新正文、tool CRLF字节与pause顺序、可控等待下重复点击/换identity/移出window/禁用空内容。App实际方法并集299、报告minimum与298缩减反例同步；单文件静态核对19语474UI+4权限、16指令对及diff通过，独立只读review无具体blocker。本机heavy/simulator由主线程WebDriver独占，本候选尚未编译或执行测试，不把源码断言当已验反馈；负责人授权先由精确head CI执行完整门禁，不抢本机资源。未发行或改生产。
+  - 独立actual UIKit回归3方法已写：assistant真实fence与最大字号前后同bounds/同按钮及NFC→NFD新正文、tool CRLF字节与pause顺序、可控等待下重复点击/换identity/移出window/禁用空内容。App实际方法并集299、报告minimum与298缩减反例同步；单文件静态核对19语474UI+4权限、16指令对及diff通过，独立只读review无具体blocker。本机heavy/simulator由主线程WebDriver独占，本机未编译或执行候选测试，不把源码断言当已验反馈；负责人授权先由精确head CI执行完整门禁，不抢本机资源。未发行或改生产。
+  - PR #266首轮f5f056a6 CI实际编译/执行299方法：assistant最大字号/不挤动/最新字节和tool原文两方法通过；生命周期方法在最后空控件分支有5条断言失败，其余298方法通过。空控件的实际UIKit按钮仍可触发空写；保留全部断言，以专用Copy外层.disabled(empty)明确环境，并在点击处理独立复核enabled/非空载荷，不依赖UIControl属性单独授复制。完整新head门禁继续CI，无本机执行。
 
 - 2026-10-16 Native 输入光标与真实 Direct 验收（独立探索继续，React Native 保持默认）。
   - 实际 UIKit 最大字号/三附件/长草稿暴露嵌套滚动裁切：光标几何超过 TextKit 惰性 contentSize，单次异步滚动也早于 viewport 新尺寸落地。现在按 input view 坐标、实际 viewport、输入/选区变化做每请求最多三轮补正；内层可达范围至少含实际光标，外层仍按真实内容限位，不写 contentSize、不退 TextKit1、不改正文/选区/marked text。普通重复 layout 和内外手势不抢回附件阅读。

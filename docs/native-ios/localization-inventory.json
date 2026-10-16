@@ -652,7 +652,7 @@
     {
       "key": "Copied",
       "sources": [
-        "packages/apple/Sources/ClawketUI/NativeCopyButton.swift:46"
+        "packages/apple/Sources/ClawketUI/NativeCopyButton.swift:60"
       ],
       "mobileTerm": "chat.Copied"
     },
@@ -663,8 +663,9 @@
         "packages/apple/Sources/ClawketUI/MessageContentView.swift:122",
         "packages/apple/Sources/ClawketUI/MessageContentView.swift:416",
         "packages/apple/Sources/ClawketUI/NativeCopyButton.swift:20",
-        "packages/apple/Sources/ClawketUI/NativeCopyButton.swift:25",
-        "packages/apple/Sources/ClawketUI/NativeCopyButton.swift:46"
+        "packages/apple/Sources/ClawketUI/NativeCopyButton.swift:34",
+        "packages/apple/Sources/ClawketUI/NativeCopyButton.swift:39",
+        "packages/apple/Sources/ClawketUI/NativeCopyButton.swift:60"
       ],
       "mobileTerm": "config.Copy"
     },

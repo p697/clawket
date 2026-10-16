@@ -14,7 +14,21 @@ struct NativeCopyFeedbackEffects {
 
 /// Feedback belongs to this visible control, never to a message or wire identity.
 @MainActor
-struct NativeCopyButton: UIViewRepresentable {
+struct NativeCopyButton: View {
+    let text: String
+    let accessibilityIdentifier: String
+    var accessibilityLabel = String(localized: "Copy")
+    var effects = NativeCopyFeedbackEffects.system
+    let beforeCopy: @MainActor () -> Void
+
+    var body: some View {
+        NativeCopyControl(text: text, accessibilityIdentifier: accessibilityIdentifier, accessibilityLabel: accessibilityLabel,
+                          effects: effects, beforeCopy: beforeCopy).disabled(text.isEmpty)
+    }
+}
+
+@MainActor
+fileprivate struct NativeCopyControl: UIViewRepresentable {
     let text: String
     let accessibilityIdentifier: String
     var accessibilityLabel = String(localized: "Copy")
@@ -45,7 +59,8 @@ struct NativeCopyButton: UIViewRepresentable {
         coordinator.button = button; coordinator.text = text; coordinator.beforeCopy = beforeCopy; coordinator.effects = effects
         button.copyTitle = String(localized: "Copy"); button.copiedTitle = String(localized: "Copied")
         button.accessibilityIdentifier = accessibilityIdentifier; button.copyAccessibilityLabel = accessibilityLabel
-        button.isEnabled = enabled && !text.isEmpty
+        coordinator.copyingEnabled = enabled && !text.isEmpty
+        button.isEnabled = coordinator.copyingEnabled
         if !button.isEnabled { coordinator.reset() }
         button.refresh()
     }
@@ -55,24 +70,25 @@ struct NativeCopyButton: UIViewRepresentable {
     }
     static func dismantleUIView(_ button: UIButton, coordinator: Coordinator) {
         coordinator.reset(); coordinator.button = nil; coordinator.beforeCopy = nil
-        coordinator.text = ""; coordinator.effects = .system
+        coordinator.text = ""; coordinator.copyingEnabled = false; coordinator.effects = .system
         (button as? CopyFeedbackButton)?.detached = nil
     }
 
     @MainActor final class Coordinator: NSObject {
         fileprivate weak var button: CopyFeedbackButton?
         fileprivate var text = ""
+        fileprivate var copyingEnabled = false
         fileprivate var beforeCopy: (@MainActor () -> Void)?
         fileprivate var effects = NativeCopyFeedbackEffects.system
         private var generation = UUID()
         private var resetTask: Task<Void, Never>?
 
         @objc fileprivate func activate() {
-            guard let button, button.isEnabled, button.window != nil else { return }
+            guard copyingEnabled, !text.isEmpty, let button, button.isEnabled, button.window != nil else { return }
             let text = self.text
             beforeCopy?()
             UIPasteboard.general.string = text
-            guard self.button === button, button.isEnabled, button.window != nil else { return }
+            guard copyingEnabled, self.button === button, button.isEnabled, button.window != nil else { return }
             resetTask?.cancel()
             let token = UUID(); generation = token
             button.copied = true; button.refresh()
