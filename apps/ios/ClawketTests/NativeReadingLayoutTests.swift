@@ -277,7 +277,7 @@ final class NativeReadingLayoutTests: XCTestCase {
                 let compact = height == 420
                 let elements = accessibilityElements(host.view)
                 let entries = elements.filter { ["work-toolbar", "work-dock"].contains(identifier($0) ?? "") }
-                XCTAssertEqual(entries.count, 1, "Every typed status has exactly one accessible Work entry")
+                XCTAssertEqual(entries.count, 1, "Every typed status has exactly one accessible Work entry; observed IDs: \(elements.compactMap(identifier).prefix(20))")
                 let entry = try XCTUnwrap(entries.first)
                 XCTAssertEqual(identifier(entry), compact ? "work-toolbar" : "work-dock")
                 XCTAssertEqual(entry.accessibilityLabel, work.title)
@@ -318,7 +318,8 @@ final class NativeReadingLayoutTests: XCTestCase {
         for width in [CGFloat(320), 402, 768] {
             await layout(host, width: width, height: 420)
             let elements = accessibilityElements(host.view)
-            let work = try XCTUnwrap(elements.first { identifier($0) == "work-toolbar" })
+            let work = try XCTUnwrap(elements.first { identifier($0) == "work-toolbar" },
+                "Observed IDs: \(elements.compactMap(identifier).prefix(20))")
             let title = try XCTUnwrap(elements.first { identifier($0) == "conversation-sessions" })
             let more = try XCTUnwrap(elements.first { identifier($0) == "conversation-actions" })
             let back = try XCTUnwrap(elements.first { $0.accessibilityLabel == "Agents" && $0.accessibilityTraits.contains(.button) })
@@ -676,8 +677,18 @@ final class NativeReadingLayoutTests: XCTestCase {
         func visit(_ object: NSObject, depth: Int) {
             guard depth < 40, visited.insert(ObjectIdentifier(object)).inserted else { return }
             if let view = object as? UIView, view.isHidden || view.alpha < 0.01 { return }
-            if object.isAccessibilityElement { result.append(object); return }
+            if object.isAccessibilityElement {
+                result.append(object)
+                // A generic UIKit host can itself be accessible while exposing
+                // the actual SwiftUI controls through its public container.
+                if identifier(object) != nil || object is UIAccessibilityElement { return }
+            }
             if let view = object as? UIView { for child in view.subviews { visit(child, depth: depth + 1) } }
+            // UIKit supports either the array property or indexed container
+            // methods. SwiftUI hosts need not implement both representations.
+            for child in object.accessibilityElements ?? [] {
+                if let child = child as? NSObject { visit(child, depth: depth + 1) }
+            }
             let count = object.accessibilityElementCount()
             if count > 0 && count < 1_024 {
                 for index in 0..<count {
