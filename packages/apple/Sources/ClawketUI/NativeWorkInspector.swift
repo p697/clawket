@@ -45,6 +45,7 @@ struct NativeWorkToolbarButton: View {
                 .font(.system(size: 18))
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
+                .accessibilityHidden(true)
         }
         .buttonStyle(.plain)
         .disabled(!work.inspect.isEnabled)
@@ -60,6 +61,7 @@ private struct WorkEntryAccessibility: ViewModifier {
     func body(content: Content) -> some View {
         content
             .accessibilityElement(children: .ignore)
+            .accessibilityAddTraits(.isButton)
             .accessibilityLabel(work.title)
             .accessibilityValue([work.status.label, work.detail, work.clock.durationLabel, work.inspect.explanation]
                 .compactMap { $0 }.joined(separator: ". "))
