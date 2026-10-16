@@ -12,14 +12,18 @@ enum NativeHistoryApplication {
         let acceptedHistoryIDs: [Int: String]
         let retiringResources: Set<UUID>
         let sourceAmbiguity: NativeSourceAmbiguity
+        let retiredTerminalSources: NativeRetiredTerminalSources
     }
 
     static func prepare(_ history: RuntimeHistory, stored: [NativeMessage],
                         readSnapshot: [String: NativeMessage], epoch: UUID?, route: ConversationID,
                         earlier: Bool, sourceAmbiguity: NativeSourceAmbiguity? = nil,
+                        retiredTerminalSources: NativeRetiredTerminalSources? = nil,
                         newID: () -> String = { UUID().uuidString }) throws -> Projection {
         var ambiguity = sourceAmbiguity?.scoped(to: epoch) ?? .init(epoch: epoch)
-        guard ambiguity.isValid else { throw NativeHistoryReconciliation.Failure.invalidInput }
+        var retired = retiredTerminalSources?.scoped(to: epoch) ?? .init(epoch: epoch)
+        guard ambiguity.isValid, retired.isValid else { throw NativeHistoryReconciliation.Failure.invalidInput }
+        let terminalSources = Set(retired.sources)
         for row in stored where row.historyEpoch == epoch && row.idSource == .ambiguousProvided {
             if let source = row.providedID { ambiguity.remember(source) }
         }
@@ -79,7 +83,9 @@ enum NativeHistoryApplication {
                     && compatibleRun && history.activeRunEvidence != false
                 var snapshotState = previous?.liveSnapshotState
                 if raw.role == .assistant, raw.idSource == .provided {
-                    if history.activeRunEvidence == false { snapshotState = .terminal }
+                    if history.activeRunEvidence == false || raw.providedID.map({ terminalSources.contains(Data($0.utf8)) }) == true {
+                        snapshotState = .terminal
+                    }
                     else if snapshotState != .terminal, history.activeRunEvidence == true,
                             let sourceRun = raw.runID, let activeRun = history.activeRunID,
                             sourceRun.utf8.elementsEqual(activeRun.utf8) {
@@ -120,8 +126,15 @@ enum NativeHistoryApplication {
                 messages[index].idSource = .ambiguousProvided
             }
         }
+        let retainedIDs = Set(messages.map(\.id))
+        try retired.remember(prior.compactMap { row in
+            guard row.historyEpoch == epoch, row.role == .assistant, !row.local, row.idSource == .provided,
+                  row.liveSnapshotState == .terminal, !retainedIDs.contains(row.id) else { return nil }
+            return row.providedID
+        })
         return Projection(messages: messages, acceptedHistoryIDs: plan.acceptedHistoryIDs,
-                          retiringResources: strongResources(stored).subtracting(strongResources(messages)), sourceAmbiguity: ambiguity)
+                          retiringResources: strongResources(stored).subtracting(strongResources(messages)), sourceAmbiguity: ambiguity,
+                          retiredTerminalSources: retired)
     }
 
     private static func byteEqual(_ left: String?, _ right: String?) -> Bool {

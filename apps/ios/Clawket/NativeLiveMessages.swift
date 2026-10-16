@@ -14,11 +14,14 @@ enum NativeLiveMessages {
     /// A negative identity observation must be saved without treating the
     /// rejected body as accepted text, run activity or current-wire evidence.
     static func reduceText(_ update: RuntimeTextUpdate, in document: inout NativeConversation, epoch: UUID?,
+                           allowAcceptedText: Bool = true,
                            newID: () -> String = { UUID().uuidString }) -> TextReduction {
         if let metadata = update.snapshotMetadata {
             guard update.mode == .snapshot else { return .rejected }
-            return snapshot(update, metadata: metadata, in: &document, epoch: epoch, newID: newID)
+            return snapshot(update, metadata: metadata, in: &document, epoch: epoch,
+                allowAcceptedText: allowAcceptedText, newID: newID)
         }
+        guard allowAcceptedText else { return .rejected }
         return legacyText(update, in: &document, epoch: epoch, newID: newID) ? .accepted : .rejected
     }
 
@@ -51,15 +54,17 @@ enum NativeLiveMessages {
     }
 
     private static func snapshot(_ update: RuntimeTextUpdate, metadata: RuntimeFinalMessageMetadata,
-                                 in document: inout NativeConversation, epoch: UUID?, newID: () -> String) -> TextReduction {
+                                 in document: inout NativeConversation, epoch: UUID?, allowAcceptedText: Bool,
+                                 newID: () -> String) -> TextReduction {
         guard !metadata.hasConflictingLineage,
               let source = metadata.providedID, !source.isEmpty, source.utf8.count <= 4_096,
               compatible(metadata.turnID, update.turnID), compatible(metadata.inputMessageID, update.inputMessageID),
               compatible(metadata.inputMessageKey, update.inputMessageKey) else { return .rejected }
         if rememberSourceContradiction(source, role: metadata.role, runID: update.runID, metadata: metadata,
                                        in: &document, epoch: epoch) { return .sourceAmbiguityChanged }
-        guard metadata.role == .assistant,
-              document.sourceAmbiguity?.scoped(to: epoch).rejects(source) != true else { return .rejected }
+        guard allowAcceptedText, metadata.role == .assistant,
+              document.sourceAmbiguity?.scoped(to: epoch).rejects(source) != true,
+              document.retiredTerminalSources?.scoped(to: epoch).rejects(source) != true else { return .rejected }
         let sources = document.messages.indices.filter {
             document.messages[$0].historyEpoch == epoch && equal(document.messages[$0].providedID, source)
         }

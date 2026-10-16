@@ -132,6 +132,24 @@ final class NativeTaskJournal {
             records: runs.map(NativeJournalProjection.run))
     }
 
+    /// Only the actual run-finished reducer sets a run's terminal status.
+    /// A tool/source terminal or a guessed history paragraph cannot do so.
+    func hasFinishedRun(_ route: ConversationID, epoch: UUID?, runID: String) -> Bool {
+        guard let epoch else { return false }
+        let current = NativeJournalScope(connectionID: route.connectionID, agentID: route.agentID,
+            sessionID: route.sessionID, historyEpoch: epoch)
+        let matches = document.runs.filter { $0.scope == current && historySame($0.lineage.runID, runID) }
+        guard matches.contains(where: { $0.status.isTerminal }) else { return false }
+        var lineage = NativeWorkLineage(runID: runID)
+        for record in matches {
+            guard !lineage.conflicts(with: record.lineage) else { return false }
+            lineage.enrich(with: record.lineage)
+        }
+        // Late work can add an unattributed display bucket. Its absent fields
+        // do not contradict an actual finish; a different actual input does.
+        return true
+    }
+
     /// These intents only inspect the already-authorized local cache; no command or RPC is issued.
     func canInspect(_ route: ConversationID, workID: String, recordID: String? = nil, stepID: String? = nil) -> Bool {
         guard let work = work(for: route), work.id == workID, work.inspect.isEnabled else { return false }

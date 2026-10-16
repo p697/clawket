@@ -184,7 +184,7 @@ extension NativeMessage {
 extension NativeConversation {
     enum CodingKeys: String, CodingKey {
         case version, revision, draft, messages, nextCursor, historyLimit, hasMore, draftResourceIDs, historyEpoch, physicalSessionID, physicalMutationUnconfirmed
-        case sourceAmbiguity
+        case sourceAmbiguity, retiredTerminalSources
     }
 
     init(from decoder: any Decoder) throws {
@@ -200,7 +200,8 @@ extension NativeConversation {
             historyEpoch: try values.decodeIfPresent(UUID.self, forKey: .historyEpoch),
             physicalSessionID: try values.decodeIfPresent(String.self, forKey: .physicalSessionID),
             physicalMutationUnconfirmed: try values.decodeIfPresent(Bool.self, forKey: .physicalMutationUnconfirmed),
-            sourceAmbiguity: try values.decodeIfPresent(NativeSourceAmbiguity.self, forKey: .sourceAmbiguity))
+            sourceAmbiguity: try values.decodeIfPresent(NativeSourceAmbiguity.self, forKey: .sourceAmbiguity),
+            retiredTerminalSources: try values.decodeIfPresent(NativeRetiredTerminalSources.self, forKey: .retiredTerminalSources))
         try validateMedia()
     }
 
@@ -214,7 +215,7 @@ extension NativeConversation {
         guard version == 1, revision >= 0, revision < 9_007_199_254_740_991, draftResourceIDs.count <= 6,
               Set(draftResourceIDs).count == draftResourceIDs.count,
               physicalSessionID == nil || (!physicalSessionID!.isEmpty && physicalSessionID!.utf8.count <= 2_048),
-              sourceAmbiguity?.isValid != false,
+              sourceAmbiguity?.isValid != false, retiredTerminalSources?.isValid != false,
               Set(messages.map(\.id)).count == messages.count else { throw StoreFailure.invalidDocument }
         for message in messages {
             if let digest = message.sourceRevisionHash {

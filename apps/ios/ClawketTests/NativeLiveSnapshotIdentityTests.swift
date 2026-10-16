@@ -1,4 +1,4 @@
-import ClawketRuntime
+@testable import ClawketRuntime
 import ClawketTransport
 import ClawketUI
 import Foundation
@@ -35,9 +35,11 @@ final class NativeLiveSnapshotIdentityTests: XCTestCase {
             activeRunEvidence: evidence)
         let result = try NativeHistoryApplication.prepare(history, stored: document.messages,
             readSnapshot: Dictionary(uniqueKeysWithValues: document.messages.map { ($0.id, $0) }),
-            epoch: epoch, route: route, earlier: false, sourceAmbiguity: document.sourceAmbiguity)
+            epoch: epoch, route: route, earlier: false, sourceAmbiguity: document.sourceAmbiguity,
+            retiredTerminalSources: document.retiredTerminalSources)
         document.messages = result.messages
         document.sourceAmbiguity = result.sourceAmbiguity
+        document.retiredTerminalSources = result.retiredTerminalSources
         return result.acceptedHistoryIDs
     }
     private func finish(_ document: inout NativeConversation, source: String? = "source", segment: String = "segment",
@@ -371,6 +373,175 @@ final class NativeLiveSnapshotIdentityTests: XCTestCase {
             XCTAssertNotEqual(accepted[0], original)
             XCTAssertEqual(document.messages.first { $0.id == original }?.text, "Preserved original")
         }
+    }
+
+    @MainActor
+    func testRemovedTerminalSourcesSurviveEmptyHeadRealColdStoreAndStaleActiveHeadWithoutBecomingAmbiguous() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("terminal-source-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        for origin in 0..<3 {
+            var document = NativeConversation(historyEpoch: epoch)
+            if origin == 0 {
+                _ = try apply([raw(text: "Source-only history", run: nil)], to: &document, active: false, evidence: nil)
+                XCTAssertNotNil(finish(&document, attachments: true))
+            } else if origin == 1 {
+                XCTAssertTrue(NativeLiveMessages.text(update("Accepted full body"), in: &document, epoch: epoch))
+                XCTAssertNotNil(finish(&document))
+            } else {
+                _ = try apply([raw(text: "Confirmed terminal history")], to: &document, active: false, evidence: false)
+            }
+            XCTAssertEqual(document.messages[0].liveSnapshotState, .terminal)
+            XCTAssertTrue(document.retiredTerminalSources?.sources.isEmpty != false)
+            _ = try apply([], to: &document, active: false, evidence: false)
+            XCTAssertTrue(document.messages.isEmpty) // Accepted empty head never displays the old body.
+            XCTAssertTrue(document.retiredTerminalSources?.rejects("source") == true)
+            XCTAssertFalse(document.sourceAmbiguity?.rejects("source") == true)
+            let folder = directory.appendingPathComponent(String(origin))
+            let store = try NativeConversationStore(directory: folder)
+            try await store.write(document, connectionID: route.connectionID, agentID: route.agentID, sessionID: route.sessionID)
+            let reopened = try NativeConversationStore(directory: folder)
+            document = try await reopened.read(connectionID: route.connectionID, agentID: route.agentID, sessionID: route.sessionID)
+            XCTAssertEqual(NativeLiveMessages.reduceText(update("Direct late packet"), in: &document, epoch: epoch), .rejected)
+            XCTAssertTrue(document.messages.isEmpty)
+            _ = try apply([raw(text: "Stale active prefix")], to: &document)
+            XCTAssertEqual(document.messages[0].liveSnapshotState, .terminal)
+            XCTAssertEqual(document.messages[0].idSource, .provided)
+            let model = NativeAppModel(); model.documents[route] = document
+            model.state = .init(connectionID: route.connectionID, phase: .ready)
+            XCTAssertEqual(model.adoptIncomingLiveText(update("Must not revive"), route: route), .rejected)
+            XCTAssertEqual(model.documents[route]?.messages.map(\.text), ["Stale active prefix"])
+            XCTAssertFalse(model.present(document.messages[0], agentName: "Agent", route: route).isStreaming)
+            XCTAssertFalse(document.sourceAmbiguity?.rejects("source") == true)
+            XCTAssertTrue(NativeLiveMessages.text(update("New physical epoch"), in: &document, epoch: UUID()))
+        }
+    }
+
+    @MainActor
+    func testRetiredTerminalCapacityRejectsHeadAtomicallyWhileFreshSourceReductionRemainsAvailable() throws {
+        let fullCount = NativeRetiredTerminalSources(epoch: epoch, sources: (0..<NativeRetiredTerminalSources.limit).map {
+            Data("retired-\($0)".utf8)
+        })
+        let fullBytes = NativeRetiredTerminalSources(epoch: epoch, sources: (0..<64).map {
+            Data((String(repeating: "x", count: 4_092) + String(format: "%04d", $0)).utf8)
+        })
+        for memory in [fullCount, fullBytes] {
+            XCTAssertTrue(memory.isValid)
+            let attachment = try JSONDecoder().decode(NativeMediaReference.self, from: Data(
+                #"{"id":"retained-media","resourceID":"11111111-1111-1111-1111-111111111111","kind":"file","mimeType":"text/plain","name":"original.txt"}"#.utf8))
+            let terminal = NativeMessage(id: "kept", role: .assistant, text: "Original cached body", runID: "run",
+                segmentID: "segment", media: [attachment], providedID: "source", idSource: .provided,
+                historyEpoch: epoch, liveSnapshotState: .terminal)
+            var document = NativeConversation(draft: "Independent draft", messages: [terminal], historyEpoch: epoch,
+                retiredTerminalSources: memory)
+            XCTAssertThrowsError(try apply([], to: &document, active: false, evidence: false)) {
+                XCTAssertEqual($0 as? NativeHistoryFailure, .full)
+            }
+            XCTAssertEqual(document.messages, [terminal]); XCTAssertEqual(document.retiredTerminalSources, memory)
+            XCTAssertEqual(document.draft, "Independent draft")
+            // This tests the reducer after admission, not a cold host's physicalReady gate.
+            XCTAssertTrue(NativeLiveMessages.text(update("Fresh reply", source: "fresh-source", run: "fresh-run", segment: "fresh-segment"),
+                in: &document, epoch: epoch))
+            XCTAssertEqual(document.messages[0], terminal); XCTAssertEqual(document.messages[1].text, "Fresh reply")
+            let coldHost = NativeAppModel(); coldHost.documents[route] = document
+            coldHost.state = .init(connectionID: route.connectionID, phase: .ready)
+            XCTAssertFalse(coldHost.physicalPermitsInput(route)) // Failed first head grants no authority.
+        }
+    }
+
+    func testRetiredTerminalMemoryIsByteExactEpochScopedLegacyOptionalAndRejectsCorruptCache() throws {
+        var memory = NativeRetiredTerminalSources(epoch: epoch)
+        try memory.remember(["é", "é"])
+        XCTAssertTrue(memory.rejects("é")); XCTAssertFalse(memory.rejects("e\u{301}"))
+        XCTAssertFalse(memory.scoped(to: UUID()).rejects("é"))
+        XCTAssertEqual(memory.sources.count, 1)
+        let document = NativeConversation(historyEpoch: epoch, retiredTerminalSources: memory)
+        let copy = try JSONDecoder().decode(NativeConversation.self, from: JSONEncoder().encode(document))
+        XCTAssertEqual(copy.retiredTerminalSources, memory)
+        let corrupt = NativeConversation(historyEpoch: epoch, retiredTerminalSources: .init(epoch: epoch, sources: [Data([0xff])]))
+        XCTAssertThrowsError(try JSONDecoder().decode(NativeConversation.self, from: JSONEncoder().encode(corrupt)))
+        let duplicate = NativeConversation(historyEpoch: epoch, retiredTerminalSources: .init(epoch: epoch, sources: [Data("id".utf8), Data("id".utf8)]))
+        XCTAssertThrowsError(try JSONDecoder().decode(NativeConversation.self, from: JSONEncoder().encode(duplicate)))
+        var legacy = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(document)) as? [String: Any])
+        legacy.removeValue(forKey: "retiredTerminalSources")
+        XCTAssertNil(try JSONDecoder().decode(NativeConversation.self, from: JSONSerialization.data(withJSONObject: legacy)).retiredTerminalSources)
+    }
+
+    @MainActor
+    func testActualFinishedJournalColdRestoreBlocksStaleStartTextAndStopWhileUnknownRunsRemainEligible() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("finished-run-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = try NativeJournalStore(directory: directory)
+        let writer = NativeTaskJournal(store: store, onFailure: { XCTFail("Unexpected write failure") })
+        writer.bindHistoryScope(route, epoch: epoch)
+        writer.started(route, runID: "run")
+        writer.receipt(.init(runID: "run", idempotencyKey: "old-input"), route: route, input: "Original input")
+        writer.finished(route, runID: "run", reason: "end_turn")
+        let terminalID = try XCTUnwrap(writer.document.runs.first?.id)
+        // Await the actual store write, without relying on a debounce timer.
+        try await store.write(writer.document)
+        let coldStore = try NativeJournalStore(directory: directory)
+        let loaded = NativeTaskJournal(store: coldStore, onFailure: { XCTFail("Unexpected cold read failure") })
+        await loaded.restore(); loaded.bindHistoryScope(route, epoch: epoch)
+        let lateWork = try XCTUnwrap(WorkEvents.canonical(.object(["type": .string("tool_call"),
+            "sessionKey": .string(route.sessionID), "runId": .string("run"), "toolCallId": .string("late-tool")])))
+        loaded.record(lateWork, route: route)
+        XCTAssertEqual(loaded.document.runs.count, 2)
+        XCTAssertEqual(loaded.document.runs[0].id, terminalID); XCTAssertTrue(loaded.document.runs[0].status.isTerminal)
+        XCTAssertNil(loaded.document.runs[1].lineage.inputMessageKey)
+        XCTAssertFalse(loaded.document.runs[1].status.isTerminal)
+        XCTAssertTrue(loaded.hasFinishedRun(route, epoch: epoch, runID: "run"))
+        loaded.flush()
+        let savedRevision = loaded.document.revision, deadline = ContinuousClock.now + .seconds(3)
+        while (try await coldStore.read()?.value.revision ?? -1) < savedRevision {
+            guard ContinuousClock.now < deadline else { throw NativeHistoryFailure.unavailable }
+            await Task.yield()
+        }
+        let journal = NativeTaskJournal(store: try NativeJournalStore(directory: directory), onFailure: { XCTFail("Unexpected final cold read failure") })
+        await journal.restore()
+        XCTAssertTrue(journal.hasFinishedRun(route, epoch: epoch, runID: "run"))
+        XCTAssertFalse(journal.hasFinishedRun(route, epoch: nil, runID: "run"))
+        XCTAssertFalse(journal.hasFinishedRun(route, epoch: UUID(), runID: "run"))
+        XCTAssertFalse(journal.hasFinishedRun(.init(connectionID: route.connectionID, agentID: "another", sessionID: route.sessionID), epoch: epoch, runID: "run"))
+        var capabilities = RuntimeCapabilities(); capabilities.chat = true; capabilities.abort = true
+        let model = NativeAppModel(taskJournal: journal)
+        model.documents[route] = .init(historyEpoch: epoch)
+        model.state = .init(connectionID: route.connectionID, phase: .ready, capabilities: capabilities)
+        let stale = RuntimeHistory(key: route.sessionID, messages: [raw()], nextCursor: nil, hasMore: false, pagination: .limit,
+            hasActiveRun: true, activeRun: .object(["runId": .string("run")]), activeRunEvidence: true)
+        model.applyHistoryActivity(stale, route: route, earlier: false, liveRevision: 0)
+        XCTAssertFalse(model.adoptIncomingRunStarted("run", route: route))
+        XCTAssertEqual(model.adoptIncomingLiveText(update("Stale complete snapshot"), route: route), .rejected)
+        let legacy = RuntimeTextUpdate(sessionKey: route.sessionID, runID: "run", segmentID: "segment", text: "Stale fragment", mode: .delta)
+        XCTAssertEqual(model.adoptIncomingLiveText(legacy, route: route), .rejected)
+        model.updatePresentation(route)
+        XCTAssertTrue(model.documents[route]?.messages.isEmpty == true)
+        XCTAssertEqual(model.presentation.conversations[route]?.sendLabel, String(localized: "Send"))
+        XCTAssertFalse(try XCTUnwrap(model.presentation.conversations[route]).availability(.stop).isVisible)
+        XCTAssertEqual(journal.document.runs.count, 2); XCTAssertTrue(journal.document.runs[0].status.isTerminal)
+        // A source terminal is not evidence that another/multi-message run finished.
+        var unknown = NativeConversation(historyEpoch: epoch)
+        _ = try apply([raw("terminal-source", text: "Earlier item", run: "fresh-run")], to: &unknown, active: false, evidence: false)
+        model.documents[route] = unknown
+        let fresh = RuntimeHistory(key: route.sessionID, messages: [], nextCursor: nil, hasMore: false, pagination: .limit,
+            hasActiveRun: true, activeRun: .object(["runId": .string("fresh-run")]), activeRunEvidence: true)
+        model.applyHistoryActivity(fresh, route: route, earlier: false, liveRevision: 0)
+        model.updatePresentation(route)
+        XCTAssertEqual(model.presentation.conversations[route]?.sendLabel, String(localized: "Add to queue"))
+        // The un-restored writer reduces actual events without starting a
+        // background save into a directory this test is about to retire.
+        let freshHost = NativeAppModel(taskJournal: writer)
+        freshHost.documents[route] = unknown; freshHost.state = model.state
+        XCTAssertTrue(freshHost.adoptIncomingRunStarted("fresh-run", route: route))
+        XCTAssertEqual(freshHost.adoptIncomingLiveText(update("Fresh source reply", source: "fresh-source", run: "fresh-run"), route: route), .accepted)
+        XCTAssertEqual(freshHost.documents[route]?.messages.last?.text, "Fresh source reply")
+        let differentInput = try XCTUnwrap(WorkEvents.canonical(.object(["type": .string("tool_call"),
+            "sessionKey": .string(route.sessionID), "runId": .string("run"), "toolCallId": .string("new-tool"),
+            "inputMessageKey": .string("new-input")])))
+        writer.record(differentInput, route: route)
+        XCTAssertFalse(writer.hasFinishedRun(route, epoch: epoch, runID: "run"))
+        XCTAssertTrue(freshHost.adoptIncomingRunStarted("run", route: route))
+        XCTAssertEqual(freshHost.adoptIncomingLiveText(update("Actual different input", source: "new-input-source", key: "new-input"), route: route), .accepted)
+        freshHost.saveTasks.values.forEach { $0.cancel() }
     }
 
     @MainActor

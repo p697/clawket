@@ -149,6 +149,8 @@ final class NativeAppModel: ObservableObject {
     /// A successful single-use claim is retained if saving fails; retry never claims it again.
     @Published private(set) var pendingPairing: PairingPayload?
 
+    init(taskJournal: NativeTaskJournal? = nil) { self.taskJournal = taskJournal }
+
     func start() async {
         guard !started else { return }; started = true
         presentation.features = [.addConnection: .available, .account: .available]
@@ -927,7 +929,7 @@ final class NativeAppModel: ObservableObject {
         guard var document = documents[route] else { throw RuntimeFailure(.superseded) }
         let projection = try NativeHistoryApplication.prepare(history, stored: document.messages,
             readSnapshot: readSnapshot, epoch: document.historyEpoch, route: route, earlier: earlier,
-            sourceAmbiguity: document.sourceAmbiguity)
+            sourceAmbiguity: document.sourceAmbiguity, retiredTerminalSources: document.retiredTerminalSources)
         // A release intent must be durable before any consumer can save a document
         // that drops the old reference. A concurrent edit/live event keeps that
         // reference and makes this read stale, including across the journal await.
@@ -940,6 +942,7 @@ final class NativeAppModel: ObservableObject {
         retireChangedHistoryMedia(old: document.messages, new: projection.messages)
         document.messages = projection.messages
         document.sourceAmbiguity = projection.sourceAmbiguity
+        document.retiredTerminalSources = projection.retiredTerminalSources
         document.nextCursor = history.nextCursor; document.hasMore = history.hasMore ?? false
         document.revision += 1; documents[route] = document
         applyHistoryActivity(history, route: route, earlier: earlier, liveRevision: liveRevision)
@@ -954,7 +957,8 @@ final class NativeAppModel: ObservableObject {
             }
             physicalReady.insert(scope); taskRequests?.refresh(route: route); updatePresentation(route)
         }
-        if !earlier, history.activeRunEvidence == true, let runID = history.activeRunID {
+        if !earlier, history.activeRunEvidence == true, let runID = history.activeRunID,
+           !hasFinishedRun(runID, route: route) {
             physicalLiveEvidence[NativeHistoryScope(route)]?.admit(runID)
         }
         hydrateHistoryMedia(history, route: route, acceptedHistoryIDs: projection.acceptedHistoryIDs)
@@ -967,10 +971,18 @@ final class NativeAppModel: ObservableObject {
         guard !earlier, historySame(history.key, route.sessionID), documents[route] != nil,
               liveRevisions[route, default: 0] == liveRevision else { return }
         switch history.activeRunEvidence {
-        case true: running[route] = history.activeRunID ?? running[route] ?? ""
+        case true:
+            if let runID = history.activeRunID, hasFinishedRun(runID, route: route) { return }
+            running[route] = history.activeRunID ?? running[route] ?? ""
         case false: running.removeValue(forKey: route)
         case nil: break
         }
+    }
+
+    private func hasFinishedRun(_ runID: String, route: ConversationID) -> Bool {
+        guard let epoch = documents[route]?.historyEpoch else { return false }
+        if let taskJournal { return taskJournal.hasFinishedRun(route, epoch: epoch, runID: runID) }
+        return finishedRuns[route]?.contains(where: { historySame($0, runID) }) == true
     }
 
     private func loadEarlier(_ route: ConversationID) {
@@ -1178,9 +1190,7 @@ final class NativeAppModel: ObservableObject {
         case let .runStarted(key, runID):
             for route in documents.keys where historySame(route.connectionID, connectionID) && historySame(route.sessionID, key) {
                 guard acceptPhysicalLive(route, runID: runID, inputKey: update.workCompletion?.inputMessageKey) else { continue }
-                taskJournal?.started(route, runID: runID)
-                liveRevisions[route, default: 0] += 1
-                running[route] = runID; updatePresentation(route)
+                adoptIncomingRunStarted(runID, route: route)
             }
         case let .text(update):
             for route in documents.keys where historySame(route.connectionID, connectionID) && historySame(route.sessionID, update.sessionKey) {
@@ -1382,6 +1392,15 @@ final class NativeAppModel: ObservableObject {
     }
 
     @discardableResult
+    func adoptIncomingRunStarted(_ runID: String, route: ConversationID) -> Bool {
+        guard documents[route] != nil, !hasFinishedRun(runID, route: route) else { return false }
+        taskJournal?.started(route, runID: runID)
+        liveRevisions[route, default: 0] += 1
+        running[route] = runID; updatePresentation(route)
+        return true
+    }
+
+    @discardableResult
     func adoptIncomingLiveText(_ update: RuntimeTextUpdate, route: ConversationID) -> NativeLiveMessages.TextReduction {
         guard historySame(update.sessionKey, route.sessionID), var document = documents[route] else { return .rejected }
         let previous = document.messages
@@ -1402,7 +1421,8 @@ final class NativeAppModel: ObservableObject {
 
     private func reduceLiveText(_ update: RuntimeTextUpdate, in document: inout NativeConversation,
                                 route: ConversationID, epoch: UUID?) -> NativeLiveMessages.TextReduction {
-        let result = NativeLiveMessages.reduceText(update, in: &document, epoch: epoch)
+        let result = NativeLiveMessages.reduceText(update, in: &document, epoch: epoch,
+            allowAcceptedText: !hasFinishedRun(update.runID, route: route))
         guard result == .accepted else { return result }
         if streamingPresentationWire != wireRevision {
             streamingPresentationRows.removeAll(); streamingPresentationWire = wireRevision

@@ -34,6 +34,40 @@ struct NativeSourceAmbiguity: Codable, Sendable, Equatable {
     }
 }
 
+/// Negative evidence only for actual terminal source rows a head removed.
+/// Full memory rejects that head atomically; it never disables fresh replies.
+struct NativeRetiredTerminalSources: Codable, Sendable, Equatable {
+    static let limit = 4_096
+    static let maximumBytes = 256 * 1_024
+    var epoch: UUID?
+    var sources: [Data] = []
+    var isValid: Bool {
+        sources.count <= Self.limit && sources.allSatisfy(Self.valid)
+            && sources.reduce(0, { $0 + $1.count }) <= Self.maximumBytes && Set(sources).count == sources.count
+    }
+
+    func scoped(to epoch: UUID?) -> Self { self.epoch == epoch ? self : .init(epoch: epoch) }
+    func rejects(_ source: String?) -> Bool {
+        guard let source else { return false }
+        return !isValid || sources.contains(Data(source.utf8))
+    }
+    mutating func remember(_ values: [String]) throws {
+        guard isValid else { throw StoreFailure.invalidDocument }
+        var next = sources, known = Set(sources), bytes = sources.reduce(0) { $0 + $1.count }
+        for value in values {
+            let source = Data(value.utf8)
+            guard Self.valid(source) else { throw StoreFailure.invalidDocument }
+            guard known.insert(source).inserted else { continue }
+            guard next.count < Self.limit, bytes + source.count <= Self.maximumBytes else { throw NativeHistoryFailure.full }
+            next.append(source); bytes += source.count
+        }
+        sources = next
+    }
+    private static func valid(_ source: Data) -> Bool {
+        !source.isEmpty && source.count <= 4_096 && String(data: source, encoding: .utf8) != nil
+    }
+}
+
 struct NativeMessage: Codable, Sendable, Identifiable, Equatable {
     var id: String
     var remoteID: String?
@@ -97,6 +131,7 @@ struct NativeConversation: Codable, Sendable {
     var physicalSessionID: String? = nil
     var physicalMutationUnconfirmed: Bool? = nil
     var sourceAmbiguity: NativeSourceAmbiguity? = nil
+    var retiredTerminalSources: NativeRetiredTerminalSources? = nil
 
     mutating func holdForEditing(messageID: String) throws -> NativePendingEdit {
         guard let index = editableIndex(messageID: messageID), let key = messages[index].idempotencyKey else {
