@@ -27,6 +27,10 @@ private final class ProDelay: @unchecked Sendable {
         due.values.forEach { $0.1.resume() }
     }
     var count: Int { lock.lock(); defer { lock.unlock() }; return waits.count }
+    func isWaiting(for seconds: Double) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return waits.values.contains { $0.0 == value + seconds }
+    }
 }
 
 @MainActor private final class ProPeer: ProStoreSource {
@@ -40,6 +44,8 @@ private final class ProDelay: @unchecked Sendable {
     var pauseRead = false
     var nextPurchase: CheckedContinuation<(customer: ProCustomer, productID: String?), any Error>?
     var purchaseError: ProStoreFailure?
+    var pauseOfferings = false
+    var nextOfferings: CheckedContinuation<(packages: [ProPackage], defaultKind: ProPlanKind), any Error>?
     let updates: AsyncStream<ProCustomer>
     let continuation: AsyncStream<ProCustomer>.Continuation
     init() { (updates, continuation) = AsyncStream.makeStream(bufferingPolicy: .bufferingNewest(8)) }
@@ -49,7 +55,10 @@ private final class ProDelay: @unchecked Sendable {
         if pauseRead { pauseRead = false; return try await withCheckedThrowingContinuation { nextCustomer = $0 } }
         return value
     }
-    func offerings() -> (packages: [ProPackage], defaultKind: ProPlanKind) { (packages, .annual) }
+    func offerings() async throws -> (packages: [ProPackage], defaultKind: ProPlanKind) {
+        if pauseOfferings { pauseOfferings = false; return try await withCheckedThrowingContinuation { nextOfferings = $0 } }
+        return (packages, .annual)
+    }
     func purchase(_ id: UUID) async throws -> (customer: ProCustomer, productID: String?) {
         purchases += 1
         if let purchaseError { throw purchaseError }
@@ -71,6 +80,20 @@ private final class ProDelay: @unchecked Sendable {
 }
 
 @MainActor struct ProControllerTests {
+    @Test func refreshingOfferingsCannotCheckoutAnOpaqueReferenceBeforeItsReplacementIsPublished() async throws {
+        let peer = ProPeer(), controller = ProController(mode: .store, source: peer, clock: { 100 })
+        let review = try #require(controller.open(presenterID: UUID()))
+        await settled { controller.phase == .ready }; #expect(controller.canCheckout)
+        peer.pauseOfferings = true
+        let refresh = Task { await controller.refresh(reviewID: review.id) }
+        await settled { peer.nextOfferings != nil }
+        #expect(controller.phase == .loading); #expect(!controller.canCheckout)
+        controller.purchase(reviewID: review.id); #expect(peer.purchases == 0)
+        peer.nextOfferings?.resume(returning: (peer.packages, .annual)); peer.nextOfferings = nil
+        await refresh.value
+        #expect(controller.phase == .ready); #expect(controller.canCheckout)
+        controller.close(review.id)
+    }
     @Test func successContinuesOnlyAfterActualMatchingDismissAndNeverRepeatsCheckout() async throws {
         let peer = ProPeer(), timer = ProDelay()
         let controller = ProController(mode: .store, source: peer, clock: { 100 }, delay: { try await timer.sleep($0) })
@@ -81,7 +104,7 @@ private final class ProDelay: @unchecked Sendable {
         await settled { peer.nextPurchase != nil }
         #expect(peer.purchases == 1); #expect(peer.reads == 2)
         peer.nextPurchase?.resume(returning: (ProPeer.customer(true), "year")); peer.nextPurchase = nil
-        await settled { controller.phase == .success && timer.count >= 1 }
+        await settled { controller.phase == .success && timer.isWaiting(for: 2) }
         #expect(controller.paid); #expect(completed.isEmpty)
         peer.value = ProPeer.customer(true)
         await controller.refresh(reviewID: review.id)
@@ -103,7 +126,7 @@ private final class ProDelay: @unchecked Sendable {
         await settled { controller.phase == .ready }
         controller.purchase(reviewID: review.id); await settled { peer.nextPurchase != nil }
         peer.nextPurchase?.resume(returning: (ProPeer.customer(true), "year")); peer.nextPurchase = nil
-        await settled { controller.phase == .success && timer.count >= 1 }
+        await settled { controller.phase == .success && timer.isWaiting(for: 2) }
         timer.advance(2); await settled { controller.review == nil }
         peer.value = ProPeer.customer(false, request: 110)
         await controller.refreshCustomer(); #expect(!controller.paid)

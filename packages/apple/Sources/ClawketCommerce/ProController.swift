@@ -68,7 +68,7 @@ public final class ProController: ObservableObject {
     public var allFeatures: Bool { access.allFeatures(at: now) }
     public var configured: Bool { source != nil && mode == .store }
     public var canCheckout: Bool {
-        guard phase == .ready, operation == nil, let selected = selectedPackage else { return false }
+        guard phase == .ready, operation == nil, offeringsRead == nil, let selected = selectedPackage else { return false }
         return !ProPlans.locked(selected, packages: packages, customer: customer, now: now)
     }
     public var selectedPackage: ProPackage? { packages.first { $0.id == selectedID } }
@@ -114,6 +114,7 @@ public final class ProController: ObservableObject {
     public func refresh(reviewID: UUID? = nil) async {
         guard operation == nil, let source else { if reviewID == review?.id { phase = .unavailable }; return }
         let revision = UUID(); readRevision = revision; offeringsRead = revision
+        if reviewID == review?.id, !phase.retainsOutcome { phase = .loading; failure = nil }
         defer { if offeringsRead == revision { offeringsRead = nil } }
         do {
             let value = try await source.customer()
