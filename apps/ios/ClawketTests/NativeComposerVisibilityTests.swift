@@ -76,6 +76,8 @@ final class NativeComposerVisibilityTests: XCTestCase {
         XCTAssertEqual(draft.text, editor.text)
 
         editor.setMarkedText("zhong", selectedRange: NSRange(location: 5, length: 0))
+        let markedText = try XCTUnwrap(editor.text)
+        let markedSelection = editor.selectedRange
         let marked = try XCTUnwrap(editor.markedTextRange)
         let markedStart = editor.offset(from: editor.beginningOfDocument, to: marked.start)
         let markedEnd = editor.offset(from: editor.beginningOfDocument, to: marked.end)
@@ -84,6 +86,8 @@ final class NativeComposerVisibilityTests: XCTestCase {
         let retainedMarked = try XCTUnwrap(editor.markedTextRange)
         XCTAssertEqual(editor.offset(from: editor.beginningOfDocument, to: retainedMarked.start), markedStart)
         XCTAssertEqual(editor.offset(from: editor.beginningOfDocument, to: retainedMarked.end), markedEnd)
+        XCTAssertTrue((editor.text ?? "").utf8.elementsEqual(markedText.utf8))
+        XCTAssertEqual(editor.selectedRange, markedSelection)
         XCTAssertTrue(descendants(host.view, UITextView.self).first === editor)
         try assertVisibleCaret(editor, in: host.view)
     }
