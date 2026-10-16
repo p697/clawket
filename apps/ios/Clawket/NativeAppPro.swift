@@ -100,7 +100,7 @@ extension NativeAppModel {
         switch frozen.action {
         case let .connection(id): activate(id)
         case .addConnection:
-            destination = nil; showConnectAfterDismissal()
+            showConnectAfterDismissal()
         case let .catalog(id): handle(.openAgentCatalog(id))
         case let .conversation(route): handle(.openConversation(route))
         }

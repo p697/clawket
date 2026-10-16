@@ -1,5 +1,12 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-16 Native 根 sheet 交接（独立候选，完整CI执行待续）。
+  - 旧QA app实际WebDriver已复现 Settings→内嵌Connections→Add 仍停Settings、连接表单未出现。Add改为关闭真正拥有它的root destination，在实际onDismiss消费精确request/原presentation UUID及activation/selection后打开Connect；重复Add幂等，替换destination取消，Pro续办复用，不再350ms猜关闭时机。
+  - 共享生产NativeAppRootView供真实UIKit宿主复用，App独占start/scene观察；destination退休期间root不抢alert，稳定sheet内仍显示错误。notice有独立代次，自动binding nil不等于确认，只有当前owner的冻结OK精确消费，旧相同文案确认不清新提示。认证、device approval、后端/传输、RN默认均不改。
+  - 新3个App方法覆盖实际root Settings→Add helper→实际onDismiss→Connect→重开Settings、真实Connect关闭同turn注入authenticationRequired→实际UIAlert→生产ack helper→重开Settings，以及context/A→B→A/同文案代次。没有伪称点了系统OK或接了真实服务；本机未编译/执行Swift或操作模拟器，heavy/simulator仍由主线程占用，完整验证交精确head CI。旧gear暂态在仅冷启自有QA后恢复，根因仍未证，未据此声称已修复现场原因。
+  - 当前main993cc686上App并集302方法/32文件，报告minimum302/301缩减拒绝同步；本机仅轻量静态验证：docs16指令对+7回归、report3、19语474UI+4权限与diff通过。独立worktree维护，不改primary；未发行、部署或改生产。
+
+
 - 2026-10-16 Native 草稿预览阅读连续性（独立探索，组合验收继续）。
   - 上一caret #265 exact0f648ece全13CI绿/current-main后合bdf98e7b并finish：App296/296零失败/跳过（38.404秒test/91.887秒wall）、package459=59+400、19语9063精确编译值；RN默认/源码与共享服务未改。
   - WebDriver旧0f648ece实际系统Photos按顺序选三张本机fixture。初轮source19未冻结测量到点击间的输入，不独自证明预览时移动；随后冻结自有合成peer、稳定呈现后恢复流式的旧版source23对照，关闭后同一行y173→-300（-473pt）、Latest不出现。修复43552eb2受控source21关闭后y173→173（0pt）、Latest保留；两者同三draft引用/原UTF8、只新增一次受控输入，非真实模型/Relay证据。现在每会话弱handle同步暂停当前可见UIKit表格，再向host原样转发open intent；不以following绑定假暂停。更新先解绑旧owner，旧dismantle不能清新owner，展开编辑器零高度不捕获空锚点；原初始化/apply/restoration保护不动。

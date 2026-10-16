@@ -14,6 +14,11 @@ struct ConnectionsView: View {
             else { NavigationStack { content } }
         }.nativePro(controller: client.pro, presenterID: proPresenterID)
     }
+    @MainActor func addConnection() {
+        if client.proCanAddConnection { client.showConnectAfterDismissal() }
+        else { client.showPro(.gatewayConnections, presenterID: proPresenterID, continuing: .addConnection) }
+    }
+
     private var content: some View {
             List {
                 if let approval = client.deviceApproval, approval.connectionID == client.activeConnectionID {
@@ -44,10 +49,7 @@ struct ConnectionsView: View {
                         .accessibilityIdentifier("saved-connection-\(connection.id)")
                         .swipeActions { Button("Remove", role: .destructive) { remove = connection } }
                     }
-                    Button {
-                        if client.proCanAddConnection { dismiss(); client.showConnectAfterDismissal() }
-                        else { client.showPro(.gatewayConnections, presenterID: proPresenterID, continuing: .addConnection) }
-                    } label: { Label("Add connection", systemImage: "plus") }
+                    Button(action: addConnection) { Label("Add connection", systemImage: "plus") }
                     if client.activeConnectionID != nil {
                         Button("Disconnect") { client.disconnect() }
                     }

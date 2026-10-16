@@ -54,13 +54,37 @@ final class NativeAppModel: ObservableObject {
     var proManualSessions: [NativeManualSession] = []
     var proContinuations: [UUID: NativeProContinuation] = [:]
     var proPreviews: [ConversationID: NativeProPreview] = [:]
-    var connectionPresentationRequest = UUID()
+    private struct ConnectionPresentationRequest {
+        let id = UUID()
+        let activation: UUID
+        let selection: UUID
+        let dismissing: UUID?
+    }
+    private var pendingConnectionPresentation: ConnectionPresentationRequest?
+    private var retiringDestinationPresentationID: UUID?
+    private(set) var destinationPresentationID: UUID?
     let preferences = NativePreferences()
     let presentation = ClientPresentation(title: String(localized: "Agents"),
         emptyTitle: String(localized: "Your agents, within reach"),
         emptyDetail: String(localized: "Connect an agent to continue conversations and keep work moving."))
-    @Published var destination: Destination? { didSet { markVisibleRosterRead() } }
-    @Published var notice: String?
+    @Published var destination: Destination? {
+        didSet {
+            if destination != nil {
+                pendingConnectionPresentation = nil
+                if oldValue?.id != destination?.id { destinationPresentationID = UUID() }
+            } else if oldValue != nil {
+                retiringDestinationPresentationID = destinationPresentationID
+            }
+            markVisibleRosterRead()
+        }
+    }
+    @Published var notice: String? { didSet { noticeRevision = UUID() } }
+    private(set) var noticeRevision = UUID()
+
+    func dismissNotice(id: UUID) {
+        guard noticeRevision == id else { return }
+        notice = nil
+    }
     @Published private(set) var deviceApproval: RuntimeDeviceApprovalContext?
     private var deviceApprovalNotice = false
     @Published private(set) var connections: [BackendConnection] = []
@@ -470,14 +494,31 @@ final class NativeAppModel: ObservableObject {
     }
 
     func showConnectAfterDismissal() {
-        let request = UUID(); connectionPresentationRequest = request
-        let activation = activationRevision, selection = selectionRevision
-        Task {
-            try? await Task.sleep(for: .milliseconds(350))
-            guard connectionPresentationRequest == request, activation == activationRevision, selection == selectionRevision,
-                  destination == nil, proCanAddConnection else { return }
-            destination = .connect
-        }
+        guard proCanAddConnection else { return }
+        // Repeated taps during the same outgoing sheet do not replace its request.
+        if let pending = pendingConnectionPresentation,
+           pending.activation == activationRevision, pending.selection == selectionRevision { return }
+        let request = ConnectionPresentationRequest(activation: activationRevision, selection: selectionRevision,
+            dismissing: destination != nil ? destinationPresentationID : retiringDestinationPresentationID)
+        pendingConnectionPresentation = request
+        if destination != nil { destination = nil }
+        else if request.dismissing == nil { completeConnectionPresentation(requestID: request.id) }
+    }
+
+    func destinationDidDismiss(presentationID: UUID?) {
+        guard let presentationID else { return }
+        if retiringDestinationPresentationID == presentationID { retiringDestinationPresentationID = nil }
+        if destination == nil, destinationPresentationID == presentationID { destinationPresentationID = nil }
+        guard let pending = pendingConnectionPresentation, pending.dismissing == presentationID else { return }
+        completeConnectionPresentation(requestID: pending.id)
+    }
+
+    private func completeConnectionPresentation(requestID: UUID) {
+        guard let pending = pendingConnectionPresentation, pending.id == requestID else { return }
+        pendingConnectionPresentation = nil
+        guard pending.activation == activationRevision, pending.selection == selectionRevision,
+              destination == nil, proCanAddConnection else { return }
+        destination = .connect
     }
 
     func setForeground(_ foreground: Bool) {

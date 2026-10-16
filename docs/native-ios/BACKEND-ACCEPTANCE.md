@@ -18,6 +18,8 @@ The independent history read uses only the QA route, compares its exact first ow
 
 Installed Hermes Stop and the Bridge agree on POST path, Bearer authentication, empty body and returned run/status fields. The Bridge's five-second upstream budget can be shorter than synchronous database/interrupt work inside the API, but the failed attempt's error category has not been captured. Do not guess a timeout fix, alter the shared service or mark cancellation passed.
 
+A later WebDriver check on the earlier installed `0f648ece` development app reproduced Settings → Connections → Add leaving Settings visible with no connection form. This is a confirmed embedded-navigation handoff defect. After an authentication error, the gear also temporarily failed to open Settings; one cold restart of only the QA app restored it after acknowledging the error. The transient gear failure’s cause remains unproven. The focused root-presenter regression covers authentication-notice/dismissal ordering and reopening Settings, not a claim of reproduced backend authentication or proof of that field incident’s cause.
+
 These checks do not establish Relay, phone-network, owner replacement, full backend parity, VoiceOver, same-bundle migration or store acceptance. React Native remains the default; there was no shared service restart, production configuration change, distribution build or release.
 
 ## Later authentication diagnostics

@@ -10,6 +10,14 @@ Theme saves immediately after verified persistence. The chat editor has an isola
 
 Wallpaper/photo ownership, bubble styles, alternate icons, purchase/account management and an in-app language selector remain pending. No fake entitlement, missing-asset icon picker or inactive control substitutes for them. Existing Mobile preference and purchase data is untouched; this QA namespace does not establish same-bundle upgrade acceptance.
 
+## Root modal handoff
+
+Connections is also embedded in Settings navigation. Add closes the owning root destination, not just the embedded page, and presents Connect only from that sheet’s actual `onDismiss`. The pending request retains its own UUID, outgoing presentation UUID and activation/selection revisions; repeated Add is inert, replacement destinations cancel it, and a late A → B → A dismissal cannot consume a new request. Pro’s permitted Add continuation uses the same handoff. There is no fixed dismissal delay.
+
+`NativeAppRootView` is the production root presenter, shared by UIKit regression hosts. Startup and scene observation remain exclusively in `ClawketApp`. While a destination is retiring, the root does not compete for an alert; a stable destination may show the same fixed failure text inside its own sheet. Automatic alert-binding retirement never acknowledges a notice. Only the displayed OK action consumes its frozen notice UUID from the current presenter, so an old acknowledgement cannot clear a same-text replacement. This changes presentation ownership only, not authentication, device approval or connection behavior.
+
+The regression fixture invokes the actual embedded Add action and observes the real root sheet’s navigation and `onDismiss` handoff. A separate case injects the existing authentication-failure handler during a real Connect dismissal, observes the real `UIAlertController`, acknowledges through the production exact-ID helper, and opens Settings again. It does not tap a system alert button, contact a backend, or prove the cause of the earlier transient gear-button failure. Full execution evidence belongs in PROGRESS/CI; source assertions alone are not acceptance.
+
 ## Persistence and authority
 
 `NativePreferencesStore` keeps separate versioned appearance and navigation documents in a protected app-support directory. Each JSON document is bounded to 256 KiB, retains the existing verified rollback through `DocumentStore`, validates JS-safe revisions and rejects corrupt/empty data. Navigation retains at most 128 connection targets and 128 loaded reading contexts. IDs are private product navigation values, never diagnostics. Byte-exact stored route comparisons preserve opaque Unicode IDs.
