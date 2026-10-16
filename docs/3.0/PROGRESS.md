@@ -1,5 +1,10 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-16 负责人决定：React Native 与 native iOS 并行，React Native 保持默认。
+  - 负责人认为当前原生 UI 美观度不及既有 React Native，尚未验收；native iOS 改为独立产品/设计探索，Android native 继续暂缓。原生 parity、测试或代理自评通过均不自动触发替换；切默认、删除 React Native、同 bundle 交付分别需要负责人后续明确决定，发布规则继续适用。
+  - 核对原生工程开始前的 b2df9a25 到当前主线 165810d7：`apps/mobile` 与根 `package-lock.json` 无差异。现有默认 `mobile:start` / `mobile:ios` / `mobile:android` 仍走 React Native/Expo，商店身份仍为 `com.p697.clawket`。独立 Swift 工程在 `apps/ios`，模块在 `packages/apple`，开发身份为 `com.p697.clawket.nativeqa`、名称 Clawket Native，沙盒与 Keychain service 独立；无需回滚原生源码就能继续使用原 React Native 客户端。
+  - 共存边界已写入根 AGENTS 与 native PLAN：保留 RN 源码、UI、默认命令、Expo/EAS 与商店/发布路径；原生探索不得降低 RN 连接稳定性或共享协议兼容性。本任务仅更新规则和文档，不改应用、构建配置、版本或服务，不执行设备安装、分发或发布。
+
 - 2026-10-16 Native live final 元数据与系统终态（实际 consumer 已接，完整 App 门禁继续）。
   - 仅保留实际 final.message 的 providedID/参与者/时钟/真实 transcriptPosition 与 turn/input lineage；OpenClaw 2026.10.2 安装源可保留真实 message，普通 Codex/Claude/Pi/Hermes/local-model live producer 没有消息 ID，明确留 nil，不把 run/turn/段序号当来源。既有 SDK history 生成器直接调用真实 Codex failure producer，并锁定实际 service wrapper，新增三份匿名合成终态向量；不是手机捕获或服务修改。
   - Host 实际文本/final/附件路径改独立 render UUID 与 exact UTF8 run/segment/current epoch 匹配；歧义不选最后一行，已知作者/lineage/source 冲突不赋来源或附件。实际 error terminalMessage 独立 system row，保留已有 partial assistant，旧客户端兼容 assistant 副本仅逐字节相等才抑制；旧 Codex fallback 没有伪造 source ID/Now。五条 Mobile 固定错误文案复用全19语译文，缓存保留原文，非 system 或任意后端 prose 不改。

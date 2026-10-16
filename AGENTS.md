@@ -4,7 +4,9 @@ This repository is the Clawket monorepo.
 
 ## Native Client Program
 
-Owner decision 2026-10-15: migrate to platform-native clients, with iOS first and Android deferred. Read `docs/native-ios/PLAN.md`, `RESEARCH.md` and `PARITY.md` for this program. The owner delegates architecture, product and interaction decisions to the implementation agent. This supersedes the old 3.0 shared-UI, custom-navigation, no-SF-Symbols/no-Liquid-Glass and no-simulator-screenshots choices for the native iOS app; existing privacy, compatibility, release, worktree and resource rules remain binding. Preserve all six currently implemented backends and current user capabilities, not just the original 3.0 scope. Keep the existing client until the native parity gate passes. Continue recording milestones in `docs/3.0/PROGRESS.md`.
+Owner decision 2026-10-16: React Native remains the default supported client on iOS and Android; native iOS is a parallel product/design experiment. Preserve `apps/mobile`, its default commands, Expo/EAS configuration, store identity and existing capabilities. Native work must not require React Native users to migrate or weaken their connection stability, shared protocol compatibility or release path. Passing native parity, tests or agent review does not switch the default: replacement, React Native removal and same-bundle delivery each require an explicit later owner decision. The current native UI is not owner-accepted. Android native remains deferred.
+
+Read `docs/native-ios/PLAN.md`, `RESEARCH.md` and `PARITY.md` for the experiment. The owner delegates architecture, product and interaction decisions within that boundary to the implementation agent. The 2026-10-15 native authorization supersedes the old 3.0 shared-UI, custom-navigation, no-SF-Symbols/no-Liquid-Glass and no-simulator-screenshots choices only for the native iOS app; existing privacy, compatibility, release, worktree and resource rules remain binding. Preserve all six currently implemented backends and current user capabilities, not just the original 3.0 scope. Continue recording milestones in `docs/3.0/PROGRESS.md`.
 
 Native iOS source belongs in `apps/ios`; Apple domain, protocol and persistence packages belong in `packages/apple`. Do not place maintained native source inside Expo-generated `apps/mobile/ios`. Development installs use a distinct bundle ID and never replace the store app. Identify an authorized physical device by its USB hardware identifier before any automation; wireless availability or a device name is insufficient. Use WebDriverAgent for the owner's requested phone research and automation.
 
@@ -52,7 +54,9 @@ Owner decision 2026-09-30. Every agent completes this loop itself and stops only
 
 | Path | Role |
 |------|------|
-| `apps/mobile` | React Native mobile app |
+| `apps/mobile` | Default React Native iOS and Android app |
+| `apps/ios` | Independent experimental native iOS app |
+| `packages/apple` | Swift modules for the native iOS experiment |
 | `apps/speech-worker` | Independent Alibaba Cloud transcription proxy; server-only secrets and bounded admission |
 | `apps/relay-registry` | Cloudflare registry worker |
 | `apps/relay-worker` | Cloudflare relay worker |

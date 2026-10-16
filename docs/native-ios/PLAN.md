@@ -1,12 +1,14 @@
 # Native iOS program
 
-Owner authorization: 2026-10-15. Product, UI and architecture decisions are delegated to the implementation agent. iOS comes first; Android native follows later. This is a complete client migration, with current capabilities preserved, not a new chat-only product.
+Owner authorization: 2026-10-15; coexistence decision: 2026-10-16. React Native remains the default supported iOS and Android client. Native iOS is an independent product and design experiment, with current capabilities preserved as its acceptance target. Product, UI and architecture decisions within this boundary are delegated to the implementation agent. Android native is deferred. The owner has not accepted the current native UI; functional tests do not establish visual quality.
 
 ## Authority and scope
 
 Current code, tests and workspace instructions define existing behavior. This directory defines the native implementation and its acceptance. The owner's decision supersedes 3.0's single shared UI, self-drawn navigation and prohibition on SF Symbols, Liquid Glass and simulator screenshots. Security, privacy, protocol compatibility, resource limits and release authorization are unchanged. Existing prices, entitlement rules and selected app version remain in force.
 
-Support OpenClaw, Hermes, Codex, Claude Code, Pi and local-model. The owner's exclusion of Claude from design research does not remove the existing Claude Code backend. Do not add backends or cloud message persistence. Keep the current app usable throughout migration; native iOS becomes the default only after [parity](PARITY.md) and upgrade acceptance pass.
+Support OpenClaw, Hermes, Codex, Claude Code, Pi and local-model. The owner's exclusion of Claude from design research does not remove the existing Claude Code backend. Do not add backends or cloud message persistence.
+
+Keep `apps/mobile` and its existing UI, default commands, Expo/EAS configuration, store identity and release path intact. Native development must preserve React Native connection stability and shared contracts. The two implementations may coexist indefinitely. [Parity](PARITY.md), upgrade acceptance and CI are quality evidence, not permission to change the default. Switching the default, removing React Native or delivering native under the store bundle each requires an explicit later owner decision, in addition to the existing release authorization.
 
 ## Product direction
 
@@ -21,17 +23,16 @@ Clawket brings the Agents on a person's computers into one dependable mobile wor
 ## Architecture
 
 ```text
-apps/ios/                   # maintained Xcode application and platform extensions
-  Sources/                  # SwiftUI features, UIKit text/timeline integration
-  Resources/                # asset catalogs and String Catalog localization
-  Tests/                    # UI/upgrade integration tests
+apps/mobile/                # default React Native iOS/Android client
+apps/ios/                   # independent experimental Xcode application
+  Clawket/                  # SwiftUI/UIKit features, assets and String Catalog
+  ClawketTests/             # actual application integration tests
 packages/apple/             # one Swift package with focused modules
   Sources/ClawketTransport/ # URLSession sockets, RPC, generation/timeout safety
   Sources/ClawketPairing/   # existing QR/invitation/code wire compatibility
   Sources/…/                # native domain/adapters/persistence as milestones land
   Tests/                    # deterministic protocol, recovery and storage tests
 tests/native-contract/      # synthetic cross-language vectors and recorded contracts
-apps/mobile/                # current client, Android and migration oracle
 ```
 
 - Swift 6, strict concurrency, Foundation actors for connection ownership; native SwiftUI features with UIKit for text/selection and any measured timeline behavior requiring it. No React Native, WebView or JavaScriptCore application runtime in the new iOS target.
@@ -41,7 +42,7 @@ apps/mobile/                # current client, Android and migration oracle
 - One active connection, inactive cache-only entries. Every awaited socket/adapter/history/storage continuation checks its captured generation and scope. Actors alone do not provide this fence.
 - NaCl-compatible pairing uses pinned Swift-Sodium; SHA-256/HMAC/Ed25519 use supported native primitives with exact old wire/key formats. No custom cryptography or protocol change.
 - Keychain secrets; protected on-device structured storage and files. Existing Expo SecureStore, AsyncStorage, identity, archives, drafts, speech recordings and RevenueCat identity require a verified, transactional importer before same-bundle delivery.
-- The maintained iOS target uses a separate QA bundle identifier during development. Store identity, signing team and distribution configuration stay out of community build requirements. Native version does not change merely because architecture changes.
+- The experimental iOS target is `Clawket Native`, using `com.p697.clawket.nativeqa`; React Native retains `com.p697.clawket`. Their app sandboxes and Keychain services are separate, so both can stay installed. Do not replace the store app or automatically transfer its credentials, data or purchase identity. Store identity, signing team and distribution configuration stay out of community build requirements. Native version does not change merely because architecture changes.
 
 ## Execution and completion gates
 
