@@ -195,7 +195,10 @@ final class NativeAppModel: ObservableObject {
                     try await self.queueModelCommand(route, plan: plan)
                 }, onSnapshot: { [weak self] route, value, rows in self?.applyModelSnapshot(route, value: value, rows: rows) },
                 onChange: { [weak self] in self?.modelSettingsChanged() },
-                permitsMutation: { [weak self] route in self?.proPermitsInput(route) == true })
+                permitsMutation: { [weak self] route in
+                    guard let self else { return false }
+                    return physicalPermitsInput(route) && proPermitsInput(route)
+                })
             if let saved = try await vault.readRegistry() {
                 registry = saved.value
                 if saved.recoveredFromRollback { notice = String(localized: "Recovered your saved connections from the last verified copy.") }

@@ -17,7 +17,8 @@
 - 2026-10-16 Native #254 精确head验收完成并继续physical host实现。
   - source d6f26006/base201f4全13 CI首次绿：actual App193/193零失败/跳过，16.638秒（wall18.839）；package397=59 XCTest+338 SwiftTesting，19语7,904编译值精确一致，Mobile三分片、types/static、v1与双桌面均绿。current-main/CLEAN核对后自行squash合5c9f9fb7并finish；原primary未跟踪node_modules保留。
   - 指定USB测试机第三次基础设施检查先成功activate独立QA App，仍63.561秒在XCTest启用automation mode超时；无WDA session/新chat请求，host/device自有runner均验零，ios/heavy释放。不把驱动未就绪算App/OC连接失败，不再无状态变化重复尝试。Appium官方列出的设备UI Automation开关信息已异步询问，继续独立实现，不操作无线个人手机或镜像、不更改全机安全设置。
-- 2026-10-16 Native Pro 实际 SDK 与权限 consumer（商店账户验收另行进行）。
+
+- 2026-10-16 Native Pro 实际 SDK 与权限 consumer（独立探索，非 UI/商店账户验收）。
   - 精确锁定 RevenueCat Swift 5.94.0 与上游 revision，真实 SDK 只由 host 在身份解析后配置；QA 独立匿名身份，不 login/alias/restore 商店账户。store bundle 仍由现有 Vault/import checkpoint 阻挡，已验证 Upgrade current-ID 优先 resolver 不等于已完成同 bundle 升级。空 operator 配置维持可构建 community access，不宣称已购买；部分配置失败关闭，真实 HTTPS 法律链接缺失不可 checkout。
   - 只有当前 SDK 真实 verified/verifiedOnDevice active entitlement 与真实 expiry 授 paid，app cache 不授 Pro。原 v1 secure allowance 保留一个 free connection、actual isMain、24小时切换和一次14天 legacy grace；按原 UTF8 比较 ID，腐败/未知替换不清空或重开 grace。初始化 await 前即注入完整空 roster set，所有 local action/发送/model/管理/完整导出在异步准备后再核当前决策；expiry 仅 hold 未发 owned queue，保留原资源/idempotency，不因购买而重放，Stop 独立。
   - session 例外只认真实 main descriptor/限定 legacy fallback、sessions-first Bridge row 和持久实际 create receipt；其他只读冻结两条 body 并保留 owned outbox/review。保存搜索/批量导出使用同一 provider。原生银色 companion paywall 使用真实 offering/package/价格/周期与月均价，保留 grandfather/lifetime/current/foreign/family 规则；显式 purchase/restore/manage/Apple redemption，最多12次前台轮询。pending/scheduled/unknown 不自动继续或重购；刷新保留结果状态，成功还须实际 dismiss、当前 paid 与冻结 route/activation/wire/selection/epoch，迟事件不借新页面操作。
@@ -26,6 +27,8 @@
 
   - db387d94 的完整13门禁已通过：实际 App224/224 零失败（22.247秒测试时间）、package438（59 XCTest+379 SwiftTesting）、8,968精确编译值，真实 SDK DTO 四项与全部 host consumer 实际执行。前一 f3d 的唯一 Mobile transfer-lease.test.ts:35 因只注入 monotonic、真实 wall 时钟推进1ms而89999≠90000，保留原红；后轮原TS/断言均未改，三shard全部通过，未把该偶发原测试混称 Pro 缺陷或抹去证据。
   - 再补当前 offering refresh 禁止旧 opaque package checkout，暂停 offering 的 Controller 单文件8项已在59%空闲/heavy/jobs2实测通过并释放。首次 revoked fixture 原等任意 timer 会误认 expiry wait，修为明确等待2秒finish wait后推进，保留原生产断言。随后重基已全绿 final metadata 主线165810d7，保留全部 turn/input/LiveMessages、新系统文本和10项 App；actual discovery234/233缩减拒绝、87源路径/唯一引用及473 UI+4权限/19语9,063源码值核对，当前组合实际执行与编译值继续交最新 head CI，旧224绿不替代新234。
+  - 12aea4ca/base165810d7最终全13门禁绿：actual App234/234零失败/跳过（16.604秒测试/20.125秒wall）、package445（59 XCTest+386 SwiftTesting）、19语9,063精确编译值。负责人决定RN继续默认后，本切片只完成已授权独立工程闭环；RN源码/默认命令/Expo与商店身份、npm lockfile和共享服务均无改，不执行真实购买/账户、设备或分发动作，原生UI尚未验收。
+  - 最后重基共存+physical主线59bd0039（#260 exact19272e1e已全13绿：240/240实际App、14.297秒测试/18.213秒wall、8,094编译值）。保留所有物理ACK单次消费、durable unknown/epoch及资源字段，派发与model mutation、远端完整导出合并physical+Pro实时门槛，Stop无付费门槛。实际源码并集258/28文件，报告minimum258及257缩减反例、PBX62生产/28测试唯一真实路径、473UI+4权限/19语9,063源码值、docs16对/7回归与报告3项通过；不做新本机构建/完整suite，当前组合执行交最后CI。
 
 - 2026-10-16 Native live final 元数据与系统终态（实际 consumer 已接，完整 App 门禁继续）。
   - 仅保留实际 final.message 的 providedID/参与者/时钟/真实 transcriptPosition 与 turn/input lineage；OpenClaw 2026.10.2 安装源可保留真实 message，普通 Codex/Claude/Pi/Hermes/local-model live producer 没有消息 ID，明确留 nil，不把 run/turn/段序号当来源。既有 SDK history 生成器直接调用真实 Codex failure producer，并锁定实际 service wrapper，新增三份匿名合成终态向量；不是手机捕获或服务修改。

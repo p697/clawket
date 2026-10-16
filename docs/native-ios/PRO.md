@@ -1,5 +1,7 @@
 # Native Pro and purchase ownership
 
+This belongs to the independent native iOS experiment. React Native remains the default supported client; code/CI completion does not accept the native UI, authorize a switch or prove real store purchase/account behavior.
+
 The iOS host uses RevenueCat's public Swift SDK **5.94.0**, pinned exactly in the Xcode project and its resolved file. `ClawketCommerce` stays independent of that SDK: it owns access policy, the protected free-slot/grace record, offering selection and explicit purchase coordination. The host adapter alone holds current SDK package references and converts real customer information. The current Mobile consumers (`pro.ts`, `pro-entitlement-storage.ts`, `pro-subscription.ts`, `manual-sessions.ts` and `session-preview.ts`) are the compatibility source.
 
 ## Identity and configuration
@@ -16,7 +18,7 @@ Paid access comes only from the current SDK identity's active, verified or verif
 
 The secure device-scoped allowance preserves Mobile's version-1 schema: explicit nullable `freeConnectionId`, `lastFreeConnectionSwitchAt`, `graceUntil`, and a once-only `graceEvaluatedAt`. A free slot may change once every 24 hours. Only validated legacy usage can establish the old fourteen-day connection/Agent grace; a fresh install, paid bootstrap, corrupt record or reinstall cannot renew it. Grace never grants adding another connection, Agent creation or other Pro features. Exact UTF-8 IDs distinguish canonically equivalent display strings. An unknown protected replacement stops further writes until verified cold recovery.
 
-The complete provider decision set replaces the roster's historical registry fallback, including an explicitly empty set on setup failure. An actual default-Agent flag is required; names and main-session spelling do not identify a free Agent. The host rechecks current decisions after asynchronous preparation and immediately before its dispatch call. Expiry holds undispatched local outbox items with original text, resources and idempotency keys. Purchase success does not replay them; Stop remains independent.
+The complete provider decision set replaces the roster's historical registry fallback, including an explicitly empty set on setup failure. An actual default-Agent flag is required; names and main-session spelling do not identify a free Agent. The host rechecks current decisions after asynchronous preparation and immediately before its dispatch call, together with the physical-history operation and current-epoch gates. Remote complete-export reads also require that current physical scope. Expiry holds undispatched local outbox items with original text, resources and idempotency keys. Purchase success does not replay them; Stop remains independent.
 
 Full session reading follows the actual Mobile exceptions: a real main descriptor (with its bounded legacy fallback), a Bridge-owned sessions-first row, or an exact persisted create receipt. Titles and native source kinds cannot mint a manual record. The independent manual-receipt store caps at 1,000 entries and persists a real returned create result before publishing that free-session exception. Unknown persistence cannot authorize a second backend create.
 
