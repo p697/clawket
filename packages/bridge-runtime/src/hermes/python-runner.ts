@@ -1,5 +1,5 @@
 import { execFile, type ChildProcess } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { delimiter, join } from 'node:path';
 
 export type HermesPythonRunnerOptions = {
@@ -14,6 +14,33 @@ function buildHermesPythonPath(sourcePath: string, existing: string | undefined)
   return [sourcePath, existing].filter(Boolean).join(delimiter);
 }
 
+// Packaged Hermes installs (v0.22+, `hermes pm`) ship no venv. The `hermes` launcher in
+// <source>/.hermes/bin is a one-line shell wrapper that execs the managed interpreter, and
+// the Python dependencies only become importable after `import hermes_bootstrap`.
+const PYTHON_PREAMBLE = 'try:\n    import hermes_bootstrap  # noqa: F401\nexcept ImportError:\n    pass\n';
+
+function pythonFromLauncher(launcherPath: string): string | undefined {
+  let launcher: string;
+  try { launcher = readFileSync(launcherPath, 'utf8'); }
+  catch { return undefined; }
+  const match = launcher.match(/^exec\s+(?:"([^"]+)"|'([^']+)'|(\S+))/m);
+  const candidate = match?.[1] ?? match?.[2] ?? match?.[3];
+  return candidate && existsSync(candidate) ? candidate : undefined;
+}
+
+function managedPythonCandidates(hermesHomePath: string): string[] {
+  const toolsDir = join(hermesHomePath, 'tools');
+  let entries: string[];
+  try { entries = readdirSync(toolsDir); }
+  catch { return []; }
+  const exe = process.platform === 'win32' ? ['python.exe'] : ['bin', 'python3'];
+  return entries
+    .filter((name) => name.startsWith('python-'))
+    .sort()
+    .reverse()
+    .map((name) => join(toolsDir, name, ...exe));
+}
+
 export function resolveHermesPythonPath(options: HermesPythonRunnerOptions): string {
   const explicit = options.hermesPythonPath?.trim();
   if (explicit) return explicit;
@@ -26,7 +53,13 @@ export function resolveHermesPythonPath(options: HermesPythonRunnerOptions): str
     join(options.hermesSourcePath, 'venv', ...pythonParts),
     join(options.hermesHomePath, 'venvs', 'hermes-dev', ...pythonParts),
   ];
-  return candidates.find((candidate) => existsSync(candidate)) ?? (process.platform === 'win32' ? 'python' : 'python3');
+  const venv = candidates.find((candidate) => existsSync(candidate));
+  if (venv) return venv;
+  const launcherName = process.platform === 'win32' ? 'hermes.cmd' : 'hermes';
+  const fromLauncher = pythonFromLauncher(join(options.hermesSourcePath, '.hermes', 'bin', launcherName));
+  if (fromLauncher) return fromLauncher;
+  const managed = managedPythonCandidates(options.hermesHomePath).find((candidate) => existsSync(candidate));
+  return managed ?? (process.platform === 'win32' ? 'python' : 'python3');
 }
 
 export class HermesPythonRunner {
@@ -54,7 +87,7 @@ export class HermesPythonRunner {
     const generation = this.generation;
     const input = stdinPayload === undefined ? undefined : JSON.stringify(stdinPayload);
     return new Promise<T>((resolve, reject) => {
-      const child = execFile(this.pythonPath, ['-c', script], {
+      const child = execFile(this.pythonPath, ['-c', PYTHON_PREAMBLE + script], {
         cwd: existsSync(this.options.hermesSourcePath) ? this.options.hermesSourcePath : undefined,
         env: {
           ...(this.options.env ?? process.env),
