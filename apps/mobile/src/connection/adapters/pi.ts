@@ -178,7 +178,9 @@ export class PiAdapter implements AgentAdapter {
     return (await this.sessionCatalog.list()).map(session => ({ ...session, connectionId: this.record.id }));
   }
   loadSession(key: string, options?: { limit?: number; cursor?: string }): Promise<SessionHistory> {
-    return this.rpc<SessionHistory>('chat.history', { sessionKey: key, cursor: options?.cursor, ...(!!this.artifacts ? { artifacts: true } : {}) }).then(artifactHistoryDisplay);
+    // Every Pi Bridge pages by cursor: a page without `nextCursor` is the oldest.
+    return this.rpc<SessionHistory>('chat.history', { sessionKey: key, cursor: options?.cursor, ...(!!this.artifacts ? { artifacts: true } : {}) })
+      .then(history => artifactHistoryDisplay({ ...history, pagination: 'cursor' }));
   }
   prompt(key: string, input: PromptInput): Promise<{ runId: string }> {
     if (this.state !== 'ready') throw new AdapterError('bridge_offline', 'Pi Bridge is offline');

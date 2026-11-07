@@ -225,6 +225,11 @@ export abstract class GatewayAdapterBase implements AgentAdapter {
     return typeof payload?.nextCursor === 'string' && payload.nextCursor ? payload.nextCursor : undefined;
   }
 
+  /** Whether a page without a cursor proves it is the oldest. Unknown peers keep the legacy path. */
+  protected historyPaginationReported(_payload: GatewayHistoryPayload | undefined): boolean {
+    return false;
+  }
+
   public async loadSession(
     key: string,
     options?: { limit?: number; cursor?: string },
@@ -268,6 +273,8 @@ export abstract class GatewayAdapterBase implements AgentAdapter {
       messages: this.connection.backendKind === 'openclaw'
         ? preserveOpenClawCliHistorySegments(key, rawMessages, mergedMessages) : mergedMessages,
       ...(nextCursor ? { nextCursor } : {}),
+      // Complete pagination evidence: a short final page must not offer an earlier-history action.
+      ...(this.historyPaginationReported(payload) ? { pagination: 'cursor' as const } : {}),
       hasActiveRun,
       ...(hasActiveRun && recoveredRunId ? { activeRun: {
         runId: recoveredRunId,

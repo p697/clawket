@@ -2328,6 +2328,26 @@ describe('useChatController contract', () => {
     expect(result.current.activityLabel).toBeNull();
   });
 
+  it('reads the transcript after Stop so the reply generated before it replaces the partial snapshot', async () => {
+    const adapter = createAdapter('ready');
+    renderHook(() => useChatController({ adapter: adapter as any, debugMode: false, showAgentAvatar: true } as any));
+    const eventParams = jest.mocked(useAdapterChatEvents).mock.calls.at(-1)?.[0];
+    await act(async () => {
+      eventParams!.onState?.('ready');
+      eventParams!.onUpdate?.({ type: 'run_started', sessionKey: 'agent:main:main', runId: 'run-stopped',
+        activeRunId: 'run-stopped', isSending: true, startedAtMs: 100 });
+      eventParams!.onUpdate?.({ type: 'agent_message_chunk', sessionKey: 'agent:main:main', runId: 'run-stopped',
+        text: '#', activeRunId: 'run-stopped', isSending: true, visible: true });
+      eventParams!.onUpdate?.({ type: 'run_finished', sessionKey: 'agent:main:main', runId: 'run-stopped',
+        stopReason: 'cancelled', activeRunId: null, isSending: false });
+    });
+    // `#` alone has nothing to show: no empty bubble waits for the transcript.
+    expect(historyMock.messages.some((message: { id: string }) => message.id === 'abort_run-stopped')).toBe(false);
+    const before = historyMock.loadHistory.mock.calls.length;
+    await act(async () => { jest.advanceTimersByTime(1_000); await Promise.resolve(); });
+    expect(historyMock.loadHistory.mock.calls.length).toBeGreaterThan(before);
+  });
+
   it('handles cancelled and errored adapter runs without leaving sending state stuck', async () => {
     const adapter = createAdapter('ready');
     const { result } = renderHook(() =>

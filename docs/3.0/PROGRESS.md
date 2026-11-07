@@ -1,5 +1,11 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-11-08 五个连接全面体验测试与 App 修复（RN 默认客户端）。
+  - 环境：fresh main 05ab5ea1 的 iOS 模拟器 Release 社区构建（RevenueCat/PostHog 关闭以免污染线上统计，Pro 因此解锁），独立模拟器「Clawket RN Connection QA」，本机 Bridge 3.1.17 + 线上 Relay。逐一用 6 位码/相册二维码配对 OpenClaw、Hermes、Claude Code、Codex、Pi，均在新建测试会话中收发（未在主人进行中的会话里输入）：长回复/Markdown 表格与代码、停止生成、图片识别、切换 Agent、冷启动恢复、Hermes 工具调用、Claude Code 在 Chats 项目建文件并回读、Codex 执行命令并附文件卡片、Pi 执行命令，原生历史只读查看与「复制一份接着聊」入口。
+  - 修复（每项有回归测试）：①OpenClaw/Hermes/Claude Code/Pi 新会话或短会话显示虚假「加载更早的消息」——OpenClaw 以 Gateway 显式 `hasMore`、Hermes 以 `hermes.multi-session.v2`、Claude Code/Pi 以其首版即有的游标分页为证据标记 `pagination: cursor`，模拟器复验 Hermes 主会话不再出现；②OpenClaw（Codex 引擎）首个片段只有 `##`/`#` 时画出空白气泡长达约 10 秒——仅有 Markdown 语法时不画流式气泡；③停止后只保留中止前到达手机的片段（实测只有 `#`），空白气泡长期残留、重进后与记录里的真实内容重复——停止后与完成一样读一次记录，被记录扩展的中止快照在内存与缓存合并中让位，无可见字的快照不生成气泡；模拟器复验停止约 3 秒后补回已生成内容、旧的重复空气泡消失；④键盘打开时点工具回执，工作记录弹层被键盘挡住——打开时先收起键盘；⑤未命名 Hermes 会话的首页预览以会话 ID（UUID）开头——标题回退为 key 时不作前缀。
+  - 逐文件 in-band：gateway-adapter.lifecycle 59、liveRunThread 32、historyMergePolicy 98、gateway-history.embedded-tools 25、claude-code 15、pi 9、ThreadView 228、useChatController.contract 127、roster-cache 27、RosterScreen 30，及相关回放 gateway-adapters.recorded 41、rpc-incarnation 12、useChatHistoryState 177、openclaw-history-retry 6、gateway-history.session-boundaries 11、useChatController.adapter-events 56；Mobile tsc、check:docs 通过。JS 替换进同一 Release 包在模拟器复验 ①②③，未做真机验收。
+  - 已确认但本次未修：OpenClaw 主会话里两次定时任务（静默结束、中间无用户消息）的工具被合并成一个回执，显示「24 小时 0 分」，需按 `__openclaw.runId` 切分回合；18 种语言的系统权限说明（相机/相册/麦克风/本地网络/定位）仍是英文，`InfoPlist.strings` 为空；新建会话因网络抖动失败时提示「保存失败」。产品决策另行汇总给负责人。无发布、无版本变更。
+
 - 2026-10-17 Native USB iPhone OpenClaw 连接交付测试（RN 保持默认）。
   - 按 owner 明确要求安装真机开发版。唯一 USB iPhone 的 IORegistry 硬件标识与 CoreDevice wired 记录完全匹配，目标为 iPhone Air/iOS27.0.1；现有开发者模式、配对及 WDA profile 均有效。fresh main0ceb1edf 独立工作树、ios/heavy 租约及 jobs2 开发编译69.9秒通过，校验QA bundle、deep strict codesign和profile包含该硬件后，仅更新安装 com.p697.clawket.nativeqa/3.1.2。未卸载、清数据、替换RN或打Archive/IPA；仅关闭自有QA模拟器，未碰其他模拟器/无线手机。
   - 实际有线WebDriver使用产品Direct表单；已知LAN endpoint仍对应本机当前接口/既有Gateway端口，不改bind/TLS/认证或重启服务。令牌只由当前已知operator配置在进程内读取，经系统Paste填入SecureField，随后手机临时剪贴板改为中性文本；保存复用同URL/transport的已有Native连接与label，其他连接保留。凭据通过后出现真实当前device-approval context，不再是上轮AUTH_TOKEN_MISMATCH。

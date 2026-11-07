@@ -142,3 +142,16 @@ it('merges a CLI managed attachment with its imported final and retires only its
   expect(result[1]).toMatchObject({ text: 'Here', attachments: [{ artifactId: 'image-7' }] });
   expect(preserveOpenClawCliHistorySegments('main', values, [...messages, { id: 'final_other', role: 'assistant', text: 'Here' }]).at(-1)?.id).toBe('final_other');
 });
+
+describe('stopped run snapshots', () => {
+  const user = { id: 'h_user', role: 'user' as const, text: 'Write a story', timestampMs: 1_000, idempotencyKey: 'send-1' };
+  const remote = { id: 'h_reply', role: 'assistant' as const, text: '# The Cat\n\nIt was two in the morning.', timestampMs: 5_000 };
+  it('lets the interrupted transcript reply replace the few characters that arrived before Stop', () => {
+    const cached = [user, { id: 'abort_run-1', role: 'assistant' as const, text: '#', timestampMs: 130_000 }];
+    expect(mergeGatewayHistory([user, remote], cached).map(message => message.id)).toEqual(['h_user', 'h_reply']);
+  });
+  it('keeps a snapshot the transcript does not extend', () => {
+    const cached = [user, { id: 'abort_run-1', role: 'assistant' as const, text: 'Different words', timestampMs: 130_000 }];
+    expect(mergeGatewayHistory([user, remote], cached)).toHaveLength(3);
+  });
+});

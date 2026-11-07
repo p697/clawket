@@ -381,6 +381,10 @@ export function mergeGatewayHistory(
       && message.id === cacheRowId && /^h_assistant_/.test(cacheRowId);
     const optimistic = optimisticUser || optimisticAssistant;
     const confirmedCopy = cacheRowId.startsWith('h_') || optimisticAssistant;
+    // A stopped run keeps only what arrived before Stop; the transcript's interrupted
+    // reply in the same user turn starts with it and began before the stop.
+    const abortSnapshot = message.role === 'assistant' && message.text.trim().length > 0
+      && [cacheRowId, message.id].some(id => id.startsWith('abort_'));
     const canonicalIndex = remoteMessages.findIndex((remote, index) => (
       (!optimistic || !matchedRemote.has(index))
       && (message.role !== 'assistant' || sameUserTurn(cachedUsers[cachedIndex], remoteUsers[index]))
@@ -388,7 +392,8 @@ export function mergeGatewayHistory(
       && remote.role === message.role
       && canMatchMessageAuthors(message, remote)
       && !(remote.idempotencyKey && message.idempotencyKey && remote.idempotencyKey !== message.idempotencyKey)
-      && comparableText(remote) === comparableText(message)
+      && (comparableText(remote) === comparableText(message)
+        || (abortSnapshot && remote.text.trimStart().startsWith(message.text.trim())))
       && (remote.text.length > 0 || Boolean(remote.tool?.callId && remote.tool.callId === message.tool?.callId))
       && typeof remote.timestampMs === 'number'
       && typeof message.timestampMs === 'number'
@@ -397,7 +402,9 @@ export function mergeGatewayHistory(
       && (cacheRowId === stableMessageId(remote.role, remote.timestampMs, remote.text)
         || Math.abs(remote.timestampMs - message.timestampMs) <= (optimistic ? 60_000 : 2_000)
         || (legacyProjectedAssistant && cachedUsers[cachedIndex] && remoteUsers[index]
-          && Math.abs(remote.timestampMs - message.timestampMs) <= 60_000))
+          && Math.abs(remote.timestampMs - message.timestampMs) <= 60_000)
+        || (abortSnapshot && cachedUsers[cachedIndex] && remoteUsers[index]
+          && remote.timestampMs <= message.timestampMs))
       && (!message.tool || remote.tool?.callId === message.tool.callId)
       && (!message.attachments?.length || remote.attachments?.length === message.attachments.length)
     ));

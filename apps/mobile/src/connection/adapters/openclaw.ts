@@ -164,6 +164,11 @@ export class OpenClawAdapter extends GatewayAdapterBase {
     return openClawHistoryCursor(key, payload);
   }
 
+  /** Gateways with offset pages report `hasMore` on every page; older ones omit it. */
+  protected override historyPaginationReported(payload: GatewayHistoryPayload | undefined): boolean {
+    return typeof payload?.hasMore === 'boolean';
+  }
+
   public get negotiatedBridgeCapabilityMode(): OpenClawBridgeCapabilityMode {
     return this.bridgeCapabilityMode;
   }

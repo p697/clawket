@@ -518,6 +518,13 @@ export function preserveOptimisticAssistantMessage(
     });
   }
 
+  // A stopped run's local snapshot holds only what arrived before Stop (OpenClaw may have sent
+  // just its first token); the transcript's interrupted reply extends it and replaces it.
+  if (nextCurrentTurnAssistant && previousLastAssistant.id.startsWith('abort_')
+    && normalizeAssistantText(nextCurrentTurnAssistant.message.text).startsWith(normalizeAssistantText(previousLastAssistant.text))) {
+    return mergedMessages;
+  }
+
   if (nextCurrentTurnAssistant) {
     const previousTimestamp = previousLastAssistant.timestampMs ?? 0;
     const currentTurnTimestamp = nextCurrentTurnAssistant.message.timestampMs ?? 0;

@@ -845,6 +845,30 @@ it('pages OpenClaw physical history with native offsets while retaining Hermes o
 });
 
 
+it('marks explicit OpenClaw pages as complete pagination evidence and keeps older Gateways on the legacy path', async () => {
+  const fake = new LifecycleGateway();
+  let payload: Record<string, unknown> = { sessionId: 'physical-1', messages: [], hasMore: false, totalMessages: 2 };
+  fake.requestHandler = () => payload;
+  const adapter = new OpenClawAdapter(connection('openclaw'), { gateway: gateway(fake), historyCache: null });
+  const complete = await adapter.loadSession('main', { limit: 50 });
+  expect(complete.pagination).toBe('cursor');
+  expect(complete.nextCursor).toBeUndefined();
+  payload = { sessionId: 'physical-1', messages: [] };
+  const legacy = await adapter.loadSession('main', { limit: 50 });
+  expect(legacy.pagination).toBeUndefined();
+  adapter.dispose();
+});
+
+it('treats a cursorless page from a multi-session Hermes Bridge as the oldest page', async () => {
+  const fake = new LifecycleGateway();
+  fake.requestHandler = () => ({ sessionId: 'physical-1', messages: [] });
+  const adapter = new HermesAdapter(connection('hermes'), { gateway: gateway(fake), historyCache: null });
+  expect((await adapter.loadSession('main', { limit: 50 })).pagination).toBeUndefined();
+  fake.emit('health', { status: 'ok', hermesApiReachable: true, capabilities: ['hermes.multi-session.v2'] });
+  expect((await adapter.loadSession('main', { limit: 50 })).pagination).toBe('cursor');
+  adapter.dispose();
+});
+
 describe('session-file capability negotiation', () => {
   it.each(['openclaw', 'hermes'] as const)('preserves %s capability identity across equivalent health evidence', async (backend) => {
     const fake = new LifecycleGateway();
