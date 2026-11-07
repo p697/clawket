@@ -1,5 +1,8 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-11-08 会话面板新建失败文案（连接全面测试发现）。
+  - Claude Code 在 Relay 心跳超时重连的同一秒新建对话失败，面板显示「保存失败」，与用户刚做的事不符。新建失败现在复用已有 19 语文案「无法新建对话」，重命名/重置/删除失败仍是「保存失败」，按钮保持可重试。SessionPanel 48 项（新增 1 项）通过；无发布。
+
 - 2026-11-08 iOS 系统权限说明本地化（连接全面测试发现）。
   - 中文模拟器上点「扫码连接」，系统弹窗标题是中文、App 提供的用途说明却是英文：各语言 `InfoPlist.strings` 一直是 `intentionally empty`，18 种非英语用户的相机/相册/存图/麦克风/本地网络/定位说明全是英文。`with-locales` 现在按 `plugins/ios-permission-strings.json` 为每种语言写入这 7 项说明（每次 prebuild 同步，英语仍用 Info.plist 基准）；前台定位原为通用的 "Allow $(PRODUCT_NAME) to access your location"，改为与「始终」一致的具体说明。术语沿用 App 内译法（统计海报、Agent 不译）。
   - 验证：新插件测试 2 项（覆盖全部 18 种语言与 7 项、strings 行格式）、i18n-prune 自检 8 项、check:app-config 9 项；把生成的 strings 装进同一 Release 包，模拟器实测中文相机弹窗显示中文用途。需要新的原生构建才会进入安装包；未做真机验收，无发布。
