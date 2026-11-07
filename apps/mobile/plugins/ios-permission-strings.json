@@ -1,0 +1,164 @@
+{
+  "zh-Hans": {
+    "NSCameraUsageDescription": "允许 Clawket 使用相机扫描二维码，并拍照发送给 AI。",
+    "NSPhotoLibraryUsageDescription": "允许 Clawket 在添加图片时显示你最近的照片，并将统计海报保存到相册。",
+    "NSPhotoLibraryAddUsageDescription": "允许 Clawket 将统计海报保存到你的相册。",
+    "NSMicrophoneUsageDescription": "允许 Clawket 使用麦克风进行语音输入。音频会发送到阿里云进行转写。",
+    "NSLocalNetworkUsageDescription": "允许 Clawket 通过局域网直接连接你的 OpenClaw Gateway。",
+    "NSLocationWhenInUseUsageDescription": "允许 Clawket 获取你的位置，让你的 AI Agent 知道你在哪里。",
+    "NSLocationAlwaysAndWhenInUseUsageDescription": "允许 Clawket 获取你的位置，让你的 AI Agent 知道你在哪里。"
+  },
+  "zh-Hant": {
+    "NSCameraUsageDescription": "允許 Clawket 使用相機掃描 QR 碼，並拍照傳送給 AI。",
+    "NSPhotoLibraryUsageDescription": "允許 Clawket 在附加圖片時顯示你最近的照片，並將統計海報儲存到照片圖庫。",
+    "NSPhotoLibraryAddUsageDescription": "允許 Clawket 將統計海報儲存到你的照片圖庫。",
+    "NSMicrophoneUsageDescription": "允許 Clawket 使用麥克風進行語音輸入。音訊會傳送至阿里雲進行轉寫。",
+    "NSLocalNetworkUsageDescription": "允許 Clawket 透過區域網路直接連線到你的 OpenClaw Gateway。",
+    "NSLocationWhenInUseUsageDescription": "允許 Clawket 取得你的位置，讓你的 AI Agent 知道你在哪裡。",
+    "NSLocationAlwaysAndWhenInUseUsageDescription": "允許 Clawket 取得你的位置，讓你的 AI Agent 知道你在哪裡。"
+  },
+  "ja": {
+    "NSCameraUsageDescription": "QR コードの読み取りと、AI に送る写真の撮影のために、Clawket にカメラの使用を許可してください。",
+    "NSPhotoLibraryUsageDescription": "画像を添付するときに最近の写真を表示し、統計ポスターを写真ライブラリに保存するために、Clawket に写真へのアクセスを許可してください。",
+    "NSPhotoLibraryAddUsageDescription": "統計ポスターを写真ライブラリに保存するために、Clawket に許可してください。",
+    "NSMicrophoneUsageDescription": "音声入力のために、Clawket にマイクの使用を許可してください。音声は文字起こしのため Alibaba Cloud に送信されます。",
+    "NSLocalNetworkUsageDescription": "ローカルネットワーク上の OpenClaw Gateway に直接接続するために、Clawket に許可してください。",
+    "NSLocationWhenInUseUsageDescription": "AI Agent があなたの居場所を把握できるように、Clawket に位置情報へのアクセスを許可してください。",
+    "NSLocationAlwaysAndWhenInUseUsageDescription": "AI Agent があなたの居場所を把握できるように、Clawket に位置情報へのアクセスを許可してください。"
+  },
+  "ko": {
+    "NSCameraUsageDescription": "QR 코드를 스캔하고 AI에 보낼 사진을 촬영할 수 있도록 Clawket의 카메라 사용을 허용해 주세요.",
+    "NSPhotoLibraryUsageDescription": "이미지를 첨부할 때 최근 사진을 보여 주고 통계 포스터를 사진 보관함에 저장할 수 있도록 Clawket의 사진 접근을 허용해 주세요.",
+    "NSPhotoLibraryAddUsageDescription": "Clawket이 통계 포스터를 사진 보관함에 저장할 수 있도록 허용해 주세요.",
+    "NSMicrophoneUsageDescription": "음성 입력을 위해 Clawket의 마이크 사용을 허용해 주세요. 오디오는 받아쓰기를 위해 Alibaba Cloud로 전송됩니다.",
+    "NSLocalNetworkUsageDescription": "Clawket이 로컬 네트워크의 OpenClaw Gateway에 직접 연결할 수 있도록 허용해 주세요.",
+    "NSLocationWhenInUseUsageDescription": "AI Agent가 사용자의 위치를 알 수 있도록 Clawket의 위치 접근을 허용해 주세요.",
+    "NSLocationAlwaysAndWhenInUseUsageDescription": "AI Agent가 사용자의 위치를 알 수 있도록 Clawket의 위치 접근을 허용해 주세요."
+  },
+  "de": {
+    "NSCameraUsageDescription": "Erlaube Clawket, die Kamera zu verwenden, um QR-Codes zu scannen und Fotos für die KI aufzunehmen.",
+    "NSPhotoLibraryUsageDescription": "Erlaube Clawket, beim Anhängen von Bildern deine neuesten Fotos anzuzeigen und Statistikposter in deiner Fotomediathek zu speichern.",
+    "NSPhotoLibraryAddUsageDescription": "Erlaube Clawket, Statistikposter in deiner Fotomediathek zu speichern.",
+    "NSMicrophoneUsageDescription": "Erlaube Clawket, das Mikrofon für die Spracheingabe zu verwenden. Audio wird zur Transkription an Alibaba Cloud gesendet.",
+    "NSLocalNetworkUsageDescription": "Erlaube Clawket, sich in deinem lokalen Netzwerk direkt mit deinem OpenClaw Gateway zu verbinden.",
+    "NSLocationWhenInUseUsageDescription": "Erlaube Clawket, auf deinen Standort zuzugreifen, damit dein AI Agent weiß, wo du bist.",
+    "NSLocationAlwaysAndWhenInUseUsageDescription": "Erlaube Clawket, auf deinen Standort zuzugreifen, damit dein AI Agent weiß, wo du bist."
+  },
+  "fr": {
+    "NSCameraUsageDescription": "Autorisez Clawket à utiliser l’appareil photo pour scanner des codes QR et prendre des photos à envoyer à l’IA.",
+    "NSPhotoLibraryUsageDescription": "Autorisez Clawket à afficher vos photos récentes lorsque vous joignez des images et à enregistrer des affiches de statistiques dans votre photothèque.",
+    "NSPhotoLibraryAddUsageDescription": "Autorisez Clawket à enregistrer des affiches de statistiques dans votre photothèque.",
+    "NSMicrophoneUsageDescription": "Autorisez Clawket à utiliser le micro pour la saisie vocale. L’audio est envoyé à Alibaba Cloud pour la transcription.",
+    "NSLocalNetworkUsageDescription": "Autorisez Clawket à se connecter directement à votre OpenClaw Gateway sur votre réseau local.",
+    "NSLocationWhenInUseUsageDescription": "Autorisez Clawket à accéder à votre position pour que votre AI Agent sache où vous êtes.",
+    "NSLocationAlwaysAndWhenInUseUsageDescription": "Autorisez Clawket à accéder à votre position pour que votre AI Agent sache où vous êtes."
+  },
+  "es": {
+    "NSCameraUsageDescription": "Permite que Clawket use la cámara para escanear códigos QR y hacer fotos para enviarlas a la IA.",
+    "NSPhotoLibraryUsageDescription": "Permite que Clawket muestre tus fotos recientes al adjuntar imágenes y guarde pósteres de estadísticas en tu fototeca.",
+    "NSPhotoLibraryAddUsageDescription": "Permite que Clawket guarde pósteres de estadísticas en tu fototeca.",
+    "NSMicrophoneUsageDescription": "Permite que Clawket use el micrófono para la entrada de voz. El audio se envía a Alibaba Cloud para su transcripción.",
+    "NSLocalNetworkUsageDescription": "Permite que Clawket se conecte directamente a tu OpenClaw Gateway en tu red local.",
+    "NSLocationWhenInUseUsageDescription": "Permite que Clawket acceda a tu ubicación para que tu AI Agent sepa dónde estás.",
+    "NSLocationAlwaysAndWhenInUseUsageDescription": "Permite que Clawket acceda a tu ubicación para que tu AI Agent sepa dónde estás."
+  },
+  "es-419": {
+    "NSCameraUsageDescription": "Permite que Clawket use la cámara para escanear códigos QR y tomar fotos para enviarlas a la IA.",
+    "NSPhotoLibraryUsageDescription": "Permite que Clawket muestre tus fotos recientes al adjuntar imágenes y guarde pósteres de estadísticas en tu biblioteca de fotos.",
+    "NSPhotoLibraryAddUsageDescription": "Permite que Clawket guarde pósteres de estadísticas en tu biblioteca de fotos.",
+    "NSMicrophoneUsageDescription": "Permite que Clawket use el micrófono para la entrada de voz. El audio se envía a Alibaba Cloud para su transcripción.",
+    "NSLocalNetworkUsageDescription": "Permite que Clawket se conecte directamente a tu OpenClaw Gateway en tu red local.",
+    "NSLocationWhenInUseUsageDescription": "Permite que Clawket acceda a tu ubicación para que tu AI Agent sepa dónde estás.",
+    "NSLocationAlwaysAndWhenInUseUsageDescription": "Permite que Clawket acceda a tu ubicación para que tu AI Agent sepa dónde estás."
+  },
+  "it": {
+    "NSCameraUsageDescription": "Consenti a Clawket di usare la fotocamera per scansionare codici QR e scattare foto da inviare all’IA.",
+    "NSPhotoLibraryUsageDescription": "Consenti a Clawket di mostrare le tue foto recenti quando alleghi immagini e di salvare i poster delle statistiche nella libreria Foto.",
+    "NSPhotoLibraryAddUsageDescription": "Consenti a Clawket di salvare i poster delle statistiche nella libreria Foto.",
+    "NSMicrophoneUsageDescription": "Consenti a Clawket di usare il microfono per l’input vocale. L’audio viene inviato ad Alibaba Cloud per la trascrizione.",
+    "NSLocalNetworkUsageDescription": "Consenti a Clawket di connettersi direttamente al tuo OpenClaw Gateway sulla rete locale.",
+    "NSLocationWhenInUseUsageDescription": "Consenti a Clawket di accedere alla tua posizione, così il tuo AI Agent sa dove ti trovi.",
+    "NSLocationAlwaysAndWhenInUseUsageDescription": "Consenti a Clawket di accedere alla tua posizione, così il tuo AI Agent sa dove ti trovi."
+  },
+  "pt-BR": {
+    "NSCameraUsageDescription": "Permita que o Clawket use a câmera para escanear códigos QR e tirar fotos para enviar à IA.",
+    "NSPhotoLibraryUsageDescription": "Permita que o Clawket mostre suas fotos recentes ao anexar imagens e salve pôsteres de estatísticas na sua fototeca.",
+    "NSPhotoLibraryAddUsageDescription": "Permita que o Clawket salve pôsteres de estatísticas na sua fototeca.",
+    "NSMicrophoneUsageDescription": "Permita que o Clawket use o microfone para entrada de voz. O áudio é enviado à Alibaba Cloud para transcrição.",
+    "NSLocalNetworkUsageDescription": "Permita que o Clawket se conecte diretamente ao seu OpenClaw Gateway na rede local.",
+    "NSLocationWhenInUseUsageDescription": "Permita que o Clawket acesse sua localização para que seu AI Agent saiba onde você está.",
+    "NSLocationAlwaysAndWhenInUseUsageDescription": "Permita que o Clawket acesse sua localização para que seu AI Agent saiba onde você está."
+  },
+  "pt-PT": {
+    "NSCameraUsageDescription": "Permita que o Clawket utilize a câmara para ler códigos QR e tirar fotografias para enviar à IA.",
+    "NSPhotoLibraryUsageDescription": "Permita que o Clawket mostre as suas fotografias recentes ao anexar imagens e guarde pósteres de estatísticas na fototeca.",
+    "NSPhotoLibraryAddUsageDescription": "Permita que o Clawket guarde pósteres de estatísticas na fototeca.",
+    "NSMicrophoneUsageDescription": "Permita que o Clawket utilize o microfone para introdução por voz. O áudio é enviado para a Alibaba Cloud para transcrição.",
+    "NSLocalNetworkUsageDescription": "Permita que o Clawket se ligue diretamente ao seu OpenClaw Gateway na rede local.",
+    "NSLocationWhenInUseUsageDescription": "Permita que o Clawket aceda à sua localização para que o seu AI Agent saiba onde está.",
+    "NSLocationAlwaysAndWhenInUseUsageDescription": "Permita que o Clawket aceda à sua localização para que o seu AI Agent saiba onde está."
+  },
+  "ru": {
+    "NSCameraUsageDescription": "Разрешите Clawket использовать камеру, чтобы сканировать QR-коды и делать фото для отправки ИИ.",
+    "NSPhotoLibraryUsageDescription": "Разрешите Clawket показывать недавние фото при прикреплении изображений и сохранять постеры со статистикой в медиатеку.",
+    "NSPhotoLibraryAddUsageDescription": "Разрешите Clawket сохранять постеры со статистикой в медиатеку.",
+    "NSMicrophoneUsageDescription": "Разрешите Clawket использовать микрофон для голосового ввода. Аудио отправляется в Alibaba Cloud для расшифровки.",
+    "NSLocalNetworkUsageDescription": "Разрешите Clawket напрямую подключаться к вашему OpenClaw Gateway в локальной сети.",
+    "NSLocationWhenInUseUsageDescription": "Разрешите Clawket доступ к геопозиции, чтобы ваш AI Agent знал, где вы находитесь.",
+    "NSLocationAlwaysAndWhenInUseUsageDescription": "Разрешите Clawket доступ к геопозиции, чтобы ваш AI Agent знал, где вы находитесь."
+  },
+  "uk": {
+    "NSCameraUsageDescription": "Дозвольте Clawket використовувати камеру, щоб сканувати QR-коди та робити фото для надсилання ШІ.",
+    "NSPhotoLibraryUsageDescription": "Дозвольте Clawket показувати нещодавні фото під час додавання зображень і зберігати постери зі статистикою в медіатеку.",
+    "NSPhotoLibraryAddUsageDescription": "Дозвольте Clawket зберігати постери зі статистикою в медіатеку.",
+    "NSMicrophoneUsageDescription": "Дозвольте Clawket використовувати мікрофон для голосового введення. Аудіо надсилається в Alibaba Cloud для розшифрування.",
+    "NSLocalNetworkUsageDescription": "Дозвольте Clawket підключатися безпосередньо до вашого OpenClaw Gateway у локальній мережі.",
+    "NSLocationWhenInUseUsageDescription": "Дозвольте Clawket доступ до вашого місцезнаходження, щоб ваш AI Agent знав, де ви.",
+    "NSLocationAlwaysAndWhenInUseUsageDescription": "Дозвольте Clawket доступ до вашого місцезнаходження, щоб ваш AI Agent знав, де ви."
+  },
+  "tr": {
+    "NSCameraUsageDescription": "Clawket'in QR kodlarını taramak ve yapay zekâya gönderilecek fotoğraflar çekmek için kamerayı kullanmasına izin verin.",
+    "NSPhotoLibraryUsageDescription": "Clawket'in görsel eklerken son fotoğraflarınızı göstermesine ve istatistik posterlerini fotoğraf arşivinize kaydetmesine izin verin.",
+    "NSPhotoLibraryAddUsageDescription": "Clawket'in istatistik posterlerini fotoğraf arşivinize kaydetmesine izin verin.",
+    "NSMicrophoneUsageDescription": "Clawket'in sesli giriş için mikrofonu kullanmasına izin verin. Ses, yazıya dökülmek üzere Alibaba Cloud'a gönderilir.",
+    "NSLocalNetworkUsageDescription": "Clawket'in yerel ağınızdaki OpenClaw Gateway'e doğrudan bağlanmasına izin verin.",
+    "NSLocationWhenInUseUsageDescription": "AI Agent'ınızın nerede olduğunuzu bilmesi için Clawket'in konumunuza erişmesine izin verin.",
+    "NSLocationAlwaysAndWhenInUseUsageDescription": "AI Agent'ınızın nerede olduğunuzu bilmesi için Clawket'in konumunuza erişmesine izin verin."
+  },
+  "vi": {
+    "NSCameraUsageDescription": "Cho phép Clawket dùng camera để quét mã QR và chụp ảnh gửi cho AI.",
+    "NSPhotoLibraryUsageDescription": "Cho phép Clawket hiển thị ảnh gần đây khi đính kèm hình ảnh và lưu poster thống kê vào thư viện ảnh.",
+    "NSPhotoLibraryAddUsageDescription": "Cho phép Clawket lưu poster thống kê vào thư viện ảnh của bạn.",
+    "NSMicrophoneUsageDescription": "Cho phép Clawket dùng micrô để nhập bằng giọng nói. Âm thanh được gửi đến Alibaba Cloud để chuyển thành văn bản.",
+    "NSLocalNetworkUsageDescription": "Cho phép Clawket kết nối trực tiếp tới OpenClaw Gateway trên mạng cục bộ của bạn.",
+    "NSLocationWhenInUseUsageDescription": "Cho phép Clawket truy cập vị trí của bạn để AI Agent biết bạn đang ở đâu.",
+    "NSLocationAlwaysAndWhenInUseUsageDescription": "Cho phép Clawket truy cập vị trí của bạn để AI Agent biết bạn đang ở đâu."
+  },
+  "th": {
+    "NSCameraUsageDescription": "อนุญาตให้ Clawket ใช้กล้องเพื่อสแกนคิวอาร์โค้ดและถ่ายรูปเพื่อส่งให้ AI",
+    "NSPhotoLibraryUsageDescription": "อนุญาตให้ Clawket แสดงรูปภาพล่าสุดของคุณเมื่อแนบรูปภาพ และบันทึกโปสเตอร์สถิติลงในคลังรูปภาพ",
+    "NSPhotoLibraryAddUsageDescription": "อนุญาตให้ Clawket บันทึกโปสเตอร์สถิติลงในคลังรูปภาพของคุณ",
+    "NSMicrophoneUsageDescription": "อนุญาตให้ Clawket ใช้ไมโครโฟนสำหรับการป้อนข้อมูลด้วยเสียง เสียงจะถูกส่งไปยัง Alibaba Cloud เพื่อถอดความ",
+    "NSLocalNetworkUsageDescription": "อนุญาตให้ Clawket เชื่อมต่อกับ OpenClaw Gateway ของคุณโดยตรงผ่านเครือข่ายท้องถิ่น",
+    "NSLocationWhenInUseUsageDescription": "อนุญาตให้ Clawket เข้าถึงตำแหน่งของคุณ เพื่อให้ AI Agent ของคุณรู้ว่าคุณอยู่ที่ไหน",
+    "NSLocationAlwaysAndWhenInUseUsageDescription": "อนุญาตให้ Clawket เข้าถึงตำแหน่งของคุณ เพื่อให้ AI Agent ของคุณรู้ว่าคุณอยู่ที่ไหน"
+  },
+  "hi": {
+    "NSCameraUsageDescription": "QR कोड स्कैन करने और AI को भेजने के लिए फ़ोटो लेने हेतु Clawket को कैमरा इस्तेमाल करने की अनुमति दें।",
+    "NSPhotoLibraryUsageDescription": "इमेज अटैच करते समय आपकी हाल की फ़ोटो दिखाने और आँकड़ों के पोस्टर फ़ोटो लाइब्रेरी में सहेजने के लिए Clawket को अनुमति दें।",
+    "NSPhotoLibraryAddUsageDescription": "आँकड़ों के पोस्टर आपकी फ़ोटो लाइब्रेरी में सहेजने के लिए Clawket को अनुमति दें।",
+    "NSMicrophoneUsageDescription": "वॉइस इनपुट के लिए Clawket को माइक्रोफ़ोन इस्तेमाल करने की अनुमति दें। ट्रांसक्रिप्शन के लिए ऑडियो Alibaba Cloud को भेजा जाता है।",
+    "NSLocalNetworkUsageDescription": "Clawket को आपके लोकल नेटवर्क पर आपके OpenClaw Gateway से सीधे कनेक्ट करने की अनुमति दें।",
+    "NSLocationWhenInUseUsageDescription": "Clawket को आपकी लोकेशन एक्सेस करने की अनुमति दें, ताकि आपका AI Agent जान सके कि आप कहाँ हैं।",
+    "NSLocationAlwaysAndWhenInUseUsageDescription": "Clawket को आपकी लोकेशन एक्सेस करने की अनुमति दें, ताकि आपका AI Agent जान सके कि आप कहाँ हैं।"
+  },
+  "ar": {
+    "NSCameraUsageDescription": "اسمح لـ Clawket باستخدام الكاميرا لمسح رموز QR والتقاط صور لإرسالها إلى الذكاء الاصطناعي.",
+    "NSPhotoLibraryUsageDescription": "اسمح لـ Clawket بعرض صورك الحديثة عند إرفاق الصور وحفظ ملصقات الإحصاءات في مكتبة الصور.",
+    "NSPhotoLibraryAddUsageDescription": "اسمح لـ Clawket بحفظ ملصقات الإحصاءات في مكتبة الصور.",
+    "NSMicrophoneUsageDescription": "اسمح لـ Clawket باستخدام الميكروفون للإدخال الصوتي. يُرسَل الصوت إلى Alibaba Cloud لتحويله إلى نص.",
+    "NSLocalNetworkUsageDescription": "اسمح لـ Clawket بالاتصال مباشرة بـ OpenClaw Gateway على شبكتك المحلية.",
+    "NSLocationWhenInUseUsageDescription": "اسمح لـ Clawket بالوصول إلى موقعك حتى يعرف AI Agent مكانك.",
+    "NSLocationAlwaysAndWhenInUseUsageDescription": "اسمح لـ Clawket بالوصول إلى موقعك حتى يعرف AI Agent مكانك."
+  }
+}

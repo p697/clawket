@@ -8,6 +8,22 @@ const path = require('path');
 const { SUPPORTED_LOCALES } = require('../src/i18n/supported-locales');
 
 const LOCALES = SUPPORTED_LOCALES.map((locale) => locale.code);
+// System permission prompts show these purpose strings in the device language;
+// English stays in Info.plist as the base. Keys must name purposes the app sets.
+const PERMISSION_STRINGS = require('./ios-permission-strings.json');
+
+function escapeStringsValue(value) {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
+}
+
+/** The localized InfoPlist.strings body for one locale. */
+function infoPlistStrings(locale) {
+  const strings = PERMISSION_STRINGS[locale];
+  if (!strings) return '/* intentionally empty */\n';
+  return Object.keys(strings).sort()
+    .map((key) => `"${key}" = "${escapeStringsValue(strings[key])}";`)
+    .join('\n') + '\n';
+}
 
 // The app owns runtime direction through I18nManager. Expo's static flags
 // overwrite those persisted preferences on every native module creation.
@@ -57,8 +73,9 @@ function withLocales(config) {
         fs.mkdirSync(lprojDir, { recursive: true });
       }
       const stringsFile = path.join(lprojDir, 'InfoPlist.strings');
-      if (!fs.existsSync(stringsFile)) {
-        fs.writeFileSync(stringsFile, '/* intentionally empty */\n');
+      const body = infoPlistStrings(locale);
+      if (!fs.existsSync(stringsFile) || fs.readFileSync(stringsFile, 'utf8') !== body) {
+        fs.writeFileSync(stringsFile, body);
       }
     }
 
@@ -74,3 +91,5 @@ function withLocales(config) {
 }
 
 module.exports = withLocales;
+module.exports.infoPlistStrings = infoPlistStrings;
+module.exports.PERMISSION_STRINGS = PERMISSION_STRINGS;
