@@ -6,7 +6,8 @@ import { handleAgentDiagnostics } from './operations.js';
 import { codexControl, startCodexBackground } from './codex-lifecycle.js';
 import { agentPairProgress, type Progress } from './progress.js';
 import { defaultDeviceConnectionName } from './device-connection-name.js';
-import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, unlinkSync, realpathSync, lstatSync } from 'node:fs';
+import { ownerLockBlocksStart } from './owner-lock-probe.js';
+import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, unlinkSync, realpathSync } from 'node:fs';
 import { dirname, join, resolve, basename } from 'node:path';
 import { homedir } from 'node:os';
 import { randomBytes, createHash } from 'node:crypto';
@@ -19,19 +20,6 @@ interface Config { device?: boolean; displayName?: string; project: string; toke
 function flag(args: string[], name: string): string | undefined {
   const i = args.indexOf(name); if (i < 0) return undefined;
   const value = args[i + 1]; if (!value || value.startsWith('--')) throw new Error(`${name} requires a value`); return value;
-}
-/** Called only after ECONNREFUSED. The runtime rechecks/acquires the lock itself. */
-function ownerLockBlocksStart(path: string): boolean {
-  try {
-    const stat = lstatSync(path);
-    if (!stat.isFile() || stat.size > 32) return true;
-    const text = readFileSync(path, 'utf8');
-    if (!/^[1-9]\d{0,9}$/.test(text)) return true;
-    const pid = Number(text);
-    try { process.kill(pid, 0); }
-    catch (error) { return (error as NodeJS.ErrnoException).code !== 'ESRCH'; }
-    return true;
-  } catch (error) { return (error as NodeJS.ErrnoException).code !== 'ENOENT'; }
 }
 async function post<T>(url: string, body: object): Promise<T> {
   const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(20_000), redirect: 'error' });

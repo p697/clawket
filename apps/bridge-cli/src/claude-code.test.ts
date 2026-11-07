@@ -36,6 +36,16 @@ it('does not launch another Claude runtime while a refused owner retains its wri
   await expect(handleClaudeCommand(['start', '--config', path])).rejects.toThrow('locked without verified health');
   expect(mock.background).not.toHaveBeenCalled(); expect(readFileSync(path, 'utf8')).toContain('local-test-token');
 });
+it.each([['alive', true], ['exited', false]])('treats a Claude owner lock whose PID is %s accordingly after connection refusal', async (_state, alive) => {
+  saved({}); mkdirSync(join(root, 'sessions'));
+  const lock = join(root, 'sessions', 'owner.lock'), owner = JSON.stringify({ pid: 12345, nonce: 'n' }); writeFileSync(lock, owner);
+  const kill = vi.spyOn(process, 'kill').mockImplementation(() => { if (alive) return true; throw Object.assign(new Error('gone'), { code: 'ESRCH' }); });
+  if (alive) await expect(handleClaudeCommand(['start', '--config', path])).rejects.toThrow('locked without verified health');
+  else await handleClaudeCommand(['start', '--config', path]);
+  expect(kill).toHaveBeenCalledWith(12345, 0);
+  expect(mock.background).toHaveBeenCalledTimes(alive ? 0 : 1);
+  expect(readFileSync(lock, 'utf8')).toBe(owner);
+});
 it.each(['pair', 'start', 'restart', 'stop', 'reset'])('does not change a Claude owner after an uncertain %s probe', async command => {
   saved({}); const before = readFileSync(path, 'utf8');
   const error = new Error('control did not answer'); mock.control.mockRejectedValue(error);

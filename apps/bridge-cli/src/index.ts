@@ -23,6 +23,7 @@ import {
   ensurePairPrerequisites,
   readRecentCliLogs,
 } from './diagnostics.js';
+import { isClawketBridgeRuntimeCommand } from './clawket-process.js';
 import { productConnections, productLogSources, printOperations, requestedBackend } from './operations.js';
 import { showLogs } from './cli-logs.js';
 import { buildGatewayControlUiOrigin, buildLocalPairingInfo, detectLanIp, resolveLocalPairGatewayUrl } from './local-pair.js';
@@ -1512,11 +1513,7 @@ function listHermesRelayRuntimePids(): number[] {
 }
 
 function isKnownClawketBridgeCliCommand(command: string): boolean {
-  const currentScriptPath = resolveCurrentScriptPath();
-  if (currentScriptPath && command.includes(currentScriptPath)) {
-    return true;
-  }
-  return /(?:^|\s)\S*(?:@p697\/clawket|apps\/bridge-cli)\/dist\/index\.js(?:\s|$)/.test(command);
+  return isClawketBridgeRuntimeCommand(command, resolveCurrentScriptPath());
 }
 
 async function startHermesBridgeRuntime(options: HermesBridgeRuntimeOptions): Promise<HermesLocalBridge> {

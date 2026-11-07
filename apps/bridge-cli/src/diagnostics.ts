@@ -17,6 +17,7 @@ import {
   resolveGatewayUrl,
   resolveHermesSourcePath,
 } from '@clawket/bridge-runtime';
+import { isClawketBridgeRuntimeCommand } from './clawket-process.js';
 import { parseLookbackToMs } from './log-parse.js';
 
 export type CliDoctorReport = {
@@ -422,7 +423,6 @@ export function resolveDiagnosticScriptPath(scriptPath: string): string {
 function listPosixPidsMatching(pattern: RegExp): number[] {
   try {
     const scriptPath = resolveDiagnosticScriptPath(process.argv[1] ?? '');
-    if (!scriptPath) return [];
     const output = readPsOutput();
     return output
       .split('\n')
@@ -434,7 +434,7 @@ function listPosixPidsMatching(pattern: RegExp): number[] {
         const pid = Number(match[1]);
         const command = match[2];
         if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid) return [];
-        if (!command.includes(scriptPath)) return [];
+        if (!isClawketBridgeRuntimeCommand(command, scriptPath)) return [];
         if (!pattern.test(command)) return [];
         return [pid];
       });

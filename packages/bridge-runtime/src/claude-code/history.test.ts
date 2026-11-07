@@ -35,8 +35,11 @@ describe('Claude native history', () => {
       message('user', 'status', '<local-command-stdout>Set model to `sonnet (claude-sonnet-5)`</local-command-stdout>'),
       message('user', 'interrupted', [{ type: 'text', text: '[Request interrupted by user for tool use]' }]),
       message('user', 'interrupted-text', '[Request interrupted by user]'),
+      message('user', 'task', '<task-notification>\n<task-id>b1</task-id>\n<status>failed</status>\n<summary>Background command failed</summary>\n</task-notification>'),
       message('user', 'human', text),
     ])).toEqual([{ id: 'human', role: 'user', text }]);
+    const quoted = 'Why did <task-notification> appear?';
+    expect(claudeHistory([message('user', 'quoted', quoted)])).toEqual([{ id: 'quoted', role: 'user', text: quoted }]);
   });
   it('preserves text exactly and reconciles tools without rendering their results as human messages', () => {
     const rows = claudeHistory([

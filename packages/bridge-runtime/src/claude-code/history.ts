@@ -85,6 +85,8 @@ export function claudeHistory(messages: readonly SessionMessage[]): ChatMessage[
       /^\s*<command-name>\/model<\/command-name>\s*<command-message>model<\/command-message>\s*<command-args>[^<]*<\/command-args>\s*$/.test(localText)
       || /^\s*<local-command-stdout>Set model to [\s\S]*<\/local-command-stdout>\s*$/.test(localText)
       || /^\[Request interrupted by user(?: for tool use)?\]$/.test(localText)
+      // Background-task completions are system-authored user entries (origin task-notification).
+      || /^\s*<task-notification>[\s\S]*<\/task-notification>\s*$/.test(localText)
     )) continue;
     const userText: string[] = [];
     const attachments: NonNullable<ChatMessage['attachments']> = [];

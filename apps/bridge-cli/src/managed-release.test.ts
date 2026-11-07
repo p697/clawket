@@ -42,3 +42,13 @@ it('does not interpret a config value as a runtime command', () => {
   expect(isRuntimeCommand(['codex', 'run', '--config', 'saved'])).toBe(true);
   expect(isRuntimeCommand(['hermes', 'relay', 'run'])).toBe(true);
 });
+
+it('runs the invoked CLI when the recorded snapshot was removed outside the updater', async () => {
+  const { delegateManagedRuntime } = await import('./managed-release.js');
+  const root = join(homedir(), '.clawket', 'runtime');
+  mkdirSync(root, { recursive: true });
+  // The releases directory itself may be gone, as after a manual disk cleanup.
+  writeFileSync(join(root, 'active.json'), JSON.stringify({ version: '3.1.16', entry: join(root, 'missing-releases', 'dist', 'index.js'), node: process.execPath }));
+  await expect(delegateManagedRuntime(['run', '--service'])).resolves.toBe(false);
+  await expect(delegateManagedRuntime(['hermes', 'relay', 'run'])).resolves.toBe(false);
+});

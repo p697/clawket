@@ -34,8 +34,18 @@ function save() { original = JSON.stringify(config, null, 2); writeFileSync(path
 const pair = (...args: string[]) => handlePiCommand(['pair', '--config', path, ...args]);
 it('does not launch another Pi runtime while a refused owner retains its writer lock', async () => {
   mock.control.mockRejectedValue(Object.assign(new Error('offline'), { code: 'ECONNREFUSED' }));
+  vi.spyOn(process, 'kill').mockImplementation(() => true);
   await expect(handlePiCommand(['start', '--config', path])).rejects.toThrow('locked without verified health');
   expect(mock.background).not.toHaveBeenCalled(); expect(readFileSync(path, 'utf8')).toBe(original);
+});
+it.each(['start', 'restart'])('allows %s after connection refusal and proof the saved Pi owner exited', async command => {
+  mock.control.mockRejectedValue(Object.assign(new Error('offline'), { code: 'ECONNREFUSED' }));
+  const kill = vi.spyOn(process, 'kill').mockImplementation(() => { throw Object.assign(new Error('gone'), { code: 'ESRCH' }); });
+  await handlePiCommand([command, '--config', path]);
+  expect(kill).toHaveBeenCalledWith(12345, 0);
+  expect(mock.background).toHaveBeenCalledTimes(1); expect(readFileSync(path, 'utf8')).toBe(original);
+  // The runtime constructor rechecks and replaces the lock; the CLI never deletes it.
+  expect(readFileSync(join(root, 'sessions', 'owner.lock'), 'utf8')).toBe('12345');
 });
 it.each(['start', 'restart', 'stop', 'reset'])('does not change Pi state after an uncertain %s control request', async command => {
   const error = new Error('control did not answer'); mock.control.mockRejectedValue(error);
@@ -115,6 +125,7 @@ it.each(['authentication', 'timeout', 'closed'])('does not treat uncertain owner
 
 it('does not replace a locked owner when its local listener is temporarily unavailable', async () => {
   mock.control.mockRejectedValue(Object.assign(new Error('unreachable'), { code: 'ECONNREFUSED' }));
+  vi.spyOn(process, 'kill').mockImplementation(() => true);
   await expect(pair()).rejects.toThrow('verify'); expect(mock.fetch).not.toHaveBeenCalled(); unchanged();
 });
 

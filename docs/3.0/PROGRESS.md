@@ -1,5 +1,11 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-11-08 连接全面测试中发现的 Bridge 缺陷修复（源码已改，需负责人配合发布 Bridge 才能到达用户）。
+  - 本机托管运行时 `~/.clawket/runtime/releases/3.1.16-…` 在 10-27 前后被外部清理删除，服务进程只靠内存运行。实测 `npx @p697/clawket@3.1.17 update`：新服务启动时委派读取 `active.json` 指向的已删除快照，`realpathSync` 抛 `ENOENT` 退出，更新回滚到同样不存在的旧版，OpenClaw/Hermes 全部停服约 3 分钟（已用 update + start 恢复到 3.1.17）。修复：已不存在的托管快照直接忽略，由被调用的 CLI 启动，`update` 能装上替代版本。
+  - `npx …@latest status/doctor` 只认自己路径启动的进程，运行在托管快照里的 Hermes Bridge/Relay 永远被报成 stopped/degraded。修复：诊断与生命周期共用 `src/clawket-process.ts`，任意已发布 Clawket 包启动的运行时都能识别。
+  - Pi 进程 10-12 非正常退出后留下 `owner.lock`（PID 已死），`pi start` 从此一直报 "locked without verified health"。修复：Pi 与 Claude Code 与 Codex 一致，连接被拒且 PID 探测为 `ESRCH` 时放行，存活/格式异常/不确定的锁继续阻止，锁由运行时构造器替换。用修复构建在本机真实陈旧锁上启动成功，随后停止并改回官方 3.1.17 运行。
+  - Claude Code 后台任务完成时注入的 `<task-notification>…</task-notification>` 用户条目，被显示为用户本人的蓝色气泡和会话预览。修复：历史与预览投影排除这一完整信封，讨论该标签的普通文本保留。
+  - 验证：managed-release 7、clawket-process 1、pi 43、claude-code 31、codex 38、diagnostics 12、index+update 68、bridge-runtime claude-code/history 7；Bridge CLI 与 runtime `tsc --noEmit`、check:docs 通过。未发布、未改版本号；用户要拿到修复需要新的 Bridge 版本。
 - 2026-11-08 五个连接全面体验测试与 App 修复（RN 默认客户端）。
   - 环境：fresh main 05ab5ea1 的 iOS 模拟器 Release 社区构建（RevenueCat/PostHog 关闭以免污染线上统计，Pro 因此解锁），独立模拟器「Clawket RN Connection QA」，本机 Bridge 3.1.17 + 线上 Relay。逐一用 6 位码/相册二维码配对 OpenClaw、Hermes、Claude Code、Codex、Pi，均在新建测试会话中收发（未在主人进行中的会话里输入）：长回复/Markdown 表格与代码、停止生成、图片识别、切换 Agent、冷启动恢复、Hermes 工具调用、Claude Code 在 Chats 项目建文件并回读、Codex 执行命令并附文件卡片、Pi 执行命令，原生历史只读查看与「复制一份接着聊」入口。
   - 修复（每项有回归测试）：①OpenClaw/Hermes/Claude Code/Pi 新会话或短会话显示虚假「加载更早的消息」——OpenClaw 以 Gateway 显式 `hasMore`、Hermes 以 `hermes.multi-session.v2`、Claude Code/Pi 以其首版即有的游标分页为证据标记 `pagination: cursor`，模拟器复验 Hermes 主会话不再出现；②OpenClaw（Codex 引擎）首个片段只有 `##`/`#` 时画出空白气泡长达约 10 秒——仅有 Markdown 语法时不画流式气泡；③停止后只保留中止前到达手机的片段（实测只有 `#`），空白气泡长期残留、重进后与记录里的真实内容重复——停止后与完成一样读一次记录，被记录扩展的中止快照在内存与缓存合并中让位，无可见字的快照不生成气泡；模拟器复验停止约 3 秒后补回已生成内容、旧的重复空气泡消失；④键盘打开时点工具回执，工作记录弹层被键盘挡住——打开时先收起键盘；⑤未命名 Hermes 会话的首页预览以会话 ID（UUID）开头——标题回退为 key 时不作前缀。
