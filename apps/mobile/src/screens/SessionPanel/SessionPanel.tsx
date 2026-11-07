@@ -1205,7 +1205,7 @@ export function SessionPanelView({
           {scopeRow}
           {createError || actionError ? (
             <View style={styles.searchWrap}>
-              <Banner message={t('Save Failed')} />
+              <Banner message={createError ? t('Unable to start a new chat', { ns: 'chat' }) : t('Save Failed')} />
             </View>
           ) : null}
           {archiveError ? (

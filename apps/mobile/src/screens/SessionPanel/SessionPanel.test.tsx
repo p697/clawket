@@ -910,6 +910,16 @@ it('does not offer session creation without a handler or an Agent', () => {
    expect(onClose).toHaveBeenCalledTimes(1);
  });
 
+it('names a failed creation instead of reporting a failed save', async () => {
+  const onCreateSession = jest.fn(() => Promise.reject(new Error('Relay closed during create')));
+  const view = render(<SessionPanelView {...props({ onCreateSession })} />);
+  fireEvent.press(view.getByTestId('session-panel-create'));
+  await act(async () => Promise.resolve());
+  expect(view.getByText('Unable to start a new chat')).toBeTruthy();
+  expect(view.queryByText('Save Failed')).toBeNull();
+  expect(view.getByTestId('session-panel-create').props.disabled).toBe(false);
+});
+
 it('does not dismiss or show a failure when creation belongs to a retired presentation', async () => {
   const onCreateSession = jest.fn(() => Promise.resolve(false as const));
   const onClose = jest.fn();
