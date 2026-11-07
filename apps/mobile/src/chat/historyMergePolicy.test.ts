@@ -118,6 +118,13 @@ describe('prependOlderCachedMessages', () => {
 });
 
 describe('preserveOptimisticAssistantMessage', () => {
+  it('replaces a stopped run snapshot with the transcript reply that extends it', () => {
+    const prompt: UiMessage = { id: 'h_user', role: 'user', text: 'Write a story', timestampMs: 1_000 };
+    const reply: UiMessage = { id: 'h_reply', role: 'assistant', text: '# The Cat\n\nIt was two in the morning.', timestampMs: 5_000 };
+    const stopped: UiMessage = { id: 'abort_run-1', role: 'assistant', text: '#', timestampMs: 30_000 };
+    expect(preserveOptimisticAssistantMessage([prompt, stopped], [prompt, reply])).toEqual([prompt, reply]);
+  });
+
   describe('steering echo identity', () => {
     const main: UiMessage = { id: 'native-main', historyMessageId: 'native-main', role: 'user', text: 'Wait', timestampMs: 1_000 };
     const first: UiMessage = { id: 'usr_10000_steer_run_1', renderKey: 'usr_10000_steer_run_1', role: 'user', sentLocally: true, text: 'Keep waiting', timestampMs: 10_000 };

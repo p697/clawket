@@ -147,13 +147,18 @@ function isTerminalAssistantMessage(message: UiMessage | undefined): boolean {
   return message.id.startsWith('final_') || message.id.startsWith('abort_');
 }
 
+export function hasVisibleStreamText(text: string): boolean {
+  return /[^\s#*_`~>|=+\-]/u.test(text);
+}
+
 function shouldShowLiveStreamBubble(params: {
   liveStreamText: string | null;
   liveStreamStartedAt: number | null;
   nowMs: number;
 }): boolean {
   const trimmed = params.liveStreamText?.trim() ?? '';
-  if (!trimmed) return false;
+  // Markdown syntax alone (a heading's `##` before its words) renders an empty bubble.
+  if (!hasVisibleStreamText(trimmed)) return false;
   if (trimmed.length >= MIN_LIVE_STREAM_VISIBLE_CHARS) return true;
   if (!params.liveStreamStartedAt || params.liveStreamStartedAt <= 0) return true;
   return params.nowMs - params.liveStreamStartedAt >= MIN_LIVE_STREAM_VISIBLE_DELAY_MS;

@@ -18,6 +18,7 @@ jest.mock('./useChatGeometryQa', () => {
 jest.mock('../../components/ui/Sheet', () => ({ Sheet: ({ visible, children, ...props }: any) => visible ? React.createElement(require('react-native').View, props, children) : null }));
 import React from 'react';
 import { act, fireEvent, render, within } from '@testing-library/react-native';
+import { Keyboard } from 'react-native';
 import { CAPABILITY_MATRIX, type Capabilities } from '@clawket/agent-protocol';
 import { builtInAccents } from '../../theme/accents';
 import { buildTheme } from '../../theme/theme';
@@ -3136,9 +3137,13 @@ it('moves a finished turn into a receipt on its last reply that opens the work r
   expect(within(view.getByTestId('thread-receipt-answer')).getByText('Ran 2 commands')).toBeTruthy();
   expect(view.queryByTestId('thread-run-a')).toBeNull();
   mockScrollToEnd.mockClear();
+  const dismiss = jest.spyOn(Keyboard, 'dismiss');
 
   fireEvent.press(view.getByTestId('thread-receipt-answer'));
   expect(view.getByTestId('work-record-sheet').props.title).toBe('Work record');
+  // The sheet never opens beneath the composer's keyboard.
+  expect(dismiss).toHaveBeenCalled();
+  dismiss.mockRestore();
   expect(view.getByTestId('thread-run-a')).toBeTruthy();
   expect(view.getByTestId('thread-run-b')).toBeTruthy();
   expect(mockScrollToEnd).not.toHaveBeenCalled();

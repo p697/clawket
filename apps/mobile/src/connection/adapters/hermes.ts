@@ -268,6 +268,11 @@ export class HermesAdapter extends GatewayAdapterBase {
     }
   }
 
+  /** Cursor pages predate multi-session v2: such a Bridge omits `nextCursor` only on the oldest page. */
+  protected override historyPaginationReported(): boolean {
+    return this.bridgeCapabilities.includes(HERMES_MULTI_SESSION_CAPABILITY);
+  }
+
   protected override historyCacheAgentId(): string {
     return 'hermes';
   }

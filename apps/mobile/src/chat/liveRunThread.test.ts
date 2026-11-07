@@ -248,6 +248,17 @@ describe('buildLiveRunListData', () => {
     expect(list.some((item) => item.id === 'streaming')).toBe(false);
   });
 
+  it('waits for visible words before drawing a stream that is only Markdown syntax', () => {
+    const live = (liveStreamText: string) => buildLiveRunListData({
+      historyMessages: [{ id: 'u1', role: 'user', text: 'Write a titled note', timestampMs: 1000 }],
+      streamSegments: [], toolMessages: [], liveStreamText, liveStreamStartedAt: 1500, activeRunId: 'run_1', nowMs: 9000,
+    }).find((item) => item.id === 'streaming');
+    expect(live('##')).toBeUndefined();
+    expect(live('\n- **')).toBeUndefined();
+    expect(live('## Heart')?.text).toBe('## Heart');
+    expect(live('1')?.text).toBe('1');
+  });
+
   it('hides the live stream bubble when the latest history message is already terminal', () => {
     const historyMessages: UiMessage[] = [
       { id: 'u1', role: 'user', text: 'Check status', timestampMs: 1000 },

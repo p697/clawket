@@ -1289,7 +1289,10 @@ export function ThreadView({
 
   const openReceipt = useCallback((receipt: TurnReceipt) => {
     const oldest = receipt.steps[0];
-    if (oldest) setWorkRecordAnchor(renderKeyOf(oldest));
+    if (!oldest) return;
+    // The work record is a sheet too: never open it beneath the keyboard.
+    Keyboard.dismiss();
+    setWorkRecordAnchor(renderKeyOf(oldest));
   }, []);
   // The work panel is a sheet: the keyboard leaves as it rises.
   const [workPanelOpen, setWorkPanelOpen] = useState(false);

@@ -264,6 +264,16 @@ describe('aggregateRoster', () => {
     }], 'a')[0].agents[0];
     expect(summary.preview).toBe('Investigate startup: Found the cause');
   });
+  it('never prefixes an untitled conversation preview with its opaque key', () => {
+    const key = 'hermes-untitled-session';
+    const summary = aggregateRoster([{
+      connection: connection('a', 1), source: 'live', syncedAt: 200,
+      agents: [agent('a', 'main')],
+      sessions: [session('a', 'main', key, 100, { kind: 'direct', preview: 'Night bus essay' })],
+      watermarks: {},
+    }], 'a')[0].agents[0];
+    expect(summary.preview).toBe('Night bus essay');
+  });
   it('shows the message directly for a Pi side conversation', () => {
     const summary = aggregateRoster([{
       connection: connection('a', 1), source: 'live', syncedAt: 200,
@@ -313,7 +323,7 @@ describe('aggregateRoster', () => {
     expect(groups.map((group) => group.connection.id)).toEqual(['c', 'a', 'b']);
     expect(groups[1].agents.map((entry) => entry.agent.agentId)).toEqual(['main', 'quiet']);
     expect(groups[1].agents[0]).toMatchObject({
-      preview: 'main:channel: recent channel',
+      preview: 'recent channel',
       lastActivityAt: 600,
       unreadCount: 1,
       hasUnread: true,

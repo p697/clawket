@@ -184,3 +184,12 @@ it('reports authenticated Bridge-version evidence and replaces it after reconnec
   adapter.disconnect(); const next = adapter.connect(); sockets.at(-1)!.open(); expect(adapter.getConnectionRuntimeMetadata().bridgeVersion).toBeUndefined();
   reply(sockets.at(-1)!, '3.1.11'); await next; expect(adapter.getConnectionRuntimeMetadata().bridgeVersion).toBe('3.1.11');
 });
+
+it('marks a complete history page as cursor based, so a new chat offers no earlier history', async () => {
+  const connected = adapter.connect(); sockets[0].open(); sockets[0].reply(); await connected;
+  const loaded = adapter.loadSession('new-session');
+  const request = JSON.parse(sockets[0].sent.at(-1)!);
+  const history = { key: 'new-session', messages: [{ id: 'u', role: 'user', text: 'Hello' }], hasActiveRun: false };
+  sockets[0].onmessage?.({ data: JSON.stringify({ type: 'res', id: request.id, ok: true, payload: history }) });
+  expect(await loaded).toEqual({ ...history, pagination: 'cursor' });
+});

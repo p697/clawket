@@ -202,7 +202,9 @@ export class ClaudeCodeAdapter implements AgentAdapter {
     return (await this.sessionCatalog.list()).map(session => ({ ...session, connectionId: this.record.id }));
   }
   loadSession(key: string, options?: { limit?: number; cursor?: string }): Promise<SessionHistory> {
-    return this.rpc<SessionHistory>('chat.history', { sessionKey: key, cursor: options?.cursor }).then(artifactHistoryDisplay);
+    // Every Claude Code Bridge pages by cursor: a page without `nextCursor` is the oldest.
+    return this.rpc<SessionHistory>('chat.history', { sessionKey: key, cursor: options?.cursor })
+      .then(history => artifactHistoryDisplay({ ...history, pagination: 'cursor' }));
   }
   prompt(key: string, input: PromptInput): Promise<{ runId: string }> {
     if (this.state !== 'ready') throw new AdapterError('bridge_offline', 'Claude Code Bridge is offline');

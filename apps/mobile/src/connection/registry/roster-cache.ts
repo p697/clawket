@@ -291,8 +291,11 @@ function buildAgentSummary(
       || a.key.localeCompare(b.key))[0];
   const previewSession = recentSession ?? agentSessions.find((session) => session.key === agent.mainSessionKey);
   const previewText = previewSession?.preview;
+  // An untitled session's descriptor title falls back to its opaque key, which is not a name.
+  const namedTitle = previewSession?.title?.trim() && previewSession.title.trim() !== previewSession.key
+    ? previewSession.title : undefined;
   const sourceTitle = previewSession && previewSession.key !== agent.mainSessionKey
-    ? previewSession.channel || previewSession.title : undefined;
+    ? previewSession.channel || namedTitle : undefined;
   const messageFirst = agent.entryMode === 'sessions' || agent.agentId === 'pi';
   const preview = previewText && sourceTitle && !messageFirst ? `${sourceTitle}: ${previewText}` : previewText
     ?? (agent.entryMode === 'sessions' && recentSession ? readString(recentSession.title) : undefined);

@@ -84,6 +84,7 @@ import {
   recoverLiveRunPresentation,
   extendRecoveredLiveRun,
   finishLiveRunPresentation,
+  hasVisibleStreamText,
   mergeNewestFirstMessages,
   replyTextSegments,
   StreamSegment,
@@ -2373,7 +2374,8 @@ export function useChatController({
             ], anchored);
           });
         } else if (update.stopReason === "cancelled") {
-          if (streamText.trim()) history.setMessages((previous) => appendUniqueMessage(previous, {
+          // Markdown syntax alone (`#`) would leave an empty bubble until the transcript read below.
+          if (hasVisibleStreamText(streamText.trim())) history.setMessages((previous) => appendUniqueMessage(previous, {
             id: `abort_${update.runId}`,
             renderKey: liveReplyRenderKey(activeRunStartedAt, update.runId, 0),
             role: "assistant", text: streamText, timestampMs: Date.now(), ...(finishedTurnId ? { turnId: finishedTurnId } : {}),
@@ -2412,9 +2414,10 @@ export function useChatController({
         clearTransientRunPresentation();
         setIsSending(false);
         setActivityLabel(null);
-        if (update.stopReason !== "cancelled" && update.stopReason !== "error") {
-          schedulePostStreamHistoryRefresh();
-        } else {
+        // A stopped reply keeps only what reached the phone; the transcript holds what was
+        // generated before Stop. Reading it never resends anything.
+        if (update.stopReason !== "error") schedulePostStreamHistoryRefresh();
+        if (update.stopReason === "cancelled" || update.stopReason === "error") {
           // An interrupted or failed turn must not trigger the next queued
           // message on its own; the user decides whether it still applies.
           holdQueuedMessages(update.stopReason === "cancelled" ? "abort" : "run_error");
