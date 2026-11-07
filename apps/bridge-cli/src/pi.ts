@@ -1,4 +1,5 @@
 import { canonicalizeOfficialRelayUrl, migrateOfficialRelayConfig, officialRelayEndpoints, sameRelayRegistry } from '@clawket/bridge-core';
+import { ownerLockBlocksStart } from './owner-lock-probe.js';
 import { registerRuntimeOwner } from './runtime-owner.js';
 import { createRemoteUpdateControl } from './remote-update.js';
 import { readCliVersion } from './metadata.js';
@@ -116,7 +117,7 @@ async function runPiCommand(args: string[], progress: Progress): Promise<void> {
     let running = false;
     try { await piControl(config); running = true; }
     catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ECONNREFUSED' || existsSync(join(directory, 'sessions', 'owner.lock'))) {
+      if ((error as NodeJS.ErrnoException).code !== 'ECONNREFUSED' || ownerLockBlocksStart(join(directory, 'sessions', 'owner.lock'))) {
         throw new Error('Cannot verify the existing Pi Bridge safely. Check clawket pi status / logs with the same pairing options; the owner has not been changed.');
       }
     }
@@ -135,7 +136,7 @@ async function runPiCommand(args: string[], progress: Progress): Promise<void> {
       try { health = await piControl(config); }
       catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ECONNREFUSED') throw error; }
     }
-    if (!health && !stoppedOwned && ['pair', 'start', 'restart'].includes(command) && existsSync(join(directory, 'sessions', 'owner.lock'))) {
+    if (!health && !stoppedOwned && ['pair', 'start', 'restart'].includes(command) && ownerLockBlocksStart(join(directory, 'sessions', 'owner.lock'))) {
       throw new Error('The saved Pi owner is locked without verified health. Inspect logs before starting another runtime.');
     }
     if (stoppedOwned) {

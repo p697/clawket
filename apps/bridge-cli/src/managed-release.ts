@@ -19,6 +19,9 @@ export async function delegateManagedRuntime(argv: string[]): Promise<boolean> {
   try { manifest = JSON.parse(readFileSync(path, 'utf8')); }
   catch { throw new Error('Invalid managed Bridge release. Inspect local update state.'); }
   if (!manifest || typeof manifest.entry !== 'string' || typeof manifest.node !== 'string' || typeof manifest.version !== 'string' || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(manifest.version)) throw new Error('Invalid managed Bridge release.');
+  // A snapshot removed outside the updater (for example by disk cleanup) cannot run; the invoked CLI
+  // starts instead, so `update` can install a replacement rather than failing every start.
+  if (!existsSync(manifest.entry)) return false;
   const entry = realpathSync(manifest.entry), inside = relative(realpathSync(join(root, 'releases')), entry);
   if (!inside || inside.startsWith('..') || isAbsolute(inside)) throw new Error('Invalid managed Bridge release location.');
   const metadata = JSON.parse(readFileSync(join(dirname(entry), '../package.json'), 'utf8'));

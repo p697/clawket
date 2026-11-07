@@ -1,4 +1,5 @@
 import { canonicalizeOfficialRelayUrl, migrateOfficialRelayConfig, officialRelayEndpoints, sameRelayRegistry } from '@clawket/bridge-core';
+import { ownerLockBlocksStart } from './owner-lock-probe.js';
 import { registerRuntimeOwner } from './runtime-owner.js';
 import { createRemoteUpdateControl } from './remote-update.js';
 import { readCliVersion } from './metadata.js';
@@ -78,7 +79,7 @@ async function runClaudeCommand(args: string[], progress: Progress): Promise<voi
       progress.update('Stopping the previous Claude Code bridge…');
       await claudeControl(config, 'bridge.stop'); stoppedOwned = true;
     }
-    if (!health && !stoppedOwned && ['pair', 'start', 'restart'].includes(command) && existsSync(join(directory, 'sessions', 'owner.lock'))) {
+    if (!health && !stoppedOwned && ['pair', 'start', 'restart'].includes(command) && ownerLockBlocksStart(join(directory, 'sessions', 'owner.lock'))) {
       throw new Error('The saved Claude Code owner is locked without verified health. Inspect logs before starting another runtime.');
     }
     if (stoppedOwned) {
