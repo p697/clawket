@@ -1,5 +1,8 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-11-08 iOS 系统权限说明本地化（连接全面测试发现）。
+  - 中文模拟器上点「扫码连接」，系统弹窗标题是中文、App 提供的用途说明却是英文：各语言 `InfoPlist.strings` 一直是 `intentionally empty`，18 种非英语用户的相机/相册/存图/麦克风/本地网络/定位说明全是英文。`with-locales` 现在按 `plugins/ios-permission-strings.json` 为每种语言写入这 7 项说明（每次 prebuild 同步，英语仍用 Info.plist 基准）；前台定位原为通用的 "Allow $(PRODUCT_NAME) to access your location"，改为与「始终」一致的具体说明。术语沿用 App 内译法（统计海报、Agent 不译）。
+  - 验证：新插件测试 2 项（覆盖全部 18 种语言与 7 项、strings 行格式）、i18n-prune 自检 8 项、check:app-config 9 项；把生成的 strings 装进同一 Release 包，模拟器实测中文相机弹窗显示中文用途。需要新的原生构建才会进入安装包；未做真机验收，无发布。
 - 2026-11-08 连接全面测试中发现的 Bridge 缺陷修复（源码已改，需负责人配合发布 Bridge 才能到达用户）。
   - 本机托管运行时 `~/.clawket/runtime/releases/3.1.16-…` 在 10-27 前后被外部清理删除，服务进程只靠内存运行。实测 `npx @p697/clawket@3.1.17 update`：新服务启动时委派读取 `active.json` 指向的已删除快照，`realpathSync` 抛 `ENOENT` 退出，更新回滚到同样不存在的旧版，OpenClaw/Hermes 全部停服约 3 分钟（已用 update + start 恢复到 3.1.17）。修复：已不存在的托管快照直接忽略，由被调用的 CLI 启动，`update` 能装上替代版本。
   - `npx …@latest status/doctor` 只认自己路径启动的进程，运行在托管快照里的 Hermes Bridge/Relay 永远被报成 stopped/degraded。修复：诊断与生命周期共用 `src/clawket-process.ts`，任意已发布 Clawket 包启动的运行时都能识别。

@@ -157,7 +157,8 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow Clawket to access your location so your AI agent can know where you are."
+          "locationAlwaysAndWhenInUsePermission": "Allow Clawket to access your location so your AI agent can know where you are.",
+          "locationWhenInUsePermission": "Allow Clawket to access your location so your AI agent can know where you are."
         }
       ],
       [
