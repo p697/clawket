@@ -1,5 +1,9 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-11-08 Bridge 3.1.18 已公开发布并在本机更新。
+  - 负责人刷新 npm 登录并完成安全密钥验证后，npm 于 00:53 UTC 接受固定发布包；00:54:52 公开 version/latest 为 3.1.18，CDN 提供的 tarball 与固定包逐字节一致（SHA-1 `987c80d6…`），空环境安装 `@latest` 得到相同 bundle。此前两次失败分别是 Node 24 本机证书链问题和未登录时 npm 返回的 404，均未上传任何内容。
+  - 本机 `npx -y @p697/clawket@3.1.18 update` 37 秒完成，六个运行时切到 3.1.18、配对与历史保留，Relay 全部重连；状态里 Hermes 显示 ready（不再误报）。模拟器 App 在五个连接的测试会话各完成一次真实收发；Pi 首次遇到模型服务 `Connection error.`，重试成功。3.1.17 保留供回滚。App 尚未提审。
+
 - 2026-11-08 生产 Relay 补齐 10-07 修复 + Bridge 3.1.18 版本准备（负责人授权「开始发布」）。
   - 10-07 的 #215（限制旧版 Bridge 反复抢占）与 #216（Registry 回退校验必须确认 `ok:true` 与 wire role，安全修复）此前只上了 Hermes Relay。本次从 `adfed05f` 构建，依次部署 Pi、Codex、Claude Code、OpenClaw 四个生产 Relay，部署字节与已验证的 Hermes Relay 完全一致；部署前逐项核对本地配置与线上变量/KV/DO/兼容日期一致（无迁移、密钥保留），用新导出的生产快照跑发布矩阵 4 场景 × 7 阶段（含 0.7.0 旧 Bridge 与回滚），每次部署前 v1 回放 44 项。部署后健康检查、回读摘要与配置不变，Registry 与 Hermes Relay 未动；本机四个运行时约 1 秒内自动重连，模拟器 App 在四个 Relay 的测试会话里各完成一次真实收发。版本号与回滚目标见 `docs/3.1/bridge-3.1.18-release.md`。
   - Bridge 仅清单/锁文件/发布守卫升到 3.1.18，唯一功能改动是 #284；发布守卫 6 项通过。npm 发布需负责人完成安全验证，App 版本不变。
