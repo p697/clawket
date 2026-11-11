@@ -1,5 +1,11 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-11-12 付费墙权益按后端收敛 + 付费墙入口与遮罩曝光埋点（整体产品审视第一档）。
+  - 依据：近 90 天 3.x 付费墙来源里，设置会员卡 324 人看到、8 人购买，但首页 Pro 徽标、宽限横幅、会员卡、更新公告都记成同一来源；只连了 Codex / Claude Code 的用户看到的权益是「管理 OpenClaw 配置、备份和日志」「技能与记忆版本」。
+  - 权益：补充权益按已保存连接的后端能力过滤（`CAPABILITY_MATRIX`，规则见 `06-paywall-and-growth.md`）。没有连接、含 OpenClaw 或未知后端时不变。新增一条 19 语言文案「接着电脑上的对话继续聊」（英文 Continue chats from your computer），其余文案、标题、价格区、购买流程不变。
+  - 埋点：所有 `paywall_*` 事件增加 `entry`（feature / pro_badge / grace_banner / membership_card / announcement / deep_link）；新增 `pro_gate_viewed`（日志、用量、配置、权限、诊断五处遮罩，每次挂载一次）。只有固定枚举。
+  - 逐文件 in-band：Paywall model 20（新增 1）、PaywallScreen 49、ProPaywallOverlay 17（新增 1）、ProGate 4（新增 1）、ProPaywallContext 27、analytics events 19（新增 1）、LogsSection 9、OpenClawManageScreen 24、AgentSettingsSectionScreen 12、AgentSettingsSections 28、AgentSettingsScreen；Mobile 类型检查、strict i18n（19 语言无缺失）、check:ui-style、check:docs 通过。新文案的各语言译法与真机排版待负责人验收（HT-PAYWALL-SCOPE-1112）；无版本号、无发布。
+
 - 2026-11-12 预览里的任务 ID 与触感补齐（整体产品审视第一档）。
   - 会话面板里定时任务会话的预览以 `[cron:<任务 UUID> <任务名>]` 开头（OpenClaw 给定时提示词加的信封；本机 Gateway 只读查询确认格式）。`formatPreviewLine` 现在去掉这段开头，只显示提示词正文；预览在信封内被截断时不显示。行标题本来就是任务名。首页 Hermes 行显示会话 UUID 的问题已由 #283 修复，本次审视用的模拟器构建早于该修复，未再改动。
   - 触感：审批的允许 / 拒绝点击为 Light，长按「始终允许」为 Medium；首页行与会话行长按打开菜单、左滑托盘打开为 Light；配对连上为 Success，配对出错为 Warning。五处直接调用 `expo-haptics` 的地方改走 `services/haptics`，强度不变。流式、取消、历史与后台更新仍然无触感。
@@ -2550,6 +2556,7 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 
 | 编号 | 事项 | 怎么做 | 验证方法 | 状态 |
 |---|---|---|---|---|
+| HT-PAYWALL-SCOPE-1112 | 付费墙按后端收敛权益的真机验收 | 开「模拟免费账号」：① 只保留 Codex 或 Claude Code 连接，从设置会员卡打开付费墙；② 只保留 Hermes；③ 含 OpenClaw | ① 只有「接着电脑上的对话继续聊」「连接数量不限」两条，权益区与价格卡的间距正常；② 没有 OpenClaw 管理一条；③ 与改动前一致。新文案措辞如需调整直接告知 | 待验收 |
 | HT-HAPTICS-1112 | 触感补齐真机验收 | 装含本改动的构建：审批卡点允许 / 拒绝、长按允许；首页行和会话行长按；左滑首页行；完成一次配对、再故意用失效的码配对一次 | 每个动作有一次对应力度的触感，没有重复或漏掉；发消息、回复完成的原有触感不变 | 待验收 |
 | HT-PAIR-RETRY-1111 | 配对失效后重新开始的真机验收 | 装含本改动的构建：① 平台页输入一个已用过的配对码 → 出现「配对已失效」后点「重新配对」；② 扫一个已用过的二维码后点同一按钮 | ① 输入框清空并弹出键盘，红色提示仍在原位；② 直接回到扫码器；两种情况都不再出现第二次同样的失败 | 待验收 |
 | HT-NATIVE-SSD-1016 | 已解除：模拟器磁盘空间 | 负责人要求代理自行清理后，迁出可重建缓存/工具链，使用苹果工具清理本任务失败导入的暂存镜像，并将四台长期关闭的旧测试模拟器完整双 SHA 校验冷归档到 SSD，保留原 UUID、App 数据与显式恢复脚本；最近使用的设备留原位。 | 标准 iOS 27.0 与原有 27.1 运行时均已实际安装为 Ready；独立普通 iPhone QA 已创建，实际 UI/连接验收继续。 | 无需负责人清理或开启完全磁盘访问，未更改系统授权。外置设备集试切换已回滚，四台冷归档设备需恢复后使用；归档及恢复说明保留在本机开发归档目录，数据未丢弃。 |

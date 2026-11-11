@@ -261,6 +261,12 @@ export function normalizeAnalyticsEventString(
     // Numeric diagnostic fields must never become a free-text escape hatch.
     if (['http_status', 'elapsed_ms'].includes(property)) return 'other';
   }
+  if (event.startsWith('paywall_') && property === 'entry') {
+    return ['feature', 'pro_badge', 'grace_banner', 'membership_card', 'announcement', 'deep_link'].includes(value) ? value : 'other';
+  }
+  if (event === 'pro_gate_viewed') {
+    return ['logs', 'usage', 'configManage', 'openclawPermissions', 'openclawDiagnostics'].includes(value) ? value : 'other';
+  }
   if (event === 'gateway_secure_pairing_finished') {
     const values: Record<string, readonly string[]> = {
       method: ['link', 'code'],

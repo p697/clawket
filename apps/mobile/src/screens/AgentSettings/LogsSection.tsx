@@ -303,6 +303,7 @@ export function LogsSection({
       {!isPro && (loaded || entries.length > 0) ? (
         <ProGate
           testID="agent-logs-gate"
+          feature="logs"
           title={t('Watch OpenClaw run in real time')}
           detail={t('Every request, error and restart, streamed to your phone.')}
           actionLabel={t('Unlock OpenClaw logs')}

@@ -99,6 +99,19 @@ describe('ProGate', () => {
     expect(onUnlock).toHaveBeenCalledTimes(1);
   });
 
+  it('reports the gated feature once when the veil comes on screen', () => {
+    const { analyticsEvents } = require('../../services/analytics/events');
+    const viewed = jest.spyOn(analyticsEvents, 'proGateViewed').mockImplementation(() => undefined);
+    const view = render(<ProGate testID="gate" feature="usage" title="Title" actionLabel="Unlock" onUnlock={jest.fn()} />);
+    view.rerender(<ProGate testID="gate" feature="usage" title="Title again" actionLabel="Unlock" onUnlock={jest.fn()} />);
+    expect(viewed).toHaveBeenCalledTimes(1);
+    expect(viewed).toHaveBeenCalledWith({ feature: 'usage' });
+    // A gate without a feature, such as a plain notice, reports nothing.
+    render(<ProGate testID="plain" title="Title" actionLabel="Unlock" onUnlock={jest.fn()} />);
+    expect(viewed).toHaveBeenCalledTimes(1);
+    viewed.mockRestore();
+  });
+
   it('keeps real teaser content decorative beneath a veil that dissolves into the surface', () => {
     const view = render(
       <ProGate testID="gate" title="Title" actionLabel="Unlock" onUnlock={jest.fn()}>

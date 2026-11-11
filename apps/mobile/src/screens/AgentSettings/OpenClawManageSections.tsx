@@ -158,6 +158,7 @@ export function ConfigurationSection({
                     {gate?.locked ? (
                       <ProGate
                         testID={`openclaw-config-gate-${entry.key}`}
+                        feature="configManage"
                         title={t('Edit OpenClaw config from your phone')}
                         detail={t('View and edit every section, saved with a safe restart.')}
                         actionLabel={t('Unlock full configuration')}
@@ -293,6 +294,7 @@ export function PermissionsSection({
           {gate?.locked ? (
             <ProGate
               testID="openclaw-permissions-gate"
+              feature="openclawPermissions"
               title={t('Repair permissions in one tap')}
               detail={t('See why web, commands and code are blocked, then fix them.')}
               actionLabel={t('Unlock permission details')}
@@ -439,6 +441,7 @@ export function DiagnosticsSection({
       {hiddenChecks.length ? (
         <ProGate
           testID="openclaw-diagnostics-gate"
+          feature="openclawDiagnostics"
           title={t('{{total}} more checks', { total: hiddenChecks.length })}
           detail={t('Read every finding and attempt an automatic fix.')}
           actionLabel={t('Unlock full diagnostics')}

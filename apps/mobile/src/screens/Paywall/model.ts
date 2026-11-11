@@ -1,3 +1,4 @@
+import { CAPABILITY_MATRIX, type BackendKind, type Capabilities } from '@clawket/agent-protocol';
 import type { ProPaywallPackage, ProPurchaseFailureReason } from '../../services/pro-subscription';
 import type { ProFeature } from '../../utils/pro';
 
@@ -45,6 +46,7 @@ export type PaywallBenefitKey =
   | 'Skill and memory versions'
   | 'Choose which models your Agent uses'
   | 'Conversations across channels and tasks'
+  | 'Continue the conversations on your computer'
   | "Shape your Agent's personality and memory"
   | 'Configure, back up and diagnose your Agents'
   | 'More Agents, unlimited connections'
@@ -85,10 +87,64 @@ const COMBINED_BENEFIT = {
   labelKey: 'More Agents, unlimited connections',
 } as const;
 
+const NATIVE_SESSION_BENEFIT = { kind: 'sessions', labelKey: 'Continue the conversations on your computer' } as const;
+const CONNECTIONS_BENEFIT = { kind: 'connections', labelKey: 'Unlimited connections' } as const;
+
+type PaywallBenefit = PaywallContent['benefits'][number];
+
+/**
+ * The backends of the user's saved connections. The supporting benefits name only what those
+ * backends can do (product review 2026-11-11: a Codex-only user read "manage OpenClaw config,
+ * backups and logs"). No saved connection, or an unknown one, keeps the full list.
+ */
+export type PaywallScope = Readonly<{ backends?: ReadonlyArray<BackendKind> }>;
+
+function scopedCapabilities(scope: PaywallScope | undefined): ReadonlyArray<Capabilities> {
+  const capabilities: Capabilities[] = [];
+  for (const backend of new Set(scope?.backends ?? [])) {
+    const row = CAPABILITY_MATRIX[backend];
+    // An unrecognised backend proves nothing about what the user can use.
+    if (!row) return [];
+    capabilities.push(row);
+  }
+  return capabilities;
+}
+
+/** A supporting benefit as these backends offer it, or null when none of them does. */
+function scopeSupportingBenefit(
+  benefit: PaywallBenefit,
+  capabilities: ReadonlyArray<Capabilities>,
+): PaywallBenefit | null {
+  if (capabilities.length === 0) return benefit;
+  const any = (test: (row: Capabilities) => boolean): boolean => capabilities.some(test);
+  if (benefit === REPAIR_BENEFIT) {
+    return any((row) => row.configManage || row.diagnostics || row.backups) ? benefit : null;
+  }
+  if (benefit === MEMORY_BENEFIT) return any((row) => row.files) ? benefit : null;
+  if (benefit === COMBINED_BENEFIT) return any((row) => row.agents) ? benefit : CONNECTIONS_BENEFIT;
+  if (benefit === SESSION_BENEFIT) {
+    if (!any((row) => row.sessions)) return null;
+    // Channel and scheduled-task conversations exist only where the backend has them; the coding
+    // Agents keep their conversations on the computer.
+    return any((row) => row.channels || row.cron) ? benefit : NATIVE_SESSION_BENEFIT;
+  }
+  return benefit;
+}
+
 function contextualBenefits(
-  first: Readonly<{ kind: PaywallBenefitKind; labelKey: PaywallBenefitKey }>,
+  first: PaywallBenefit,
+  scope?: PaywallScope,
+  options: Readonly<{ scopeFirst?: boolean }> = {},
 ): PaywallContent['benefits'] {
-  const candidates = [first, COMBINED_BENEFIT, SESSION_BENEFIT, MEMORY_BENEFIT, REPAIR_BENEFIT];
+  const capabilities = scopedCapabilities(scope);
+  // The first line is what the user just reached for; only the generic wall leads with a supporting one.
+  const lead = options.scopeFirst ? scopeSupportingBenefit(first, capabilities) : first;
+  const candidates = [lead, COMBINED_BENEFIT, SESSION_BENEFIT, MEMORY_BENEFIT, REPAIR_BENEFIT]
+    .flatMap((benefit, index): PaywallBenefit[] => {
+      if (!benefit) return [];
+      const scoped = index === 0 ? benefit : scopeSupportingBenefit(benefit, capabilities);
+      return scoped ? [scoped] : [];
+    });
   const seen = new Set<PaywallBenefitKind>();
   return candidates.filter((benefit) => {
     const duplicateCategory = benefit.kind === 'combined'
@@ -102,7 +158,7 @@ function contextualBenefits(
   }).slice(0, 4);
 }
 
-function manageContent(featureKey: PaywallSubtitleFeatureKey): PaywallContent {
+function manageContent(featureKey: PaywallSubtitleFeatureKey, scope?: PaywallScope): PaywallContent {
   return {
     hero: 'manage',
     titleKey: 'Fix your OpenClaw from your phone',
@@ -112,11 +168,11 @@ function manageContent(featureKey: PaywallSubtitleFeatureKey): PaywallContent {
     benefits: contextualBenefits({
       kind: 'manage',
       labelKey: 'One-tap permission and diagnostic fixes',
-    }),
+    }, scope),
   };
 }
 
-export function resolvePaywallContent(trigger: PaywallTrigger | null): PaywallContent {
+export function resolvePaywallContent(trigger: PaywallTrigger | null, scope?: PaywallScope): PaywallContent {
   switch (trigger) {
     case 'gatewayConnections':
       return {
@@ -125,7 +181,7 @@ export function resolvePaywallContent(trigger: PaywallTrigger | null): PaywallCo
         subtitleKey: 'Use the Agents on all your computers from one app.',
         subtitleFeatureKey: null,
         actionKey: 'adding another connection',
-        benefits: contextualBenefits({ kind: 'connections', labelKey: 'Unlimited connections' }),
+        benefits: contextualBenefits({ kind: 'connections', labelKey: 'Unlimited connections' }, scope),
       };
     case 'agents':
       return {
@@ -142,15 +198,15 @@ export function resolvePaywallContent(trigger: PaywallTrigger | null): PaywallCo
         ],
       };
     case 'openclawPermissions':
-      return manageContent('Permissions');
+      return manageContent('Permissions', scope);
     case 'configBackups':
     case 'configBackupCreate':
     case 'configBackupRestore':
-      return manageContent('Config backups');
+      return manageContent('Config backups', scope);
     case 'configManage':
-      return manageContent('Configuration');
+      return manageContent('Configuration', scope);
     case 'openclawDiagnostics':
-      return manageContent('Diagnostics');
+      return manageContent('Diagnostics', scope);
     case 'coreFileEditing':
       return {
         hero: 'logsFiles',
@@ -158,7 +214,7 @@ export function resolvePaywallContent(trigger: PaywallTrigger | null): PaywallCo
         subtitleKey: null,
         subtitleFeatureKey: null,
         actionKey: 'editing this file',
-        benefits: contextualBenefits(MEMORY_BENEFIT),
+        benefits: contextualBenefits(MEMORY_BENEFIT, scope),
       };
     case 'logs':
       return {
@@ -167,7 +223,7 @@ export function resolvePaywallContent(trigger: PaywallTrigger | null): PaywallCo
         subtitleKey: null,
         subtitleFeatureKey: null,
         actionKey: 'viewing logs',
-        benefits: contextualBenefits({ kind: 'logsFiles', labelKey: 'Logs and file editing' }),
+        benefits: contextualBenefits({ kind: 'logsFiles', labelKey: 'Logs and file editing' }, scope),
       };
     case 'modelManage':
       return {
@@ -179,7 +235,7 @@ export function resolvePaywallContent(trigger: PaywallTrigger | null): PaywallCo
         benefits: contextualBenefits({
           kind: 'manage',
           labelKey: 'Choose which models your Agent uses',
-        }),
+        }, scope),
       };
     case 'sessionHistory':
       return {
@@ -188,14 +244,14 @@ export function resolvePaywallContent(trigger: PaywallTrigger | null): PaywallCo
         subtitleKey: 'Read complete channel, task and subagent conversations, and reply where supported.',
         subtitleFeatureKey: null,
         actionKey: null,
-        benefits: contextualBenefits(SESSION_BENEFIT),
+        benefits: contextualBenefits(SESSION_BENEFIT, scope, { scopeFirst: true }),
       };
     case 'archiveTools':
       return { hero: 'search', titleKey: 'Search and bulk export', subtitleKey: null, subtitleFeatureKey: null, actionKey: null,
-        benefits: contextualBenefits({ kind: 'search', labelKey: 'Search and bulk export' }) };
+        benefits: contextualBenefits({ kind: 'search', labelKey: 'Search and bulk export' }, scope) };
     case 'documentVersions':
       return { hero: 'logsFiles', titleKey: 'Skill and memory versions', subtitleKey: null, subtitleFeatureKey: null, actionKey: null,
-        benefits: contextualBenefits(MEMORY_BENEFIT) };
+        benefits: contextualBenefits(MEMORY_BENEFIT, scope) };
     case 'messageHistory':
       return {
         hero: 'search',
@@ -203,7 +259,7 @@ export function resolvePaywallContent(trigger: PaywallTrigger | null): PaywallCo
         subtitleKey: 'Message details across sessions are a Pro feature.',
         subtitleFeatureKey: null,
         actionKey: 'opening this message',
-        benefits: contextualBenefits({ kind: 'search', labelKey: 'Search across sessions and favorites' }),
+        benefits: contextualBenefits({ kind: 'search', labelKey: 'Search across sessions and favorites' }, scope),
       };
     case 'usage':
       return {
@@ -212,7 +268,7 @@ export function resolvePaywallContent(trigger: PaywallTrigger | null): PaywallCo
         subtitleKey: '7-day and 30-day usage, cost and trends are a Pro feature.',
         subtitleFeatureKey: null,
         actionKey: 'viewing usage trends',
-        benefits: contextualBenefits({ kind: 'usage', labelKey: '7- and 30-day usage and cost trends' }),
+        benefits: contextualBenefits({ kind: 'usage', labelKey: '7- and 30-day usage and cost trends' }, scope),
       };
     case 'appIcons':
     case 'settingsMembershipPreview':
@@ -225,7 +281,7 @@ export function resolvePaywallContent(trigger: PaywallTrigger | null): PaywallCo
         subtitleKey: null,
         subtitleFeatureKey: null,
         actionKey: null,
-        benefits: contextualBenefits(SESSION_BENEFIT),
+        benefits: contextualBenefits(SESSION_BENEFIT, scope, { scopeFirst: true }),
       };
   }
 }

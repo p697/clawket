@@ -21,7 +21,7 @@ import {
 } from '../services/pro-subscription';
 import { StorageService } from '../services/storage';
 import { syncAnalyticsSubscriptionContext } from '../services/analytics/subscription-context';
-import { ProFeature, resolvePreviewPaywallFeature, resolveProAccessEnabled } from '../utils/pro';
+import { type PaywallEntry, ProFeature, resolvePreviewPaywallFeature, resolveProAccessEnabled } from '../utils/pro';
 import type { PaywallMode } from '../screens/Paywall/model';
 
 export type ProPaywallErrorCode =
@@ -69,6 +69,8 @@ export type ProPaywallContextType = {
   paywallPhase: ProPaywallPhase;
   previewOnly: boolean;
   blockedFeature: ProFeature | null;
+  /** What the user tapped to open the paywall; analytics only. */
+  paywallEntry: PaywallEntry | null;
   isLoading: boolean;
   offeringsLoading: boolean;
   purchasePending: boolean;
@@ -85,7 +87,7 @@ export type ProPaywallContextType = {
   failureOperation: 'purchase' | 'restore' | null;
   hidePaywall: () => void;
   showPaywallPreview: () => void;
-  showPaywall: (feature: ProFeature) => boolean;
+  showPaywall: (feature: ProFeature, entry?: PaywallEntry) => boolean;
   requirePro: (feature: ProFeature) => boolean;
   setSimulateFreeAccount: (enabled: boolean) => void;
   purchasePro: () => Promise<ProPaywallActionResult>;
@@ -108,6 +110,7 @@ export function ProPaywallProvider({ children }: { children: React.ReactNode }):
   // The env unlock only stands while the developer is not simulating a free account.
   const proAccessOverride = debugOverrideEnabled && !simulateFreeAccount;
   const [blockedFeature, setBlockedFeature] = useState<ProFeature | null>(null);
+  const [paywallEntry, setPaywallEntry] = useState<PaywallEntry | null>(null);
   const [previewOnly, setPreviewOnly] = useState(false);
   const [paywallMode, setPaywallMode] = useState<PaywallMode | null>(null);
   const [paywallPhase, setPaywallPhase] = useState<ProPaywallPhase>('loading');
@@ -496,7 +499,7 @@ export function ProPaywallProvider({ children }: { children: React.ReactNode }):
     && (debugOverrideEnabled || isProSubscriptionSnapshotActiveAt(snapshot, now))
   ), [debugOverrideEnabled, simulateFreeAccount, snapshot]);
 
-  const showPaywall = useCallback((feature: ProFeature): boolean => {
+  const showPaywall = useCallback((feature: ProFeature, entry: PaywallEntry = 'feature'): boolean => {
     if (
       proAccessOverride
       || (feature !== 'settingsMembershipPreview' && hasProAccess(Date.now()))
@@ -509,6 +512,7 @@ export function ProPaywallProvider({ children }: { children: React.ReactNode }):
     clearFeedback();
     setPreviewOnly(false);
     setBlockedFeature(feature);
+    setPaywallEntry(entry);
     paywallModeRef.current = 'purchase';
     setPaywallMode('purchase');
     setPaywallPhase(paywallPackages.length > 0 ? 'ready' : 'loading');
@@ -759,6 +763,7 @@ export function ProPaywallProvider({ children }: { children: React.ReactNode }):
       paywallPhase,
       previewOnly,
       blockedFeature,
+      paywallEntry,
       isLoading: isLoading || !simulateFreeAccountLoaded,
       offeringsLoading,
       purchasePending,
@@ -788,6 +793,7 @@ export function ProPaywallProvider({ children }: { children: React.ReactNode }):
     }),
     [
       blockedFeature,
+      paywallEntry,
       debugOverrideEnabled,
       errorCode,
       failureOperation,

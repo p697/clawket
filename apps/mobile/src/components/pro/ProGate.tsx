@@ -1,9 +1,11 @@
-import React, { useId, useMemo } from 'react';
+import React, { useEffect, useId, useMemo } from 'react';
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { LockKeyhole } from 'lucide-react-native';
 
 import { Button } from '../ui/Button';
+import { analyticsEvents } from '../../services/analytics/events';
+import type { ProFeature } from '../../utils/pro';
 import { useAppTheme } from '../../theme';
 import {
   ControlSize,
@@ -36,6 +38,8 @@ export type ProGateProps = Readonly<{
   detail?: string;
   actionLabel: string;
   onUnlock: () => void;
+  /** The gated feature, reported once when the veil comes on screen. */
+  feature?: ProFeature;
   /** Real content shown beneath the veil. Omit for a plain notice. */
   children?: React.ReactNode;
   teaserHeight?: number;
@@ -50,6 +54,7 @@ export function ProGate({
   detail,
   actionLabel,
   onUnlock,
+  feature,
   children,
   teaserHeight = PRO_GATE_TEASER_HEIGHT,
   surfaceColor,
@@ -61,6 +66,11 @@ export function ProGate({
   const gradientId = `proGateVeil${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
   const surface = surfaceColor ?? theme.colors.canvasGrouped;
   const hasTeaser = children !== undefined && children !== null && children !== false;
+  useEffect(() => {
+    if (!feature) return;
+    // Telemetry cannot interrupt a page.
+    try { analyticsEvents.proGateViewed({ feature }); } catch { /* ignored */ }
+  }, [feature]);
 
   return (
     <View

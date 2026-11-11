@@ -303,6 +303,21 @@ describe('ProPaywallOverlay', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it('reports which entry opened the paywall and hands the saved backends to the page', () => {
+    render(<ProPaywallOverlay visible onClose={jest.fn()} />);
+    // A gated action unless the context names a membership entry.
+    expect(mockAnalytics.paywallViewed).toHaveBeenLastCalledWith(expect.objectContaining({ blocked_feature: 'agents', entry: 'feature' }));
+
+    mockContext = { ...baseContext(), blockedFeature: 'settingsMembershipPreview', paywallEntry: 'pro_badge' };
+    const screen = render(<ProPaywallOverlay visible connectedBackends={['codex']} onClose={jest.fn()} />);
+    expect(mockAnalytics.paywallViewed).toHaveBeenLastCalledWith(expect.objectContaining({
+      blocked_feature: 'settingsMembershipPreview',
+      trigger_screen: 'account',
+      entry: 'pro_badge',
+    }));
+    expect(screen.getByTestId('mock-paywall-screen').props.connectedBackends).toEqual(['codex']);
+  });
+
   it('marks the generic connection-ready paywall as a roster launch', () => {
     mockContext = { ...baseContext(), blockedFeature: 'launch' };
     render(<ProPaywallOverlay visible onClose={jest.fn()} />);

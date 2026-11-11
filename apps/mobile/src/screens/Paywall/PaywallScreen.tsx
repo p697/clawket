@@ -1,3 +1,4 @@
+import type { BackendKind } from '@clawket/agent-protocol';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -47,6 +48,8 @@ import {
 
 type Props = Readonly<{
   blockedFeature: ProFeature | null;
+  /** Backends of the saved connections; supporting benefits name only what they offer. */
+  connectedBackends?: ReadonlyArray<BackendKind>;
   phase: ProPaywallPhase;
   packages: readonly ProPaywallPackage[];
   selectedPackageId: string | null;
@@ -80,6 +83,7 @@ export function PaywallScreen(props: Props): React.JSX.Element {
 
 function PaywallPresentation({
   blockedFeature,
+  connectedBackends,
   phase,
   packages,
   selectedPackageId,
@@ -112,7 +116,10 @@ function PaywallPresentation({
   const width = Math.max(0, frame.width - insets.left - insets.right);
   const height = frame.height;
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
-  const content = useMemo(() => resolvePaywallContent(blockedFeature), [blockedFeature]);
+  const content = useMemo(
+    () => resolvePaywallContent(blockedFeature, { backends: connectedBackends }),
+    [blockedFeature, connectedBackends],
+  );
   const orderedPackages = useMemo(() => orderPaywallPackages(packages), [packages]);
   const selectedPackage = orderedPackages.find((item) => item.packageIdentifier === selectedPackageId) ?? null;
   const [monthlyVisible, setMonthlyVisible] = useState(selectedPackage?.packageType === 'MONTHLY');
@@ -441,6 +448,7 @@ function translatePaywallBenefit(key: PaywallBenefitKey, t: Translate): string {
     case 'Skill and memory versions': return t('Skill and memory versions');
     case 'Choose which models your Agent uses': return t('Choose which models your Agent uses');
     case 'Conversations across channels and tasks': return t('Conversations across channels and tasks');
+    case 'Continue the conversations on your computer': return t('Continue the conversations on your computer');
     case "Shape your Agent's personality and memory": return t("Shape your Agent's personality and memory");
     case 'Configure, back up and diagnose your Agents': return t('Configure, back up and diagnose your Agents');
     case 'More Agents, unlimited connections': return t('More Agents, unlimited connections');
