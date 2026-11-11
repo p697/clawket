@@ -1,5 +1,11 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-11-11 配对失败后不再重放失效邀请 + 配对失败原因埋点（整体产品审视第一档）。
+  - PostHog 近 90 天 3.x 新装约 980 人：只看配对页 407、只复制命令 106、提交过码或扫过码但没连上 180、连上 177（18%）；安全配对码结束事件里失败 341 次、成功 245 次，但事件不带原因，查不出为什么。数字是一次性查询，可能含团队设备。
+  - 修复：连接尚未建立时的「配对已失效 / 登录已过期」不再把同一个码或二维码重新提交（单次有效，必然再失败）。上一次是扫码就重新打开来源相同的扫码器（平台页或首页）；上一次是配对码或链接就清空输入框并聚焦，错误提示保持原位直到下一次结果。网络、超时等可重试错误仍重放；链接配对失败后的「重试」原先会重放更早的一次提交，现在重放该链接。连接已建立后的重试仍只探测该连接。
+  - 埋点：`gateway_secure_pairing_finished` 增加固定类别 `reason`（connected / declined / network / invalid_code / rate_limited / expired / handshake / invalid_invitation / claim_failed / unknown）；新增 `onboarding_pairing_failed`（backend、method、code、reason）。只记录固定枚举，不含配对码、链接或错误原文。
+  - 逐文件 in-band：OnboardingRoute 33（新增 4）、OnboardingScreen 56（新增 1）、GatewayScannerContext 6（新增 1）、backend-pairing-profile 21、analytics events 18（新增 1）；Mobile 类型检查与 check:docs 通过。无文案改动、无版本号、无发布；真机验收见 HT-PAIR-RETRY-1111。
+
 - 2026-11-08 Bridge 3.1.18 已公开发布并在本机更新。
   - 负责人刷新 npm 登录并完成安全密钥验证后，npm 于 00:53 UTC 接受固定发布包；00:54:52 公开 version/latest 为 3.1.18，CDN 提供的 tarball 与固定包逐字节一致（SHA-1 `987c80d6…`），空环境安装 `@latest` 得到相同 bundle。此前两次失败分别是 Node 24 本机证书链问题和未登录时 npm 返回的 404，均未上传任何内容。
   - 本机 `npx -y @p697/clawket@3.1.18 update` 37 秒完成，六个运行时切到 3.1.18、配对与历史保留，Relay 全部重连；状态里 Hermes 显示 ready（不再误报）。模拟器 App 在五个连接的测试会话各完成一次真实收发；Pi 首次遇到模型服务 `Connection error.`，重试成功。3.1.17 保留供回滚。App 尚未提审。
@@ -2539,6 +2545,7 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 
 | 编号 | 事项 | 怎么做 | 验证方法 | 状态 |
 |---|---|---|---|---|
+| HT-PAIR-RETRY-1111 | 配对失效后重新开始的真机验收 | 装含本改动的构建：① 平台页输入一个已用过的配对码 → 出现「配对已失效」后点「重新配对」；② 扫一个已用过的二维码后点同一按钮 | ① 输入框清空并弹出键盘，红色提示仍在原位；② 直接回到扫码器；两种情况都不再出现第二次同样的失败 | 待验收 |
 | HT-NATIVE-SSD-1016 | 已解除：模拟器磁盘空间 | 负责人要求代理自行清理后，迁出可重建缓存/工具链，使用苹果工具清理本任务失败导入的暂存镜像，并将四台长期关闭的旧测试模拟器完整双 SHA 校验冷归档到 SSD，保留原 UUID、App 数据与显式恢复脚本；最近使用的设备留原位。 | 标准 iOS 27.0 与原有 27.1 运行时均已实际安装为 Ready；独立普通 iPhone QA 已创建，实际 UI/连接验收继续。 | 无需负责人清理或开启完全磁盘访问，未更改系统授权。外置设备集试切换已回滚，四台冷归档设备需恢复后使用；归档及恢复说明保留在本机开发归档目录，数据未丢弃。 |
 | HT-NATIVE-WDA-1016 | 已解除：指定 USB 测试机 WebDriver 前置条件 | 本轮重新逐次匹配唯一USB iPhone硬件标识与CoreDevice wired，验证既有profile后启动WDA并建立独立QA session。 | 真实产品表单、当前设备批准与OpenClaw冷重连均通过该有线session操作。 | 2026-10-17已实际ready；无需负责人再处理开关，未修改系统授权。先前三轮automation-mode超时原因仍未证，不由本轮成功倒推。 |
 | HT-NATIVE-OWNER-1017 | 独立原生 iOS 手机初验 | 已在USB iPhone Air安装Clawket Native；当前OpenClaw是该Mac的LAN直连。负责人先体验真实聊天、上传、停止生成、重连与UI方向，RN继续默认。 | 实际功能与视觉由负责人验收；模拟器、编译及连接目录不代替推理/完整N5或原生替换决定。 | 真机认证、精确设备批准、4个Agent目录及QA App冷重连通过；未发测试消息，已停自动化并交还手机，待负责人测试反馈。 |

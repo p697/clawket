@@ -5,6 +5,7 @@ import {
   Platform,
   StyleSheet,
   Text,
+  type TextInput,
   View,
 } from 'react-native';
 import Reanimated, { useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
@@ -68,6 +69,8 @@ export type OnboardingScreenProps = Readonly<{
   status?: OnboardingStatus;
   environment?: 'production' | 'preview';
   pairingCommand?: string;
+  /** Bumped when the last code is spent: the field empties and takes focus for a new one. */
+  freshAttempt?: number;
   onViewed?: () => void;
   onClose?: () => void;
   onOpenDesignSystem?: () => void;
@@ -130,6 +133,7 @@ export function OnboardingScreen({
   status = { kind: 'idle' },
   environment = 'production',
   pairingCommand = PAIRING_COMMAND,
+  freshAttempt = 0,
   onViewed,
   onClose,
   onOpenDesignSystem,
@@ -235,6 +239,17 @@ export function OnboardingScreen({
       }
     }
   }, [initialBackend]);
+
+  // The held error keeps its place; only the spent code leaves, and the field is ready for the next one.
+  const codeInputRef = useRef<TextInput>(null);
+  const freshAttemptRef = useRef(freshAttempt);
+  useEffect(() => {
+    if (freshAttemptRef.current === freshAttempt) return;
+    freshAttemptRef.current = freshAttempt;
+    formRevisionRef.current += 1;
+    setPairingCode('');
+    codeInputRef.current?.focus();
+  }, [freshAttempt]);
 
   const environmentRef = useRef(environment);
   useEffect(() => {
@@ -353,7 +368,7 @@ export function OnboardingScreen({
       label={codeBackendSelected ? backendLabel : t('Select platform')} variant="card" size="lg" multiline
       icon={ChevronDown} disabled={pairingInFlight} onPress={() => { formRevisionRef.current += 1; Keyboard.dismiss(); setPlatformPickerOpen(true); }} /> : null}
     {codeVisible && (!choosing || codeBackendSelected) ? <View ref={keyboardReveal.anchorRef} testID="onboarding-keyboard-anchor" style={styles.keyboardAnchor} onLayout={keyboardReveal.measureAnchor}>
-      <FormTextInput testID="onboarding-pairing-code" accessibilityLabel={t('Pairing code')} surface="quiet"
+      <FormTextInput ref={codeInputRef} testID="onboarding-pairing-code" accessibilityLabel={t('Pairing code')} surface="quiet"
         trailing={choosing && onPastePairingCode ? <Button testID="onboarding-paste-code" label={t('Paste')} variant="text" disabled={pairingInFlight} onPress={() => { void pastePairingCode().catch(() => setLocalError(true)); }} /> : undefined}
         autoComplete="one-time-code" autoCapitalize="characters" autoCorrect={false} editable={!pairingInFlight}
         keyboardType={pairingInput.keyboardType} maxLength={backendKind === 'openclaw' ? 14 : 7}

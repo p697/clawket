@@ -2,7 +2,7 @@ import {
   AdapterError,
   type BackendKind,
 } from '@clawket/agent-protocol';
-import { analyticsEvents } from '../../services/analytics/events';
+import { analyticsEvents, type SecurePairingOutcomeReason } from '../../services/analytics/events';
 import { startConnectionDiagnostic } from '../../services/connection-diagnostics';
 import { PairingValidationError, type PairingValidationReason } from './pairing-validation';
 import {
@@ -205,6 +205,25 @@ const BACKEND_PAIRING_PROFILES: Readonly<Record<PairingBackendKind, BackendPairi
   },
 };
 
+/** The fixed analytics category of a rejected code claim, from its typed code only; never the error text. */
+function codeClaimFailureReason(error: unknown): SecurePairingOutcomeReason {
+  const code = error && typeof error === 'object' ? (error as { code?: unknown }).code : undefined;
+  switch (code) {
+    case 'pairing_expired':
+    case 'pairing_required':
+      return 'expired';
+    case 'rate_limited':
+      return 'rate_limited';
+    case 'network':
+    case 'timeout':
+      return 'network';
+    case 'unsupported':
+      return 'invalid_invitation';
+    default:
+      return 'unknown';
+  }
+}
+
 export async function connectBackendPairingCode(
   input: BackendCodePairingInput,
 ): Promise<BackendPairingResult | null> {
@@ -216,6 +235,7 @@ export async function connectBackendPairingCode(
         method: 'code',
         environment: input.environment,
         connected: true,
+        reason: 'connected',
       });
     }
     return result;
@@ -225,6 +245,7 @@ export async function connectBackendPairingCode(
         method: 'code',
         environment: input.environment,
         connected: false,
+        reason: codeClaimFailureReason(error),
       });
     }
     throw error;

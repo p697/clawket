@@ -29,7 +29,8 @@ PostHog 项目 337268；SDK 与集中式 `src/services/analytics/events.ts` 沿�
 | `onboarding_viewed` | `source: first_run|add_connection` | 引导页显示 |
 | `pairing_code_submitted` | `length_ok` | 提交六位码 |
 | `gateway_connect_saved`（现有） | `backend`, `transport`, `source` | 保存连接 |
-| `gateway_secure_pairing_finished`（现有） | 现有 | |
+| `gateway_secure_pairing_finished`（现有） | `method: link|code`, `environment`, `connected`, `reason: connected|declined|network|invalid_code|rate_limited|expired|handshake|invalid_invitation|claim_failed|unknown` | 安全邀请（链接 / 六位码）结束；`reason` 是固定类别，不含码、链接或错误原文 |
+| `onboarding_pairing_failed` | `backend`, `method: code|scan|link`, `code`（AdapterErrorCode）, `reason`（本地校验原因或 `none`） | 引导页发起的配对以页面错误结束 |
 | `connect_attempt` | `backend`, `transport`, `reason: launch|switch|foreground|manual|retry` | 传输开始连接 |
 | `connect_ready` | `backend`, `transport`, `elapsed_ms`, `attempt` | 三段就绪 |
 | `connect_failed` | `backend`, `transport`, `code`, `stage: socket|handshake|ready`, `attempt` | 失败 |

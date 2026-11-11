@@ -2,8 +2,11 @@ import React from 'react';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import {
   GatewayScannerProvider,
+  securePairingFailureReason,
   useGatewayScanner,
 } from './GatewayScannerContext';
+import { analyticsEvents } from '../services/analytics/events';
+import { PairingSessionError } from '../services/pairing-session';
 import {
   OFFICIAL_PREVIEW_REGISTRY_URL,
   OFFICIAL_PRODUCTION_REGISTRY_URL,
@@ -305,6 +308,7 @@ describe('GatewayScannerProvider pairing persistence', () => {
         clientToken: 'client-token',
       },
     });
+    const finished = jest.spyOn(analyticsEvents, 'gatewaySecurePairingFinished').mockImplementation(() => undefined);
     const view = render(
       <GatewayScannerProvider>
         <CaptureScanner />
@@ -325,6 +329,18 @@ describe('GatewayScannerProvider pairing persistence', () => {
     await expect(cancelledPairing).resolves.toBe(false);
     expect(view.queryByTestId('gateway-secure-pairing-confirmation')).toBeNull();
     expect(mockSavePairedConnection).not.toHaveBeenCalled();
+    expect(finished).toHaveBeenLastCalledWith({ method: 'code', environment: 'production', connected: false, reason: 'declined' });
+
+    // A confirmed invitation whose single-use claim fails is not a declined one.
+    mockClaimRelayPairing.mockRejectedValueOnce(new Error('synthetic claim failure'));
+    let failedClaim: Promise<boolean> | undefined;
+    await act(async () => {
+      failedClaim = scanner?.connectPairingCode({ serverUrl: 'https://registry.example', pairingCode: '123456' });
+      await Promise.resolve();
+    });
+    fireEvent.press(view.getByTestId('gateway-secure-pairing-confirmation-confirm'));
+    await expect(failedClaim).resolves.toBe(false);
+    expect(finished).toHaveBeenLastCalledWith({ method: 'code', environment: 'production', connected: false, reason: 'claim_failed' });
 
     let acceptedPairing: Promise<boolean> | undefined;
     await act(async () => {
@@ -346,6 +362,25 @@ describe('GatewayScannerProvider pairing persistence', () => {
       source: 'gateway_scanner',
     });
     expect(view.queryByTestId('gateway-secure-pairing-confirmation')).toBeNull();
+    expect(finished).toHaveBeenLastCalledWith({ method: 'code', environment: 'production', connected: true, reason: 'connected' });
+
+    mockResolvePairingCode.mockRejectedValueOnce(new PairingSessionError('PAIRING_SESSION_EXPIRED', 'synthetic'));
+    await act(async () => {
+      await scanner?.connectPairingCode({ serverUrl: 'https://registry.example', pairingCode: '123456' });
+    });
+    expect(finished).toHaveBeenLastCalledWith({ method: 'code', environment: 'production', connected: false, reason: 'expired' });
+    finished.mockRestore();
+  });
+
+  it('reduces a failed invitation to a fixed analytics category', () => {
+    expect(securePairingFailureReason(new PairingSessionError('PAIRING_NETWORK_ERROR', 'x'))).toBe('network');
+    expect(securePairingFailureReason(new PairingSessionError('INVALID_PAIRING_CODE', 'x'))).toBe('invalid_code');
+    expect(securePairingFailureReason(new PairingSessionError('PAIRING_CODE_RATE_LIMITED', 'x'))).toBe('rate_limited');
+    expect(securePairingFailureReason(new PairingSessionError('ACCESS_CODE_EXPIRED', 'x'))).toBe('expired');
+    expect(securePairingFailureReason(new PairingSessionError('PAIRING_HANDSHAKE_TIMEOUT', 'x'))).toBe('handshake');
+    expect(securePairingFailureReason(new PairingSessionError('PAIRING_DECRYPT_FAILED', 'x'))).toBe('invalid_invitation');
+    expect(securePairingFailureReason(new PairingSessionError('SOMETHING_NEW', 'code 123456'))).toBe('unknown');
+    expect(securePairingFailureReason(new Error('code 123456 expired'))).toBe('unknown');
   });
 
   it('rejects a decrypted link for the wrong backend before confirmation or persistence', async () => {

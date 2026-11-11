@@ -22,6 +22,18 @@ export function analyticsAgentDocument(fileName: string): AnalyticsAgentDocument
   return ANALYTICS_AGENT_DOCUMENTS[fileName] ?? 'other';
 }
 type AnalyticsTransport = TransportKind;
+/** Fixed outcome categories of a secure (link or six-digit code) pairing invitation. */
+export type SecurePairingOutcomeReason =
+  | 'connected'
+  | 'declined'
+  | 'network'
+  | 'invalid_code'
+  | 'rate_limited'
+  | 'expired'
+  | 'handshake'
+  | 'invalid_invitation'
+  | 'claim_failed'
+  | 'unknown';
 type ScreenArea = 'onboarding' | 'roster' | 'thread' | 'settings' | 'account' | 'search' | 'paywall';
 /** `launch` is the once-per-update sheet; `debug_preview` is the Developer row. */
 type AppUpdateAnnouncementSource = 'launch' | 'debug_preview';
@@ -61,7 +73,8 @@ export const ANALYTICS_EVENT_PROPERTY_WHITELIST = Object.freeze({
   onboarding_agent_prompt_copied: ['backend'],
   gateway_connect_saved: ['backend', 'transport', 'source'],
   gateway_scan_qr_tapped: ['source'],
-  gateway_secure_pairing_finished: ['method', 'environment', 'connected'],
+  gateway_secure_pairing_finished: ['method', 'environment', 'connected', 'reason'],
+  onboarding_pairing_failed: ['backend', 'method', 'code', 'reason'],
   connect_attempt: ['backend', 'transport', 'reason'],
   connect_phase: ['protocol', 'route', 'phase', 'elapsed_ms', 'phase_ms', 'attempt'],
   connect_ready: ['backend', 'transport', 'elapsed_ms', 'attempt'],
@@ -339,8 +352,23 @@ export const analyticsEvents = {
     method: 'link' | 'code';
     environment: 'production' | 'preview';
     connected: boolean;
+    /** Why the invitation did not connect; a fixed category, never the code, link or error text. */
+    reason: SecurePairingOutcomeReason;
   }): void {
     captureAnalyticsEvent('gateway_secure_pairing_finished', properties);
+  },
+
+  /** A pairing started from Onboarding ended in an error the page shows. */
+  onboardingPairingFailed(properties: {
+    backend: AnalyticsBackend;
+    method: 'code' | 'scan' | 'link';
+    code: string;
+    reason?: string;
+  }): void {
+    captureAnalyticsEvent('onboarding_pairing_failed', {
+      ...properties,
+      reason: properties.reason ?? 'none',
+    });
   },
 
   connectPhase(properties: {

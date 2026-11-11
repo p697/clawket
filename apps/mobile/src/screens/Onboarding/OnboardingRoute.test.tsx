@@ -645,6 +645,69 @@ describe('OnboardingRoute', () => {
     expect(mockCoordinator.probeActive).not.toHaveBeenCalled();
   });
 
+  it('asks for a new code instead of resubmitting a spent one', async () => {
+    // Funnel review 2026-11-11: "Pair again" replayed the same expired code and failed the same way.
+    const onPairingFailed = jest.fn();
+    mockConnectBackendPairingCode.mockRejectedValueOnce({ code: 'pairing_expired' });
+    render(<OnboardingRoute {...createProps({ onPairingFailed })} />);
+    expect(mockScreenProps?.freshAttempt).toBe(0);
+
+    await act(async () => {
+      await mockScreenProps?.onSubmitPairing({ backendKind: 'hermes', transportKind: 'relay', code: 'ABC234' });
+    });
+    expect(mockScreenProps?.status).toEqual({ kind: 'error', code: 'pairing_expired' });
+    expect(onPairingFailed).toHaveBeenCalledWith({ backendKind: 'hermes', method: 'code', code: 'pairing_expired' });
+
+    act(() => mockScreenProps?.onErrorAction?.('pairing_expired'));
+    expect(mockConnectBackendPairingCode).toHaveBeenCalledTimes(1);
+    expect(mockScreenProps?.freshAttempt).toBe(1);
+    // The failure keeps its place until the next attempt has an outcome.
+    expect(mockScreenProps?.status).toEqual({ kind: 'error', code: 'pairing_expired' });
+  });
+
+  it.each([
+    ['a backend step', 'backend'],
+    ['the home', 'any'],
+  ] as const)('reopens the scanner of %s for a spent QR', async (_label, entry) => {
+    const onPairingFailed = jest.fn();
+    mockConnectBackendPairingPayload.mockRejectedValueOnce({ code: 'pairing_expired' });
+    render(<OnboardingRoute {...createProps({ onPairingFailed })} />);
+    act(() => { if (entry === 'any') mockScreenProps?.onScanAnyQr?.(); else mockScreenProps?.onScanQr('codex'); });
+    await act(async () => {
+      await mockScanner.openGatewayScanner.mock.calls[0][0].onScanned({
+        url: 'wss://relay.example/ws',
+        backendKind: 'codex',
+        transportKind: 'relay',
+        mode: 'relay',
+        relay: { serverUrl: 'https://registry.clawket.ai', gatewayId: 'gateway-1', accessCode: 'synthetic' },
+      });
+    });
+    expect(mockScreenProps?.status).toEqual({ kind: 'error', code: 'pairing_expired' });
+    expect(onPairingFailed).toHaveBeenCalledWith({ backendKind: 'codex', method: 'scan', code: 'pairing_expired' });
+
+    act(() => mockScreenProps?.onErrorAction?.('pairing_expired'));
+    expect(mockScanner.openGatewayScanner).toHaveBeenCalledTimes(2);
+    expect(mockConnectBackendPairingPayload).toHaveBeenCalledTimes(1);
+    expect(mockScreenProps?.freshAttempt).toBe(0);
+  });
+
+  it('replays a failed pairing link on retry', async () => {
+    mockConnectBackendPairingLink.mockRejectedValueOnce({ code: 'network' });
+    render(<OnboardingRoute {...createProps()} />);
+    await act(async () => {
+      await mockScreenProps?.onPastePairingCode?.('openclaw');
+    });
+    expect(mockConnectBackendPairingLink).toHaveBeenCalledTimes(0);
+    mockClipboardGetString.mockResolvedValueOnce('https://clawket.ai/pair/example#test-fragment');
+    await act(async () => {
+      await mockScreenProps?.onPastePairingCode?.('openclaw');
+    });
+    expect(mockConnectBackendPairingLink).toHaveBeenCalledTimes(1);
+    expect(mockScreenProps?.status).toEqual({ kind: 'error', code: 'network' });
+    await act(async () => { mockScreenProps?.onErrorAction?.('network'); });
+    expect(mockConnectBackendPairingLink).toHaveBeenCalledTimes(2);
+  });
+
   it('keeps an offline existing connection out of an added pairing and its retry', async () => {
     // Owner report 2026-09-19: "Add connection" showed "No network" because
     // the current connection was offline. The form stays clean, a failed claim

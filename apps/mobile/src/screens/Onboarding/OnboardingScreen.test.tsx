@@ -330,6 +330,21 @@ describe('OnboardingScreen', () => {
     expect(view.getByTestId('onboarding-pairing-code').props.value).toBe('');
   });
 
+  it('empties a spent code for a fresh attempt and keeps the failure in place', () => {
+    const props = createProps({ initialBackend: 'hermes', status: { kind: 'error', code: 'pairing_expired' } });
+    const view = render(<OnboardingScreen {...props} />);
+    fireEvent.changeText(view.getByTestId('onboarding-pairing-code'), 'ABC234');
+    expect(view.getByTestId('onboarding-pairing-code').props.value).toBe('ABC 234');
+
+    view.rerender(<OnboardingScreen {...props} freshAttempt={1} />);
+    expect(view.getByTestId('onboarding-pairing-code').props.value).toBe('');
+    expect(view.getByTestId('onboarding-error')).toBeTruthy();
+    // The same value again is not another request.
+    fireEvent.changeText(view.getByTestId('onboarding-pairing-code'), 'ABC235');
+    view.rerender(<OnboardingScreen {...props} freshAttempt={1} />);
+    expect(view.getByTestId('onboarding-pairing-code').props.value).toBe('ABC 235');
+  });
+
   it('submits normalized manual codes with separate Hermes and Relay identities', () => {
     const onSubmitPairing = jest.fn();
     const view = render(<OnboardingScreen {...createProps({ onSubmitPairing, initialBackend: undefined })} />);

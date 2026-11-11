@@ -26,7 +26,8 @@ const SPEC_EVENT_PROPERTIES: Readonly<Record<string, ReadonlyArray<string>>> = {
   pairing_code_submitted: ['length_ok'],
   onboarding_agent_prompt_copied: ['backend'],
   gateway_connect_saved: ['backend', 'transport', 'source'],
-  gateway_secure_pairing_finished: ['method', 'environment', 'connected'],
+  gateway_secure_pairing_finished: ['method', 'environment', 'connected', 'reason'],
+  onboarding_pairing_failed: ['backend', 'method', 'code', 'reason'],
   connect_attempt: ['backend', 'transport', 'reason'],
   connect_phase: ['protocol', 'route', 'phase', 'elapsed_ms', 'phase_ms', 'attempt'],
   connect_ready: ['backend', 'transport', 'elapsed_ms', 'attempt'],
@@ -505,3 +506,19 @@ describe('review request telemetry privacy', () => {
     })).toEqual({ outcome: 'other', reason: 'other' });
   });
 });
+
+test('pairing outcome events keep fixed categories only', () => {
+  expect(sanitizeAnalyticsEventProperties('gateway_secure_pairing_finished', {
+    method: 'code', environment: 'production', connected: false, reason: 'expired',
+  })).toEqual({ method: 'code', environment: 'production', connected: false, reason: 'expired' });
+  expect(sanitizeAnalyticsEventProperties('gateway_secure_pairing_finished', {
+    method: '123456', environment: 'https://registry.example', connected: false, reason: 'Code 123456 expired',
+  })).toEqual({ method: 'other', environment: 'other', connected: false, reason: 'other' });
+  expect(sanitizeAnalyticsEventProperties('onboarding_pairing_failed', {
+    backend: 'codex', method: 'scan', code: 'pairing_expired', reason: 'backend_mismatch',
+  })).toEqual({ backend: 'codex', method: 'scan', code: 'pairing_expired', reason: 'backend_mismatch' });
+  expect(sanitizeAnalyticsEventProperties('onboarding_pairing_failed', {
+    backend: 'My Mac', method: 'wss://relay', code: 'secret token rejected', reason: 'private detail', payload: 'qr',
+  })).toEqual({ backend: 'other', method: 'other', code: 'other', reason: 'other' });
+});
+
