@@ -44,22 +44,24 @@ Clawket connects to agents you run; you need an existing supported agent or mode
 
 ## Get connected
 
-Install the mobile app using either store link above. On the computer running your agent, install the Bridge CLI (Node.js 20.3+):
+Install the mobile app using either store link above. On the computer running your agent (Node.js 20.3+), run the command the app shows on its pairing home:
+
+```bash
+npx @p697/clawket@latest pair choose
+```
+
+It detects the installed platforms (OpenClaw, Hermes, Codex, Claude Code, and Pi) and lets you choose one. Scan the generated QR code in Clawket.
+
+To keep the Bridge CLI installed, or to pair OpenClaw and Hermes without choosing:
 
 ```bash
 npm install -g @p697/clawket
 clawket pair
 ```
 
-Scan the generated QR code in Clawket. The default command detects installed OpenClaw and Hermes backends and produces a labeled pairing result for each. Relay is the default; Hermes pairing also attempts to start its Clawket-managed bridge and Relay runtime.
+This default command detects installed OpenClaw and Hermes backends only and produces a labeled pairing result for each. Relay is the default; Hermes pairing also attempts to start its Clawket-managed bridge and Relay runtime. For Codex, Claude Code, or Pi, use `pair choose` or `--backend`.
 
-To detect installed platforms and choose one interactively (including Codex, Claude Code, and Pi), run this in your computer's terminal:
-
-```bash
-npx @p697/clawket@latest pair choose
-```
-
-The pairing home shows this command and its Copy action directly below the platform list, under **Or detect automatically**. Scan and expandable code entry are available on the same page, and the scanner can also read a QR code from your photos; manual codes require selecting their platform first. Platform-specific onboarding defaults to terminal scanning for Codex, Claude Code, Pi, and local models; OpenClaw and Hermes default to an agent message. You can switch methods and enter a pairing code instead of scanning. `pair choose` is interactive, accepts no flags, and is not a Preview command.
+The pairing home shows the `pair choose` command and its Copy action directly below the platform list, under **Or detect automatically**. Scan and expandable code entry are available on the same page, and the scanner can also read a QR code from your photos; manual codes require selecting their platform first. Platform-specific onboarding defaults to terminal scanning for Codex, Claude Code, Pi, and local models; OpenClaw and Hermes default to an agent message. You can switch methods and enter a pairing code instead of scanning. `pair choose` is interactive, accepts no flags, and is not a Preview command.
 
 For direct pairing on your local network:
 

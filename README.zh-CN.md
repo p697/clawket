@@ -44,22 +44,24 @@ Clawket 连接的是你自己运行的 Agent，需要先安装受支持的 Agent
 
 ## 开始连接
 
-通过上方商店链接安装 App。在运行 Agent 的电脑上安装 Bridge CLI（需要 Node.js 20.3+）：
+通过上方商店链接安装 App。在运行 Agent 的电脑上（需要 Node.js 20.3+）运行 App 配对首页显示的命令：
+
+```bash
+npx @p697/clawket@latest pair choose
+```
+
+它会检测已安装的平台（OpenClaw、Hermes、Codex、Claude Code 和 Pi），由你选择一个。在 Clawket 中扫描生成的二维码。
+
+如果想长期安装 Bridge CLI，或者不经选择直接配对 OpenClaw 和 Hermes：
 
 ```bash
 npm install -g @p697/clawket
 clawket pair
 ```
 
-在 Clawket 中扫描生成的二维码。默认命令会检测已安装的 OpenClaw 和 Hermes 后端，为每个后端分别生成带标签的配对结果。默认使用 Relay；Hermes 配对时也会尝试启动由 Clawket 管理的 Bridge 和 Relay runtime。
+这条默认命令只检测已安装的 OpenClaw 和 Hermes 后端，为每个后端分别生成带标签的配对结果。默认使用 Relay；Hermes 配对时也会尝试启动由 Clawket 管理的 Bridge 和 Relay runtime。Codex、Claude Code 或 Pi 请使用 `pair choose` 或 `--backend`。
 
-也可以在电脑终端里检测已安装的平台，再选择一个连接（包括 Codex、Claude Code 和 Pi）：
-
-```bash
-npx @p697/clawket@latest pair choose
-```
-
-App 配对首页在平台列表下方以「或者自动检测」标题直接展示这条命令和复制按钮。扫码和可展开的输码都在同一页，扫码页里也可以从相册识别二维码；手输码需先选择对应平台。按平台连接时，Codex、Claude Code、Pi 和本地模型默认走终端扫码，OpenClaw 和 Hermes 默认让 Agent 代跑；可切换方式，也可输入配对码代替扫码。`pair choose` 需要交互式终端，不接受参数，不适用于 Preview。
+App 配对首页在平台列表下方以「或者自动检测」标题直接展示 `pair choose` 命令和复制按钮。扫码和可展开的输码都在同一页，扫码页里也可以从相册识别二维码；手输码需先选择对应平台。按平台连接时，Codex、Claude Code、Pi 和本地模型默认走终端扫码，OpenClaw 和 Hermes 默认让 Agent 代跑；可切换方式，也可输入配对码代替扫码。`pair choose` 需要交互式终端，不接受参数，不适用于 Preview。
 
 如果希望通过本地网络直连：
 
