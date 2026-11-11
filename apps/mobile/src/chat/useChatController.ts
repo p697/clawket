@@ -2,7 +2,7 @@ import { originalRunUserIndex } from './turnIdentity';
 import { sameLiveToolCall, withToolMessage } from './liveToolMessages';
 import { hasBackendEcho, rememberUncertainSend, recoverUncertainSends, reconcilePromptReceipts, useUncertainSends } from './sendRecovery';
 import { describeReplyFailure, sanitizeReplyFailure } from './reply-failure';
-import { triggerSendHaptic, triggerSuccessHaptic, triggerWarningHaptic } from '../services/haptics';
+import { triggerRigidImpact, triggerSendHaptic, triggerSuccessHaptic, triggerWarningHaptic } from '../services/haptics';
 import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
 import {
   AppState,
@@ -12,7 +12,6 @@ import {
 } from "react-native";
 import { useIsFocused } from "@react-navigation/native";
 import * as Clipboard from "expo-clipboard";
-import * as Haptics from "expo-haptics";
 import * as Network from "expo-network";
 import { useTranslation } from "react-i18next";
 import {
@@ -3804,7 +3803,7 @@ export function useChatController({
   const abortCurrentRun = useCallback(() => {
     const key = history.sessionKey;
     if (!key || !adapter?.capabilities.abort || abortInFlightRef.current) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid);
+    triggerRigidImpact();
     holdQueuedMessages("abort");
     const runIdAtAbort = currentRunIdRef.current;
     const scope = sendScopeRef.current;

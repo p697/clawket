@@ -458,6 +458,7 @@ jest.mock('./components/ThreadMessageActionsOverlay', () => {
 
 jest.mock('../../services/haptics', () => ({
   triggerLightImpact: jest.fn(),
+  triggerMediumImpact: jest.fn(),
   triggerSelectionHaptic: jest.fn(),
 }));
 

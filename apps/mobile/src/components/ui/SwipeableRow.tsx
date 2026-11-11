@@ -5,6 +5,7 @@ import ReanimatedSwipeable, {
 } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
 import type { LucideIcon } from 'lucide-react-native';
+import { triggerLightImpact } from '../../services/haptics';
 import { useAppTheme } from '../../theme';
 import {
   BorderWidth,
@@ -171,7 +172,7 @@ export function SwipeableRow({
       overshootRight={false}
       rightThreshold={SWIPEABLE_ROW_ACTION_WIDTH / 2}
       renderRightActions={renderRightActions}
-      onSwipeableWillOpen={() => group?.opened(rowKey)}
+      onSwipeableWillOpen={() => { triggerLightImpact(); group?.opened(rowKey); }}
       onSwipeableClose={() => group?.closed(rowKey)}
     >
       {children}

@@ -28,6 +28,7 @@ jest.mock('./WelcomeScreen', () => ({ WelcomeScreen: () => null }));
 jest.mock('react-native', () => {
   const ReactRuntime = require('react');
   return {
+    Platform: { OS: 'ios' },
     View: ({ children, ...props }: { children?: React.ReactNode }) => ReactRuntime.createElement(
       'View',
       props,
@@ -166,6 +167,7 @@ describe('OnboardingRoute', () => {
     });
     mockClipboardSetString.mockClear();
     mockClipboardGetString.mockClear();
+    jest.mocked(require('expo-haptics').notificationAsync).mockClear();
     mockOpenUrl.mockClear();
     mockShowNoticeAlert.mockClear();
     consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation((message?: unknown) => {
@@ -213,6 +215,8 @@ describe('OnboardingRoute', () => {
       expect(mockScreenProps?.status).toEqual({ kind: 'connecting', phase: 'waiting_bridge' });
     });
     expect(onConnected).not.toHaveBeenCalled();
+    const Haptics = require('expo-haptics');
+    expect(Haptics.notificationAsync).not.toHaveBeenCalled();
 
     mockRuntime = connectionSnapshot();
     view.rerender(<OnboardingRoute {...props} />);
@@ -222,6 +226,10 @@ describe('OnboardingRoute', () => {
         backendKind: 'openclaw',
       });
     });
+    // Success plays once, when the paired Agent is ready, and not again on later renders.
+    view.rerender(<OnboardingRoute {...props} />);
+    expect(Haptics.notificationAsync).toHaveBeenCalledTimes(1);
+    expect(Haptics.notificationAsync).toHaveBeenCalledWith(Haptics.NotificationFeedbackType.Success);
   });
 
   it('admits only one pairing operation while submission is in flight', async () => {
@@ -657,6 +665,10 @@ describe('OnboardingRoute', () => {
     });
     expect(mockScreenProps?.status).toEqual({ kind: 'error', code: 'pairing_expired' });
     expect(onPairingFailed).toHaveBeenCalledWith({ backendKind: 'hermes', method: 'code', code: 'pairing_expired' });
+    // A failed pairing warns once; nothing has succeeded.
+    const Haptics = require('expo-haptics');
+    expect(Haptics.notificationAsync).toHaveBeenCalledTimes(1);
+    expect(Haptics.notificationAsync).toHaveBeenCalledWith(Haptics.NotificationFeedbackType.Warning);
 
     act(() => mockScreenProps?.onErrorAction?.('pairing_expired'));
     expect(mockConnectBackendPairingCode).toHaveBeenCalledTimes(1);

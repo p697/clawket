@@ -426,6 +426,16 @@ describe.each(['light', 'dark'] as const)('%s roster primitives', (scheme) => {
     expect(result.getByTestId('roster-row-avatar-overlay-icon').props.color).toBe(theme.colors.inkSecondary);
     expect(result.queryByTestId('roster-row-pin-icon')).toBeNull();
 
+    // A long press that opens the row's menu taps lightly; a row without one stays a plain press.
+    const Haptics = require('expo-haptics');
+    Haptics.impactAsync.mockClear();
+    const onLongPress = jest.fn();
+    const held = render(<RosterRow testID="held" agentId="main" name="Main" preview="Reply" onPress={jest.fn()} onLongPress={onLongPress} />);
+    fireEvent(held.getByTestId('held'), 'longPress');
+    expect(onLongPress).toHaveBeenCalledTimes(1);
+    expect(Haptics.impactAsync).toHaveBeenCalledWith(Haptics.ImpactFeedbackStyle.Light);
+    expect(render(<RosterRow testID="plain" agentId="main" name="Main" preview="Reply" onPress={jest.fn()} />).getByTestId('plain').props.onLongPress).toBeUndefined();
+
     // Only a pinned Agent carries the pin glyph.
     const agent = render(<RosterRow testID="pinned-agent" agentId="main" name="Main" preview="Reply" pinned onPress={jest.fn()} />);
     expect(agent.getByTestId('pinned-agent-pin-icon')).toBeTruthy();

@@ -1,7 +1,7 @@
 import React, { useMemo, useRef } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { BottomSheetFlatList } from '@gorhom/bottom-sheet';
-import * as Haptics from 'expo-haptics';
+import { triggerLightImpact } from '../../services/haptics';
 import { Check } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Sheet } from '../ui';
@@ -78,7 +78,7 @@ export function CommandOptionPickerModal({
           keyExtractor={(item: CommandPickerItem) => item.value}
           renderItem={({ item }: { item: CommandPickerItem }) => (
             <Pressable
-              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onSelectOption(item.value); }}
+              onPress={() => { triggerLightImpact(); onSelectOption(item.value); }}
               disabled={isSending}
               style={({ pressed }) => [
                 styles.row,

@@ -665,6 +665,18 @@ it('renders the exact installed-skill instruction as a concise reference without
 });
 
 describe('formatPreviewLine', () => {
+  it('drops the scheduled-run envelope so a preview never opens with a job id', () => {
+    const id = '5421ea38-59f7-4fa5-a907-6fe37c57bd1a';
+    expect(formatPreviewLine(`[cron:${id} release-duty-time-followup] Run today's follow-up.`)).toBe("Run today's follow-up.");
+    expect(formatPreviewLine(`[cron:${id}] Run it.`)).toBe('Run it.');
+    // The Gateway may cut the preview inside the envelope: nothing readable is left.
+    expect(formatPreviewLine(`[cron:${id} a very long job na`)).toBeUndefined();
+    expect(formatPreviewLine(`[cron:${id} job]`)).toBeUndefined();
+    // Ordinary bracketed text and a later mention stay verbatim.
+    expect(formatPreviewLine('[cron] is the tag we use')).toBe('[cron] is the tag we use');
+    expect(formatPreviewLine(`See [cron:${id} job] above`)).toBe(`See [cron:${id} job] above`);
+  });
+
   it('drops Markdown markers from raw message text and keeps one plain line', () => {
     expect(formatPreviewLine('- Apple\n- Banana\n- Mango\n\n1. Red\n2. Blue\n3. Green'))
       .toBe('Apple Banana Mango Red Blue Green');
