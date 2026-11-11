@@ -65,7 +65,8 @@ PostHog 项目 337268；SDK 与集中式 `src/services/analytics/events.ts` 沿�
 | `agent_file_activity` | `action: edit|saved|failed`, `backend`, `document: agents|soul|identity|user|bootstrap|memory|other` | 文件页里编辑 Agent 工作区文件；`document` 是有界枚举，永不上报文件名、路径或内容（2026-09-16 由 `identity_file_activity` 改名并移到文件页，3.0 未发布，无历史数据） |
 | `search_performed` | `scope: global|panel`, `has_results`, `result_kinds` | 防抖后 |
 | `search_message_opened` | `is_pro` | 触发 Pro |
-| `paywall_viewed`（现有） | 现有 + `hero`, `variant`, `trigger_screen`, `launch: bool` | |
+| `paywall_viewed`（现有） | 现有 + `hero`, `variant`, `trigger_screen`, `launch: bool`, `entry: feature|pro_badge|grace_banner|membership_card|announcement|deep_link` | `entry` 是用户实际点的入口（2026-11-12 新增，所有 `paywall_*` 事件都带）：功能拦截为 `feature`；首页 Pro 徽标、宽限横幅、设置会员卡、更新公告、裸链接此前都记成同一来源 |
+| `pro_gate_viewed` | `feature: logs|usage|configManage|openclawPermissions|openclawDiagnostics` | 渐隐遮罩（`ProGate`）出现在屏幕上，每次挂载一次；与 `paywall_viewed.blocked_feature` 相除得到「看到遮罩 → 点解锁」 |
 | `paywall_closed`（现有） | + `seconds_on_paywall`, `plan_toggled` | |
 | `paywall_package_selected` / `paywall_subscribe_tapped` / `paywall_purchase_succeeded`（现有） | + `hero`, `variant` | |
 | `paywall_purchase_failed`（现有） | + `reason` | |

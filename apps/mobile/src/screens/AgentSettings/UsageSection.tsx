@@ -287,6 +287,7 @@ export function UsageSection({
     content = (
       <ProGate
         testID="agent-usage-gate"
+        feature="usage"
         title={t('See the whole week and month', { ns: 'settings' })}
         detail={t('Usage, cost and trends for 7 and 30 days.', { ns: 'settings' })}
         actionLabel={t('Unlock usage trends', { ns: 'settings' })}

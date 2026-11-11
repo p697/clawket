@@ -187,7 +187,7 @@ import { OpenClawDirectRoute } from './src/screens/Onboarding/OpenClawDirectRout
 import { OnboardingRoute, type OnboardingConnectedResult } from './src/screens/Onboarding/OnboardingRoute';
 import { publicAppLinks } from './src/config/public';
 import { CLAWKET_GITHUB_REPO_URL } from './src/config/app-links';
-import type { ProFeature } from './src/utils/pro';
+import type { PaywallEntry, ProFeature } from './src/utils/pro';
 
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { ConnectionsScreen } from './src/screens/Connection/ConnectionsScreen';
@@ -505,6 +505,7 @@ function AppContent({
   const presentPaywall = useCallback((
     feature: ProFeature,
     onContinue?: () => void | Promise<void>,
+    entry?: PaywallEntry,
   ): boolean => {
     if (paywallVisible) return false;
     if (isPro && feature !== 'settingsMembershipPreview') {
@@ -512,7 +513,7 @@ function AppContent({
       return false;
     }
     return paywallContinuationCoordinatorRef.current.tryPresent(
-      () => showPaywall(feature),
+      () => showPaywall(feature, entry),
       onContinue,
     );
   }, [isPro, paywallVisible, showPaywall]);
@@ -1234,7 +1235,7 @@ function AppContent({
         seconds_visible: Math.max(0, Math.round((Date.now() - presentation.openedAtMs) / 1_000)),
       });
     }
-    if (followUp?.type === 'open_paywall') presentPaywall(followUp.feature);
+    if (followUp?.type === 'open_paywall') presentPaywall(followUp.feature, undefined, 'announcement');
     else if (followUp?.type === 'open_url') openExternalUrl(followUp.url);
     else if (followUp?.type === 'open_bridge_upgrade' && rootNavigationRef.isReady()) rootNavigationRef.navigate('BridgeUpgrade');
   }, [announcementPresentation, openExternalUrl, presentPaywall]);
@@ -1464,7 +1465,7 @@ function AppContent({
         setSimulateFreeAccount(request.enabled === true);
         return;
       case 'view-pro':
-        presentPaywall('settingsMembershipPreview');
+        presentPaywall('settingsMembershipPreview', undefined, 'membership_card');
         return;
       case 'restore-purchases':
         void restorePurchases();
@@ -1702,8 +1703,8 @@ function AppContent({
                       onRemoveConnection={handleRosterConnectionRemove}
                       onUnpinSession={handleRosterSessionUnpin}
                       onRenameSession={handleRosterSessionRename}
-                      onGraceAction={() => presentPaywall('settingsMembershipPreview')}
-                      onOpenPro={() => presentPaywall('settingsMembershipPreview')}
+                      onGraceAction={() => presentPaywall('settingsMembershipPreview', undefined, 'grace_banner')}
+                      onOpenPro={() => presentPaywall('settingsMembershipPreview', undefined, 'pro_badge')}
                     />
   );
 
@@ -1984,7 +1985,7 @@ function AppContent({
                       onRetry={() => { void getConnectionRuntime().probeActive(); }}
                       onOpenAction={(action) => {
                         if (action === 'view-pro') {
-                          presentPaywall('settingsMembershipPreview');
+                          presentPaywall('settingsMembershipPreview', undefined, 'membership_card');
                           return;
                         }
                         if (action === 'restore-purchases') {
@@ -2303,7 +2304,8 @@ function PaywallRouteBridge({
       navigation.goBack();
       return;
     }
-    if (!openedRef.current) showPaywall(feature);
+    // In-app gates navigate here with their reason; a bare link to the paywall carries none.
+    if (!openedRef.current) showPaywall(feature, route.params?.reason ? 'feature' : 'deep_link');
   }, [isPro, navigation, route.params?.reason, showPaywall]);
 
   useEffect(() => {
@@ -2330,9 +2332,15 @@ function GlobalProPaywallOverlay({
   onContinue: () => void;
 }>): React.JSX.Element | null {
   const { visible } = useProPaywall();
+  const { connections } = useConnections();
+  const connectedBackends = useMemo(
+    () => [...new Set(connections.map((connection) => connection.backendKind))].sort(),
+    [connections],
+  );
   return (
     <ProPaywallOverlay
       visible={visible}
+      connectedBackends={connectedBackends}
       onClose={onDismiss}
       onContinue={onContinue}
     />

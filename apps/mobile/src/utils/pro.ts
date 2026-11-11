@@ -25,6 +25,12 @@ export type ProFeature =
   | 'launch'
   | 'settingsMembershipPreview';
 
+/**
+ * What the user tapped to open the paywall. `feature` is a gated action; the others are entries that
+ * all open the membership paywall and were indistinguishable in analytics (review 2026-11-11).
+ */
+export type PaywallEntry = 'feature' | 'pro_badge' | 'grace_banner' | 'membership_card' | 'announcement' | 'deep_link';
+
 export type CanonicalProFeature = Exclude<
   ProFeature,
   'configBackupCreate' | 'configBackupRestore'

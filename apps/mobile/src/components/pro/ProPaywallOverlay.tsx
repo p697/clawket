@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import type { BackendKind } from '@clawket/agent-protocol';
 import { Alert, I18nManager, Linking, Modal, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -9,7 +10,7 @@ import { analyticsEvents } from '../../services/analytics/events';
 import { hasRenewingProSubscription, isRevenueCatPackagePurchaseLocked, proSubscriptionManagementUrl, selectDisplayedRevenueCatPackage } from '../../services/pro-subscription';
 import { PaywallScreen } from '../../screens/Paywall/PaywallScreen';
 import { resolvePaywallContent } from '../../screens/Paywall/model';
-import type { ProFeature } from '../../utils/pro';
+import type { PaywallEntry, ProFeature } from '../../utils/pro';
 import { PresentationSafeAreaProvider } from '../ui/PresentationSafeAreaProvider';
 import { useAppTheme } from '../../theme';
 import { buildPaywallTheme } from '../../theme/paywall';
@@ -18,6 +19,8 @@ export type ProPaywallContinueSource = 'purchase' | 'restore' | 'redeem';
 
 type Props = Readonly<{
   visible: boolean;
+  /** Backends of the saved connections, for the benefits the paywall lists. */
+  connectedBackends?: ReadonlyArray<BackendKind>;
   onClose: () => void;
   onContinue?: (source: ProPaywallContinueSource) => void;
 }>;
@@ -30,6 +33,7 @@ type PurchasePaywallAnalyticsContext = Readonly<{
   hero: ReturnType<typeof resolvePaywallContent>['hero'];
   variant: 'generic' | 'contextual';
   trigger_screen: PaywallTriggerScreen;
+  entry: PaywallEntry;
   launch: boolean;
 }>;
 
@@ -38,13 +42,14 @@ type PurchasePaywallSession = Readonly<{
   openedAtMs: number;
 }> & { planToggled: boolean };
 
-export function ProPaywallOverlay({ visible, onClose, onContinue }: Props): React.JSX.Element | null {
+export function ProPaywallOverlay({ visible, connectedBackends, onClose, onContinue }: Props): React.JSX.Element | null {
   const { t } = useTranslation(['common']);
   const { theme } = useAppTheme();
   const purchaseSessionRef = useRef<PurchasePaywallSession | null>(null);
   const submissionInFlightRef = useRef(false);
   const {
     blockedFeature,
+    paywallEntry,
     failureOperation,
     failureReason,
     isConfigured,
@@ -82,7 +87,7 @@ export function ProPaywallOverlay({ visible, onClose, onContinue }: Props): Reac
     }
     if (!paywallMode) return;
     if (purchaseSessionRef.current) return;
-    const context = buildPurchasePaywallAnalyticsContext(blockedFeature, previewOnly);
+    const context = buildPurchasePaywallAnalyticsContext(blockedFeature, previewOnly, paywallEntry ?? 'feature');
     purchaseSessionRef.current = {
       context,
       openedAtMs: Date.now(),
@@ -133,7 +138,7 @@ export function ProPaywallOverlay({ visible, onClose, onContinue }: Props): Reac
   };
 
   const analyticsContext = purchaseSessionRef.current?.context
-    ?? buildPurchasePaywallAnalyticsContext(blockedFeature, previewOnly);
+    ?? buildPurchasePaywallAnalyticsContext(blockedFeature, previewOnly, paywallEntry ?? 'feature');
 
   const handlePurchase = () => {
     if (submissionInFlightRef.current) return;
@@ -205,6 +210,7 @@ export function ProPaywallOverlay({ visible, onClose, onContinue }: Props): Reac
         <PaywallModalFrame>
           <PaywallScreen
             blockedFeature={blockedFeature}
+            connectedBackends={connectedBackends}
             phase={paywallPhase}
             packages={paywallPackages}
             selectedPackageId={selectedPackageId}
@@ -258,6 +264,7 @@ function PaywallModalFrame({ children }: React.PropsWithChildren): React.JSX.Ele
 function buildPurchasePaywallAnalyticsContext(
   blockedFeature: ProFeature | null,
   previewOnly: boolean,
+  entry: PaywallEntry,
 ): PurchasePaywallAnalyticsContext {
   const content = resolvePaywallContent(blockedFeature);
   return {
@@ -266,6 +273,7 @@ function buildPurchasePaywallAnalyticsContext(
     hero: content.hero,
     variant: content.hero === 'generic' ? 'generic' : 'contextual',
     trigger_screen: resolvePaywallTriggerScreen(blockedFeature),
+    entry,
     launch: blockedFeature === 'launch',
   };
 }

@@ -74,8 +74,9 @@ const SPEC_EVENT_PROPERTIES: Readonly<Record<string, ReadonlyArray<string>>> = {
   usage_range_changed: ['range', 'cached', 'locked'],
   search_performed: ['scope', 'has_results', 'result_kinds'],
   search_message_opened: ['is_pro'],
-  paywall_plan_change_submitted: ['package_id', 'package_type', 'price_string', 'blocked_feature', 'preview_only', 'hero', 'variant', 'trigger_screen', 'launch'],
-  paywall_manage_subscription_tapped: ['blocked_feature', 'preview_only', 'hero', 'variant', 'trigger_screen', 'launch'],
+  paywall_plan_change_submitted: ['package_id', 'package_type', 'price_string', 'blocked_feature', 'preview_only', 'hero', 'variant', 'trigger_screen', 'entry', 'launch'],
+  paywall_manage_subscription_tapped: ['blocked_feature', 'preview_only', 'hero', 'variant', 'trigger_screen', 'entry', 'launch'],
+  pro_gate_viewed: ['feature'],
   paywall_viewed: [
     'blocked_feature',
     'package_count',
@@ -83,7 +84,7 @@ const SPEC_EVENT_PROPERTIES: Readonly<Record<string, ReadonlyArray<string>>> = {
     'selected_package_id',
     'hero',
     'variant',
-    'trigger_screen',
+    'trigger_screen', 'entry',
     'launch',
   ],
   paywall_closed: [
@@ -91,7 +92,7 @@ const SPEC_EVENT_PROPERTIES: Readonly<Record<string, ReadonlyArray<string>>> = {
     'preview_only',
     'hero',
     'variant',
-    'trigger_screen',
+    'trigger_screen', 'entry',
     'launch',
     'seconds_on_paywall',
     'plan_toggled',
@@ -104,7 +105,7 @@ const SPEC_EVENT_PROPERTIES: Readonly<Record<string, ReadonlyArray<string>>> = {
     'preview_only',
     'hero',
     'variant',
-    'trigger_screen',
+    'trigger_screen', 'entry',
     'launch',
   ],
   paywall_subscribe_tapped: [
@@ -115,7 +116,7 @@ const SPEC_EVENT_PROPERTIES: Readonly<Record<string, ReadonlyArray<string>>> = {
     'preview_only',
     'hero',
     'variant',
-    'trigger_screen',
+    'trigger_screen', 'entry',
     'launch',
   ],
   paywall_purchase_succeeded: [
@@ -126,7 +127,7 @@ const SPEC_EVENT_PROPERTIES: Readonly<Record<string, ReadonlyArray<string>>> = {
     'preview_only',
     'hero',
     'variant',
-    'trigger_screen',
+    'trigger_screen', 'entry',
     'launch',
   ],
   paywall_purchase_failed: [
@@ -137,7 +138,7 @@ const SPEC_EVENT_PROPERTIES: Readonly<Record<string, ReadonlyArray<string>>> = {
     'preview_only',
     'hero',
     'variant',
-    'trigger_screen',
+    'trigger_screen', 'entry',
     'launch',
     'reason',
   ],
@@ -520,5 +521,13 @@ test('pairing outcome events keep fixed categories only', () => {
   expect(sanitizeAnalyticsEventProperties('onboarding_pairing_failed', {
     backend: 'My Mac', method: 'wss://relay', code: 'secret token rejected', reason: 'private detail', payload: 'qr',
   })).toEqual({ backend: 'other', method: 'other', code: 'other', reason: 'other' });
+});
+
+test('paywall entry and gate exposure keep fixed categories only', () => {
+  expect(sanitizeAnalyticsEventProperties('paywall_viewed', { blocked_feature: 'settingsMembershipPreview', entry: 'pro_badge' }))
+    .toEqual({ blocked_feature: 'settingsMembershipPreview', entry: 'pro_badge' });
+  expect(sanitizeAnalyticsEventProperties('paywall_closed', { entry: 'Lucy tapped the badge' })).toEqual({ entry: 'other' });
+  expect(sanitizeAnalyticsEventProperties('pro_gate_viewed', { feature: 'usage', agent: 'main' })).toEqual({ feature: 'usage' });
+  expect(sanitizeAnalyticsEventProperties('pro_gate_viewed', { feature: 'agent:main:secret' })).toEqual({ feature: 'other' });
 });
 

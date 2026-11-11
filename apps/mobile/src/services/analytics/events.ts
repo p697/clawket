@@ -4,6 +4,7 @@ import { normalizeAnalyticsEventString } from './event-property-normalizers';
 import { posthogClient, recordPostHogDiagnosticEvent } from './posthog';
 import { getAnalyticsSubscriptionProperties } from './subscription-context';
 import type { ConnectionDiagnosticEvent } from '../connection-diagnostics';
+import type { PaywallEntry, ProFeature } from '../../utils/pro';
 
 type AnalyticsValue = boolean | number | string | null | undefined;
 type AnalyticsProperties = Record<string, AnalyticsValue>;
@@ -50,6 +51,8 @@ type PaywallContext = {
   hero?: 'connections' | 'agents' | 'manage' | 'logsFiles' | 'search' | 'generic';
   variant?: string;
   trigger_screen?: ScreenArea;
+  /** What the user tapped: a gated action, or which membership entry. */
+  entry?: PaywallEntry;
   launch?: boolean;
 };
 
@@ -120,6 +123,7 @@ export const ANALYTICS_EVENT_PROPERTY_WHITELIST = Object.freeze({
   usage_range_changed: ['range', 'cached', 'locked'],
   search_performed: ['scope', 'has_results', 'result_kinds'],
   search_message_opened: ['is_pro'],
+  pro_gate_viewed: ['feature'],
   paywall_viewed: [
     'blocked_feature',
     'package_count',
@@ -127,17 +131,17 @@ export const ANALYTICS_EVENT_PROPERTY_WHITELIST = Object.freeze({
     'selected_package_id',
     'hero',
     'variant',
-    'trigger_screen',
+    'trigger_screen', 'entry',
     'launch',
   ],
-  paywall_plan_change_submitted: ['package_id', 'package_type', 'price_string', 'blocked_feature', 'preview_only', 'hero', 'variant', 'trigger_screen', 'launch'],
-  paywall_manage_subscription_tapped: ['blocked_feature', 'preview_only', 'hero', 'variant', 'trigger_screen', 'launch'],
+  paywall_plan_change_submitted: ['package_id', 'package_type', 'price_string', 'blocked_feature', 'preview_only', 'hero', 'variant', 'trigger_screen', 'entry', 'launch'],
+  paywall_manage_subscription_tapped: ['blocked_feature', 'preview_only', 'hero', 'variant', 'trigger_screen', 'entry', 'launch'],
   paywall_closed: [
     'blocked_feature',
     'preview_only',
     'hero',
     'variant',
-    'trigger_screen',
+    'trigger_screen', 'entry',
     'launch',
     'seconds_on_paywall',
     'plan_toggled',
@@ -150,7 +154,7 @@ export const ANALYTICS_EVENT_PROPERTY_WHITELIST = Object.freeze({
     'preview_only',
     'hero',
     'variant',
-    'trigger_screen',
+    'trigger_screen', 'entry',
     'launch',
   ],
   paywall_subscribe_tapped: [
@@ -161,7 +165,7 @@ export const ANALYTICS_EVENT_PROPERTY_WHITELIST = Object.freeze({
     'preview_only',
     'hero',
     'variant',
-    'trigger_screen',
+    'trigger_screen', 'entry',
     'launch',
   ],
   paywall_purchase_succeeded: [
@@ -172,7 +176,7 @@ export const ANALYTICS_EVENT_PROPERTY_WHITELIST = Object.freeze({
     'preview_only',
     'hero',
     'variant',
-    'trigger_screen',
+    'trigger_screen', 'entry',
     'launch',
   ],
   paywall_purchase_failed: [
@@ -183,13 +187,13 @@ export const ANALYTICS_EVENT_PROPERTY_WHITELIST = Object.freeze({
     'preview_only',
     'hero',
     'variant',
-    'trigger_screen',
+    'trigger_screen', 'entry',
     'launch',
     'reason',
   ],
-  paywall_restore_tapped: ['blocked_feature', 'preview_only', 'hero', 'variant', 'trigger_screen', 'launch'],
-  paywall_restore_succeeded: ['blocked_feature', 'preview_only', 'hero', 'variant', 'trigger_screen', 'launch'],
-  paywall_restore_failed: ['blocked_feature', 'preview_only', 'hero', 'variant', 'trigger_screen', 'launch', 'reason'],
+  paywall_restore_tapped: ['blocked_feature', 'preview_only', 'hero', 'variant', 'trigger_screen', 'entry', 'launch'],
+  paywall_restore_succeeded: ['blocked_feature', 'preview_only', 'hero', 'variant', 'trigger_screen', 'entry', 'launch'],
+  paywall_restore_failed: ['blocked_feature', 'preview_only', 'hero', 'variant', 'trigger_screen', 'entry', 'launch', 'reason'],
   app_update_announcement_shown: ['version', 'release_count', 'entry_count', 'source'],
   app_update_announcement_closed: ['version', 'release_count', 'source', 'action', 'seconds_visible'],
   app_update_announcement_entry_tapped: ['version', 'entry', 'action'],
@@ -586,6 +590,11 @@ export const analyticsEvents = {
 
   searchMessageOpened(properties: { is_pro: boolean }): void {
     captureAnalyticsEvent('search_message_opened', properties);
+  },
+
+  /** A veiled Pro preview came on screen: the top of the gate → paywall → purchase funnel. */
+  proGateViewed(properties: { feature: ProFeature }): void {
+    try { captureAnalyticsEvent('pro_gate_viewed', properties); } catch { /* Telemetry cannot interrupt a page. */ }
   },
 
   paywallViewed(properties: PaywallContext & {
