@@ -4,7 +4,7 @@
   - 依据：近 90 天 3.x 付费墙来源里，设置会员卡 324 人看到、8 人购买，但首页 Pro 徽标、宽限横幅、会员卡、更新公告都记成同一来源；只连了 Codex / Claude Code 的用户看到的权益是「管理 OpenClaw 配置、备份和日志」「技能与记忆版本」。
   - 权益：补充权益按已保存连接的后端能力过滤（`CAPABILITY_MATRIX`，规则见 `06-paywall-and-growth.md`）。没有连接、含 OpenClaw 或未知后端时不变。新增一条 19 语言文案「接着电脑上的对话继续聊」（英文 Continue chats from your computer），其余文案、标题、价格区、购买流程不变。
   - 埋点：所有 `paywall_*` 事件增加 `entry`（feature / pro_badge / grace_banner / membership_card / announcement / deep_link）；新增 `pro_gate_viewed`（日志、用量、配置、权限、诊断五处遮罩，每次挂载一次）。只有固定枚举。
-  - 逐文件 in-band：Paywall model 20（新增 1）、PaywallScreen 49、ProPaywallOverlay 17（新增 1）、ProGate 4（新增 1）、ProPaywallContext 27、analytics events 19（新增 1）、LogsSection 9、OpenClawManageScreen 24、AgentSettingsSectionScreen 12；Mobile 类型检查、strict i18n（19 语言无缺失）、check:ui-style、check:docs 通过。新文案的各语言译法与真机排版待负责人验收（HT-PAYWALL-SCOPE-1112）；无版本号、无发布。
+  - 逐文件 in-band：Paywall model 20（新增 1）、PaywallScreen 49、ProPaywallOverlay 17（新增 1）、ProGate 4（新增 1）、ProPaywallContext 27、analytics events 19（新增 1）、LogsSection 9、OpenClawManageScreen 24、AgentSettingsSectionScreen 12、AgentSettingsSections 28、AgentSettingsScreen；Mobile 类型检查、strict i18n（19 语言无缺失）、check:ui-style、check:docs 通过。新文案的各语言译法与真机排版待负责人验收（HT-PAYWALL-SCOPE-1112）；无版本号、无发布。
 
 - 2026-11-12 预览里的任务 ID 与触感补齐（整体产品审视第一档）。
   - 会话面板里定时任务会话的预览以 `[cron:<任务 UUID> <任务名>]` 开头（OpenClaw 给定时提示词加的信封；本机 Gateway 只读查询确认格式）。`formatPreviewLine` 现在去掉这段开头，只显示提示词正文；预览在信封内被截断时不显示。行标题本来就是任务名。首页 Hermes 行显示会话 UUID 的问题已由 #283 修复，本次审视用的模拟器构建早于该修复，未再改动。

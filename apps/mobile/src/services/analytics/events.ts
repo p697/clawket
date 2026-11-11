@@ -594,7 +594,7 @@ export const analyticsEvents = {
 
   /** A veiled Pro preview came on screen: the top of the gate → paywall → purchase funnel. */
   proGateViewed(properties: { feature: ProFeature }): void {
-    try { captureAnalyticsEvent('pro_gate_viewed', properties); } catch { /* Telemetry cannot interrupt a page. */ }
+    captureAnalyticsEvent('pro_gate_viewed', properties);
   },
 
   paywallViewed(properties: PaywallContext & {

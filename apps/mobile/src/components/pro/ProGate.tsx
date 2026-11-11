@@ -67,7 +67,9 @@ export function ProGate({
   const surface = surfaceColor ?? theme.colors.canvasGrouped;
   const hasTeaser = children !== undefined && children !== null && children !== false;
   useEffect(() => {
-    if (feature) analyticsEvents.proGateViewed({ feature });
+    if (!feature) return;
+    // Telemetry cannot interrupt a page.
+    try { analyticsEvents.proGateViewed({ feature }); } catch { /* ignored */ }
   }, [feature]);
 
   return (
