@@ -122,3 +122,22 @@ test('media permission validation fails closed on missing or malformed inputs', 
     assert.equal(validateAndroidMediaPermissions(expo).length, 1);
   }
 });
+
+test('the launch screen follows the system appearance with the theme canvases', async () => {
+  const { existsSync } = await import('node:fs');
+  const source = JSON.parse(readFileSync(new URL('../app.json', import.meta.url), 'utf8'));
+  const splash = source.expo.plugins.find(plugin => Array.isArray(plugin) && plugin[0] === 'expo-splash-screen')?.[1];
+  assert.ok(splash, 'expo-splash-screen must stay configured');
+  const theme = readFileSync(new URL('../src/theme/theme.ts', import.meta.url), 'utf8');
+  const canvases = [...theme.matchAll(/^  canvas: '(#[0-9A-Fa-f]{6})',$/gm)].map(match => match[1].toLowerCase());
+  // lightPalette then darkPalette: the splash must hand over to the same canvas the app paints.
+  assert.equal(canvases.length, 2);
+  assert.equal(splash.backgroundColor.toLowerCase(), canvases[0]);
+  assert.equal(splash.dark?.backgroundColor?.toLowerCase(), canvases[1]);
+  for (const image of [splash.image, splash.dark?.image]) {
+    assert.ok(image && existsSync(new URL(`../${image}`, import.meta.url)), `missing launch artwork ${image}`);
+  }
+  // LaunchLoading continues the native splash, so it must draw the same two marks.
+  const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
+  for (const image of [splash.image, splash.dark.image]) assert.ok(app.includes(`require('${image}')`), `App.tsx must draw ${image}`);
+});

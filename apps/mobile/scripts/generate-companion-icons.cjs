@@ -21,12 +21,15 @@ async function main() {
     dark: artwork({ ink: '#f8f8fa', paper: '#191b1d' }),
     adaptive: artwork({ ink: '#191b1d', paper: '#ffffff', scale: 5.5, transparent: true }),
     splash: artwork({ ink: '#191b1d', paper: '#ffffff', scale: 3.2, transparent: true }),
+    // Dark launch: the dark canvas (#0C0C0D, theme.ts) shows through the eyes, like paper does in light.
+    splashDark: artwork({ ink: '#f8f8fa', paper: '#0c0c0d', scale: 3.2, transparent: true }),
   };
   for (const [name, svg] of Object.entries(variants)) await fs.writeFile(path.join(sourceDir, `${name}.svg`), svg);
   const outputs = [
     ['light', 'assets/icon.png', 1024], ['light', 'assets/icon-512.png', 512],
     ['light', 'assets/favicon.png', 48], ['light', 'assets/adaptive-icon.png', 1024],
     ['adaptive', 'assets/adaptive-icon-foreground.png', 1024], ['splash', 'assets/splash-icon.png', 1024],
+    ['splashDark', 'assets/splash-icon-dark.png', 1024],
     ['dark', 'assets/app-icons/black/app-icon-black-1024.png', 1024],
     ...Object.entries({ mdpi: 48, hdpi: 72, xhdpi: 96, xxhdpi: 144, xxxhdpi: 192 }).map(([density, size]) => ['dark', `assets/app-icons/black/android/mipmap-${density}/ic_launcher_black.png`, size]),
   ];
