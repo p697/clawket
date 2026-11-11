@@ -517,7 +517,8 @@ async function handlePairCommand(args: string[], jsonOutput: boolean): Promise<v
 
   if (backends.length === 0) {
     throw new Error(
-      'No pairable backend was detected on this machine. Set up OpenClaw or Hermes first, then retry.',
+      'No OpenClaw or Hermes installation was detected on this machine. '
+      + 'To pair Codex, Claude Code or Pi, run `npx @p697/clawket@latest pair choose`, or add `--backend codex`, `--backend claude-code` or `--backend pi`.',
     );
   }
 

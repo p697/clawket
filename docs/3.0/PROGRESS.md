@@ -1,5 +1,10 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-11-12 README 与 CLI 的配对入口对齐 App（整体产品审视第一档）。
+  - README 中英文原先首推 `npm install -g @p697/clawket` + `clawket pair`，这条默认命令只检测 OpenClaw 和 Hermes；只装了 Codex / Claude Code / Pi 的人照做会得到「先安装 OpenClaw 或 Hermes」。现在两份 README 都先给 App 配对首页显示的 `npx @p697/clawket@latest pair choose`，全局安装与 `clawket pair` 作为 OpenClaw / Hermes 的直接方式保留在后面，内容不删。
+  - CLI 裸 `pair` 找不到 OpenClaw / Hermes 时，报错改为同时指出 `pair choose` 与 `--backend codex|claude-code|pi`。检测范围和旧客户端依赖的裸 `pair` 行为不变；这条文案要随下一次 Bridge 发布才到达用户，本次不发布、不改版本号。
+  - 验证：check:docs 通过；Bridge 类型检查与 Windows / macOS 兼容任务由 PR CI 执行。
+
 - 2026-11-12 付费墙权益按后端收敛 + 付费墙入口与遮罩曝光埋点（整体产品审视第一档）。
   - 依据：近 90 天 3.x 付费墙来源里，设置会员卡 324 人看到、8 人购买，但首页 Pro 徽标、宽限横幅、会员卡、更新公告都记成同一来源；只连了 Codex / Claude Code 的用户看到的权益是「管理 OpenClaw 配置、备份和日志」「技能与记忆版本」。
   - 权益：补充权益按已保存连接的后端能力过滤（`CAPABILITY_MATRIX`，规则见 `06-paywall-and-growth.md`）。没有连接、含 OpenClaw 或未知后端时不变。新增一条 19 语言文案「接着电脑上的对话继续聊」（英文 Continue chats from your computer），其余文案、标题、价格区、购买流程不变。
