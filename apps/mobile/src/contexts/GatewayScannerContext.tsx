@@ -29,7 +29,7 @@ import {
   type ResolvedPairingSession,
 } from '../services/pairing-session';
 import { resolveOfficialRelayEnvironment } from '../services/relay-environment';
-import { analyticsEvents } from '../services/analytics/events';
+import { analyticsEvents, type SecurePairingOutcomeReason } from '../services/analytics/events';
 import type { RelayServiceEnvironment } from '../types';
 
 type GatewayScannerOptions = {
@@ -80,6 +80,10 @@ export function GatewayScannerProvider({ children }: { children: React.ReactNode
     debugMode,
   } = useAppContext();
   const { showOverlay, hideOverlay } = useGatewayOverlay();
+
+  // Why the last secure invitation ended as it did, for analytics only: `confirmResolvedPairing`
+  // resolves a bare boolean for a declined sheet, an unusable invitation and a failed claim alike.
+  const securePairingOutcomeRef = useRef<SecurePairingOutcomeReason>('unknown');
 
   const showPairingFailedAlert = useCallback((message: string) => {
     const now = Date.now();
@@ -143,6 +147,7 @@ export function GatewayScannerProvider({ children }: { children: React.ReactNode
     expectation?: SecurePairingExpectation,
   ): Promise<boolean> => {
     const parsed = parseQRPayload(resolved.rawQrPayload);
+    securePairingOutcomeRef.current = 'invalid_invitation';
     if (!parsed) {
       showPairingFailedAlert(i18n.t('This pairing invitation does not contain valid connection info.', { ns: 'config' }));
       return Promise.resolve(false);
@@ -164,6 +169,7 @@ export function GatewayScannerProvider({ children }: { children: React.ReactNode
     const displayName = resolved.displayName?.trim()
       || parsed.relay?.displayName?.trim()
       || i18n.t('your computer', { ns: 'config' });
+    securePairingOutcomeRef.current = 'unknown';
     return new Promise<boolean>((resolve) => {
       pendingPairingConfirmationRef.current?.resolve(false);
       const pending = { displayName, payload: parsed, resolve };
@@ -176,6 +182,7 @@ export function GatewayScannerProvider({ children }: { children: React.ReactNode
     const pending = pendingPairingConfirmationRef.current;
     pendingPairingConfirmationRef.current = null;
     setPendingPairingConfirmation(null);
+    securePairingOutcomeRef.current = 'declined';
     pending?.resolve(false);
   }, []);
 
@@ -184,6 +191,7 @@ export function GatewayScannerProvider({ children }: { children: React.ReactNode
     pendingPairingConfirmationRef.current = null;
     setPendingPairingConfirmation(null);
     if (!pending) return;
+    securePairingOutcomeRef.current = 'claim_failed';
     void connectFromScan(pending.payload).then(pending.resolve, () => pending.resolve(false));
   }, [connectFromScan]);
 
@@ -205,11 +213,15 @@ export function GatewayScannerProvider({ children }: { children: React.ReactNode
       const resolved = await resolvePairingLink(url);
       hideOverlay();
       const connected = await confirmResolvedPairing(resolved, expectation);
-      analyticsEvents.gatewaySecurePairingFinished({ method: 'link', environment, connected });
+      analyticsEvents.gatewaySecurePairingFinished({
+        method: 'link', environment, connected, reason: connected ? 'connected' : securePairingOutcomeRef.current,
+      });
       return connected;
     } catch (error) {
       hideOverlay();
-      analyticsEvents.gatewaySecurePairingFinished({ method: 'link', environment, connected: false });
+      analyticsEvents.gatewaySecurePairingFinished({
+        method: 'link', environment, connected: false, reason: securePairingFailureReason(error),
+      });
       showPairingFailedAlert(pairingFailureMessage(error));
       return false;
     }
@@ -227,10 +239,14 @@ export function GatewayScannerProvider({ children }: { children: React.ReactNode
         expectedBackendKind: input.expectedBackendKind,
         environment: input.environment,
       });
-      analyticsEvents.gatewaySecurePairingFinished({ method: 'code', environment, connected });
+      analyticsEvents.gatewaySecurePairingFinished({
+        method: 'code', environment, connected, reason: connected ? 'connected' : securePairingOutcomeRef.current,
+      });
       return connected;
     } catch (error) {
-      analyticsEvents.gatewaySecurePairingFinished({ method: 'code', environment, connected: false });
+      analyticsEvents.gatewaySecurePairingFinished({
+        method: 'code', environment, connected: false, reason: securePairingFailureReason(error),
+      });
       showPairingFailedAlert(pairingFailureMessage(error));
       return false;
     }
@@ -401,6 +417,34 @@ export function useGatewayScanner(): GatewayScannerContextType {
     throw new Error('useGatewayScanner must be used within GatewayScannerProvider');
   }
   return context;
+}
+
+/** The fixed analytics category of a failed secure invitation; never the error text. */
+export function securePairingFailureReason(error: unknown): SecurePairingOutcomeReason {
+  if (!(error instanceof PairingSessionError)) return 'unknown';
+  switch (error.code) {
+    case 'PAIRING_NETWORK_ERROR':
+      return 'network';
+    case 'INVALID_PAIRING_CODE':
+      return 'invalid_code';
+    case 'PAIRING_CODE_RATE_LIMITED':
+      return 'rate_limited';
+    case 'PAIRING_SESSION_NOT_FOUND':
+    case 'PAIRING_SESSION_EXPIRED':
+    case 'ACCESS_CODE_EXPIRED':
+      return 'expired';
+    case 'PAIRING_HANDSHAKE_TIMEOUT':
+    case 'PAIRING_HANDSHAKE_FAILED':
+    case 'PAIRING_HANDSHAKE_REJECTED':
+      return 'handshake';
+    case 'INVALID_PAIRING_LINK':
+    case 'INVALID_PAIRING_SECRET':
+    case 'PAIRING_DECRYPT_FAILED':
+    case 'UNTRUSTED_PAIRING_SERVER':
+      return 'invalid_invitation';
+    default:
+      return 'unknown';
+  }
 }
 
 function pairingFailureMessage(error: unknown): string {

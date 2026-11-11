@@ -243,6 +243,7 @@ describe('backend pairing profiles', () => {
       method: 'code',
       environment: 'preview',
       connected: true,
+      reason: 'connected',
     });
   });
 
@@ -264,6 +265,24 @@ describe('backend pairing profiles', () => {
       method: 'code',
       environment: 'production',
       connected: false,
+      // An untyped Registry error stays uncategorised here; Onboarding reports its resolved code.
+      reason: 'unknown',
+    });
+
+    mockClaimCode.mockRejectedValueOnce(Object.assign(new Error('synthetic'), { code: 'pairing_expired' }));
+    await expect(connectBackendPairingCode({
+      backendKind: 'hermes',
+      environment: 'production',
+      debugMode: false,
+      runtime: createRuntime(),
+      pairingCode: 'ABC234',
+      secureInvitation: createSecureInvitation(),
+    })).rejects.toThrow('synthetic');
+    expect(mockPairingFinished).toHaveBeenLastCalledWith({
+      method: 'code',
+      environment: 'production',
+      connected: false,
+      reason: 'expired',
     });
   });
 

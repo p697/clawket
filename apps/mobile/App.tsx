@@ -1738,6 +1738,9 @@ function AppContent({
                           ? 'add_connection'
                           : 'first_run',
                       })}
+                      onPairingFailed={({ backendKind, method, code, reason }) => analyticsEvents.onboardingPairingFailed({
+                        backend: backendKind, method, code, reason,
+                      })}
                       onOpenPaywall={(reason, onContinue) => presentPaywall(reason, onContinue)}
                       onConnected={completeOnboardingConnection}
                     />

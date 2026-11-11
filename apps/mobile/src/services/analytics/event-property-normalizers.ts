@@ -261,6 +261,22 @@ export function normalizeAnalyticsEventString(
     // Numeric diagnostic fields must never become a free-text escape hatch.
     if (['http_status', 'elapsed_ms'].includes(property)) return 'other';
   }
+  if (event === 'gateway_secure_pairing_finished') {
+    const values: Record<string, readonly string[]> = {
+      method: ['link', 'code'],
+      environment: ['production', 'preview'],
+      reason: ['connected', 'declined', 'network', 'invalid_code', 'rate_limited', 'expired', 'handshake', 'invalid_invitation', 'claim_failed', 'unknown'],
+    };
+    return values[property]?.includes(value) ? value : 'other';
+  }
+  if (event === 'onboarding_pairing_failed' && property !== 'code') {
+    const values: Record<string, readonly string[]> = {
+      backend: ['openclaw', 'hermes', 'local-model', 'pi', 'codex', 'claude-code'],
+      method: ['code', 'scan', 'link'],
+      reason: ['none', 'backend_mismatch', 'invalid_backend', 'preview_requires_debug_mode', 'official_environment_mismatch', 'saved_connection_mismatch'],
+    };
+    return values[property]?.includes(value) ? value : 'other';
+  }
   if (event === 'agent_file_activity') {
     const allowed: Record<string, readonly string[]> = {
       action: ['edit', 'saved', 'failed'],

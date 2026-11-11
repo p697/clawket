@@ -64,9 +64,25 @@ export type OnboardingRouteProps = NavigationProps & Readonly<{
     lengthOk: boolean;
   }) => void;
   onScanQrTapped?: (backendKind: PairableBackendKind) => void;
+  /** A pairing started here ended in an error the page shows. Fixed categories only. */
+  onPairingFailed?: (input: {
+    backendKind: PairableBackendKind;
+    method: PairingActionKind;
+    code: ReturnType<typeof resolveOnboardingAdapterError>;
+    reason?: PairingValidationReason;
+  }) => void;
   onOpenPaywall?: (reason: 'gatewayConnections', onContinue?: () => void) => void;
   onClose?: () => void;
 }>;
+
+/** How the last pairing was started; decides what a fresh attempt offers. */
+type PairingActionKind = 'code' | 'scan' | 'link';
+
+/**
+ * Errors that mean the invitation itself is spent. Before a connection exists, replaying the same
+ * code or QR can only fail again, so their action starts a fresh attempt instead.
+ */
+const SPENT_INVITATION_ERRORS: ReadonlySet<string> = new Set(['pairing_expired', 'pairing_required', 'unauthorized']);
 
 type PairingOperation = Readonly<{
   active: boolean;
@@ -93,6 +109,7 @@ export function OnboardingRoute({
   onAgentPromptCopied,
   onPairingCodeSubmitted,
   onScanQrTapped,
+  onPairingFailed,
   onOpenPaywall,
   onClose,
 }: OnboardingRouteProps): React.JSX.Element {
@@ -117,6 +134,10 @@ export function OnboardingRoute({
   const handledPairingUrlRef = useRef<string | null>(null);
   const announcedConnectionRef = useRef<string | null>(null);
   const lastActionRef = useRef<(() => void) | null>(null);
+  const lastActionKindRef = useRef<PairingActionKind | null>(null);
+  // The scanner entry that delivered the last QR: a backend step's scoped scan, or the home's.
+  const lastScanEntryRef = useRef<'backend' | 'any'>('backend');
+  const [freshAttempt, setFreshAttempt] = useState(0);
 
   const canBeginPairing = useCallback((onContinue?: () => void): boolean => {
     if (runtime.connections.length === 0 || isPro) return true;
@@ -149,15 +170,23 @@ export function OnboardingRoute({
     return requestId;
   }, []);
 
-  const failOperation = useCallback((requestId: number, error: unknown) => {
+  const failOperation = useCallback((requestId: number, error: unknown, backendKind: PairableBackendKind) => {
     if (requestId !== requestIdRef.current) return;
+    const errorCode = resolveOnboardingAdapterError(error);
+    const pairingReason = resolvePairingValidationReason(error);
     setOperation((current) => ({
       ...current,
       active: false,
-      errorCode: resolveOnboardingAdapterError(error),
-      pairingReason: resolvePairingValidationReason(error),
+      errorCode,
+      pairingReason,
     }));
-  }, []);
+    onPairingFailed?.({
+      backendKind,
+      method: lastActionKindRef.current ?? 'code',
+      code: errorCode,
+      ...(pairingReason ? { reason: pairingReason } : {}),
+    });
+  }, [onPairingFailed]);
 
   const awaitRuntimeConnection = useCallback(async (
     requestId: number,
@@ -172,7 +201,7 @@ export function OnboardingRoute({
     const connectionId = result.connectionId;
     const descriptor = snapshot.connections.find((connection) => connection.id === connectionId);
     if (!descriptor) {
-      failOperation(requestId, new Error('Pairing did not create the expected backend connection.'));
+      failOperation(requestId, new Error('Pairing did not create the expected backend connection.'), result.backendKind);
       return;
     }
     setOperation({
@@ -191,6 +220,7 @@ export function OnboardingRoute({
         lengthOk: isVerificationCodeComplete(submission.code, submission.backendKind),
       });
       lastActionRef.current = () => { void perform(); };
+      lastActionKindRef.current = 'code';
       const requestId = beginOperation(submission.backendKind);
       try {
         const result = await connectBackendPairingCode({
@@ -207,7 +237,7 @@ export function OnboardingRoute({
         if (requestId !== requestIdRef.current) return;
         await awaitRuntimeConnection(requestId, result);
       } catch (error) {
-        failOperation(requestId, error);
+        failOperation(requestId, error, submission.backendKind);
       } finally {
         releasePairingRequest();
       }
@@ -236,6 +266,7 @@ export function OnboardingRoute({
     if (!acquirePairingRequest()) return;
     const action = () => { void connectScannedPayloadRef.current(payload, expectedBackendKind); };
     lastActionRef.current = action;
+    lastActionKindRef.current = 'scan';
     const requestId = beginOperation(expectedBackendKind);
     try {
       const result = await connectBackendPairingPayload({
@@ -248,7 +279,7 @@ export function OnboardingRoute({
       if (requestId !== requestIdRef.current) return;
       await awaitRuntimeConnection(requestId, result);
     } catch (error) {
-      failOperation(requestId, error);
+      failOperation(requestId, error, expectedBackendKind);
     } finally {
       releasePairingRequest();
     }
@@ -282,7 +313,10 @@ export function OnboardingRoute({
         pairingReason: undefined,
       }));
       void openGatewayScanner({
-        onScanned: (result) => connectScannedPayloadRef.current(result, expectedBackendKind),
+        onScanned: (result) => {
+          lastScanEntryRef.current = 'backend';
+          return connectScannedPayloadRef.current(result, expectedBackendKind);
+        },
       });
     };
     if (!canBeginPairing(perform)) return;
@@ -302,6 +336,7 @@ export function OnboardingRoute({
             showNoticeAlert(t('Invalid QR Code'), t('This QR code does not contain valid connection info.'));
             return;
           }
+          lastScanEntryRef.current = 'any';
           return connectScannedPayloadRef.current(result, backendKind);
         },
       });
@@ -313,6 +348,9 @@ export function OnboardingRoute({
   const connectFromPairingLink = useCallback(async (url: string, expectedBackendKind = initialBackend) => {
     const perform = async () => {
       if (!acquirePairingRequest()) return;
+      // A failed link used to leave Retry on whatever was submitted before it.
+      lastActionRef.current = () => { void perform(); };
+      lastActionKindRef.current = 'link';
       const requestId = beginOperation(expectedBackendKind);
       try {
         const result = await connectBackendPairingLink({
@@ -329,7 +367,7 @@ export function OnboardingRoute({
         if (requestId !== requestIdRef.current) return;
         await awaitRuntimeConnection(requestId, result);
       } catch (error) {
-        failOperation(requestId, error);
+        failOperation(requestId, error, expectedBackendKind);
       } finally {
         releasePairingRequest();
       }
@@ -411,6 +449,18 @@ export function OnboardingRoute({
     lastActionRef.current?.();
   }, [operation.targetConnectionId]);
 
+  // A spent code or QR cannot be claimed twice. Its action asks for a new one where the last one came
+  // from: the scanner for a QR, the emptied code field otherwise (funnel review 2026-11-11: "Pair
+  // again" resubmitted the same invitation and failed the same way).
+  const startFreshPairing = useCallback(() => {
+    if (lastActionKindRef.current === 'scan') {
+      if (lastScanEntryRef.current === 'any') scanAnyQr();
+      else scanQr(operation.backendKind);
+      return;
+    }
+    setFreshAttempt((count) => count + 1);
+  }, [operation.backendKind, scanAnyQr, scanQr]);
+
   const openDocs = useCallback((backendKind: PairableBackendKind) => {
     onDocsOpened?.(backendKind);
     void Linking.openURL(ONBOARDING_DOCUMENTATION_URLS[backendKind]);
@@ -434,6 +484,7 @@ export function OnboardingRoute({
       status={status}
       environment={environment}
       pairingCommand={getOnboardingPairingCommand(environment)}
+      freshAttempt={freshAttempt}
       onViewed={onViewed}
       onClose={close ?? (() => {
         requestIdRef.current += 1;
@@ -463,6 +514,10 @@ export function OnboardingRoute({
       onErrorAction={(code) => {
         if (code === 'bridge_offline') {
           openDocs(operation.backendKind);
+          return;
+        }
+        if (!operation.targetConnectionId && SPENT_INVITATION_ERRORS.has(code)) {
+          startFreshPairing();
           return;
         }
         retry();
