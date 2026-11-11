@@ -24,6 +24,7 @@ import {
   Platform,
   Share,
   StyleSheet,
+  useColorScheme,
   View,
   Text,
 } from 'react-native';
@@ -196,6 +197,7 @@ import { ConnectionScreen } from './src/screens/Connection/ConnectionScreen';
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 const LOADING_THEME = buildTheme('light', 'light', builtInAccents[defaultAccentId]);
+const LOADING_THEME_DARK = buildTheme('dark', 'dark', builtInAccents[defaultAccentId]);
 const NO_CAPABILITIES = Object.freeze(Object.fromEntries(
   CAPABILITY_KEYS.map((capability) => [capability, false]),
 )) as unknown as Capabilities;
@@ -229,16 +231,22 @@ type AnnouncementPresentation = Readonly<{
 }>;
 
 const LAUNCH_MARK = require('./assets/splash-icon.png');
+const LAUNCH_MARK_DARK = require('./assets/splash-icon-dark.png');
 // The native splash draws splash-icon.png 200 points wide (app.json, expo-splash-screen `imageWidth`),
 // and the Companion fills 94 × 3.2 of its 1024-pixel canvas (scripts/generate-companion-icons.cjs).
 const SPLASH_IMAGE_WIDTH = 200;
 const SPLASH_COMPANION_WIDTH = (94 * 3.2 / 1024) * SPLASH_IMAGE_WIDTH;
 
-/** Continues the native splash with the same artwork, size and centring instead of a spinner. */
+/**
+ * Continues the native splash with the same artwork, size and centring instead of a spinner. Like
+ * the native splash it follows the system appearance: the saved theme is not readable yet, and a
+ * white frame between a dark splash and a dark app was the flash this replaces.
+ */
 function LaunchLoading(): React.JSX.Element {
+  const dark = useColorScheme() === 'dark';
   return (
-    <View style={[loadingStyles.loading, { backgroundColor: LOADING_THEME.colors.canvas }]}>
-      <Image source={LAUNCH_MARK} style={loadingStyles.launchMark} resizeMode="contain" accessibilityIgnoresInvertColors />
+    <View testID="launch-loading" style={[loadingStyles.loading, { backgroundColor: (dark ? LOADING_THEME_DARK : LOADING_THEME).colors.canvas }]}>
+      <Image source={dark ? LAUNCH_MARK_DARK : LAUNCH_MARK} style={loadingStyles.launchMark} resizeMode="contain" accessibilityIgnoresInvertColors />
       <StatusBar style="auto" />
     </View>
   );

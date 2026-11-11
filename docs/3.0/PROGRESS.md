@@ -1,5 +1,9 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-11-12 深色模式启动屏（整体产品审视第一档；草稿 PR，外观待负责人确认）。
+  - 现状：原生启动屏和 JS 启动占位 `LaunchLoading` 都固定白底黑猫，系统深色模式下冷启动会先闪一屏白再进深色界面。
+  - 改动：`expo-splash-screen` 增加 `dark`（背景为深色 `canvas` #0C0C0D，图为新生成的 `splash-icon-dark.png`，浅色猫、眼睛透出背景）；`LaunchLoading` 用 `useColorScheme` 接续同一组图和底色（此时还读不到 App 内的主题设置，所以与原生启动屏一样跟随系统）。浅色模式资源逐字节不变。
+  - 验证：图标生成脚本重跑后其余 12 个资源无变化；iOS 与 Android 预构建（`expo prebuild --no-install`，未编译）生成了深色 colorset / `dark_image*` 与 `values-night` / `drawable-night-*`；check:app-config 10 项（新增 1 项，把两种底色绑定到主题 canvas）、Mobile 类型检查通过。未做原生编译和真机冷启动验收；已安装的客户端需要新的原生构建才会生效。App 内主题手动设为浅色而系统为深色的用户，会从深色启动屏进入浅色界面（原先是反过来的情况闪白）。见 HT-DARK-LAUNCH-1112。
 - 2026-11-12 README 与 CLI 的配对入口对齐 App（整体产品审视第一档）。
   - README 中英文原先首推 `npm install -g @p697/clawket` + `clawket pair`，这条默认命令只检测 OpenClaw 和 Hermes；只装了 Codex / Claude Code / Pi 的人照做会得到「先安装 OpenClaw 或 Hermes」。现在两份 README 都先给 App 配对首页显示的 `npx @p697/clawket@latest pair choose`，全局安装与 `clawket pair` 作为 OpenClaw / Hermes 的直接方式保留在后面，内容不删。
   - CLI 裸 `pair` 找不到 OpenClaw / Hermes 时，报错改为同时指出 `pair choose` 与 `--backend codex|claude-code|pi`。检测范围和旧客户端依赖的裸 `pair` 行为不变；这条文案要随下一次 Bridge 发布才到达用户，本次不发布、不改版本号。
@@ -2561,6 +2565,7 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 
 | 编号 | 事项 | 怎么做 | 验证方法 | 状态 |
 |---|---|---|---|---|
+| HT-DARK-LAUNCH-1112 | 深色启动屏外观确认与真机验收 | 先看草稿 PR 里的改前改后对比图决定是否采用；采用后用新的原生构建，在系统深色与浅色下各冷启动几次 | 深色下全程无白屏闪烁，猫的大小和位置在启动屏与占位之间不跳；浅色下与现在一致 | 待确认 |
 | HT-PAYWALL-SCOPE-1112 | 付费墙按后端收敛权益的真机验收 | 开「模拟免费账号」：① 只保留 Codex 或 Claude Code 连接，从设置会员卡打开付费墙；② 只保留 Hermes；③ 含 OpenClaw | ① 只有「接着电脑上的对话继续聊」「连接数量不限」两条，权益区与价格卡的间距正常；② 没有 OpenClaw 管理一条；③ 与改动前一致。新文案措辞如需调整直接告知 | 待验收 |
 | HT-HAPTICS-1112 | 触感补齐真机验收 | 装含本改动的构建：审批卡点允许 / 拒绝、长按允许；首页行和会话行长按；左滑首页行；完成一次配对、再故意用失效的码配对一次 | 每个动作有一次对应力度的触感，没有重复或漏掉；发消息、回复完成的原有触感不变 | 待验收 |
 | HT-PAIR-RETRY-1111 | 配对失效后重新开始的真机验收 | 装含本改动的构建：① 平台页输入一个已用过的配对码 → 出现「配对已失效」后点「重新配对」；② 扫一个已用过的二维码后点同一按钮 | ① 输入框清空并弹出键盘，红色提示仍在原位；② 直接回到扫码器；两种情况都不再出现第二次同样的失败 | 待验收 |
