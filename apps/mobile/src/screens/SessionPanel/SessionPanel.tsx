@@ -65,6 +65,7 @@ import {
 import { useRelativeTimeTranslator } from '../../hooks/useRelativeTimeTranslator';
 import { relativeTime } from '../../utils/chat-message';
 import { analyticsEvents } from '../../services/analytics/events';
+import { triggerLightImpact } from '../../services/haptics';
 import {
   availableSessionActions,
   applySessionPanelActivity,
@@ -294,7 +295,7 @@ const SessionRow = memo(function SessionRow({
       accessibilityState={{ selected }}
       onPressIn={() => { longPressHandled.current = false; }}
       onPress={() => { if (!longPressHandled.current) onSelect(row); }}
-      onLongPress={actions.length ? openActions : undefined}
+      onLongPress={actions.length ? () => { triggerLightImpact(); openActions(); } : undefined}
       accessibilityActions={actions.length ? [{ name: 'longpress', label: t('Session actions') }] : undefined}
       onAccessibilityAction={(event) => {
         if (event.nativeEvent.actionName === 'longpress') openActions();

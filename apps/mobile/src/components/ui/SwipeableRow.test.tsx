@@ -80,6 +80,19 @@ describe('SwipeableRow', () => {
     expect(onPin).not.toHaveBeenCalled();
   });
 
+  it('taps lightly as its tray opens', () => {
+    const Haptics = require('expo-haptics');
+    Haptics.impactAsync.mockClear();
+    const view = render(
+      <SwipeableRow rowKey="a" actions={actions()} testID="row">
+        <Text>Agent</Text>
+      </SwipeableRow>,
+    );
+    view.getByTestId('row').props.onSwipeableWillOpen('right');
+    expect(Haptics.impactAsync).toHaveBeenCalledTimes(1);
+    expect(Haptics.impactAsync).toHaveBeenCalledWith(Haptics.ImpactFeedbackStyle.Light);
+  });
+
   it('colours destructive cells with the semantic bad tone and neutral cells with surface', () => {
     const view = render(
       <SwipeableRow rowKey="a" actions={actions()} testID="row">

@@ -1,5 +1,5 @@
 import React from 'react';
-import * as Haptics from 'expo-haptics';
+import { triggerSelectionHaptic } from '../../services/haptics';
 import { StyleProp, View, ViewStyle } from 'react-native';
 import { MenuAction, MenuView } from '@react-native-menu/menu';
 import { useTranslation } from 'react-i18next';
@@ -41,7 +41,7 @@ export function AttachmentMenu({
 
   const handleAction = React.useCallback(({ nativeEvent }: { nativeEvent: { event: string } }) => {
     const action = nativeEvent.event as AttachmentAction;
-    Haptics.selectionAsync();
+    triggerSelectionHaptic();
 
     if (action === 'photo-library') {
       void onPickImage();

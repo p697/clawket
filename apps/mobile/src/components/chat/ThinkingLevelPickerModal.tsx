@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text } from 'react-native';
 import { BottomSheetFlatList } from '@gorhom/bottom-sheet';
-import * as Haptics from 'expo-haptics';
+import { triggerLightImpact } from '../../services/haptics';
 import { useTranslation } from 'react-i18next';
 import { Check } from 'lucide-react-native';
 import { Sheet } from '../ui';
@@ -54,7 +54,7 @@ export function ThinkingLevelPickerModal({
               accessibilityRole="button"
               accessibilityState={{ selected: isActive, disabled }}
               onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                triggerLightImpact();
                 onSelect(item.value);
               }}
               disabled={disabled}

@@ -18,7 +18,7 @@ import {
   Shadow,
   Space,
 } from '../../theme/tokens';
-import { triggerLightImpact } from '../../services/haptics';
+import { triggerLightImpact, triggerMediumImpact } from '../../services/haptics';
 import { ApprovalCard } from './ApprovalCard';
 import { BUBBLE_TAIL_WIDTH, Bubble } from './Bubble';
 import { chatWallpaperPalettes } from '../../theme/chat-wallpaper';
@@ -152,6 +152,7 @@ jest.mock('react-native-safe-area-context', () => ({
 
 jest.mock('../../services/haptics', () => ({
   triggerLightImpact: jest.fn(),
+  triggerMediumImpact: jest.fn(),
 }));
 
 let consoleErrorSpy: jest.SpyInstance;
@@ -335,9 +336,14 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
       backgroundColor: palette.outgoing,
     });
     expect(flattenStyle(result.getByTestId('approval-secondary').props.style).backgroundColor).toBe(palette.service);
+    jest.mocked(triggerLightImpact).mockClear();
+    jest.mocked(triggerMediumImpact).mockClear();
     fireEvent.press(result.getByTestId('approval-primary'));
     fireEvent(result.getByTestId('approval-primary'), 'longPress');
     fireEvent.press(result.getByTestId('approval-secondary'));
+    // Each decision answers with a tap: light for Allow and Reject, medium for the held "always".
+    expect(triggerLightImpact).toHaveBeenCalledTimes(2);
+    expect(triggerMediumImpact).toHaveBeenCalledTimes(1);
     expect(allow).toHaveBeenCalledTimes(1);
     expect(alwaysAllow).toHaveBeenCalledTimes(1);
     expect(reject).toHaveBeenCalledTimes(1);

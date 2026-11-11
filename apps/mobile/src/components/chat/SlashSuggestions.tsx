@@ -8,7 +8,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import * as Haptics from 'expo-haptics';
+import { triggerLightImpact } from '../../services/haptics';
 import { SlashCommand } from '../../data/slash-commands';
 import { useSlashCommandDescriptions } from './slashCommandCopy';
 import { useAppTheme } from '../../theme';
@@ -123,7 +123,7 @@ export function SlashSuggestions({ visible, inputValue, suggestions, maxHeight, 
           const { highlight, rest } = splitCommandLabel(item.command, typedPrefix);
           return (
             <Pressable
-              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onSelect(item); }}
+              onPress={() => { triggerLightImpact(); onSelect(item); }}
               style={({ pressed }) => [
                 styles.row,
                 pressed && styles.rowPressed,

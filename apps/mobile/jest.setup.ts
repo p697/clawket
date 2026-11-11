@@ -114,6 +114,8 @@ jest.mock('react-native-gesture-handler/ReanimatedSwipeable', () => {
       children,
       renderRightActions,
       testID,
+      onSwipeableWillOpen,
+      onSwipeableClose,
     }: {
       children?: React.ReactNode;
       renderRightActions?: (
@@ -134,7 +136,8 @@ jest.mock('react-native-gesture-handler/ReanimatedSwipeable', () => {
     React.useImperativeHandle(ref, () => methods, [methods]);
     return React.createElement(
       'Swipeable',
-      { testID },
+      // The open/close callbacks stay reachable so a test can stand in for the gesture.
+      { testID, onSwipeableWillOpen, onSwipeableClose },
       children,
       renderRightActions ? renderRightActions({ value: 1 }, { value: 0 }, methods) : null,
     );

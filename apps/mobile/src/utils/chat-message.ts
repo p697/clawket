@@ -284,8 +284,16 @@ export function sanitizeSilentPreviewText(text: string | null | undefined): stri
  * "- Apple - Banana 1. Red" (device review 2026-09-27). Single `*` and `_` stay:
  * they are common in identifiers.
  */
+/**
+ * OpenClaw prefixes a scheduled run's prompt with `[cron:<job id> <job name>]`. When that prompt is
+ * the session's last message, the list preview opened with the job's UUID (simulator review
+ * 2026-11-11); the row title already names the job. A preview cut off inside the envelope has
+ * nothing left to show.
+ */
+const CRON_PROMPT_ENVELOPE = /^\[cron:[0-9a-f-]{8,64}(?:\s[^\]\n]*)?(?:\]\s*|$)/i;
+
 export function formatPreviewLine(text: string | null | undefined): string | undefined {
-  const clean = sanitizeSilentPreviewText(text);
+  const clean = sanitizeSilentPreviewText(text)?.replace(CRON_PROMPT_ENVELOPE, '');
   if (!clean) return undefined;
   // Some bridges flatten the text before sending it: a one-line preview that opens with a list
   // marker is a flattened list, so its inline " - " and " 2. " markers are list markers too.

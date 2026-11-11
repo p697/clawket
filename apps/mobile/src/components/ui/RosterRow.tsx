@@ -33,6 +33,7 @@ import {
   type AgentAttentionTone,
   type AgentAvatarStatus,
 } from './AgentAvatar';
+import { triggerLightImpact } from '../../services/haptics';
 import { formatFloatingButtonBadgeCount } from './FloatingButton';
 import type { PlatformKind } from './PlatformMark';
 
@@ -154,7 +155,7 @@ export function RosterRow({
       accessibilityState={{ selected }}
       accessibilityLabel={accessibilityLabel ?? name}
       onPress={onPress}
-      onLongPress={onLongPress}
+      onLongPress={onLongPress ? () => { triggerLightImpact(); onLongPress(); } : undefined}
       onPressIn={() => {
         pressProgress.value = withTiming(1, { duration: Motion.duration.fast });
       }}

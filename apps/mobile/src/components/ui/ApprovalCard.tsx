@@ -21,6 +21,7 @@ import {
   Radius,
   Space,
 } from '../../theme/tokens';
+import { triggerLightImpact, triggerMediumImpact } from '../../services/haptics';
 import { Bubble } from './Bubble';
 
 export type ApprovalCardAction = {
@@ -106,11 +107,14 @@ export function ApprovalCard({
     disabled: (busy && spinningSlot !== slot) || action.disabled === true,
     accessibilityLabel: action.accessibilityLabel ?? action.label,
     testID: testID ? `${testID}-${slot}` : undefined,
+    // A decision answers with a tap of its own; the request itself arrived with a Warning.
     onPress: () => {
+      triggerLightImpact();
       setPressedSlot(slot);
       action.onPress();
     },
     onLongPress: action.onLongPress ? () => {
+      triggerMediumImpact();
       setPressedSlot(slot);
       action.onLongPress?.();
     } : undefined,

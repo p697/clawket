@@ -28,6 +28,7 @@ import { useGatewayScanner } from '../../contexts/GatewayScannerContext';
 import { useProPaywall } from '../../contexts/ProPaywallContext';
 import type { RootStackParamList } from '../../navigation/root-stack';
 import type { RelayServiceEnvironment } from '../../types';
+import { triggerSuccessHaptic, triggerWarningHaptic } from '../../services/haptics';
 import { showNoticeAlert } from '../../utils/notice-alert';
 import { OnboardingScreen } from './OnboardingScreen';
 import { WelcomeScreen } from './WelcomeScreen';
@@ -174,6 +175,7 @@ export function OnboardingRoute({
     if (requestId !== requestIdRef.current) return;
     const errorCode = resolveOnboardingAdapterError(error);
     const pairingReason = resolvePairingValidationReason(error);
+    triggerWarningHaptic();
     setOperation((current) => ({
       ...current,
       active: false,
@@ -407,6 +409,8 @@ export function OnboardingRoute({
       return;
     }
     announcedConnectionRef.current = connectionId;
+    // The one moment the whole flow builds to: the paired Agent answered.
+    triggerSuccessHaptic();
     setOperation((current) => ({ ...current, phase: 'ready' }));
     onConnected?.({ connectionId, backendKind: operation.backendKind });
   }, [
