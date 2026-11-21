@@ -87,6 +87,7 @@ import {
   type SessionPanelPageState,
   type SessionPanelRenamePayload,
   type SessionPanelRow,
+  orderProjectsByRecency,
 } from './model';
 
 type MaybePromise = void | Promise<void>;
@@ -1406,6 +1407,7 @@ export function SessionPanel({
   const cachedProjects = useMemo(() => rows.flatMap(r => r.project ? [r.project] : [])
     .filter((p, i, all) => all.findIndex(v => v.id === p.id) === i), [rows]);
   const projects = projectSnapshot?.adapter === adapter ? projectSnapshot.projects : cachedProjects;
+  const orderedProjects = useMemo(() => orderProjectsByRecency(projects ?? [], rows), [projects, rows]);
   useEffect(() => {
     // Closing a sheet must not scan the host again or empty its cached picker.
     if (!visible || !adapter?.capabilities.projects || !adapter.projects) return;
@@ -1436,7 +1438,7 @@ export function SessionPanel({
     <SessionPanelView
       activityAdapter={adapter}
       activityLive={activityLive}
-      projects={adapter?.capabilities.projects ? projects ?? [] : undefined}
+      projects={adapter?.capabilities.projects ? orderedProjects : undefined}
       archiveScope={adapter?.connection.id}
       onLoadArchived={adapter?.capabilities.sessionArchive && adapter.listArchivedSessions && group ? async () => {
         const sessions = await adapter.listArchivedSessions!(currentAgentId);

@@ -320,3 +320,22 @@ export function sessionPanelRowWorking(row: SessionPanelRow): boolean {
   return row.hasActiveRun && row.activityState !== 'unknown' && row.activityState !== 'waiting'
     && row.attention !== 'input' && row.attention !== 'approval' && !row.archived;
 }
+
+/**
+ * Project picker order: the folder with the most recent conversation first,
+ * folders that no longer exist last, the Bridge's own order between equals.
+ */
+export function orderProjectsByRecency<P extends { id: string; available?: boolean }>(
+  projects: readonly P[],
+  rows: readonly { project?: { id: string } | null; updatedAt: number }[],
+): P[] {
+  const latest = new Map<string, number>();
+  for (const row of rows) {
+    if (row.project) latest.set(row.project.id, Math.max(latest.get(row.project.id) ?? 0, row.updatedAt || 0));
+  }
+  return projects.map((project, index) => ({ project, index }))
+    .sort((a, b) => Number(b.project.available !== false) - Number(a.project.available !== false)
+      || (latest.get(b.project.id) ?? 0) - (latest.get(a.project.id) ?? 0)
+      || a.index - b.index)
+    .map(entry => entry.project);
+}

@@ -1,9 +1,21 @@
 import { ClaudeFault } from './errors.js';
 import { EventEmitter } from 'node:events';
+import { homedir } from 'node:os';
+import { posix } from 'node:path';
 import { query, type Options, type Query, type SDKMessage, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { PromptInput, SessionUpdate } from '@clawket/agent-protocol';
 import { ClaudeInteractions } from './interactions.js';
 import { claudeModelId } from './models.js';
+
+/**
+ * macOS asks at the computer before a new executable may read these folders,
+ * and the process waits in that prompt: nobody can answer it from the phone.
+ */
+export function macProtectedFolder(cwd: string, home = homedir(), platform: string = process.platform): boolean {
+  if (platform !== 'darwin') return false;
+  // macOS paths are POSIX whatever host evaluates this.
+  return ['Documents', 'Desktop', 'Downloads'].some(name => cwd === posix.join(home, name) || cwd.startsWith(posix.join(home, name) + '/'));
+}
 
 type SessionOptions = {
   key: string;
@@ -89,7 +101,12 @@ export class ClaudeSession extends EventEmitter {
     this.reader = this.read(this.runner);
     const deadline = setTimeout(() => this.controller.abort(), 30_000);
     try { await this.runner.initializationResult(); }
-    catch { await this.close(); throw new ClaudeFault('Claude Code could not initialize. Check native authentication and configuration.'); }
+    catch {
+      await this.close();
+      throw new ClaudeFault(macProtectedFolder(this.options.cwd)
+        ? 'Claude Code did not start in this folder. If your Mac is asking whether it may access the folder, allow it on the computer, then send again.'
+        : 'Claude Code could not initialize. Check native authentication and configuration.');
+    }
     finally { clearTimeout(deadline); }
     if (this.closed) throw new ClaudeFault('Claude session closed during initialization');
   }
