@@ -193,7 +193,7 @@ it('preserves default device discovery through the first background pairing laun
   const childConfig = childArgs[childArgs.indexOf('--config') + 1];
   await handleClaudeCommand([...childArgs, '--foreground']);
   expect(JSON.parse(readFileSync(childConfig, 'utf8'))).toMatchObject({
-    device: true, displayName: 'Claude Code · 工作室 Mac', project: realpathSync(join(root, 'Documents', 'Clawket', 'Chats')),
+    device: true, displayName: 'Claude Code · 工作室 Mac', project: realpathSync(join(root, 'Clawket', 'Chats')),
   });
   expect(JSON.parse(mock.qr.mock.calls[0][0])).toMatchObject({ backendKind: 'claude-code', mode: 'local', displayName: 'Claude Code · 工作室 Mac' });
 });

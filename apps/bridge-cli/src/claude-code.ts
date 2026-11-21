@@ -1,5 +1,6 @@
 import { canonicalizeOfficialRelayUrl, migrateOfficialRelayConfig, officialRelayEndpoints, sameRelayRegistry } from '@clawket/bridge-core';
 import { ownerLockBlocksStart } from './owner-lock-probe.js';
+import { deviceChatsRoot } from './device-chats.js';
 import { registerRuntimeOwner } from './runtime-owner.js';
 import { createRemoteUpdateControl } from './remote-update.js';
 import { readCliVersion } from './metadata.js';
@@ -39,7 +40,7 @@ async function runClaudeCommand(args: string[], progress: Progress): Promise<voi
   if (!['pair', 'run', 'doctor', 'status', 'start', 'restart', 'stop', 'logs', 'reset'].includes(command)) throw new Error('Use claude-code pair, run, start, restart, stop, status, doctor, logs or reset');
   if (args.includes('--device') && flag(args, '--project')) throw new Error('Choose --device or --project, not both');
   const device = args.includes('--device') || (!flag(args, '--project') && !flag(args, '--config'));
-  const deviceRoot = join(homedir(), 'Documents', 'Clawket', 'Chats');
+  const deviceRoot = deviceChatsRoot(resolve(flag(args, '--config') ?? join(homedir(), '.clawket', 'claude-code', 'device', args.includes('--preview') ? 'preview' : 'production', 'runtime.json')));
   if (device) mkdirSync(deviceRoot, { recursive: true, mode: 0o700 });
   const requestedProject = resolve(flag(args, '--project') ?? (device ? deviceRoot : process.cwd()));
   const project = flag(args, '--config') && !existsSync(requestedProject) ? requestedProject : realpathSync(requestedProject);

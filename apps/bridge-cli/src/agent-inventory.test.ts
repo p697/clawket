@@ -59,6 +59,14 @@ it.each(['ECONNRESET', 'ETIMEDOUT', undefined])('does not equate uncertain healt
   const result = await inspectAgent({ backend: 'codex', configPath: path, environment: 'production' });
   expect(result.state).toBe('unverified'); expect(JSON.stringify(result)).not.toContain('private-native-error');
 });
+it.each(['codex', 'claude-code', 'pi'] as const)('names the restart when the running %s Bridge reports its own Agent process unhealthy', async backend => {
+  const path = save(backend, 'production', config(), scope);
+  control[backend === 'claude-code' ? 'claude' : backend].mockRejectedValue(Object.assign(new Error('private-native-error'), { code: 'NATIVE_HEALTH_FAILED' }));
+  const result = await inspectAgent({ backend, configPath: path, environment: 'production' });
+  expect(result.state).toBe('unverified');
+  expect(result.finding).toContain(`clawket ${backend} restart`);
+  expect(JSON.stringify(result)).not.toContain('private-native-error');
+});
 it('classifies only connection refusal as stopped', async () => {
   const path = save(); control.codex.mockRejectedValue(Object.assign(new Error('refused'), { code: 'ECONNREFUSED' }));
   expect((await inspectAgent({ backend: 'codex', configPath: path, environment: 'production' })).state).toBe('stopped');

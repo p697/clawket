@@ -3500,8 +3500,12 @@ describe('Codex account read rejected by a long-lived native process', () => {
       if (method === 'account/read') throw new CodexRpcError('Codex request timed out; its outcome is unknown. Do not resend automatically.', 'uncertain');
       return original(method, params);
     });
+    const diagnostics: any[] = []; service.on('diagnostic', d => diagnostics.push(d.reason));
+    await expect(request('health')).rejects.toThrow('outcome is unknown');
     await expect(request('health')).rejects.toThrow('outcome is unknown');
     expect(mock.instances).toHaveLength(1);
+    // The failed handshake is recorded, once a minute at most.
+    expect(diagnostics).toEqual(['health_failed']);
   });
 });
 

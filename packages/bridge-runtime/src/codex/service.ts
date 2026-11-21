@@ -104,6 +104,7 @@ export class CodexService extends EventEmitter {
   private recoveryFailures = 0;
   private writerReleases = new Map<string, ReturnType<typeof setTimeout>>();
   private accountRecycleAt = 0;
+  private healthFailureAt = -Infinity;
   private accountRecycle?: Promise<void>;
   private runs = new Map<string, Run>();
   // Bounded lookup for follower start replies; settled entries stay here, so only `pendingStarts` means busy.
@@ -1095,6 +1096,14 @@ export class CodexService extends EventEmitter {
     })];
   }
   async health(): Promise<object> {
+    try { return await this.healthNow(); }
+    catch (error) {
+      // A failed phone handshake leaves no other trace on this computer. One line a minute.
+      if (!this.stopped && Date.now() - this.healthFailureAt >= 60_000) { this.healthFailureAt = Date.now(); this.emit('diagnostic', { reason: 'health_failed', pendingCount: 0 }); }
+      throw error;
+    }
+  }
+  private async healthNow(): Promise<object> {
     if (this.stopped) throw new Error('Codex process is unavailable. Restart the Bridge.');
     await this.recover();
     const catalog = this.catalog.length ? this.catalog : await this.refreshModels();

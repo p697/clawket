@@ -25,6 +25,7 @@ import { handleRemoteUpdateRequest, isRemoteUpdateMethod, remoteUpdateHealth, ty
 export interface ClaudeRequest { type: 'req'; id: string; method: string; params?: Record<string, unknown> }
 export interface ClaudeOptions { bridgeVersion?: string; remoteUpdate?: RemoteUpdateControl; project: string; directory: string; executable: string; device?: boolean; ownershipDirectory?: string }
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
+const IDLE_SESSION_RELEASE_MS = 30 * 60_000;
 function string(value: unknown, label: string, max = 300): string {
   if (typeof value !== 'string' || !value.trim() || value.length > max) throw new ClaudeFault(`Invalid ${label}`);
   return value;
@@ -38,6 +39,7 @@ export class ClaudeService extends EventEmitter {
   private readonly catalog: ClaudeCatalog;
   private readonly owners: ClaudeOwners;
   private sessions = new Map<string, ClaudeSession>();
+  private idleReleases = new Map<string, ReturnType<typeof setTimeout>>();
   private locks = new Map<string, ClaudeOwnerLock>();
   private probes = new Set<ClaudeSession>();
   private previews = new Map<string, { preview: string; lastActivityAt: number }>();
@@ -309,8 +311,29 @@ export class ClaudeService extends EventEmitter {
     return record;
   }
 
+  /**
+   * An owned process keeps the login and settings it started with, and occupies
+   * one of the two process slots. Half an hour after its last turn it is closed;
+   * the next send resumes the same conversation in a fresh process.
+   */
+  private armIdleRelease(key: string, session: ClaudeSession): void {
+    const pending = this.idleReleases.get(key); if (pending) clearTimeout(pending);
+    if (this.stopped) return;
+    const timer = setTimeout(() => {
+      this.idleReleases.delete(key);
+      void this.serial(async () => {
+        if (this.sessions.get(key) !== session) return;
+        if (session.activeRun) { this.armIdleRelease(key, session); return; }
+        await this.releaseSession(key, session);
+      }).catch(() => {});
+    }, IDLE_SESSION_RELEASE_MS);
+    timer.unref?.();
+    this.idleReleases.set(key, timer);
+  }
+
   private async releaseSession(key: string, session: ClaudeSession): Promise<void> {
     if (this.sessions.get(key) !== session) return;
+    const idle = this.idleReleases.get(key); if (idle) { clearTimeout(idle); this.idleReleases.delete(key); }
     await session.close();
     this.sessions.delete(key);
     this.locks.get(key)?.close(); this.locks.delete(key);
@@ -398,10 +421,12 @@ export class ClaudeService extends EventEmitter {
         void this.descriptor(record).then(descriptor => this.update({ type: 'session_info_update', session: descriptor })).catch(() => {});
         // Imported conversations relinquish the native writer between turns so the computer can resume later.
         if (record.imported) void this.serial(() => this.releaseSession(record.key, session)).catch(() => {});
+        else this.armIdleRelease(record.key, session);
       });
       this.sessions.set(record.key, session);
       try { await session.start(); }
       catch (error) { this.sessions.delete(record.key); await session.close(); throw error; }
+      this.armIdleRelease(record.key, session);
       return session;
     } catch (error) { lock.close(); this.locks.delete(record.key); throw error; }
   }
@@ -470,6 +495,7 @@ export class ClaudeService extends EventEmitter {
   async stop(): Promise<void> {
     if (this.stopped) return;
     this.stopped = true; this.artifacts.clear();
+    for (const timer of this.idleReleases.values()) clearTimeout(timer); this.idleReleases.clear();
     for (const probe of this.probes) await probe.close();
     for (const session of this.sessions.values()) await session.close();
     await this.queue.catch(() => {});

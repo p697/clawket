@@ -10,7 +10,9 @@ export class CodexRpcError extends Error {
 export type CodexRpcDiagnostic = Readonly<{
   reason: 'native_spawn_error' | 'native_exit' | 'native_write_error' | 'frame_too_large' | 'invalid_frame' | 'request_timeout' | 'workspace_requirements_unavailable' | 'stopped'
     // Emitted by the service: a rejected account read, and the idle child replacement that follows it.
-    | 'account_read_rejected' | 'account_recycle';
+    | 'account_read_rejected' | 'account_recycle'
+    // Emitted by the service when a health request (the phone handshake) fails, at most once a minute.
+    | 'health_failed';
   pendingCount: number;
   frameBytes?: number;
 }>;

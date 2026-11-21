@@ -7,6 +7,7 @@ import { codexControl, startCodexBackground } from './codex-lifecycle.js';
 import { agentPairProgress, type Progress } from './progress.js';
 import { defaultDeviceConnectionName } from './device-connection-name.js';
 import { ownerLockBlocksStart } from './owner-lock-probe.js';
+import { deviceChatsRoot } from './device-chats.js';
 import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, unlinkSync, realpathSync } from 'node:fs';
 import { dirname, join, resolve, basename } from 'node:path';
 import { homedir } from 'node:os';
@@ -39,7 +40,7 @@ async function runCodexCommand(args: string[], progress: Progress): Promise<void
   if (!['pair', 'run', 'doctor', 'status', 'start', 'restart', 'stop', 'logs', 'reset'].includes(command)) throw new Error('Use codex pair, run, start, restart, stop, status, doctor, logs or reset');
   if (args.includes('--device') && flag(args, '--project')) throw new Error('Choose --device or --project, not both');
   const device = args.includes('--device') || (!flag(args, '--project') && !flag(args, '--config'));
-  const deviceRoot = join(homedir(), 'Documents', 'Clawket', 'Chats');
+  const deviceRoot = deviceChatsRoot(resolve(flag(args, '--config') ?? join(homedir(), '.clawket', 'codex', 'device', args.includes('--preview') ? 'preview' : 'production', 'runtime.json')));
   if (device) mkdirSync(deviceRoot, { recursive: true, mode: 0o700 });
   const requestedProject = resolve(flag(args, '--project') ?? (device ? deviceRoot : process.cwd()));
   const project = flag(args, '--config') && !existsSync(requestedProject) ? requestedProject : realpathSync(requestedProject);

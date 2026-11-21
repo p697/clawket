@@ -36,8 +36,12 @@ describe('Claude native history', () => {
       message('user', 'interrupted', [{ type: 'text', text: '[Request interrupted by user for tool use]' }]),
       message('user', 'interrupted-text', '[Request interrupted by user]'),
       message('user', 'task', '<task-notification>\n<task-id>b1</task-id>\n<status>failed</status>\n<summary>Background command failed</summary>\n</task-notification>'),
+      message('user', 'image-note', '[Image: original 1206x2622, displayed at 920x2000. Multiply coordinates by 1.31 to map to original image.]'),
+      message('user', 'image-note-block', [{ type: 'text', text: '[Image: original 800x600, displayed at 400x300. Multiply coordinates by 2 to map to original image.]' }]),
       message('user', 'human', text),
     ])).toEqual([{ id: 'human', role: 'user', text }]);
+    const mentioned = 'What does "[Image: original 1206x2622, displayed at 920x2000." mean?';
+    expect(claudeHistory([message('user', 'mentioned', mentioned)])).toEqual([{ id: 'mentioned', role: 'user', text: mentioned }]);
     const quoted = 'Why did <task-notification> appear?';
     expect(claudeHistory([message('user', 'quoted', quoted)])).toEqual([{ id: 'quoted', role: 'user', text: quoted }]);
   });

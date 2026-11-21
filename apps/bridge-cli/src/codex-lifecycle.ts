@@ -27,7 +27,7 @@ export function codexControl(config: { port: number; token: string }, method = '
           return;
         }
         if (method === 'health' && frame.id === 'auth' && frame.error?.code === 'codex_error') {
-          finish(new Error('The existing Codex Bridge failed its native health check. Run clawket codex restart with the same pairing options, then retry. Inspect clawket codex logs for details.'));
+          finish(Object.assign(new Error('The existing Codex Bridge failed its native health check. Run clawket codex restart with the same pairing options, then retry. Inspect clawket codex logs for details.'), { code: 'NATIVE_HEALTH_FAILED' }));
           return;
         }
         finish(new Error('Codex Bridge rejected the control request')); return;
