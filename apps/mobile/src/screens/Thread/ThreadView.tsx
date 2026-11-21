@@ -674,7 +674,7 @@ export function ThreadView({
     && (awaitingInput || hasPendingApproval(messages, capabilities, Date.now()));
   const headerWorking = presentedRunning && !waitingForYou && state.kind !== 'reconnecting';
   const headerPresence = waitingForYou ? 'attention' as const : headerWorking ? 'working' as const : null;
-  const headerSubtitle = state.kind === 'reconnecting' ? t('Reconnecting…')
+  const headerSubtitle = state.kind === 'reconnecting' ? state.connecting ? t('Connecting', { ns: 'common' }) : t('Reconnecting…')
     : waitingForYou ? interactionAttention === 'input' ? t('Agent needs your input', { ns: 'chat' }) : t('Waiting for your approval', { ns: 'chat' })
     : headerWorking ? resolveThreadWorkingStatus({ messages, activityLabel, thinkingLabel: copy.thinking, t })
     : resolveThreadHeaderSubtitle({

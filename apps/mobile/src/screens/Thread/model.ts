@@ -21,7 +21,7 @@ export type ThreadContentState =
   | Readonly<{ kind: 'loading' }>
   | Readonly<{ kind: 'empty' }>
   | Readonly<{ kind: 'ready' }>
-  | Readonly<{ kind: 'reconnecting' }>
+  | Readonly<{ kind: 'reconnecting'; connecting?: boolean }>
   | Readonly<{ kind: 'offline' }>
   | Readonly<{ kind: 'locked' }>
   | Readonly<{
@@ -427,6 +427,9 @@ export function deriveThreadContentState({
   if (hydrating) return { kind: 'loading' };
   // Keep scoped cached messages visible while reconnecting or refreshing history.
   if (hasMessages && !switching && targetSessionReady) return { kind: 'ready' };
+  // The thread is keyed by its connection and Agent, so these saved messages
+  // are this conversation's own: read them while the connection is being made.
+  if (hasMessages && switching && targetSessionReady) return { kind: 'reconnecting', connecting: true };
 
   if (
     switching

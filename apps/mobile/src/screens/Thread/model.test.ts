@@ -120,12 +120,27 @@ describe('Thread model', () => {
   });
 
   it('distinguishes loading, empty, ready, and cache-preserving offline states', () => {
+    // Saved messages of this conversation stay readable while the connection is made.
     expect(deriveThreadContentState({
       switching: true,
       historyLoaded: true,
       hasMessages: true,
       connectionState: 'ready',
-    })).toEqual({ kind: 'loading' });
+    })).toEqual({ kind: 'reconnecting', connecting: true });
+    expect(deriveThreadContentState({
+      switching: true,
+      historyLoaded: true,
+      hasMessages: true,
+      connectionState: 'idle',
+    })).toEqual({ kind: 'reconnecting', connecting: true });
+    for (const waiting of [{ hasMessages: false }, { targetSessionReady: false }, { hydrating: true }]) {
+      expect(deriveThreadContentState({
+        switching: true, historyLoaded: true, hasMessages: true, connectionState: 'idle', ...waiting,
+      })).toEqual({ kind: 'loading' });
+    }
+    expect(deriveThreadContentState({
+      switching: true, historyLoaded: true, hasMessages: true, connectionState: 'offline',
+    })).toEqual({ kind: 'offline' });
     expect(deriveThreadContentState({
       targetSessionReady: false,
       historyLoaded: true,

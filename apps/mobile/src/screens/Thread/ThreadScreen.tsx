@@ -197,6 +197,18 @@ export function ThreadScreen(props: ThreadScreenProps): React.JSX.Element {
     if (!focused || props.locked || agent?.entryMode !== 'sessions' || !sessionKey || !sessionExists) return;
     void SessionPreferencesService.setLastSession(connectionId, agentId, sessionKey).catch(() => {});
   }, [focused, props.locked, agent?.entryMode, connectionId, agentId, sessionKey, sessionExists]);
+  // A conversation opened from the saved list may be gone from the computer.
+  // Once the live list says so, hand over to the picker instead of an error.
+  const liveGroup = snapshot.roster.find(group => group.connection.id === connectionId);
+  const sessionListed = liveGroup?.agents.find(row => row.agent.agentId === agentId)?.sessions
+    ?.some(session => session.key === sessionKey && session.archived !== true) === true;
+  const goneFromComputer = props.route.params.cachedEntry === true && !!sessionKey && !props.locked
+    && snapshot.activeConnectionId === connectionId && snapshot.activeState === 'ready'
+    && liveGroup?.source === 'live' && !sessionListed;
+  useEffect(() => {
+    if (!focused || !goneFromComputer) return;
+    props.navigation.replace('Thread', { connectionId, agentId, sessionKey: '', from: props.route.params.from });
+  }, [focused, goneFromComputer, props.navigation, props.route.params.from, connectionId, agentId]);
   if (!sessionKey) return <ConversationEntry {...props} />;
   return <AppContextProvider value={scoped}>
     <ThreadScreenContent key={`${connectionId}:${agentId}`} {...props} focused={focused} />

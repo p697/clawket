@@ -1428,6 +1428,7 @@ describe('ThreadScreen connection container', () => {
   });
 
   it('activates an inactive route and keeps the view in loading with no optimistic capabilities', async () => {
+    mockController.listData = [];
     mockConnections = {
       ...mockConnections,
       switching: true,
@@ -1441,6 +1442,48 @@ describe('ThreadScreen connection container', () => {
     expect(mockThreadViewProps?.state).toEqual({ kind: 'loading' });
     expect(mockThreadViewProps?.capabilities.chat).toBe(false);
     expect(mockThreadViewProps?.capabilities.sessions).toBe(false);
+  });
+
+  it('shows the saved messages of an inactive route while it connects, still with no optimistic capabilities', async () => {
+    mockConnections = {
+      ...mockConnections,
+      switching: true,
+      activeConnectionId: 'connection-2',
+      activeAdapter: null,
+    };
+    mockRuntime.getSnapshot.mockReturnValue({ activeConnectionId: 'connection-2' });
+    render(<ThreadScreen {...createNavigationProps()} />);
+
+    await waitFor(() => expect(mockRuntime.activate).toHaveBeenCalledWith('connection-1'));
+    expect(mockThreadViewProps?.state).toEqual({ kind: 'reconnecting', connecting: true });
+    expect(mockThreadViewProps?.capabilities.chat).toBe(false);
+    expect(mockThreadViewProps?.capabilities.sessions).toBe(false);
+  });
+
+  it.each([
+    ['gone from the live list', { source: 'live', sessions: [] }, true],
+    ['archived on the computer', { source: 'live', sessions: [{ key: 'agent:atlas:main', archived: true }] }, true],
+    ['still listed', { source: 'live', sessions: [{ key: 'agent:atlas:main' }] }, false],
+    ['only known from the saved list so far', { source: 'cache', sessions: [] }, false],
+  ] as const)('returns a conversation opened from the saved list to the picker only when it is %s', async (_name, group, bounced) => {
+    const props = createNavigationProps();
+    (props.route.params as any).cachedEntry = true;
+    mockConnections = { ...mockConnections, activeConnectionId: 'connection-1', activeState: 'ready',
+      roster: [{ connection: { id: 'connection-1', backendKind: 'codex' }, source: group.source,
+        agents: [{ agent: { agentId: 'atlas', name: 'Atlas', entryMode: 'sessions' }, sessions: group.sessions }] }] };
+    render(<ThreadScreen {...props} />);
+    await act(async () => {});
+    if (bounced) expect(props.navigation.replace).toHaveBeenCalledWith('Thread', { connectionId: 'connection-1', agentId: 'atlas', sessionKey: '', from: 'roster' });
+    else expect(props.navigation.replace).not.toHaveBeenCalled();
+  });
+
+  it('never sends an ordinarily opened conversation back to the picker', async () => {
+    const props = createNavigationProps();
+    mockConnections = { ...mockConnections, activeConnectionId: 'connection-1', activeState: 'ready',
+      roster: [{ connection: { id: 'connection-1', backendKind: 'codex' }, source: 'live', agents: [{ agent: { agentId: 'atlas', name: 'Atlas' }, sessions: [] }] }] };
+    render(<ThreadScreen {...props} />);
+    await act(async () => {});
+    expect(props.navigation.replace).not.toHaveBeenCalled();
   });
 
   it('maps a structured adapter failure through its product error descriptor', async () => {

@@ -1155,6 +1155,17 @@ describe('ThreadView', () => {
     expect(view.queryByText('Last connected: {{time}}')).toBeNull();
   });
 
+  it('keeps saved messages readable under a Connecting header while the first connection is made, with sending off', () => {
+    const props = createProps();
+    const view = render(<ThreadView {...props} state={{ kind: 'reconnecting', connecting: true }} />);
+    expect(view.getByText('Ready to help.')).toBeTruthy();
+    expect(view.getByText('Connecting')).toBeTruthy();
+    expect(view.queryByText('Reconnecting…')).toBeNull();
+    view.rerender(<ThreadView {...props} state={{ kind: 'reconnecting' }} />);
+    expect(view.getByText('Reconnecting…')).toBeTruthy();
+    expect(view.queryByText('Connecting')).toBeNull();
+  });
+
   it('keeps the recovery grace quiet and scopes saved-message dismissal to the connection', () => {
     const props = createProps({ connectionFailure: { name: 'Computer', scope: 'first' }, onRetry: jest.fn() });
     const view = render(<ThreadView {...props} state={{ kind: 'reconnecting' }} />);

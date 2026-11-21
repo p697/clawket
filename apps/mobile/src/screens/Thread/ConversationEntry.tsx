@@ -65,6 +65,7 @@ export function ConversationEntry({ navigation, route, locked, lockedReason = 'a
       const runtime = getConnectionRuntime();
       const initial = runtime.getSnapshot();
       const initialAdapter = initial.activeAdapter;
+      const initialActiveId = initial.activeConnectionId;
       const initiallyReady = initial.activeConnectionId === connectionId && initial.activeState === 'ready'
         && initialAdapter?.connection.id === connectionId;
       const lastPromise = SessionPreferencesService.getLastSession(connectionId, agentId).catch(() => null);
@@ -92,7 +93,29 @@ export function ConversationEntry({ navigation, route, locked, lockedReason = 'a
           return;
         }
       }
-      const activated = await runtime.activate(connectionId);
+      // Connecting starts at once; nothing below delays it.
+      const activation = runtime.activate(connectionId);
+      if (!initiallyReady) {
+        // The last conversation and its messages are on this phone already: open
+        // it now and let the thread connect underneath, instead of waiting here.
+        // The thread returns to this picker if the live list no longer has it.
+        void activation.catch(() => {});
+        const saved = await lastPromise;
+        if (!current || !scope.current.focused || scope.current.connectionId !== connectionId
+          || scope.current.agentId !== agentId) return;
+        const latest = runtime.getSnapshot();
+        const listed = saved ? latest.roster.find(candidate => candidate.connection.id === connectionId)
+          ?.agents.find(row => row.agent.agentId === agentId)?.sessions
+          ?.some(session => session.key === saved && session.archived !== true) : false;
+        // Another connection chosen meanwhile wins over this entry.
+        const superseded = latest.activeConnectionId !== connectionId && latest.activeConnectionId !== initialActiveId;
+        if (saved && listed && !superseded) {
+          navigation.replace('Thread', { ...route.params, sessionKey: saved, cachedEntry: true });
+          current = false;
+          return;
+        }
+      }
+      const activated = await activation;
       const last = await lastPromise;
       // Activation already waits for its ready transition's catalog. Reuse only
       // that live scope; activation may also resolve after a failed refresh.

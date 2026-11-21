@@ -223,18 +223,30 @@ it.each(['missing', 'archived', 'cached', 'other-agent', 'other-connection'])('k
   expect(navigation.replace).not.toHaveBeenCalled();
 });
 
-it('waits for cold activation, then reuses its live catalog without a second scan', async () => {
-  mockSnapshot.activeState = 'ready'; mockSnapshot.activeConnectionId = 'other';
+it('opens the saved last conversation at once while another connection is still active, and connects underneath', async () => {
+  mockSnapshot.activeState = 'ready'; mockSnapshot.activeConnectionId = 'other'; mockSnapshot.roster[0].source = 'cache';
+  mockPreferences.getLastSession.mockResolvedValue('existing');
+  mockRuntime.activate.mockReturnValueOnce(new Promise(() => {}));
+  render(<ConversationEntry {...props} />);
+  expect(mockRuntime.activate).toHaveBeenCalledWith('c');
+  await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('Thread', expect.objectContaining({ sessionKey: 'existing', cachedEntry: true })));
+  expect(mockRuntime.refreshRoster).not.toHaveBeenCalled();
+});
+
+it('waits for cold activation, then reuses its live catalog without a second scan, when the conversation was not saved on the phone', async () => {
+  mockSnapshot.activeState = 'ready'; mockSnapshot.activeConnectionId = 'other'; mockSnapshot.roster[0].agents[0].sessions = [];
   mockPreferences.getLastSession.mockResolvedValue('existing');
   let activated!: (snapshot: any) => void;
   mockRuntime.activate.mockReturnValueOnce(new Promise(resolve => { activated = resolve; }));
   render(<ConversationEntry {...props} />);
   expect(mockRuntime.activate).toHaveBeenCalledWith('c');
+  await act(async () => {});
   expect(mockRuntime.refreshRoster).not.toHaveBeenCalled();
   expect(navigation.replace).not.toHaveBeenCalled();
-  mockSnapshot.activeConnectionId = 'c';
+  mockSnapshot.activeConnectionId = 'c'; mockSnapshot.roster[0].agents[0].sessions = [{ key: 'existing' }];
   await act(async () => { activated({ ...mockSnapshot }); });
   await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('Thread', expect.objectContaining({ sessionKey: 'existing' })));
+  expect(navigation.replace).not.toHaveBeenCalledWith('Thread', expect.objectContaining({ cachedEntry: true }));
   expect(mockRuntime.refreshRoster).not.toHaveBeenCalled();
 });
 
@@ -264,11 +276,14 @@ it('rechecks adapter identity after the preference read before using the shortcu
 });
 
 it.each(['cached', 'archived', 'missing', 'other-agent', 'other-connection', 'not-ready'])(
-  'does not reuse an activation catalog with a %s target', async kind => {
+  'treats an activation catalog with a %s target as unconfirmed', async kind => {
     mockPreferences.getLastSession.mockResolvedValue('existing');
+    // Not in the phone's saved list, so only the activation catalog can vouch for it.
+    mockSnapshot.roster[0].agents[0].sessions = [];
     mockRuntime.activate.mockImplementationOnce(async () => {
       mockSnapshot.activeState = kind === 'not-ready' ? 'reconnecting' : 'ready';
       const group = mockSnapshot.roster[0];
+      group.agents[0].sessions = [{ key: 'existing' }];
       if (kind === 'cached') group.source = 'cache';
       if (kind === 'archived') group.agents[0].sessions[0].archived = true;
       if (kind === 'missing') group.agents[0].sessions = [];
@@ -277,6 +292,12 @@ it.each(['cached', 'archived', 'missing', 'other-agent', 'other-connection', 'no
       return { ...mockSnapshot };
     });
     render(<ConversationEntry {...props} />);
+    if (kind === 'cached' || kind === 'not-ready') {
+      // The phone's own list has the conversation: it opens from there, and the
+      // thread goes back to the picker if the live list later disagrees.
+      await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('Thread', expect.objectContaining({ sessionKey: 'existing', cachedEntry: true })));
+      return;
+    }
     await waitFor(() => expect(mockPanel.visible).toBe(true));
     expect(mockRuntime.refreshRoster).toHaveBeenCalledTimes(['archived', 'missing'].includes(kind) ? 0 : 1);
     expect(navigation.replace).not.toHaveBeenCalled();
@@ -284,16 +305,16 @@ it.each(['cached', 'archived', 'missing', 'other-agent', 'other-connection', 'no
 );
 
 it('uses a successful fallback refresh when activation retained only cached sessions', async () => {
-  mockSnapshot.roster[0].source = 'cache';
+  mockSnapshot.roster[0].source = 'cache'; mockSnapshot.roster[0].agents[0].sessions = [];
   mockPreferences.getLastSession.mockResolvedValue('existing');
-  mockRuntime.refreshRoster.mockImplementationOnce(async () => { mockSnapshot.roster[0].source = 'live'; });
+  mockRuntime.refreshRoster.mockImplementationOnce(async () => { mockSnapshot.roster[0].source = 'live'; mockSnapshot.roster[0].agents[0].sessions = [{ key: 'existing' }]; });
   render(<ConversationEntry {...props} />);
   await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('Thread', expect.objectContaining({ sessionKey: 'existing' })));
   expect(mockRuntime.refreshRoster).toHaveBeenCalledTimes(1);
 });
 
 it.each(['adapter-replaced', 'disconnected', 'left', 'connection-switched'])(
-  'does not reopen an activation snapshot after %s while preferences are pending', async kind => {
+  'handles %s while the last-conversation preference is still being read', async kind => {
     let lastRead!: (key: string) => void;
     mockPreferences.getLastSession.mockReturnValueOnce(new Promise(resolve => { lastRead = resolve; }));
     const view = render(<ConversationEntry {...props} />);
@@ -304,6 +325,19 @@ it.each(['adapter-replaced', 'disconnected', 'left', 'connection-switched'])(
     if (kind === 'connection-switched') mockSnapshot.activeConnectionId = 'other';
     if (kind === 'left') view.unmount();
     await act(async () => { lastRead('existing'); });
-    expect(navigation.replace).not.toHaveBeenCalled();
+    // The thread makes its own connection, so a replaced or reconnecting adapter
+    // does not hold back the saved conversation; leaving or choosing another connection does.
+    if (kind === 'left' || kind === 'connection-switched') expect(navigation.replace).not.toHaveBeenCalled();
+    else expect(navigation.replace).toHaveBeenCalledWith('Thread', expect.objectContaining({ sessionKey: 'existing', cachedEntry: true }));
   },
 );
+
+it.each([['an archived', true], ['a missing', false]])('does not open %s saved conversation ahead of the connection', async (_name, archived) => {
+  mockSnapshot.roster[0].source = 'cache';
+  mockSnapshot.roster[0].agents[0].sessions = archived ? [{ key: 'existing', archived: true }] : [];
+  mockPreferences.getLastSession.mockResolvedValue('existing');
+  mockRuntime.activate.mockReturnValueOnce(new Promise(() => {}));
+  render(<ConversationEntry {...props} />);
+  await act(async () => {});
+  expect(navigation.replace).not.toHaveBeenCalled();
+});
