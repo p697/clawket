@@ -1,5 +1,6 @@
 import { ClaudeFault } from './errors.js';
 import { EventEmitter } from 'node:events';
+import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { posix } from 'node:path';
 import { query, type Options, type Query, type SDKMessage, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
@@ -30,6 +31,16 @@ type SessionOptions = {
   tools?: Options['tools'];
 };
 type Run = { id: string; messageId: string; text: string; started: number; cancelling: boolean; toolIds: Set<string>; model?: string };
+/** The reply has ended; the native process is still closing that turn. */
+type Closing = { messageId: string; text: string; timestampMs: number; timer: ReturnType<typeof setTimeout> };
+/**
+ * Claude Code reports a turn's result only after a further model call that
+ * summarises the turn: 4–5 s after the last word on a good connection, 10–28 s
+ * on a poor one (2.1.319, owner's Mac, 2026-11-22). The reply itself is over
+ * when its last message ends with `end_turn`, so the phone's run ends there.
+ * A result that never arrives must not hold the process as busy for ever.
+ */
+const CLOSING_LIMIT_MS = 120_000;
 
 export function claudePromptContent(input: PromptInput): SDKUserMessage['message']['content'] {
   if (typeof input.text !== 'string' || input.text.length > 200_000 || !input.text.trim() && !input.attachments?.length) {
@@ -60,6 +71,7 @@ export class ClaudeSession extends EventEmitter {
   private wake?: () => void;
   private closed = false;
   private run?: Run;
+  private closing?: Closing;
   private nativeId?: string;
   private model?: string;
   private modelRevision = 0;
@@ -75,6 +87,10 @@ export class ClaudeSession extends EventEmitter {
   get activeRun(): { runId: string; text: string; startedAtMs: number; sessionAbortable: boolean } | undefined {
     return this.run ? { runId: this.run.id, text: this.run.text, startedAtMs: this.run.started, sessionAbortable: true } : undefined;
   }
+  /** No run is shown, but the process has not reported the end of its last turn yet. A message sent now waits natively. */
+  get settling(): boolean { return !!this.closing; }
+  /** Identity of the user message whose reply has just ended; the transcript receives that reply a moment later. */
+  get settlingMessageId(): string | undefined { return this.closing?.messageId; }
   private update(update: SessionUpdate): void { this.emit('update', update); }
 
   start(): Promise<void> {
@@ -166,11 +182,23 @@ export class ClaudeSession extends EventEmitter {
       this.emit('identity', this.nativeId);
       if (this.run) this.run.model = message.model;
     }
+    const sessionKey = this.options.key;
+    const closing = this.closing;
+    if (closing && message.type === 'result') {
+      // Results arrive in turn order; one without an identity belongs to the turn that is closing.
+      if (!message.user_message_uuid || message.user_message_uuid === closing.messageId || message.user_message_uuids?.includes(closing.messageId)) { this.settle(); return; }
+    }
+    if (closing && !this.run && message.type === 'stream_event' && !message.parent_tool_use_id && message.event.type === 'message_start') {
+      // The turn went on after its reply ended (a Stop hook sent Claude back to work). Show the rest as a run of its own.
+      clearTimeout(closing.timer); this.closing = undefined;
+      this.run = { id: randomUUID(), messageId: closing.messageId, text: '', started: Date.now(), cancelling: false, toolIds: new Set(), model: this.model };
+      this.update({ type: 'run_started', sessionKey, runId: this.run.id });
+    }
     const run = this.run;
     if (!run) return;
-    const sessionKey = this.options.key;
     if (message.type === 'stream_event' && !message.parent_tool_use_id) {
       const event = message.event;
+      if (event.type === 'message_delta' && event.delta.stop_reason === 'end_turn' && run.text && !run.cancelling) { this.replied(run); return; }
       if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
         run.text += event.delta.text;
         this.update({ type: 'agent_message_chunk', sessionKey, runId: run.id, text: event.delta.text, textMode: 'delta' });
@@ -201,14 +229,40 @@ export class ClaudeSession extends EventEmitter {
     }
   }
 
-  private finish(stopReason: 'end_turn' | 'cancelled' | 'error'): void {
-    const run = this.run;
-    if (!run) return;
+  /** The last message of the reply ended. The phone's run ends now; the process settles when its result arrives. */
+  private replied(run: Run): void {
+    this.settle();
     this.run = undefined;
     this.interactions.cancelPending();
+    const timestampMs = Date.now();
+    this.update({ type: 'run_finished', sessionKey: this.options.key, runId: run.id, stopReason: 'end_turn',
+      message: { role: 'assistant', content: run.text, model: run.model } });
+    const timer = setTimeout(() => { if (this.closing?.timer === timer) this.settle(); }, CLOSING_LIMIT_MS);
+    timer.unref?.();
+    this.closing = { messageId: run.messageId, text: run.text, timestampMs, timer };
+    this.emit('replied', { text: run.text, timestampMs });
+  }
+
+  private settle(): void {
+    const closing = this.closing;
+    if (!closing) return;
+    clearTimeout(closing.timer);
+    this.closing = undefined;
+    // With a later run already shown, that run's own end settles the process.
+    if (!this.run) this.emit('settled', { text: closing.text, timestampMs: closing.timestampMs });
+  }
+
+  private finish(stopReason: 'end_turn' | 'cancelled' | 'error'): void {
+    const run = this.run;
+    if (!run) { this.settle(); return; }
+    this.run = undefined;
+    if (this.closing) { clearTimeout(this.closing.timer); this.closing = undefined; }
+    this.interactions.cancelPending();
+    const timestampMs = Date.now();
     this.update({ type: 'run_finished', sessionKey: this.options.key, runId: run.id, stopReason,
       ...(run.text ? { message: { role: 'assistant', content: run.text, model: run.model } } : {}) });
-    this.emit('settled', { text: run.text, timestampMs: Date.now() });
+    this.emit('replied', { text: run.text, timestampMs });
+    this.emit('settled', { text: run.text, timestampMs });
   }
 
   async interrupt(runId: string): Promise<void> {
