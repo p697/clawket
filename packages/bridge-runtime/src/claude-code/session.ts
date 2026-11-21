@@ -30,7 +30,17 @@ type SessionOptions = {
   settingSources?: Options['settingSources'];
   tools?: Options['tools'];
 };
-type Run = { id: string; messageId: string; text: string; started: number; cancelling: boolean; toolIds: Set<string>; model?: string };
+type Run = { id: string; messageId: string; text: string; started: number; cancelling: boolean; toolIds: Set<string>; model?: string; keyframeAt: number };
+/**
+ * Reply text travels as deltas, and nothing between here and the phone buffers
+ * them: a phone that reconnects in the middle of a reply appended the next
+ * deltas to the text it had before the gap and showed the reply with a piece
+ * missing until the turn ended. Every so often the whole reply so far is sent
+ * in place of a delta, so any loss repairs itself within that interval.
+ */
+const KEYFRAME_MS = 1_500;
+/** Beyond this the whole text is too much to repeat; the finished reply still carries all of it. */
+const KEYFRAME_MAX_CHARS = 64_000;
 /** The reply has ended; the native process is still closing that turn. */
 type Closing = { messageId: string; text: string; timestampMs: number; timer: ReturnType<typeof setTimeout> };
 /**
@@ -144,7 +154,7 @@ export class ClaudeSession extends EventEmitter {
     if (this.run) throw new ClaudeFault('Claude is still working on this session');
     const messageContent = claudePromptContent(input);
     const messageId = runId;
-    this.run = { id: runId, messageId, text: '', started: Date.now(), cancelling: false, toolIds: new Set(), model: this.model };
+    this.run = { id: runId, messageId, text: '', started: Date.now(), cancelling: false, toolIds: new Set(), model: this.model, keyframeAt: 0 };
     this.inbox.push({ type: 'user', uuid: messageId as SDKUserMessage['uuid'], session_id: this.nativeId,
       message: { role: 'user', content: messageContent }, parent_tool_use_id: null });
     this.update({ type: 'run_started', sessionKey: this.options.key, runId });
@@ -191,7 +201,7 @@ export class ClaudeSession extends EventEmitter {
     if (closing && !this.run && message.type === 'stream_event' && !message.parent_tool_use_id && message.event.type === 'message_start') {
       // The turn went on after its reply ended (a Stop hook sent Claude back to work). Show the rest as a run of its own.
       clearTimeout(closing.timer); this.closing = undefined;
-      this.run = { id: randomUUID(), messageId: closing.messageId, text: '', started: Date.now(), cancelling: false, toolIds: new Set(), model: this.model };
+      this.run = { id: randomUUID(), messageId: closing.messageId, text: '', started: Date.now(), cancelling: false, toolIds: new Set(), model: this.model, keyframeAt: 0 };
       this.update({ type: 'run_started', sessionKey, runId: this.run.id });
     }
     const run = this.run;
@@ -201,7 +211,11 @@ export class ClaudeSession extends EventEmitter {
       if (event.type === 'message_delta' && event.delta.stop_reason === 'end_turn' && run.text && !run.cancelling) { this.replied(run); return; }
       if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
         run.text += event.delta.text;
-        this.update({ type: 'agent_message_chunk', sessionKey, runId: run.id, text: event.delta.text, textMode: 'delta' });
+        const now = Date.now();
+        if (run.text.length <= KEYFRAME_MAX_CHARS && now - run.keyframeAt >= KEYFRAME_MS) {
+          run.keyframeAt = now;
+          this.update({ type: 'agent_message_chunk', sessionKey, runId: run.id, text: run.text, textMode: 'snapshot' });
+        } else this.update({ type: 'agent_message_chunk', sessionKey, runId: run.id, text: event.delta.text, textMode: 'delta' });
       }
       if (event.type === 'content_block_delta' && event.delta.type === 'thinking_delta') {
         this.update({ type: 'agent_thought_chunk', sessionKey, runId: run.id, text: event.delta.thinking });
