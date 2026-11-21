@@ -234,6 +234,24 @@ describe('Claude owned streaming session', () => {
     });
   });
 
+  it('repeats the whole reply so far at intervals, so a phone that missed deltas catches up', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const { session, events, push, takeInput } = fixture();
+      const chunk = (text: string) => push({ type: 'stream_event', parent_tool_use_id: null, event: { type: 'content_block_delta', delta: { type: 'text_delta', text } } });
+      const tick = () => new Promise(resolve => setImmediate(resolve));
+      await session.start();
+      session.send('00000000-0000-4000-8000-000000000021', { text: 'Hello', idempotencyKey: 'k' }); await takeInput();
+      chunk('One'); chunk(' two'); await tick();
+      vi.advanceTimersByTime(1_600); chunk(' three'); chunk(' four'); await tick();
+      vi.advanceTimersByTime(1_600); chunk('x'.repeat(64_000)); chunk(' end'); await tick();
+      expect(events.filter(event => event.type === 'agent_message_chunk').map(event => [(event as any).textMode, (event as any).text.length > 40 ? 'long' : (event as any).text])).toEqual([
+        ['snapshot', 'One'], ['delta', ' two'], ['snapshot', 'One two three'], ['delta', ' four'], ['delta', 'long'], ['delta', ' end'],
+      ]);
+      await session.close();
+    } finally { vi.useRealTimers(); }
+  });
+
   it('rejects unsupported attachment data before creating a run', async () => {
     const { session, events } = fixture();
     await session.start();

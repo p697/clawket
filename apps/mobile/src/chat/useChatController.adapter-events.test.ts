@@ -438,6 +438,24 @@ describe('useChatController adapter event migration', () => {
     expect(result.current.listData.find(message => message.id === 'streaming')?.timestampMs).toBe(19_000);
   });
 
+  it('repairs a Claude Code reply that lost deltas during a reconnect as soon as the whole text arrives', () => {
+    const { result, handlers } = renderController('claude-code');
+    const chunk = (text: string, textMode: 'delta' | 'snapshot') => act(() => handlers.onUpdate?.(mapAdapterSessionUpdate({
+      type: 'agent_message_chunk', sessionKey: 'agent:main:main', runId: 'gap-run', text, textMode })));
+    const streaming = () => result.current.listData.find(message => message.id === 'streaming')?.text;
+    act(() => handlers.onState?.('ready'));
+    chunk('The plan has', 'delta');
+    act(() => handlers.onState?.('offline'));
+    // " three steps:" was sent while the phone was away and is lost.
+    act(() => handlers.onState?.('ready'));
+    chunk(' first,', 'delta');
+    expect(streaming()).toBe('The plan has first,');
+    chunk('The plan has three steps: first, read', 'snapshot');
+    expect(streaming()).toBe('The plan has three steps: first, read');
+    chunk(' the file.', 'delta');
+    expect(streaming()).toBe('The plan has three steps: first, read the file.');
+  });
+
   it('keeps a noncurrent Codex paragraph first clock and isolates it from the previous selected conversation', () => {
     jest.setSystemTime(10_000);
     const { result, rerender, handlers } = renderController('codex');
