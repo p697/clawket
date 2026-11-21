@@ -95,7 +95,7 @@ The extension is in acceptance testing; the earlier project-only QA report does 
 - Android physical device over existing isolated Preview: opened the same original thread through a separate Bridge, answered both fields through native owner IPC, and observed completion. Independent follower logs confirm pending/resolved/terminal state.
 - New question UI has explicit radio cards, an on-demand custom field, separate task cancellation and dismissal. Android cold launch restored the exact `DRAFT_QA_0926` custom value plus the first option selection. Maestro text injection dropped characters in two attempts; direct Android input produced the exact value and recovery preserved it. This is not evidence of a storage truncation.
 - Local drafts are serialized, bounded to 32 entries/256 KB/seven days, and removed on native resolution. Radio mutual exclusion and failed-answer retention have focused regression tests.
-- Current Desktop saved `local-projects` names/rootPaths supplement legacy roots; no filesystem scan. Missing roots remain visible but unavailable for new work.
+- Current Desktop saved `local-projects` names/rootPaths supplement legacy roots; no filesystem scan. Missing roots remain visible in the project filter; when choosing a project for a new chat they are listed only while searching (2026-11-21) and stay unavailable for new work.
 - Acceptance remains in progress; earlier initial-integration release conclusions do not certify the continuity extension.
 
 已获明确 no-owner 且原生历史无进行中回合后，Bridge 的原生续聊会话由该 App Server 持有；后续发送、模型/推理设置以及其他 IPC follower 均走同一 owner，不能因 `source=native` 再次外派。进程重启后重新发现 owner。仅更改设置的恢复同样需要 no-owner/idle 双重确认。

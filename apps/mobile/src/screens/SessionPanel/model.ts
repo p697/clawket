@@ -339,3 +339,12 @@ export function orderProjectsByRecency<P extends { id: string; available?: boole
       || a.index - b.index)
     .map(entry => entry.project);
 }
+
+/**
+ * An OpenClaw Agent's own workspace. Conversations there are that Agent's
+ * engine runs, not chats the person had with Codex, so the all-projects list
+ * leaves them out; choosing the project or searching still shows them.
+ */
+export function isAgentWorkspaceProject(project?: { path?: string } | null): boolean {
+  return typeof project?.path === 'string' && /(?:^|[\\/])\.openclaw[\\/]/.test(project.path);
+}

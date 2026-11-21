@@ -2,6 +2,7 @@ import { originalRunUserIndex } from './turnIdentity';
 import { sameLiveToolCall, withToolMessage } from './liveToolMessages';
 import { hasBackendEcho, rememberUncertainSend, recoverUncertainSends, reconcilePromptReceipts, useUncertainSends } from './sendRecovery';
 import { describeReplyFailure, sanitizeReplyFailure } from './reply-failure';
+import { localizeSendFailure } from './sendFailureNotice';
 import { triggerRigidImpact, triggerSendHaptic, triggerSuccessHaptic, triggerWarningHaptic } from '../services/haptics';
 import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
 import {
@@ -2945,9 +2946,9 @@ export function useChatController({
           }
           rememberUncertainSend(sourceQueue.scopeKey, uiMsg);
           if (messageQueueRef.current.scopeKey !== sourceQueue.scopeKey) return;
-          setSendFailure(t('Sending failed. Check the conversation before trying again.'));
-          uncertainFailureRef.current = { scope: sourceQueue.scopeKey, message: uiMsg };
           const details = sanitizeReplyFailure(error instanceof Error ? error.message : String(error ?? ''));
+          setSendFailure(localizeSendFailure(details, t));
+          uncertainFailureRef.current = { scope: sourceQueue.scopeKey, message: uiMsg };
           setSendFailureDetails(details || null);
           // Preserve one recoverable bubble; refilling the composer invites duplicate sends.
         });
@@ -2991,7 +2992,8 @@ export function useChatController({
         const ready = await ensureConnectionReadyForSend();
         if (!isCurrent()) return false;
         if (!ready) {
-          setSendFailure(t('Sending failed. Check the conversation before trying again.'));
+          // Nothing left the phone: say so instead of asking to check the conversation.
+          setSendFailure(t('Your computer is not reachable right now. The message was not sent.'));
           return false;
         }
         const prepared = await preparePendingImagesForSend(images);
@@ -3311,8 +3313,9 @@ export function useChatController({
       if (codex) void requestVisibleHistoryReload(key, 'steer-accepted').catch(() => undefined);
     }).catch((error: unknown) => {
       if (!scope.active || sendScopeRef.current !== scope) return;
-      setSendFailure(t('Sending failed. Check the conversation before trying again.'));
-      setSendFailureDetails(sanitizeReplyFailure(error instanceof Error ? error.message : String(error)) || null);
+      const details = sanitizeReplyFailure(error instanceof Error ? error.message : String(error));
+      setSendFailure(localizeSendFailure(details, t));
+      setSendFailureDetails(details || null);
     }).finally(() => {
       steeringBusyRef.current = false;
       if (sendScopeRef.current.active) setSteeringPending(false);

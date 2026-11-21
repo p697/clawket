@@ -23,7 +23,10 @@ export function ProjectPicker({ visible, projects, counts, totalCount, selected,
 }): React.JSX.Element {
   const { t } = useTranslation('common'); const { theme } = useAppTheme(); const [query, setQuery] = useState('');
   useEffect(() => { if (visible) setQuery(''); }, [visible]);
-  const filtered = projects.filter(p => `${p.name} ${p.path}`.toLowerCase().includes(query.trim().toLowerCase()));
+  // A folder that no longer exists cannot host a new chat. It stays out of the
+  // way there until searched for; the filter picker still lists it for its history.
+  const filtered = projects.filter(p => (!creating || p.available || !!query.trim())
+    && `${p.name} ${p.path}`.toLowerCase().includes(query.trim().toLowerCase()));
   const check = <Check size={IconSize.md} color={theme.colors.ink} />;
   return <Sheet visible={visible} stackBehavior="push" title={t(creating ? 'Choose a project' : 'Projects')} onClose={onClose} closeAccessibilityLabel={t('Close')} snapPoints={['70%', '90%']} testID="codex-project-picker">
     <View style={styles.search}><SearchInput inSheet appearance="quiet" value={query} onChangeText={setQuery} onClear={() => setQuery('')} placeholder={t('Search projects')} /></View>
