@@ -3,7 +3,7 @@
   "synthetic": true,
   "sourceDigests": {
     "codex/history.ts": "02bb32c5b39fc7445e2343b8aa896a816a6fcae24779ca318b0e60095c8c3128",
-    "codex/service.ts": "c4616a7215c77469a8462718e1e20f96ec67c54e8e72b2f00d4f221f096676d5",
+    "codex/service.ts": "543c4ab3620fd85772f8f2aa02b64e36bf44d20a81a88b7f33735fa20f3041bd",
     "pi/history.ts": "a3fa4ab2cc49e14e2547d59f6988a6154410e87061504cfb4f59d8cfebfcc582",
     "claude-code/history.ts": "c3f65cdaed50fa0ddded823923a672a935545ebb5f6ab7d848d28d00278337a3",
     "claude-code/models.ts": "669d11e25032a3df4af946abe0206cea9cf96e6899752261e987503973975506"

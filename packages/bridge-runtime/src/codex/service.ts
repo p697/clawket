@@ -8,7 +8,8 @@ import { InteractionAttention } from '../interaction-attention.js';
 import { lastVisiblePreview, sessionPreview } from '../session-preview.js';
 import { isDeepStrictEqual } from 'node:util';
 import { EventEmitter } from 'node:events';
-import { mkdirSync, readFileSync, writeFileSync, renameSync, lstatSync, realpathSync, existsSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, renameSync, lstatSync, realpathSync, existsSync, readdirSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join, basename } from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
 import type { SessionDescriptor, SessionUpdate, SessionHistory, PromptInput, AgentQuestion, ApprovalRequest } from '@clawket/agent-protocol';
@@ -29,7 +30,9 @@ import { handleRemoteUpdateRequest, isRemoteUpdateMethod, remoteUpdateHealth, ty
 export interface CodexRequest { type: 'req'; id: string; method: string; params?: Record<string, unknown> }
 export interface CodexOptions { bridgeVersion?: string; remoteUpdate?: RemoteUpdateControl; project: string; directory: string; command?: string; env?: NodeJS.ProcessEnv; device?: boolean; desktop?: DesktopIpc }
 type Entry = { permissionsUnconfirmed?: true; archived?: boolean; cwd?: string; native?: boolean; id: string; threadId?: string; title: string; created: number; activity?: number; model?: string; provider?: string; effort?: string; serviceTier?: string | null; speedPreference?: { serviceTier: string | null; provider: string }; preview?: string; keys: Record<string, { hash: string; runId: string }> };
-type Run = { desktop?: boolean; id: string; turnId?: string; inputMessageId?: string; inputMessageKey?: string; text: string; started: number; itemId?: string; final?: string; items: Map<string, any>;
+type Run = { desktop?: boolean;
+  /** Running in another process and read from native history a step at a time: no writer, no stop, no guidance from here. */
+  external?: boolean; id: string; turnId?: string; inputMessageId?: string; inputMessageKey?: string; text: string; started: number; itemId?: string; final?: string; items: Map<string, any>;
   /** Lifecycle clocks of this run's items (bounded); native items stay unchanged. */
   itemClocks?: Map<string, CodexItemClock>;
   /** Desktop: projected at least once, so later items were observed as they appeared. */
@@ -61,6 +64,17 @@ export function hasNativeWriterLock(version: string | undefined): boolean {
  * (about 20 seconds before the next reply on the owner's Mac, 2026-11-21).
  */
 const OPENED_WRITER_RELEASE_MS = 30_000, CHAT_WRITER_RELEASE_MS = 300_000;
+/**
+ * A turn running in another process (Codex on the computer) sends this Bridge
+ * no events. Its history reads as status "interrupted" with no completion time
+ * while it runs, and gains each item when that step completes (verified on
+ * 0.171.0-alpha.13). A conversation a phone has open is therefore read every
+ * two seconds, at most four at once; a quiet minute rechecks that a writer
+ * still holds it, since a turn whose process died never completes.
+ */
+const EXTERNAL_POLL_MS = 2_000, EXTERNAL_LEASE_MS = 60_000, EXTERNAL_RECHECK_MS = 60_000, EXTERNAL_WATCH_LIMIT = 4;
+const EXTERNAL_BUSY = 'This conversation is in use by Codex on your computer. Send again when it is idle there.';
+type ExternalWatch = { entry: Entry; expires: number; turnId?: string; held?: boolean; probedAt: number; signature?: string; changedAt: number };
 const UNCONFIRMED_PERMISSIONS = 'Codex did not restore the conversation permissions. Select and confirm permissions before sending.';
 const permissionSettings = (settings: NativeSettings) => ({ approvalPolicy: settings.approvalPolicy,
   approvalsReviewer: settings.approvalsReviewer, sandboxPolicy: settings.sandboxPolicy, activePermissionProfile: settings.activePermissionProfile });
@@ -103,6 +117,9 @@ export class CodexService extends EventEmitter {
   private nextRecoveryAt = 0;
   private recoveryFailures = 0;
   private writerReleases = new Map<string, ReturnType<typeof setTimeout>>();
+  private externalWatches = new Map<string, ExternalWatch>();
+  private externalTimer?: ReturnType<typeof setInterval>;
+  private externalPolling = false;
   private accountRecycleAt = 0;
   private healthFailureAt = -Infinity;
   private accountRecycle?: Promise<void>;
@@ -1085,6 +1102,8 @@ export class CodexService extends EventEmitter {
     if (strict && !discovered.complete) throw new Error('Codex conversation catalog could not be refreshed completely');
     await this.verifyMissingArchives();
     await this.refreshNativePreviews();
+    const elsewhere = await this.runningElsewhere();
+    const marked = (row: SessionDescriptor): SessionDescriptor => row.sessionId && !row.hasActiveRun && elsewhere.has(row.sessionId) ? { ...row, hasActiveRun: true } : row;
     return [...this.records.filter(r => !r.archived).map(r => {
       const native = r.threadId ? this.nativePreviews.get(`native:${r.threadId}`) : undefined;
       return native && !this.runs.has(r.id) && (r.preview === undefined || (r.native && !Object.keys(r.keys).length) || (native.lastActivityAt ?? 0) > (r.activity ?? 0))
@@ -1093,7 +1112,34 @@ export class CodexService extends EventEmitter {
     }), ...[...discovered.entries].filter(([, t]) => !this.records.some(r => r.threadId === t.id)).map(([key, t]): SessionDescriptor => {
       const visible = this.nativePreviews.get(key);
       return { connectionId: '', agentId: 'codex', key, kind: 'direct', title: t.name || t.preview?.slice(0, 80) || basename(t.cwd), updatedAt: t.updatedAt * 1000, lastActivityAt: visible?.lastActivityAt ?? (t.recencyAt ?? t.updatedAt) * 1000, preview: visible?.preview, model: modelName(t.model), modelProvider: t.modelProvider, hasActiveRun: t.status?.type === 'active', project: this.options.device ? this.projectDetails(t.cwd) : undefined, canContinue: this.options.device === true, source: 'native', sessionId: t.id, allowedActions: { rename: this.options.device === true, reset: false, delete: false, pin: true, archive: this.options.device === true } };
-    })];
+    })].map(marked);
+  }
+  /**
+   * Conversations a turn is running in on the computer right now, for the list.
+   * The native writer-lock files name what some process holds; of those, an
+   * unfinished turn started within twelve hours counts as running. A lock file
+   * can outlive a crashed process, so a conversation the observer found
+   * unheld is left out. Read-only, at most eight conversations a list.
+   */
+  private async runningElsewhere(): Promise<Set<string>> {
+    const running = new Set<string>();
+    if (this.desktop?.ready || !hasNativeWriterLock(this.rpc.nativeVersion)) return running;
+    let held: string[];
+    try { held = readdirSync(join(this.options.env?.CODEX_HOME || process.env.CODEX_HOME || join(homedir(), '.codex'), 'thread-writer-locks')); }
+    catch { return running; }
+    const rpc = this.rpc, now = Date.now() / 1000;
+    for (const name of held.slice(0, 64)) {
+      if (running.size >= 8) break;
+      const threadId = name.endsWith('.lock') ? name.slice(0, -5) : '';
+      if (!ID.test(threadId)) continue;
+      const r = this.records.find(row => row.threadId === threadId);
+      if ((r && (this.loaded.has(r.id) || (this.runs.has(r.id) && !this.runs.get(r.id)!.external))) || this.externalWatches.get(threadId)?.held === false) continue;
+      try {
+        const latest = (await rpc.request('thread/turns/list', { threadId, limit: 1, itemsView: 'summary', sortDirection: 'desc' })).data?.[0];
+        if (latest?.status === 'interrupted' && latest.completedAt == null && Number.isFinite(latest.startedAt) && now - latest.startedAt < 12 * 3600) running.add(threadId);
+      } catch { /* Unreadable here: not shown as running. */ }
+    }
+    return running;
   }
   async health(): Promise<object> {
     try { return await this.healthNow(); }
@@ -1284,12 +1330,14 @@ export class CodexService extends EventEmitter {
         const r = this.record(p.sessionKey), run = this.runs.get(r.id);
         if (!run) return { ok: true };
         if ((p.runId && p.runId !== run.id) || !run.turnId) throw new Error('Task changed or is still starting');
+        if (run.external) throw new Error('This task is running in Codex on your computer. Stop it there.');
         await (run.desktop ? this.desktop!.request('thread-follower-interrupt-turn', { conversationId: r.threadId, mode: 'user-stop', expectedTurnId: run.turnId }) : this.rpc.request('turn/interrupt', { threadId: r.threadId, turnId: run.turnId })); return { ok: true };
       }
       case 'chat.steer': {
         const r = this.record(p.sessionKey), run = this.runs.get(r.id);
         if (!run?.turnId || run.id !== p.runId || typeof p.text !== 'string' || !p.text.trim() || p.text.length > 128000) throw new Error('Task is no longer running');
         const input = [{ type: 'text', text: p.text, text_elements: [] }];
+        if (run.external) throw new Error('This task is running in Codex on your computer. Guide it there.');
         await (run.desktop ? this.desktop!.request('thread-follower-steer-turn', { conversationId: r.threadId, expectedTurnId: run.turnId, input }) : this.rpc.request('turn/steer', { threadId: r.threadId, expectedTurnId: run.turnId, input })); return { ok: true };
       }
       case 'approvals.list': this.record(p.sessionKey); return [...this.approvals.values()].filter(a => a.entry.id === p.sessionKey).map(a => ({ sessionKey: a.entry.id, approval: a.approval }));
@@ -1464,6 +1512,7 @@ export class CodexService extends EventEmitter {
     if (owned && (!owned.threadId || !owned.activity)) return { key: owned.id, messages: [], hasActiveRun: false };
     const threadId = owned?.threadId ?? native.id;
     if (owned && !this.loaded.has(owned.id)) { this.desktop?.follow(threadId); const snapshot = this.desktop?.snapshots.get(threadId); if (snapshot?.fresh) this.desktopSnapshot(threadId, snapshot); }
+    if (owned) this.watchExternalRun(owned);
     let page: { kind?: 'items'; native?: string; end?: number } = {};
     if (cursor !== undefined) {
       if (typeof cursor !== 'string' || cursor.length > 4096) throw new Error('Invalid history cursor');
@@ -1528,6 +1577,7 @@ export class CodexService extends EventEmitter {
       const hash = createHash('sha256').update(JSON.stringify(input)).digest('hex');
       const previous = Object.hasOwn(r.keys, input.idempotencyKey) ? r.keys[input.idempotencyKey] : undefined;
       if (previous) { if (previous.hash !== hash) throw new Error('Prompt key already used for different content'); return { runId: previous.runId }; }
+      if (this.runs.get(r.id)?.external) throw new Error(EXTERNAL_BUSY);
       if (this.runs.has(r.id)) throw new Error('This session is busy. Stop it or send guidance.');
       if (!projectDescriptor(r.cwd ?? this.project).available) throw new Error('The working directory no longer exists');
       // Native is immutable provenance, not current ownership. A successful,
@@ -1566,6 +1616,7 @@ export class CodexService extends EventEmitter {
       if (!desktopOwned && input.thinkingLevel && !model?.supportedReasoningEfforts?.some((e: any) => e.reasoningEffort === input.thinkingLevel)) throw new Error('This model does not support that reasoning level');
       // Owner discovery/settings may deliver a fresh active Desktop snapshot.
       // Preserve that exact turn instead of replacing it with our pending send.
+      if (this.runs.get(r.id)?.external) throw new Error(EXTERNAL_BUSY);
       if (this.runs.has(r.id)) throw new Error('This session is busy. Stop it or send guidance.');
       if (Object.keys(r.keys).length >= 10000) throw new Error('Start a new conversation to continue');
       const runId = randomUUID();
@@ -1746,6 +1797,99 @@ export class CodexService extends EventEmitter {
     this.update({ type: 'session_info_update', session: this.descriptor(r) });
     this.armWriterRelease(r, CHAT_WRITER_RELEASE_MS);
   }
+  /** A phone is reading this conversation: keep an eye on a turn another process may be running in it. */
+  private watchExternalRun(r: Entry): void {
+    if (this.stopped || !r.threadId || !r.activity || this.loaded.has(r.id) || this.desktop?.ready || !hasNativeWriterLock(this.rpc.nativeVersion)) return;
+    const run = this.runs.get(r.id); if (run && !run.external) return;
+    const now = Date.now(), current = this.externalWatches.get(r.threadId);
+    if (current) { current.expires = now + EXTERNAL_LEASE_MS; return; }
+    if (this.externalWatches.size >= EXTERNAL_WATCH_LIMIT) {
+      // Make room only from conversations nobody reads any more and where nothing is running.
+      const idle = [...this.externalWatches].find(([, watch]) => watch.expires <= now && !this.runs.get(watch.entry.id)?.external);
+      if (!idle) return;
+      this.externalWatches.delete(idle[0]);
+    }
+    this.externalWatches.set(r.threadId, { entry: r, expires: now + EXTERNAL_LEASE_MS, probedAt: 0, changedAt: now });
+    if (!this.externalTimer) { this.externalTimer = setInterval(() => { void this.pollExternalRuns(); }, EXTERNAL_POLL_MS); this.externalTimer.unref?.(); }
+    void this.pollExternalRuns();
+  }
+  private async pollExternalRuns(): Promise<void> {
+    if (this.externalPolling || this.stopped || this.disconnected) return;
+    this.externalPolling = true;
+    try {
+      for (const [threadId, watch] of [...this.externalWatches]) {
+        try { await this.readExternalRun(threadId, watch); }
+        catch { /* An unreadable step is read again on the next round; nothing is concluded from it. */ }
+      }
+    } finally {
+      this.externalPolling = false;
+      if (!this.externalWatches.size && this.externalTimer) { clearInterval(this.externalTimer); this.externalTimer = undefined; }
+    }
+  }
+  private async readExternalRun(threadId: string, watch: ExternalWatch): Promise<void> {
+    const r = watch.entry, rpc = this.rpc, now = Date.now();
+    const current = () => !this.stopped && !this.disconnected && this.rpc === rpc && this.externalWatches.get(threadId) === watch;
+    const local = this.runs.get(r.id);
+    // Our own writer, a local run or a Desktop broker supersede reading from history.
+    if (!this.records.includes(r) || r.threadId !== threadId || this.loaded.has(r.id) || (local && !local.external) || this.desktop?.ready
+      || (watch.expires <= now && !local?.external)) { this.externalWatches.delete(threadId); return; }
+    const listed = await rpc.request('thread/turns/list', { threadId, limit: 3, itemsView: 'summary', sortDirection: 'desc' });
+    if (!current() || !Array.isArray(listed.data)) return;
+    const turns: any[] = [...listed.data].reverse(), latest = turns.at(-1);
+    if (!latest || typeof latest.id !== 'string') return;
+    const unfinished = ['inProgress', 'running', 'active'].includes(latest.status) || (latest.status === 'interrupted' && latest.completedAt == null);
+    if (!unfinished) {
+      // The turn this Bridge was reading has its native outcome now.
+      if (local?.external && turns.some(turn => turn.id === local.turnId)) {
+        const terminal = turns.find(turn => turn.id === local.turnId);
+        const items = await this.externalItems(rpc, threadId, terminal.id);
+        if (!current()) return;
+        this.desktopSnapshot(threadId, { state: { turns: turns.map(turn => turn === terminal ? { ...turn, itemsView: items.complete ? 'full' : 'summary', items: items.rows } : turn), requests: [] }, source: 'native-history', fresh: true });
+      }
+      watch.turnId = undefined; watch.held = undefined; watch.signature = undefined;
+      return;
+    }
+    // An unfinished turn runs only while some process holds the conversation.
+    if (watch.turnId !== latest.id || watch.held === undefined || (now - watch.changedAt >= EXTERNAL_RECHECK_MS && now - watch.probedAt >= EXTERNAL_RECHECK_MS)) {
+      watch.turnId = latest.id; watch.probedAt = now;
+      try {
+        await rpc.request('thread/resume', { threadId, excludeTurns: true });
+        // Nobody held it: the turn's process is gone. Leave the conversation again at once.
+        watch.held = false;
+        await rpc.request('thread/unsubscribe', { threadId }).catch(() => {});
+      } catch (error) {
+        watch.held = error instanceof CodexRpcError && error.code === 'native_writer_busy' ? true : undefined;
+      }
+      if (!current()) return;
+    }
+    if (watch.held === undefined) return;
+    const items = await this.externalItems(rpc, threadId, latest.id);
+    if (!current()) return;
+    if (!watch.held) {
+      if (local?.external) this.desktopSnapshot(threadId, { state: { turns: turns.map(turn => turn === latest ? { ...turn, status: 'interrupted', itemsView: items.complete ? 'full' : 'summary', items: items.rows } : turn), requests: [] }, source: 'native-history', fresh: true });
+      return;
+    }
+    const signature = `${latest.id}:${items.rows.length}:${items.rows.at(-1)?.id ?? ''}`;
+    if (signature !== watch.signature) { watch.signature = signature; watch.changedAt = now; }
+    this.desktopSnapshot(threadId, { state: { turns: turns.map(turn => turn === latest ? { ...turn, turnId: turn.id, status: 'inProgress',
+      // Native turn clocks are Unix seconds; the run's elapsed time starts where the turn did.
+      ...(Number.isSafeInteger(turn.startedAt) && turn.startedAt > 0 ? { turnStartedAtMs: turn.startedAt * 1000 } : {}),
+      itemsView: items.complete ? 'full' : 'summary', items: items.rows } : turn), requests: [] }, source: 'native-history', fresh: true });
+    const run = this.runs.get(r.id);
+    if (run?.desktop && run.turnId === latest.id) run.external = true;
+  }
+  /** The newest items of one turn, oldest first; `complete` when the turn's first item is among them. */
+  private async externalItems(rpc: CodexRpc, threadId: string, turnId: string): Promise<{ rows: any[]; complete: boolean }> {
+    const rows: any[] = []; let cursor: string | undefined;
+    for (let page = 0; page < 4; page++) {
+      const result = await rpc.request('thread/items/list', { threadId, turnId, limit: 50, sortDirection: 'desc', ...(cursor ? { cursor } : {}) });
+      if (!Array.isArray(result.data)) throw new Error('Invalid native item history');
+      for (const row of result.data) if (row?.item && typeof row.item === 'object') rows.push(row.item);
+      cursor = typeof result.nextCursor === 'string' && result.nextCursor ? result.nextCursor : undefined;
+      if (!cursor) return { rows: rows.reverse(), complete: true };
+    }
+    return { rows: rows.reverse(), complete: false };
+  }
   /**
    * Leave an idle conversation so native unloads it and frees its writer lock:
    * Codex on the computer can then continue what the phone opened or answered.
@@ -1770,11 +1914,13 @@ export class CodexService extends EventEmitter {
     timer.unref?.();
     this.writerReleases.set(r.id, timer);
   }
-  prepareForUpdate(): boolean { return this.updateAdmission.prepare(() => this.runs.size > 0 || this.pendingStarts.size > 0); }
+  // A turn another process runs is not this Bridge's work and does not hold back an update.
+  prepareForUpdate(): boolean { return this.updateAdmission.prepare(() => [...this.runs.values()].some(run => !run.external) || this.pendingStarts.size > 0); }
 
   async stop(): Promise<void> {
     if (this.stopped) return; this.stopped = true; this.freshThreads.clear(); this.artifacts.clear();
     for (const timer of this.writerReleases.values()) clearTimeout(timer); this.writerReleases.clear();
+    if (this.externalTimer) clearInterval(this.externalTimer); this.externalTimer = undefined; this.externalWatches.clear();
     this.invalidateDesktopHistory();
     this.retireDesktopFollowers();
     for (const waiter of this.settingsWaiters.values()) { clearTimeout(waiter.timer); waiter.reject(new Error('Codex Bridge stopped')); }
