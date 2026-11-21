@@ -8,6 +8,7 @@ import type {
 import type { RosterConnectionGroup } from '../../connection';
 import {
   orderProjectsByRecency,
+  isAgentWorkspaceProject,
   applySessionPanelActivity,
   sessionPanelRowWorking,
   availableSessionActions,
@@ -348,5 +349,16 @@ describe('orderProjectsByRecency', () => {
     expect(orderProjectsByRecency(projects, rows).map(project => project.id)).toEqual(['app', 'chats', 'idle-a', 'idle-b', 'gone']);
     expect(orderProjectsByRecency(projects, []).map(project => project.id)).toEqual(['chats', 'idle-a', 'app', 'idle-b', 'gone']);
     expect(orderProjectsByRecency([], rows)).toEqual([]);
+  });
+});
+
+describe('isAgentWorkspaceProject', () => {
+  it('recognizes OpenClaw agent workspaces on every platform and nothing else', () => {
+    for (const path of ['/Users/qa/.openclaw/workspace', '/Users/qa/.openclaw/workspace-ui-operator/sub', 'C:\\Users\\qa\\.openclaw\\workspace', '/home/qa/.openclaw/agents/x']) {
+      expect(isAgentWorkspaceProject({ path })).toBe(true);
+    }
+    for (const project of [{ path: '/Users/qa/Desktop/openclaw' }, { path: '/Users/qa/.openclawx/workspace' }, { path: '/Users/qa/code/.openclaw' }, { path: '' }, {}, null, undefined]) {
+      expect(isAgentWorkspaceProject(project)).toBe(false);
+    }
   });
 });

@@ -88,6 +88,7 @@ import {
   type SessionPanelRenamePayload,
   type SessionPanelRow,
   orderProjectsByRecency,
+  isAgentWorkspaceProject,
 } from './model';
 
 type MaybePromise = void | Promise<void>;
@@ -957,7 +958,8 @@ export function SessionPanelView({
   );
   const chips = useMemo(() => projects ? [] : buildSessionPanelChips(agentRows), [agentRows, projects]);
   const activeFilter: SessionPanelFilter = chips.some((chip) => chip.key === filter) ? filter : 'all';
-  const filteredRows = useMemo(() => filterSessionPanelRows(projects && projectId ? displayRows.filter(r => r.project?.id === projectId) : displayRows, {
+  const filteredRows = useMemo(() => filterSessionPanelRows(projects && projectId ? displayRows.filter(r => r.project?.id === projectId)
+    : projects && !query.trim() ? displayRows.filter(r => !isAgentWorkspaceProject(r.project)) : displayRows, {
     agentId: viewAgentIdResolved,
     filter: activeFilter,
     query,
@@ -1129,8 +1131,9 @@ export function SessionPanelView({
     }
     return counts;
   }, [displayRows, viewAgentIdResolved]);
+  // The count beside "All projects" is the length of the list that choice shows.
   const projectCountTotal = useMemo(
-    () => displayRows.filter((row) => row.agentId === viewAgentIdResolved).length,
+    () => displayRows.filter((row) => row.agentId === viewAgentIdResolved && !isAgentWorkspaceProject(row.project)).length,
     [displayRows, viewAgentIdResolved],
   );
   const archiveChip = archiveAvailable ? (

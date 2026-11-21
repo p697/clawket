@@ -917,7 +917,7 @@ describe('useChatController contract', () => {
     expect(recordCompletedTurnForAutomaticReview).not.toHaveBeenCalled();
     expect(result.current.input).toBe('');
     expect(result.current.listData[0]).toMatchObject({ text: 'hello', delivery: 'held' });
-    expect(result.current.sendFailure).toBe('Sending failed. Check the conversation before trying again.');
+    expect(result.current.sendFailure).toBe('Your computer is not reachable right now. The message was not sent.');
   });
 
   it('sends after send preflight probe succeeds', async () => {

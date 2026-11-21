@@ -64,7 +64,7 @@ Explicit no-inference native verification: `CLAWKET_CLAUDE_MODEL_READ_LIVE=1 npm
 
 Native model-switch records and interruption markers are excluded from displayed human turns; ordinary text discussing commands remains intact. Device and native evidence, with remaining coverage limits, is recorded in [candidate QA](claude-code-qa-2026-09-26.md).
 
-Device pairing preserves its scope across background launch and supplements SDK session directories with saved project keys from the standard `~/.claude.json`. Unavailable paths remain visible but cannot host a new chat. Custom `CLAUDE_CONFIG_DIR` installations currently use SDK discovery only, avoiding accidental import from the default Claude account. New chat reuses the shared project picker; this selects an existing local project, not an arbitrary new filesystem directory.
+Device pairing preserves its scope across background launch and supplements SDK session directories with saved project keys from the standard `~/.claude.json`. Unavailable paths remain visible in the project filter and cannot host a new chat; the new-chat picker lists them only while searching (2026-11-21). Custom `CLAUDE_CONFIG_DIR` installations currently use SDK discovery only, avoiding accidental import from the default Claude account. New chat reuses the shared project picker; this selects an existing local project, not an arbitrary new filesystem directory.
 
 ### Local display names
 
