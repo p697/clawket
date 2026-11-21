@@ -2,9 +2,11 @@ import { once } from 'node:events';
 import { describe, expect, it, vi } from 'vitest';
 import type { Query, SDKMessage, SDKUserMessage, query } from '@anthropic-ai/claude-agent-sdk';
 import type { SessionUpdate } from '@clawket/agent-protocol';
-import { ClaudeSession } from './session.js';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import { ClaudeSession, macProtectedFolder } from './session.js';
 
-function fixture() {
+function fixture(cwd = '/qa-project') {
   let input!: AsyncIterator<SDKUserMessage>;
   let next: ((value: IteratorResult<SDKMessage>) => void) | undefined;
   let closed = false;
@@ -32,7 +34,7 @@ function fixture() {
     input = (args.prompt as AsyncIterable<SDKUserMessage>)[Symbol.asyncIterator]();
     return iterator as unknown as Query;
   });
-  const session = new ClaudeSession({ key: 'owned', cwd: '/qa-project', executable: '/native/claude' }, factory);
+  const session = new ClaudeSession({ key: 'owned', cwd, executable: '/native/claude' }, factory);
   const events: SessionUpdate[] = [];
   session.on('update', update => events.push(update));
   return { session, factory, iterator, events, push, takeInput: () => input.next() };
@@ -151,5 +153,26 @@ describe('Claude owned streaming session', () => {
     expect(session.activeRun).toBeUndefined();
     expect(events).toHaveLength(0);
     await session.close();
+  });
+});
+
+describe('Claude initialization in a macOS-protected folder', () => {
+  it('recognizes Documents, Desktop and Downloads on macOS only', () => {
+    expect(macProtectedFolder('/Users/qa/Documents/Clawket/Chats', '/Users/qa', 'darwin')).toBe(true);
+    expect(macProtectedFolder('/Users/qa/Desktop', '/Users/qa', 'darwin')).toBe(true);
+    expect(macProtectedFolder('/Users/qa/Downloads/x', '/Users/qa', 'darwin')).toBe(true);
+    expect(macProtectedFolder('/Users/qa/DocumentsOther/x', '/Users/qa', 'darwin')).toBe(false);
+    expect(macProtectedFolder('/Users/qa/code/app', '/Users/qa', 'darwin')).toBe(false);
+    expect(macProtectedFolder('/Users/qa/Documents/x', '/Users/qa', 'linux')).toBe(false);
+    expect(macProtectedFolder('C:\\Users\\qa\\Documents', 'C:\\Users\\qa', 'win32')).toBe(false);
+  });
+  it.each([
+    [join(homedir(), 'Documents', 'Clawket', 'Chats'), process.platform === 'darwin' ? 'allow it on the computer' : 'could not initialize'],
+    ['/qa-project', 'could not initialize'],
+  ])('names the folder prompt only where macOS can be asking (%s)', async (cwd, expected) => {
+    const { session, iterator } = fixture(cwd);
+    iterator.initializationResult.mockRejectedValueOnce(new Error('aborted'));
+    await expect(session.start()).rejects.toThrow(expected);
+    expect(iterator.close).toHaveBeenCalled();
   });
 });

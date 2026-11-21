@@ -7,6 +7,7 @@ import type {
 
 import type { RosterConnectionGroup } from '../../connection';
 import {
+  orderProjectsByRecency,
   applySessionPanelActivity,
   sessionPanelRowWorking,
   availableSessionActions,
@@ -325,4 +326,27 @@ it('unknown clears only the presentation arc; waiting keeps attention and known 
   expect(idle.hasActiveRun).toBe(false); expect(idle.attention).toBeNull();
   const error = { ...working, attention: 'error' as const };
   expect(applySessionPanelActivity([error], new Map([[working.key, { key: working.key, state: 'idle', attention: null }]]))[0].attention).toBe('error');
+});
+
+describe('orderProjectsByRecency', () => {
+  it('puts the most recently used folder first, missing folders last, and keeps the Bridge order between equals', () => {
+    const projects = [
+      { id: 'chats', name: 'Chats', available: true },
+      { id: 'gone', name: 'gone', available: false },
+      { id: 'idle-a', name: 'a', available: true },
+      { id: 'app', name: 'app', available: true },
+      { id: 'idle-b', name: 'b', available: true },
+    ];
+    const rows = [
+      { project: { id: 'chats' }, updatedAt: 100 },
+      { project: { id: 'app' }, updatedAt: 300 },
+      { project: { id: 'app' }, updatedAt: 50 },
+      { project: { id: 'gone' }, updatedAt: 900 },
+      { project: null, updatedAt: 999 },
+      { updatedAt: 999 },
+    ];
+    expect(orderProjectsByRecency(projects, rows).map(project => project.id)).toEqual(['app', 'chats', 'idle-a', 'idle-b', 'gone']);
+    expect(orderProjectsByRecency(projects, []).map(project => project.id)).toEqual(['chats', 'idle-a', 'app', 'idle-b', 'gone']);
+    expect(orderProjectsByRecency([], rows)).toEqual([]);
+  });
 });

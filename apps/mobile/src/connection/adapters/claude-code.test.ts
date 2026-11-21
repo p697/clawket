@@ -136,6 +136,22 @@ it('preserves native model priority for catalog, selection and settings replies'
   }
 });
 
+it('waits for a first send that starts the native process beyond 20 seconds, with a bounded 45-second deadline', async () => {
+  const connected = adapter.connect(); sockets[0].open(); sockets[0].reply(); await connected;
+  let settled = false;
+  const sent = adapter.prompt('cold', { text: 'hello', idempotencyKey: 'send-1' }).then(value => { settled = true; return value; });
+  const request = JSON.parse(sockets[0].sent.at(-1)!);
+  expect(request.method).toBe('chat.send');
+  await jest.advanceTimersByTimeAsync(38_000);
+  expect(settled).toBe(false);
+  sockets[0].onmessage?.({ data: JSON.stringify({ type: 'res', id: request.id, ok: true, payload: { runId: 'run-1' } }) });
+  expect(await sent).toEqual({ runId: 'run-1' });
+  sockets[0].onmessage?.({ data: JSON.stringify({ type: 'tick', ts: Date.now(), ack: 'relay.client-pong.v1' }) });
+  const stalled = adapter.prompt('cold', { text: 'again', idempotencyKey: 'send-2' }).catch(error => error);
+  await jest.advanceTimersByTimeAsync(45_000);
+  expect((await stalled).code).toBe('timeout');
+});
+
 it('waits for a cold native model read beyond 20 seconds, with a bounded 60-second deadline', async () => {
   const connected = adapter.connect(); sockets[0].open(); sockets[0].reply(); await connected;
   let settled = false;
