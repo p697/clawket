@@ -1,5 +1,13 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-11-21 Codex / Claude Code 连接体验实测（负责人要求整体研究并优化这两个后端的连接与对话体验）。
+  - 方法：本机 Codex Desktop 26.1117.41037（自带 codex 0.171.0-alpha.13）、Claude Code 2.1.319、公开 Bridge 3.1.18；「Clawket RN Connection QA」模拟器（iPhone 17 Pro / iOS 27.2），把当前 main 的 JS 换进 11-08 的 Release 模拟器包；Production 配对，只在 Chats 项目的测试对话里发消息。证据、数字与未决事项见 [实测记录](../3.1/native-agent-experience-2026-11-21.md)。
+  - 实测结论：连上之后的路径是顺的（冷启动约 4 秒出首页、再 2–3 秒连上；进聊天约 0.8 秒；新建对话、多步命令、流式回复、回执正常；冻结 150 秒后回前台无感）。体验差来自三处故障态：① Bridge 自己的 Codex 子进程在电脑重新登录后凭据失效，`health` 握手每次被拒，手机永远「离线 · 正在重连」，本机从 10:05 持续到 15:08 手动重启；② Codex Desktop 26.1117 不再提供 Bridge 依赖的桌面 IPC，原生版本又不在原子恢复名单里，Bridge 重启后任何已有对话（包括手机自己建的）都发不出消息；③ 本机两条 Bridge 隧道每天各断 25–40 次，其中约每小时一次发生在整点前 15 秒（代理环境），断线后 Relay 会关闭手机连接。
+  - 本次修复（Bridge）：`account/read` 被拒不再让握手失败，`health` 返回 `modelReady: false`；没有运行、待确认启动和设置写入时替换自己的 App Server 子进程一次（十分钟内最多一次），并记录 `account_read_rejected` / `account_recycle` 两个固定诊断类别。超时等未知结果仍按原样失败。`service.test.ts` 355 项通过（新增 4 项：空闲替换并用新登录完成握手、运行中不替换且手机仍可连接、十分钟内不重复替换、未知结果仍失败）。新进程能读到新登录这一点用本机两个版本的独立 App Server 实测过；真实的凭据失效现场没有再造。
+  - 本次修复（Mobile）：已保存且以前连上过的 Codex / Claude Code / Pi 连接，新建 adapter（冷启动、切换连接、手动重连）遇到 `BRIDGE_UNAVAILABLE` 时走 2/4/8/8 秒短重试，不再第一次就等 30 秒；从未连上过的连接不变。`bridge-recovery.test.ts` 11 项通过（新增 3 项）。
+  - 未改、待负责人决定：原子恢复的版本策略、新版 Codex 下「接着桌面对话继续聊」的实现路线、会话列表里 OpenClaw 借 Codex 引擎产生的对话、握手被拒时手机端的可读提示。见 HT-CODEX-CONTINUE-1121、HT-CODEX-ACCOUNT-1121。
+  - 本机操作：15:08 用 `clawket codex restart` 重启了负责人这台电脑的 Codex Bridge（配对保留，重启前确认没有运行中的任务）；测试留下 Chats 项目里一条新对话和旧 QA 对话里一条发送失败的消息。未升版本、未打分发包、未发布 Bridge 或 App、未部署服务。
+
 - 2026-11-12 README 与 CLI 的配对入口对齐 App（整体产品审视第一档）。
   - README 中英文原先首推 `npm install -g @p697/clawket` + `clawket pair`，这条默认命令只检测 OpenClaw 和 Hermes；只装了 Codex / Claude Code / Pi 的人照做会得到「先安装 OpenClaw 或 Hermes」。现在两份 README 都先给 App 配对首页显示的 `npx @p697/clawket@latest pair choose`，全局安装与 `clawket pair` 作为 OpenClaw / Hermes 的直接方式保留在后面，内容不删。
   - CLI 裸 `pair` 找不到 OpenClaw / Hermes 时，报错改为同时指出 `pair choose` 与 `--backend codex|claude-code|pi`。检测范围和旧客户端依赖的裸 `pair` 行为不变；这条文案要随下一次 Bridge 发布才到达用户，本次不发布、不改版本号。
@@ -2561,6 +2569,8 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 
 | 编号 | 事项 | 怎么做 | 验证方法 | 状态 |
 |---|---|---|---|---|
+| HT-CODEX-CONTINUE-1121 | 新版 Codex Desktop 下续聊已有对话的路线决定 | 负责人看 [实测记录](../3.1/native-agent-experience-2026-11-21.md) 的「待决定」：① 原子恢复改为按最低版本放行还是继续逐版本登记；② 桌面对话续聊走临时写入者、官方消息队列还是暂不支持。 | 决定后实现并在真实 Desktop 窗口验证：手机续聊后电脑上重开同一对话正常。 | 待负责人决定；当前 main 与公开 Bridge 3.1.18 在 Codex Desktop 26.1117 上，Bridge 重启后已有对话无法续聊。 |
+| HT-CODEX-ACCOUNT-1121 | Codex 凭据失效自愈的发布与手机验收 | 负责人授权发布含本修复的 Bridge 并更新各台电脑；之后在电脑上重新登录 Codex，再用手机连接。 | 手机能连上并看到会话；空闲时 Bridge 自行恢复，发消息得到回复；`clawket logs --backend codex` 出现 `account_recycle`。 | 源码已改、单元测试通过；未发布、运行中的 3.1.18 未替换。 |
 | HT-PAYWALL-SCOPE-1112 | 付费墙按后端收敛权益的真机验收 | 开「模拟免费账号」：① 只保留 Codex 或 Claude Code 连接，从设置会员卡打开付费墙；② 只保留 Hermes；③ 含 OpenClaw | ① 只有「接着电脑上的对话继续聊」「连接数量不限」两条，权益区与价格卡的间距正常；② 没有 OpenClaw 管理一条；③ 与改动前一致。新文案措辞如需调整直接告知 | 待验收 |
 | HT-HAPTICS-1112 | 触感补齐真机验收 | 装含本改动的构建：审批卡点允许 / 拒绝、长按允许；首页行和会话行长按；左滑首页行；完成一次配对、再故意用失效的码配对一次 | 每个动作有一次对应力度的触感，没有重复或漏掉；发消息、回复完成的原有触感不变 | 待验收 |
 | HT-PAIR-RETRY-1111 | 配对失效后重新开始的真机验收 | 装含本改动的构建：① 平台页输入一个已用过的配对码 → 出现「配对已失效」后点「重新配对」；② 扫一个已用过的二维码后点同一按钮 | ① 输入框清空并弹出键盘，红色提示仍在原位；② 直接回到扫码器；两种情况都不再出现第二次同样的失败 | 待验收 |

@@ -83,6 +83,8 @@ export type ConnectionRecordPatch = Partial<
 
 export type ConnectionAdapterFactoryContext = Readonly<{
   onReconnect?: (reason: 'seq_gap') => void;
+  /** This phone completed a handshake with the connection before, in this or an earlier app run. */
+  previouslyReady?: boolean;
 }>;
 
 export type ConnectionAdapterFactory = (

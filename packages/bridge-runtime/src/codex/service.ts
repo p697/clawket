@@ -15,7 +15,7 @@ import type { SessionDescriptor, SessionUpdate, SessionHistory, PromptInput, Age
 import { nativeSettings, nativePermissionSettings, nativeTurnPermissions, matchesNativeSettings, permissionMode, permissionSelectionPatch, type NativeSettings } from './settings.js';
 import { fastServiceTier, isFastServiceTier, hasServiceTier } from './speed.js';
 import { CodexProfile } from './profile.js';
-import { CodexRpc } from './rpc.js';
+import { CodexRpc, CodexRpcError } from './rpc.js';
 import { acquireCodexOwnerLock } from './owner-lock.js';
 import { codexMessages, codexGeneratedImage, codexTool, codexTurnFailure, codexReplyTimestamp, codexFinalReplyId, codexItemClock, codexItemTimestamp,
   codexToolTiming, codexDesktopItemClock, mergeCodexLiveItems, type CodexItemClock } from './history.js';
@@ -82,6 +82,8 @@ export class CodexService extends EventEmitter {
   private recovery?: Promise<void>;
   private nextRecoveryAt = 0;
   private recoveryFailures = 0;
+  private accountRecycleAt = 0;
+  private accountRecycle?: Promise<void>;
   private runs = new Map<string, Run>();
   // Bounded lookup for follower start replies; settled entries stay here, so only `pendingStarts` means busy.
   private starts = new Map<string, Promise<any>>();
@@ -1073,8 +1075,42 @@ export class CodexService extends EventEmitter {
     if (this.stopped) throw new Error('Codex process is unavailable. Restart the Bridge.');
     await this.recover();
     const catalog = this.catalog.length ? this.catalog : await this.refreshModels();
-    const account = await this.rpc.request('account/read', { refreshToken: false });
-    return { backend: 'codex', ...(this.options.bridgeVersion ? { bridgeVersion: this.options.bridgeVersion } : {}), ...remoteUpdateHealth(this.options.remoteUpdate), sessionActivity: 1, profileVersion: 1, sessionCatalogSync: 1, sessionCatalogPageIndex: 1, artifacts: true, modelReady: account.requiresOpenaiAuth !== true || !!account.account, model: catalog.find(m => m.isDefault)?.model ?? '', vision: true, project: basename(this.project), projects: !!this.options.device, fastMode: true, sessionPermissions: true, sessionArchive: true, promptStatus: true, desktopConnected: this.desktop?.ready === true };
+    const account = await this.readAccount();
+    return { backend: 'codex', ...(this.options.bridgeVersion ? { bridgeVersion: this.options.bridgeVersion } : {}), ...remoteUpdateHealth(this.options.remoteUpdate), sessionActivity: 1, profileVersion: 1, sessionCatalogSync: 1, sessionCatalogPageIndex: 1, artifacts: true, modelReady: !!account && (account.requiresOpenaiAuth !== true || !!account.account), model: catalog.find(m => m.isDefault)?.model ?? '', vision: true, project: basename(this.project), projects: !!this.options.device, fastMode: true, sessionPermissions: true, sessionArchive: true, promptStatus: true, desktopConnected: this.desktop?.ready === true };
+  }
+  /**
+   * A long-lived App Server keeps the login it started with. After the user
+   * signs in again on the computer, its account read is rejected until the
+   * process restarts, although conversations and history stay readable. That is
+   * an authentication state: it must not fail every phone handshake.
+   */
+  private async readAccount(): Promise<any | undefined> {
+    const rpc = this.rpc;
+    try { return await rpc.request('account/read', { refreshToken: false }); }
+    catch (error) {
+      if (!(error instanceof CodexRpcError) || error.outcome !== 'rejected') throw error;
+      if (!this.accountRecycle) {
+        if (this.rpc !== rpc) return this.rpc.request('account/read', { refreshToken: false });
+        this.emit('diagnostic', { reason: 'account_read_rejected', pendingCount: 0 });
+        // Only an idle owned child is replaced, at most once per ten minutes: a
+        // rejected read never interrupts a task or its pending start.
+        const idle = !this.runs.size && !this.pendingStarts.size && !this.settingsWaiters.size;
+        if (this.stopped || !idle || Date.now() - this.accountRecycleAt < 600_000) return undefined;
+        this.accountRecycleAt = Date.now();
+        this.accountRecycle = (async () => {
+          this.emit('diagnostic', { reason: 'account_recycle', pendingCount: 0 });
+          await rpc.stop();
+          this.nextRecoveryAt = 0;
+          await this.recover();
+        })().finally(() => { this.accountRecycle = undefined; });
+      }
+      await this.accountRecycle;
+      try { return await this.rpc.request('account/read', { refreshToken: false }); }
+      catch (retryError) {
+        if (retryError instanceof CodexRpcError && retryError.outcome === 'rejected') return undefined;
+        throw retryError;
+      }
+    }
   }
   async request(frame: CodexRequest): Promise<unknown> {
     return this.updateAdmission.request(() => this.requestNow(frame));

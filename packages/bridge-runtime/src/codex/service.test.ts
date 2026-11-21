@@ -7,9 +7,10 @@ import { createServer, type Socket } from 'node:net';
 import { execFileSync } from 'node:child_process';
 const mock = vi.hoisted(() => ({ instances: [] as any[], request: vi.fn(), respond: vi.fn(), refuse: vi.fn(), resumeSpeed: vi.fn() }));
 vi.mock('./resume-settings.js', () => ({ nativeResumeSpeed: (...args: any[]) => mock.resumeSpeed(...args) }));
-vi.mock('./rpc.js', async () => {
+vi.mock('./rpc.js', async importOriginal => {
+  const actual = await importOriginal<typeof import('./rpc.js')>();
   const { EventEmitter } = await import('node:events');
-  return { CodexRpc: class extends EventEmitter {
+  return { ...actual, CodexRpc: class extends EventEmitter {
     constructor() { super(); mock.instances.push(this); }
     nativeVersion = '0.153.3';
     request = mock.request; respond = mock.respond; refuse = mock.refuse;
@@ -30,6 +31,7 @@ vi.mock('./desktop-ipc.js', async importOriginal => {
   } };
 });
 import { CodexService } from './service.js';
+import { CodexRpcError } from './rpc.js';
 import { codexMessages } from './history.js';
 import { desktopTurns } from './desktop-state.js';
 import { DesktopIpcError } from './desktop-ipc.js';
@@ -3457,5 +3459,48 @@ describe('Desktop history publication generations', () => {
       expect((service as any).runs.size).toBe(0);
       expect(mock.request.mock.calls.some(([method]) => ['turn/start', 'thread/resume'].includes(method))).toBe(false);
     } finally { vi.useRealTimers(); }
+  });
+});
+
+describe('Codex account read rejected by a long-lived native process', () => {
+  const rejectAccount = (while_: () => boolean) => {
+    const original = mock.request.getMockImplementation()!;
+    mock.request.mockImplementation(async (method: string, params: any) => {
+      if (method === 'account/read' && while_()) throw new CodexRpcError('Codex rejected the operation (-32603). Check project trust and model configuration on your computer.', 'rejected');
+      return original(method, params);
+    });
+  };
+  it('replaces its idle child once and completes the handshake with the fresh login', async () => {
+    const diagnostics: any[] = []; service.on('diagnostic', d => diagnostics.push(d.reason));
+    rejectAccount(() => mock.instances.length === 1);
+    await expect(Promise.all([request('health'), request('health')])).resolves.toMatchObject([{ backend: 'codex', modelReady: true }, { backend: 'codex', modelReady: true }]);
+    expect(mock.instances).toHaveLength(2);
+    expect(diagnostics.filter(reason => reason === 'account_recycle')).toHaveLength(1);
+    expect(diagnostics).toContain('account_read_rejected');
+    await expect(request('sessions.list')).resolves.toEqual(expect.any(Array));
+  });
+  it('keeps a running task and its child, and still lets the phone connect', async () => {
+    await start();
+    rejectAccount(() => true);
+    await expect(request('health')).resolves.toMatchObject({ backend: 'codex', modelReady: false, sessionCatalogSync: 1 });
+    expect(mock.instances).toHaveLength(1);
+    expect(updates.some(update => update.type === 'error')).toBe(false);
+  });
+  it('does not replace the child again within ten minutes when the fresh one is rejected too', async () => {
+    rejectAccount(() => mock.instances.length !== 2 || mock.request.mock.calls.filter(([method]) => method === 'account/read').length > 3);
+    // First child rejects, the replacement's readiness read succeeds, later reads are rejected again.
+    await expect(request('health')).resolves.toMatchObject({ backend: 'codex' });
+    await expect(request('health')).resolves.toMatchObject({ backend: 'codex', modelReady: false });
+    await expect(request('health')).resolves.toMatchObject({ backend: 'codex', modelReady: false });
+    expect(mock.instances).toHaveLength(2);
+  });
+  it('still fails the handshake when the native outcome is unknown', async () => {
+    const original = mock.request.getMockImplementation()!;
+    mock.request.mockImplementation(async (method: string, params: any) => {
+      if (method === 'account/read') throw new CodexRpcError('Codex request timed out; its outcome is unknown. Do not resend automatically.', 'uncertain');
+      return original(method, params);
+    });
+    await expect(request('health')).rejects.toThrow('outcome is unknown');
+    expect(mock.instances).toHaveLength(1);
   });
 });

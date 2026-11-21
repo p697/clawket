@@ -837,6 +837,7 @@ export class ConnectionCoordinator {
         descriptor,
         {
           onReconnect: (reason) => this.telemetry.reconnect(descriptor, reason),
+          previouslyReady: (this.connectionDetails.get(connectionId)?.lastReadyAt ?? 0) > 0,
         },
       ));
     } catch (error) {

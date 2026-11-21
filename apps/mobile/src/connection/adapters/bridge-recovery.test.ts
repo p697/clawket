@@ -78,3 +78,38 @@ describe.each([
     } finally { adapter.disconnect(); }
   });
 });
+
+describe.each([
+  ['claude-code', ClaudeCodeAdapter], ['codex', CodexAdapter], ['pi', PiAdapter],
+] as const)('%s saved connection that was ready in an earlier run', (backend, Adapter) => {
+  beforeEach(() => { jest.useFakeTimers(); jest.spyOn(Math, 'random').mockReturnValue(0); });
+  afterEach(() => { jest.clearAllTimers(); jest.useRealTimers(); jest.restoreAllMocks(); });
+
+  it('uses the short owner-recovery retries on a new adapter, once', async () => {
+    const record: ConnectionRecord = { id: 'recovery-phone', backendKind: backend, transportKind: 'relay', label: 'QA',
+      url: 'wss://example.com/ws', createdAt: 1, relay: { gatewayId: 'qa', clientToken: 'qa', serverUrl: 'https://example.com' } };
+    const sockets: Socket[] = [];
+    const adapter = new Adapter(record, { previouslyReady: true, webSocketFactory: () => { const socket = new Socket(); sockets.push(socket); return socket; } });
+    try {
+      void adapter.connect().catch(() => {});
+      for (const [index, delay] of [2_000, 4_000, 8_000, 8_000, 30_000, 60_000].entries()) {
+        const current = sockets.at(-1)!;
+        current.open(); current.answer();
+        await jest.advanceTimersByTimeAsync(0);
+        const count = sockets.length;
+        await jest.advanceTimersByTimeAsync(delay - 1);
+        expect(sockets).toHaveLength(count);
+        await jest.advanceTimersByTimeAsync(1);
+        expect(sockets).toHaveLength(count + 1);
+        if (index === 3) {
+          // A coordinator retry cannot refill the exhausted short allowance.
+          adapter.disconnect();
+          void adapter.connect().catch(() => {});
+        }
+      }
+      sockets.at(-1)!.open(); sockets.at(-1)!.answer(backend);
+      await jest.advanceTimersByTimeAsync(0);
+      expect(adapter.state).toBe('ready');
+    } finally { adapter.disconnect(); }
+  });
+});

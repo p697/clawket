@@ -56,7 +56,9 @@ export class PiAdapter implements AgentAdapter {
   private pending = new Map<string, { resolve: (value: unknown) => void; reject: (reason: Error) => void; cancelTimeout: () => void }>();
   private listeners: { [K in keyof Listeners]: Set<Listeners[K]> } = { update: new Set(), state: new Set(), sessions: new Set() };
 
-  constructor(private readonly record: ConnectionRecord, options: { isFreeSlot?: boolean; webSocketFactory?: WebSocketFactory } = {}) {
+  constructor(private readonly record: ConnectionRecord, options: { isFreeSlot?: boolean; previouslyReady?: boolean; webSocketFactory?: WebSocketFactory } = {}) {
+    // A saved connection that was ready in an earlier run keeps the short owner-recovery retries.
+    this.previouslyReady = options.previouslyReady === true;
     if (record.backendKind !== 'pi') throw new TypeError('Expected pi connection');
     this.connection = { id: record.id, backendKind: record.backendKind, transportKind: record.transportKind, label: record.label, createdAt: record.createdAt, environment: record.environment, isFreeSlot: options.isFreeSlot ?? false };
     const url = new URL(record.url);
