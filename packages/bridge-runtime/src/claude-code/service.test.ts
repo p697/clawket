@@ -12,6 +12,7 @@ vi.mock('./session.js', () => ({ claudePromptContent: (input: { text: string }) 
   ClaudeSession: class extends EventEmitter {
     constructor(options: unknown) { super(); mocks.starts(options, this); }
     activeRun: { runId: string } | undefined;
+    settling = false;
     interactions = { questions: mocks.questions, approvals: () => [] };
     currentModel = 'sonnet';
     interrupt = mocks.interrupt;
@@ -177,6 +178,26 @@ describe('Claude service durable send and ownership boundary', () => {
     const session = mocks.starts.mock.calls.at(-1)![1] as EventEmitter;
     session.emit('settled', { text: '**Latest reply**', timestampMs: 1234 });
     expect((await request(service, 'sessions.list') as any[])[0]).toMatchObject({ preview: 'Latest reply', lastActivityAt: 1234 });
+  });
+  it('waits for a reply that has just ended to reach the transcript before answering a history read', async () => {
+    const { service } = fixture();
+    const row = await request(service, 'sessions.create') as { key: string };
+    const sent = await request(service, 'chat.send', { sessionKey: row.key, text: 'Hello', idempotencyKey: 'hello' }) as { runId: string };
+    const session = mocks.starts.mock.calls.at(-1)![1] as EventEmitter & { activeRun?: unknown; settlingMessageId?: string };
+    session.activeRun = undefined; session.settlingMessageId = sent.runId;
+    const asked = { uuid: sent.runId, type: 'user', message: { content: 'Hello' } };
+    mocks.history.mockResolvedValueOnce([asked]).mockResolvedValueOnce([asked]).mockResolvedValue([asked, { uuid: 'reply', type: 'assistant', message: { content: 'Hi' } }]);
+    const history = await request(service, 'chat.history', { sessionKey: row.key }) as any;
+    expect(history.messages.map((message: any) => message.role)).toEqual(['user', 'assistant']);
+    expect(mocks.history).toHaveBeenCalledTimes(3);
+    // A reply that never arrives does not hold the read for long, and an ordinary read is not delayed at all.
+    mocks.history.mockReset(); mocks.history.mockResolvedValue([asked]);
+    const started = Date.now();
+    expect(((await request(service, 'chat.history', { sessionKey: row.key })) as any).messages).toHaveLength(1);
+    expect(Date.now() - started).toBeLessThan(1_500); expect(mocks.history).toHaveBeenCalledTimes(9);
+    session.settlingMessageId = undefined; mocks.history.mockClear();
+    await request(service, 'chat.history', { sessionKey: row.key });
+    expect(mocks.history).toHaveBeenCalledTimes(1);
   });
   it('clears the ephemeral preview when a Bridge-owned conversation is reset', async () => {
     const { service } = fixture();
@@ -448,6 +469,18 @@ describe('Claude service durable send and ownership boundary', () => {
       await request(service, 'models.list', { sessionKey: row.key });
       expect(mocks.close).not.toHaveBeenCalled();
       await next();
+      expect(mocks.starts).toHaveBeenCalledTimes(1); expect(mocks.send).toHaveBeenCalledTimes(2);
+    });
+    it('treats a turn that is still closing natively as its own work: no check, no restart, no release', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const { service, row, running, nativeId } = await settledTurn();
+      (running as any).settling = true;
+      // Someone else appearing now is the same situation as during a running turn.
+      mocks.roster.mockResolvedValue({ known: true, owners: [{ sessionId: nativeId, status: 'idle', pid: 1 }, { sessionId: nativeId, status: 'idle', pid: 2 }] });
+      await request(service, 'models.list', { sessionKey: row.key });
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+      expect(mocks.close).not.toHaveBeenCalled();
+      await request(service, 'chat.send', { sessionKey: row.key, text: 'two', idempotencyKey: 'two' });
       expect(mocks.starts).toHaveBeenCalledTimes(1); expect(mocks.send).toHaveBeenCalledTimes(2);
     });
     it('closes the process two idle minutes after its turn', async () => {

@@ -145,6 +145,95 @@ describe('Claude owned streaming session', () => {
     await session.close();
   });
 
+  describe('a reply that has ended while the process is still closing the turn', () => {
+    const delta = (text: string) => ({ type: 'stream_event', parent_tool_use_id: null, event: { type: 'content_block_delta', delta: { type: 'text_delta', text } } });
+    const ended = (stop_reason = 'end_turn', parent: string | null = null) => ({ type: 'stream_event', parent_tool_use_id: parent, event: { type: 'message_delta', delta: { stop_reason } } });
+    const tick = () => new Promise(resolve => setImmediate(resolve));
+    async function replying() {
+      const subject = fixture(); const { session, push, takeInput } = subject;
+      const marks: string[] = [];
+      session.on('replied', () => marks.push('replied')); session.on('settled', () => marks.push('settled'));
+      await session.start();
+      session.send('00000000-0000-4000-8000-000000000011', { text: 'Hello', idempotencyKey: 'a' });
+      const input = (await takeInput()).value!;
+      push(delta('Hi there')); push(ended()); await tick();
+      return { ...subject, marks, input };
+    }
+    it('ends the run at the last message and settles when the native result arrives', async () => {
+      const { session, events, marks, push, input } = await replying();
+      expect(events.at(-1)).toMatchObject({ type: 'run_finished', runId: '00000000-0000-4000-8000-000000000011', stopReason: 'end_turn', message: { content: 'Hi there' } });
+      expect(session.activeRun).toBeUndefined(); expect(session.settling).toBe(true); expect(marks).toEqual(['replied']);
+      push({ type: 'system', subtype: 'post_turn_summary' });
+      push({ type: 'result', subtype: 'success', is_error: false, result: 'Hi there', user_message_uuid: input.uuid }); await tick();
+      expect(session.settling).toBe(false); expect(marks).toEqual(['replied', 'settled']);
+      expect(events.filter(event => event.type === 'run_finished')).toHaveLength(1);
+      await session.close();
+    });
+    it('accepts the next message while closing; the earlier result neither ends the new run nor settles the process', async () => {
+      const { session, events, marks, push, input, takeInput } = await replying();
+      session.send('00000000-0000-4000-8000-000000000012', { text: 'Again', idempotencyKey: 'b' });
+      const second = (await takeInput()).value!;
+      push({ type: 'result', subtype: 'success', is_error: false, result: 'Hi there', user_message_uuid: input.uuid }); await tick();
+      expect(session.activeRun?.runId).toBe('00000000-0000-4000-8000-000000000012'); expect(session.settling).toBe(false); expect(marks).toEqual(['replied']);
+      push(delta('Second')); push(ended()); await tick();
+      push({ type: 'result', subtype: 'success', is_error: false, result: 'Second', user_message_uuid: second.uuid }); await tick();
+      expect(marks).toEqual(['replied', 'replied', 'settled']);
+      expect(events.filter(event => event.type === 'run_finished').map(event => (event as any).message.content)).toEqual(['Hi there', 'Second']);
+      await session.close();
+    });
+    it('gives a result without an identity to the turn that is closing', async () => {
+      const { session, marks, push, takeInput } = await replying();
+      session.send('00000000-0000-4000-8000-000000000012', { text: 'Again', idempotencyKey: 'b' }); await takeInput();
+      push({ type: 'result', subtype: 'success', is_error: false, result: 'Hi there' }); await tick();
+      expect(session.activeRun?.runId).toBe('00000000-0000-4000-8000-000000000012'); expect(session.settling).toBe(false);
+      push({ type: 'result', subtype: 'success', is_error: false, result: 'late' }); await tick();
+      expect(session.activeRun).toBeUndefined(); expect(marks).toEqual(['replied', 'replied', 'settled']);
+      await session.close();
+    });
+    it('shows work that continues after the reply as a run of its own', async () => {
+      const { session, events, marks, push, input } = await replying();
+      push({ type: 'stream_event', parent_tool_use_id: null, event: { type: 'message_start' } }); await tick();
+      const started = events.at(-1) as { type: string; runId: string };
+      expect(started.type).toBe('run_started'); expect(started.runId).not.toBe('00000000-0000-4000-8000-000000000011');
+      expect(session.activeRun?.runId).toBe(started.runId); expect(session.settling).toBe(false);
+      push(delta('More')); push({ type: 'result', subtype: 'success', is_error: false, result: 'More', user_message_uuid: input.uuid }); await tick();
+      expect(events.at(-1)).toMatchObject({ type: 'run_finished', runId: started.runId, message: { content: 'More' } });
+      expect(marks).toEqual(['replied', 'replied', 'settled']);
+      await session.close();
+    });
+    it('stops waiting for a result that never arrives', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      try {
+        const { session, marks } = await replying();
+        await vi.advanceTimersByTimeAsync(119_000); expect(session.settling).toBe(true);
+        await vi.advanceTimersByTimeAsync(2_000); expect(session.settling).toBe(false); expect(marks).toEqual(['replied', 'settled']);
+        await session.close();
+      } finally { vi.useRealTimers(); }
+    });
+    it.each([
+      ['a tool call follows', [delta('Working'), ended('tool_use')]],
+      ['the message belongs to a subagent', [delta('Working'), ended('end_turn', 'tool-1')]],
+      ['nothing was written', [ended()]],
+    ])('keeps the run when %s', async (_label, frames) => {
+      const { session, events, push, takeInput } = fixture();
+      await session.start();
+      session.send('00000000-0000-4000-8000-000000000013', { text: 'Work', idempotencyKey: 'c' }); await takeInput();
+      for (const frame of frames) push(frame); await tick();
+      expect(session.activeRun?.runId).toBe('00000000-0000-4000-8000-000000000013'); expect(session.settling).toBe(false);
+      expect(events.some(event => event.type === 'run_finished')).toBe(false);
+      await session.close();
+    });
+    it('waits for the native result once a stop was requested', async () => {
+      const { session, events, push, takeInput } = fixture();
+      await session.start();
+      session.send('00000000-0000-4000-8000-000000000014', { text: 'Work', idempotencyKey: 'd' }); await takeInput();
+      push(delta('Partial')); await tick(); await session.interrupt('00000000-0000-4000-8000-000000000014');
+      push(ended()); await tick();
+      expect(session.activeRun).toBeDefined(); expect(events.some(event => event.type === 'run_finished')).toBe(false);
+      await session.close();
+    });
+  });
+
   it('rejects unsupported attachment data before creating a run', async () => {
     const { session, events } = fixture();
     await session.start();

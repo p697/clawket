@@ -304,7 +304,7 @@ export class ClaudeService extends EventEmitter {
             models: claudeModels(catalog) };
           return frame.method === 'models.select' ? { ...selection, ok: true, scope: 'session' } : selection;
         } finally {
-          if (record.imported && !session.activeRun) {
+          if (record.imported && !session.activeRun && !session.settling) {
             // A process started only to read models is closed at once. One kept after a turn stays, with the transcript as it now is.
             if (this.keptStamps.has(record.key) && this.sessions.get(record.key) === session) await this.keepImported(record, session);
             else await this.releaseSession(record.key, session);
@@ -362,7 +362,7 @@ export class ClaudeService extends EventEmitter {
       this.idleReleases.delete(key);
       void this.serial(async () => {
         if (this.sessions.get(key) !== session) return;
-        if (session.activeRun) { this.armIdleRelease(key, session, delayMs); return; }
+        if (session.activeRun || session.settling) { this.armIdleRelease(key, session, delayMs); return; }
         await this.releaseSession(key, session);
       }).catch(() => {});
     }, delayMs);
@@ -425,13 +425,15 @@ export class ClaudeService extends EventEmitter {
   private async session(record: ClaudeRecord): Promise<ClaudeSession> {
     const existing = this.sessions.get(record.key);
     if (existing) {
-      if (!record.imported || existing.activeRun) return existing;
+      // A turn that is still closing natively is this process's own work, exactly as a running one.
+      if (!record.imported || existing.activeRun || existing.settling) return existing;
       if (await this.keptUnchanged(record)) return existing;
       // Touched or held elsewhere, or never kept after a turn: start over through the ordinary checks.
       await this.releaseSession(record.key, existing);
     }
     if (this.sessions.size >= 2) {
-      const idle = [...this.sessions].find(([, session]) => !session.activeRun);
+      const resting = [...this.sessions].filter(([, session]) => !session.activeRun);
+      const idle = resting.find(([, session]) => !session.settling) ?? resting[0];
       if (!idle) throw new ClaudeFault('Two Claude tasks are already running. Wait for one to finish.');
       await this.releaseSession(idle[0], idle[1]);
     }
@@ -478,7 +480,8 @@ export class ClaudeService extends EventEmitter {
           void this.descriptor(record).then(descriptor => this.update({ type: 'session_info_update', session: descriptor })).catch(() => {});
         }
       });
-      session.on('settled', (result?: { text?: string; timestampMs?: number }) => {
+      // The reply ended: the list shows it at once. The process may still be closing the turn.
+      const noteReply = (result?: { text?: string; timestampMs?: number }) => {
         const preview = sessionPreview(result?.text);
         if (preview) {
           record.lastActivityAt = result?.timestampMs ?? Date.now();
@@ -487,6 +490,11 @@ export class ClaudeService extends EventEmitter {
         try { this.store.save(); }
         catch { this.update({ type: 'error', sessionKey: record.key, code: 'server', message: 'Claude session metadata could not be saved. Check local storage.' }); }
         void this.descriptor(record).then(descriptor => this.update({ type: 'session_info_update', session: descriptor })).catch(() => {});
+      };
+      let noted: unknown;
+      session.on('replied', (result?: { text?: string; timestampMs?: number }) => { noted = result?.timestampMs; noteReply(result); });
+      session.on('settled', (result?: { text?: string; timestampMs?: number }) => {
+        if (result?.timestampMs === undefined || result.timestampMs !== noted) noteReply(result);
         // An imported conversation gives the native writer back two idle minutes after its turn, so the computer can resume it.
         if (record.imported) void this.serial(() => this.keepImported(record, session)).catch(() => {});
         else this.armIdleRelease(record.key, session);
@@ -533,7 +541,7 @@ export class ClaudeService extends EventEmitter {
       // A failure after durable acceptance remains uncertain. Never remove this fingerprint and retry silently.
       session.send(runId, input);
       return { runId };
-    } finally { if (record.imported && !session.activeRun) await this.releaseSession(record.key, session); }
+    } finally { if (record.imported && !session.activeRun && !session.settling) await this.releaseSession(record.key, session); }
   }
 
   private async history(key: string, cursor: unknown): Promise<SessionHistory> {
@@ -547,8 +555,19 @@ export class ClaudeService extends EventEmitter {
       return { ...page, messages: this.artifacts.project(key, page.messages, [this.catalog.native(key).cwd], artifactEpoch, cursor) };
     }
     if (record.imported) this.update({ type: 'session_info_update', session: await this.descriptor(record) });
-    const page = record.materialized ? await claudeHistoryPage(record.nativeId!, record.cwd, cursor) : { messages: [] };
-    const activeRun = this.sessions.get(key)?.activeRun;
+    let page = record.materialized ? await claudeHistoryPage(record.nativeId!, record.cwd, cursor) : { messages: [] };
+    // Claude Code writes a finished reply to the transcript about 0.1 s after its last word. A read in that
+    // moment would show the conversation without the reply the phone has just been given.
+    const live = this.sessions.get(key);
+    for (let attempt = 0; attempt < 8 && cursor === undefined && record.materialized; attempt++) {
+      const turn = live?.settlingMessageId;
+      if (!turn) break;
+      const asked = page.messages.findIndex(message => message.id === turn);
+      if (asked >= 0 && page.messages.slice(asked + 1).some(message => message.role === 'assistant')) break;
+      await new Promise(resolve => setTimeout(resolve, 75));
+      page = await claudeHistoryPage(record.nativeId!, record.cwd, cursor);
+    }
+    const activeRun = live?.activeRun;
     const rendered = this.artifacts.project(key, page.messages, [record.cwd], artifactEpoch, cursor);
     for (const message of rendered) {
       const accepted = Object.values(record.fingerprints).find(item => item.runId === message.id);
