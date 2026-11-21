@@ -68,7 +68,7 @@ export class CodexRpc extends EventEmitter {
               this.diagnose('workspace_requirements_unavailable');
             }
             const busy = typeof frame.error.message === 'string' && /thread [a-f0-9-]{36} already has an active writer/.test(frame.error.message);
-            call.reject(new CodexRpcError(busy ? 'This conversation is controlled by another Codex process. Continue there or release it before trying again.' : `Codex rejected the operation (${Number(frame.error.code) || 'server'}). Check project trust and model configuration on your computer.`, 'rejected', busy ? 'native_writer_busy' : undefined));
+            call.reject(new CodexRpcError(busy ? 'This conversation is in use by Codex on your computer. Send again when it is idle there.' : `Codex rejected the operation (${Number(frame.error.code) || 'server'}). Check project trust and model configuration on your computer.`, 'rejected', busy ? 'native_writer_busy' : undefined));
           }
           else call.resolve(frame.result);
         }

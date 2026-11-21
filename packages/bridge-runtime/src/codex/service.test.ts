@@ -30,7 +30,7 @@ vi.mock('./desktop-ipc.js', async importOriginal => {
     async request() { throw new actual.DesktopIpcError('no-owner', 'No owner'); }
   } };
 });
-import { CodexService } from './service.js';
+import { CodexService, hasNativeWriterLock } from './service.js';
 import { CodexRpcError } from './rpc.js';
 import { codexMessages } from './history.js';
 import { desktopTurns } from './desktop-state.js';
@@ -840,13 +840,13 @@ describe('Codex owned sessions', () => {
     expect(mock.request).toHaveBeenCalledWith('turn/start', expect.objectContaining({ threadId, serviceTier: 'priority', clientUserMessageId: 'direct-cold-send' }));
     expect(mock.request.mock.calls.some(([method]) => method === 'thread/start')).toBe(false);
   });
-  it.each(['unknown-connection', 'unknown-version', 'native-import', 'active-native-turn', 'writer-busy', 'unknown-speed'])(
+  it.each(['unknown-connection', 'below-lock-version', 'native-import-below-lock-version', 'active-native-turn', 'writer-busy', 'unknown-speed'])(
     'does not dispatch or record a cold direct send with unproven ownership/settings: %s', async reason => {
       await start(); notify('turn/completed', { turn: { id: 'turn-1', status: 'completed' } });
       await service.stop(); service = new CodexService({ project, directory: join(root, 'state') });
       (service as any).desktop.connect = async () => { throw new DesktopIpcError('uncertain', 'Broker unavailable', reason === 'unknown-connection' ? undefined : 'broker-unavailable'); };
-      if (reason === 'unknown-version') mock.instances.at(-1).nativeVersion = '0.999.0';
-      if (reason === 'native-import') (service as any).records[0].native = true;
+      if (reason.endsWith('below-lock-version')) mock.instances.at(-1).nativeVersion = '0.157.0';
+      if (reason === 'native-import-below-lock-version') (service as any).records[0].native = true;
       if (reason === 'unknown-speed') mock.resumeSpeed.mockResolvedValue({ kind: 'unknown' });
       const original = mock.request.getMockImplementation()!;
       mock.request.mockImplementation(async (method, params) => {
@@ -861,12 +861,12 @@ describe('Codex owned sessions', () => {
       expect(await request('chat.promptStatus', { sessionKey: key, idempotencyKey: 'unsafe-cold-send' })).toEqual({ status: 'unknown' });
     },
   );
-  it.each(['unknown-version', 'native-import', 'active-native-turn'])('refuses CLI-only acquisition for %s', async reason => {
+  it.each(['below-lock-version', 'native-import-below-lock-version', 'active-native-turn'])('refuses CLI-only acquisition for %s', async reason => {
     await start(); notify('turn/completed', { turn: { id: 'turn-1', status: 'completed' } });
     await service.stop(); service = new CodexService({ project, directory: join(root, 'state') });
     (service as any).desktop.request = async () => { throw new DesktopIpcError('uncertain', 'Broker unavailable', 'broker-unavailable'); };
-    if (reason === 'unknown-version') mock.instances.at(-1).nativeVersion = '0.999.0';
-    if (reason === 'native-import') (service as any).records[0].native = true;
+    if (reason.endsWith('below-lock-version')) mock.instances.at(-1).nativeVersion = '0.157.0';
+    if (reason === 'native-import-below-lock-version') (service as any).records[0].native = true;
     if (reason === 'active-native-turn') {
       const original = mock.request.getMockImplementation()!;
       mock.request.mockImplementation(async (method, params) => method === 'thread/turns/list' ? { data: [{ id: 'turn-1', status: 'inProgress', items: [] }] } : original(method, params));
@@ -3502,5 +3502,89 @@ describe('Codex account read rejected by a long-lived native process', () => {
     });
     await expect(request('health')).rejects.toThrow('outcome is unknown');
     expect(mock.instances).toHaveLength(1);
+  });
+});
+
+describe('Codex continuation through the native writer lock, without a Desktop broker', () => {
+  const brokerless = () => {
+    const desktop = (service as any).desktop;
+    desktop.ready = false;
+    desktop.connect = async () => { throw new DesktopIpcError('uncertain', 'Broker unavailable', 'broker-unavailable'); };
+    desktop.request = async () => { throw new DesktopIpcError('uncertain', 'Broker unavailable', 'broker-unavailable'); };
+  };
+  const restart = async (version: string, imported: boolean) => {
+    await start(); notify('turn/completed', { turn: { id: 'turn-1', status: 'completed' } });
+    await service.stop(); service = new CodexService({ project, directory: join(root, 'state') });
+    updates = []; service.on('update', u => updates.push(u));
+    mock.instances.at(-1).nativeVersion = version;
+    if (imported) (service as any).records[0].native = true;
+    brokerless(); mock.request.mockClear();
+  };
+  it('knows which native versions take the lock', () => {
+    for (const version of ['0.153.3', '0.158.0-alpha.2.1', '0.158.0', '0.160.0', '0.167.0', '0.171.0-alpha.13', '1.0.0']) expect(hasNativeWriterLock(version)).toBe(true);
+    for (const version of [undefined, '', 'latest', '0.153.4', '0.157.9', '0.99.0']) expect(hasNativeWriterLock(version)).toBe(false);
+  });
+  it.each([[false, '0.171.0-alpha.13'], [true, '0.171.0-alpha.13'], [true, '0.153.3']])(
+    'continues an existing conversation after a restart (imported=%s, native %s)', async (imported, version) => {
+      await restart(version, imported);
+      const sent = await request('chat.send', { sessionKey: key, text: 'continue', idempotencyKey: 'lock-send' });
+      await Promise.resolve();
+      expect(sent.runId).toEqual(expect.any(String));
+      const methods = mock.request.mock.calls.map(([method]) => method);
+      expect(methods.indexOf('thread/resume')).toBeGreaterThan(-1);
+      expect(methods.indexOf('turn/start')).toBeGreaterThan(methods.indexOf('thread/resume'));
+      expect(methods).not.toContain('thread/start');
+    });
+  it('reports a conversation held on the computer without dispatching or recording the send', async () => {
+    await restart('0.171.0-alpha.13', true);
+    const original = mock.request.getMockImplementation()!;
+    mock.request.mockImplementation(async (method, params) => {
+      if (method === 'thread/resume') throw new CodexRpcError('This conversation is in use by Codex on your computer. Send again when it is idle there.', 'rejected', 'native_writer_busy');
+      return original(method, params);
+    });
+    await expect(request('chat.send', { sessionKey: key, text: 'continue', idempotencyKey: 'busy-send' })).rejects.toThrow('in use by Codex on your computer');
+    expect(mock.request.mock.calls.some(([method]) => method === 'turn/start')).toBe(false);
+    expect(await request('chat.promptStatus', { sessionKey: key, idempotencyKey: 'busy-send' })).toEqual({ status: 'unknown' });
+  });
+  it('leaves a conversation five idle minutes after its turn so the computer can continue it, and resumes on the next send', async () => {
+    vi.useFakeTimers();
+    try {
+      await restart('0.171.0-alpha.13', true);
+      await request('chat.send', { sessionKey: key, text: 'continue', idempotencyKey: 'lock-send-1' });
+      await Promise.resolve(); notify('turn/started', { turn: { id: 'turn-2' } });
+      // A running task keeps its writer however long it takes.
+      await vi.advanceTimersByTimeAsync(900_000);
+      expect(mock.request.mock.calls.some(([method]) => method === 'thread/unsubscribe')).toBe(false);
+      notify('turn/completed', { turn: { id: 'turn-1', status: 'completed' } });
+      await vi.advanceTimersByTimeAsync(299_000);
+      expect(mock.request.mock.calls.some(([method]) => method === 'thread/unsubscribe')).toBe(false);
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(mock.request).toHaveBeenCalledWith('thread/unsubscribe', { threadId });
+      mock.request.mockClear();
+      await request('chat.send', { sessionKey: key, text: 'again', idempotencyKey: 'lock-send-2' });
+      await Promise.resolve();
+      const methods = mock.request.mock.calls.map(([method]) => method);
+      expect(methods.indexOf('turn/start')).toBeGreaterThan(methods.indexOf('thread/resume'));
+      expect(methods.indexOf('thread/resume')).toBeGreaterThan(-1);
+    } finally { vi.useRealTimers(); }
+  });
+  it('keeps a conversation loaded while a Desktop broker can route to this owner', async () => {
+    vi.useFakeTimers();
+    try {
+      await start(); notify('turn/completed', { turn: { id: 'turn-1', status: 'completed' } });
+      await vi.advanceTimersByTimeAsync(900_000);
+      expect(mock.request.mock.calls.some(([method]) => method === 'thread/unsubscribe')).toBe(false);
+    } finally { vi.useRealTimers(); }
+  });
+  it('releases a conversation that was only opened for its model settings', async () => {
+    vi.useFakeTimers();
+    try {
+      await restart('0.171.0-alpha.13', true);
+      await request('models.list', { sessionKey: key });
+      expect(mock.request).toHaveBeenCalledWith('thread/resume', expect.objectContaining({ threadId }));
+      await vi.advanceTimersByTimeAsync(31_000);
+      expect(mock.request).toHaveBeenCalledWith('thread/unsubscribe', { threadId });
+      expect(mock.request.mock.calls.some(([method]) => method === 'turn/start')).toBe(false);
+    } finally { vi.useRealTimers(); }
   });
 });
