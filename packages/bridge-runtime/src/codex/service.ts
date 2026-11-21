@@ -41,6 +41,26 @@ type QuestionGroup = { desktop?: boolean; wireId: string | number; entry: Entry;
 type MetadataBaseline = Map<Entry, { threadId: string; revision: number; pending: boolean }>;
 const ID = /^[a-f0-9-]{36}$/;
 const PERMISSIONS = { approvalPolicy: 'on-request', approvalsReviewer: 'user', permissions: ':workspace' };
+/**
+ * Native versions whose thread/resume takes the cross-process writer lock: the
+ * audited 0.153.3 and every 0.158.0 build or later (owner decision 2026-11-21,
+ * verified on 0.171.0-alpha.13). Another process holding a conversation makes
+ * resume fail with "already has an active writer"; the lock leaves a live
+ * process about a minute after thread/unsubscribe.
+ */
+export function hasNativeWriterLock(version: string | undefined): boolean {
+  if (version === '0.153.3') return true;
+  const match = /^(\d+)\.(\d+)\.\d+/.exec(version ?? '');
+  return !!match && (Number(match[1]) > 0 || Number(match[2]) >= 158);
+}
+/**
+ * Without a Desktop broker nobody can route to this Bridge, so it holds a
+ * conversation only around its own work. One that was merely opened (its model
+ * settings were read) is left after 30 seconds. One the phone is chatting in is
+ * kept for five idle minutes: native reloads an unloaded conversation slowly
+ * (about 20 seconds before the next reply on the owner's Mac, 2026-11-21).
+ */
+const OPENED_WRITER_RELEASE_MS = 30_000, CHAT_WRITER_RELEASE_MS = 300_000;
 const UNCONFIRMED_PERMISSIONS = 'Codex did not restore the conversation permissions. Select and confirm permissions before sending.';
 const permissionSettings = (settings: NativeSettings) => ({ approvalPolicy: settings.approvalPolicy,
   approvalsReviewer: settings.approvalsReviewer, sandboxPolicy: settings.sandboxPolicy, activePermissionProfile: settings.activePermissionProfile });
@@ -82,6 +102,7 @@ export class CodexService extends EventEmitter {
   private recovery?: Promise<void>;
   private nextRecoveryAt = 0;
   private recoveryFailures = 0;
+  private writerReleases = new Map<string, ReturnType<typeof setTimeout>>();
   private accountRecycleAt = 0;
   private accountRecycle?: Promise<void>;
   private runs = new Map<string, Run>();
@@ -726,15 +747,17 @@ export class CodexService extends EventEmitter {
   }
   private async assertReleasedNative(r: Entry, error: unknown, allowAtomicResume = false): Promise<void> {
     const snapshot = this.desktop!.snapshots.get(r.threadId!);
-    // CLI-only hosts have no Desktop broker. For our own IDs only, audited
-    // native versions atomically acquire a cross-process writer lock in
-    // thread/resume itself. A broker connect failure is not no-owner evidence;
-    // it permits attempting that native acquisition, never guessing ownership.
-    const atomicResume = allowAtomicResume && !r.native && error instanceof DesktopIpcError && error.reason === 'broker-unavailable';
+    // CLI-only hosts and current Codex Desktop have no broker. Native versions
+    // with the cross-process writer lock acquire it atomically in thread/resume
+    // itself, for imported conversations as well as our own. A broker connect
+    // failure is not no-owner evidence; it permits attempting that native
+    // acquisition, never guessing ownership.
+    const atomicResume = allowAtomicResume && error instanceof DesktopIpcError && error.reason === 'broker-unavailable'
+      && (!r.native || hasNativeWriterLock(this.rpc.nativeVersion));
     if (!(error instanceof DesktopIpcError) || (error.outcome !== 'no-owner' && !atomicResume) || (snapshot?.fresh ? desktopTurns(snapshot.state) : []).some((t: any) => ['inProgress', 'running', 'active'].includes(t.status))) throw error;
     const metadata = await this.rpc.request('thread/read', { threadId: r.threadId, includeTurns: false });
     if (metadata.thread?.cwd !== (r.cwd ?? this.project)) throw new Error('Conversation belongs to another project');
-    if (atomicResume && !['0.153.3', '0.158.0-alpha.2.1'].includes(this.rpc.nativeVersion ?? '')) throw error;
+    if (atomicResume && !hasNativeWriterLock(this.rpc.nativeVersion)) throw error;
     const latest = await this.rpc.request('thread/turns/list', { threadId: r.threadId, limit: 1, itemsView: 'summary', sortDirection: 'desc' });
     if (!Array.isArray(latest.data) || latest.data.some((t: any) => !['completed', 'interrupted', 'failed'].includes(t?.status))) throw new DesktopIpcError('uncertain', 'A native task may still be running. Continue it on your computer.');
   }
@@ -1016,7 +1039,7 @@ export class CodexService extends EventEmitter {
     r.threadId = result.thread.id; r.model = result.model ?? result.thread.model; r.provider = result.modelProvider ?? result.thread.modelProvider;
     r.effort = result.reasoningEffort ?? undefined;
     if (hasServiceTier(result)) r.serviceTier = result.serviceTier;
-    this.loaded.add(r.id); this.save();
+    this.loaded.add(r.id); this.save(); this.armWriterRelease(r, OPENED_WRITER_RELEASE_MS);
     // 0.153.3 cold resume initializes normal collaboration mode in native core. Newer native
     // responses expose it explicitly; unknown shapes cannot publish an invented Desktop state.
     const effective = nativeSettings(result, true, !resume || this.rpc.nativeVersion === '0.153.3');
@@ -1712,11 +1735,37 @@ export class CodexService extends EventEmitter {
     this.update({ type: 'run_finished', sessionKey: r.id, runId: run.id, stopReason, ...(terminalMessage ? { terminalMessage,
       message: { role: 'assistant', content: terminalMessage.text } } : run.final || generated.length ? { message: { role: 'assistant', content: run.final ?? '', ...(timestampMs !== undefined ? { timestampMs } : {}), ...(generated.length ? { attachments: generated } : {}), model: r.model, provider: r.provider } } : {}) });
     this.update({ type: 'session_info_update', session: this.descriptor(r) });
+    this.armWriterRelease(r, CHAT_WRITER_RELEASE_MS);
+  }
+  /**
+   * Leave an idle conversation so native unloads it and frees its writer lock:
+   * Codex on the computer can then continue what the phone opened or answered.
+   * A connected Desktop broker routes to this owner instead, and keeps it loaded.
+   */
+  private armWriterRelease(r: Entry, delayMs: number): void {
+    const pending = this.writerReleases.get(r.id); if (pending) clearTimeout(pending);
+    if (this.stopped) return;
+    const timer = setTimeout(() => {
+      this.writerReleases.delete(r.id);
+      const rpc = this.rpc;
+      if (this.stopped || this.disconnected || !this.loaded.has(r.id) || !this.records.includes(r)) return;
+      void this.serial(r, async () => {
+        if (this.rpc !== rpc || !this.loaded.has(r.id) || !r.threadId || !r.activity) return;
+        if (this.desktop?.ready || !hasNativeWriterLock(rpc.nativeVersion)) return;
+        const waiting = this.settingsWaiters.has(r.id) || [...this.approvals.values()].some(c => c.entry === r) || [...this.questions.values()].some(g => g.entry === r);
+        if (this.runs.has(r.id) || waiting) { this.armWriterRelease(r, delayMs); return; }
+        this.loaded.delete(r.id); this.freshThreads.delete(r); this.effectiveSettings.delete(r.id);
+        await rpc.request('thread/unsubscribe', { threadId: r.threadId });
+      }).catch(() => { /* The next send reads native state again. */ });
+    }, delayMs);
+    timer.unref?.();
+    this.writerReleases.set(r.id, timer);
   }
   prepareForUpdate(): boolean { return this.updateAdmission.prepare(() => this.runs.size > 0 || this.pendingStarts.size > 0); }
 
   async stop(): Promise<void> {
     if (this.stopped) return; this.stopped = true; this.freshThreads.clear(); this.artifacts.clear();
+    for (const timer of this.writerReleases.values()) clearTimeout(timer); this.writerReleases.clear();
     this.invalidateDesktopHistory();
     this.retireDesktopFollowers();
     for (const waiter of this.settingsWaiters.values()) { clearTimeout(waiter.timer); waiter.reject(new Error('Codex Bridge stopped')); }

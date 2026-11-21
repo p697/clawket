@@ -80,6 +80,7 @@ export class DesktopIpc extends EventEmitter {
     if (this.ready) this.write({ type: 'broadcast', method, version: versions[method] ?? 1, sourceClientId: this.clientId, params });
   }
   readonly snapshots = new Map<string, DesktopSnapshot>();
+  private retryDelay = 2000;
   constructor(private readonly paths = process.platform === 'win32' ? ['\\\\.\\pipe\\codex-ipc'] : [join(process.env.CODEX_HOME || join(homedir(), '.codex'), 'ipc', 'ipc.sock'), join(tmpdir(), 'codex-ipc', `ipc-${process.getuid?.() ?? 0}.sock`)]) { super(); }
   get ready(): boolean { return !!this.clientId && !this.socket?.destroyed; }
   async connect(): Promise<void> {
@@ -135,7 +136,13 @@ export class DesktopIpc extends EventEmitter {
         clearTimeout(p.timer); p.reject(new DesktopIpcError('uncertain', 'Desktop connection interrupted; check the task before retrying.', 'connection-lost'));
       }
       this.pending.clear(); this.emit('offline');
-      if (!this.closed && this.followed.size && !this.retry) this.retry = setTimeout(() => { this.retry = undefined; void this.connect().catch(() => {}); }, 2000);
+      // A computer without a Desktop broker (CLI only, or a Desktop that no longer
+      // serves one) is not asked every two seconds forever.
+      if (!this.closed && this.followed.size && !this.retry) {
+        this.retry = setTimeout(() => { this.retry = undefined; void this.connect().catch(() => {}); }, this.retryDelay);
+        this.retry.unref?.();
+        this.retryDelay = Math.min(60_000, this.retryDelay * 2);
+      }
     });
     try {
       await new Promise<void>((resolve, reject) => {
@@ -145,7 +152,7 @@ export class DesktopIpc extends EventEmitter {
       });
       const result = await this.call('initialize', { clientType: 'clawket-bridge' }, true);
       if (typeof result?.clientId !== 'string' || !result.clientId) throw new Error('Invalid desktop handshake');
-      this.clientId = result.clientId;
+      this.clientId = result.clientId; this.retryDelay = 2000;
       for (const id of this.followed) { this.announceFollowing(id, true); this.queueOwnerProbe(id); }
       this.emit('ready');
     } catch (error) { socket.destroy(); throw error; }
