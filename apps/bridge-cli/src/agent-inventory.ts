@@ -107,7 +107,10 @@ export async function inspectAgent(target: AgentTarget): Promise<AgentStatus> {
   } catch (error) {
     result.state = (error as NodeJS.ErrnoException)?.code === 'ECONNREFUSED' ? 'stopped' : 'unverified';
     result.finding = result.state === 'stopped' ? 'Bridge is stopped; start this saved connection.'
-      : 'Bridge health could not be verified. Inspect logs; an unanswered or rejected probe does not prove it is stopped.';
+      // The Bridge authenticated this probe and reported its own Agent process as unhealthy.
+      : (error as NodeJS.ErrnoException)?.code === 'NATIVE_HEALTH_FAILED'
+        ? `The Bridge is running, but its ${target.backend} process rejected the health check; phones cannot connect. Restart this saved connection: clawket ${target.backend} restart (same pairing options).`
+        : 'Bridge health could not be verified. Inspect logs; an unanswered or rejected probe does not prove it is stopped.';
   }
   if (!result.projectAvailable) result.finding = 'Saved project directory is unavailable; restore it before starting new work.';
   return result;

@@ -87,6 +87,8 @@ export function claudeHistory(messages: readonly SessionMessage[]): ChatMessage[
       || /^\[Request interrupted by user(?: for tool use)?\]$/.test(localText)
       // Background-task completions are system-authored user entries (origin task-notification).
       || /^\s*<task-notification>[\s\S]*<\/task-notification>\s*$/.test(localText)
+      // The client's own note beside an image it showed the model, never typed by a person.
+      || /^\[Image: original \d+x\d+, displayed at \d+x\d+\. Multiply coordinates by \d+(?:\.\d+)? to map to original image\.\]$/.test(localText)
     )) continue;
     const userText: string[] = [];
     const attachments: NonNullable<ChatMessage['attachments']> = [];

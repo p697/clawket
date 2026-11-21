@@ -471,3 +471,41 @@ it('answers phone-started update only through the injected control', async () =>
   expect(await call('bridge.update.status')).toEqual({ status });
   expect(start).toHaveBeenCalledExactlyOnceWith();
 });
+
+describe('Claude owned process idle release', () => {
+  afterEach(() => { vi.useRealTimers(); });
+  it('closes an owned process half an hour after its last turn and starts a fresh one on the next send', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const { service } = fixture();
+    const row = await request(service, 'sessions.create') as { key: string };
+    await request(service, 'chat.send', { sessionKey: row.key, text: 'one', idempotencyKey: 'one' });
+    const running = mocks.starts.mock.calls.at(-1)![1];
+    // A running task keeps its process however long it takes.
+    await vi.advanceTimersByTimeAsync(3 * 60 * 60_000);
+    expect(mocks.close).not.toHaveBeenCalled();
+    running.activeRun = undefined; running.emit('settled');
+    await vi.advanceTimersByTimeAsync(29 * 60_000);
+    expect(mocks.close).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(2 * 60_000);
+    expect(mocks.close).toHaveBeenCalledTimes(1);
+    await request(service, 'chat.send', { sessionKey: row.key, text: 'two', idempotencyKey: 'two' });
+    expect(mocks.starts).toHaveBeenCalledTimes(2);
+    expect(mocks.send).toHaveBeenCalledTimes(2);
+  });
+  it('counts idle time from the latest turn', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const { service } = fixture();
+    const row = await request(service, 'sessions.create') as { key: string };
+    await request(service, 'chat.send', { sessionKey: row.key, text: 'one', idempotencyKey: 'one' });
+    const running = mocks.starts.mock.calls.at(-1)![1];
+    running.activeRun = undefined; running.emit('settled');
+    await vi.advanceTimersByTimeAsync(20 * 60_000);
+    await request(service, 'chat.send', { sessionKey: row.key, text: 'two', idempotencyKey: 'two' });
+    running.activeRun = undefined; running.emit('settled');
+    await vi.advanceTimersByTimeAsync(20 * 60_000);
+    expect(mocks.close).not.toHaveBeenCalled();
+    expect(mocks.starts).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(11 * 60_000);
+    expect(mocks.close).toHaveBeenCalledTimes(1);
+  });
+});

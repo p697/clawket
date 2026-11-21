@@ -197,7 +197,7 @@ it.each([false, true])('preserves default device scope on first detached pairing
   const childConfig = childArgs[childArgs.indexOf('--config') + 1];
   await handleCodexCommand([...childArgs, '--foreground']);
   const initial = JSON.parse(readFileSync(childConfig, 'utf8'));
-  expect(initial).toMatchObject({ device: true, displayName: 'Codex · 工作室 Mac', project: realpathSync(join(root, 'Documents', 'Clawket', 'Chats')) });
+  expect(initial).toMatchObject({ device: true, displayName: 'Codex · 工作室 Mac', project: realpathSync(join(root, 'Clawket', 'Chats')) });
   expect(JSON.parse(mock.qr.mock.calls[0][0])).toMatchObject({ backendKind: 'codex', mode: 'local', displayName: initial.displayName });
   mock.name.mockReturnValue('Codex · Renamed computer');
   await handleCodexCommand(args);

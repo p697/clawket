@@ -23,7 +23,7 @@ export function claudeControl(config: { port: number; token: string }, method = 
           expectedResponse = 'identity'; socket.send(JSON.stringify({ type: 'req', id: 'identity', method: 'agents.list' })); return;
         }
         if (method === 'health' && frame.id === 'auth' && frame.error?.code === 'claude-code_error') {
-          finish(new Error('The existing Claude Code Bridge failed its native health check. Inspect clawket claude-code logs and explicitly restart with the same pairing options.')); return;
+          finish(Object.assign(new Error('The existing Claude Code Bridge failed its native health check. Inspect clawket claude-code logs and explicitly restart with the same pairing options.'), { code: 'NATIVE_HEALTH_FAILED' })); return;
         }
         finish(new Error('Claude Code Bridge rejected the control request')); return;
       }
