@@ -395,7 +395,7 @@ The `local-model` backend uses the shared chat UI with its own adapter. It is of
 
 Local-model Relay handshakes use `health`, not the OpenClaw challenge-triggering `connect`; direct sockets retain token-authenticated `connect`. Failed handshakes use transport backoff, and 30-second ticks allow three missed intervals. Keep idle and failure-recovery regressions beside the adapter.
 
-Connection retry ownership: repeated `connect()` calls must preserve a pending transport backoff; only explicit `reconnect()` bypasses it. Local-model `BRIDGE_UNAVAILABLE` retains its offline error code and backs off 30/60/120 seconds until successful backend health.
+Connection retry ownership: repeated `connect()` calls must preserve a pending transport backoff; only explicit `reconnect()` bypasses it. Local-model `BRIDGE_UNAVAILABLE` retains its offline error code and backs off 30/60/120 seconds until successful backend health. Codex, Claude Code and Pi adapters take the short 2/4/8/8-second owner-recovery retries once per adapter when the connection was ready before: in this adapter, or in an earlier run as recorded by the roster cache (`lastReadyAt`, passed as `previouslyReady` by the coordinator). A connection that never completed a handshake keeps 30/60/120.
 
 After a verified handshake, Codex/Claude/Pi allow four bounded missing-Bridge recovery retries (minimum 2/4/8/8 seconds, spanning the 20-second owner lease), then use the existing 30/60/120-second offline backoff. Cold, never-healthy adapters retain the offline schedule. Raw socket opens and repeated `connect()` calls cannot refill that allowance; only successful backend health does. Retain proven health across the coordinator's same-adapter disconnect/connect recovery, never across replacement adapters.
 

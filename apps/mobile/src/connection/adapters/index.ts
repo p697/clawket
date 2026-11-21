@@ -29,9 +29,9 @@ export function createConnectionAdapter(
 ): AgentAdapter {
   const isFreeSlot = descriptor.isFreeSlot;
   switch (record.backendKind) {
-    case 'claude-code': return new ClaudeCodeAdapter(record, { isFreeSlot });
-    case 'codex': return new CodexAdapter(record, { isFreeSlot });
-    case 'pi': return new PiAdapter(record, { isFreeSlot });
+    case 'claude-code': return new ClaudeCodeAdapter(record, { isFreeSlot, previouslyReady: options.previouslyReady });
+    case 'codex': return new CodexAdapter(record, { isFreeSlot, previouslyReady: options.previouslyReady });
+    case 'pi': return new PiAdapter(record, { isFreeSlot, previouslyReady: options.previouslyReady });
     case 'local-model':
       return new LocalModelAdapter(record, { isFreeSlot });
     case 'openclaw':
