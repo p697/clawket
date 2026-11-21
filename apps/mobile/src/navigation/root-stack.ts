@@ -43,6 +43,8 @@ export type RootStackParamList = {
     agentId: string;
     sessionKey: string;
     from: ThreadOrigin;
+    /** Opened from the phone's saved list before the computer answered; a conversation the live list no longer has returns to the picker. */
+    cachedEntry?: boolean;
     shareId?: string;
     /** One-shot reviewable input; never submitted automatically. */
     composerDraft?: { id: string; text: string; skill?: { name: string; invocation: string } };
