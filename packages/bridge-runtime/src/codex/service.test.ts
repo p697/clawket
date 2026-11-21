@@ -3592,3 +3592,127 @@ describe('Codex continuation through the native writer lock, without a Desktop b
     } finally { vi.useRealTimers(); }
   });
 });
+
+describe('Codex turn running in another process, read from native history', () => {
+  const busy = () => new CodexRpcError('This conversation is in use by Codex on your computer. Send again when it is idle there.', 'rejected', 'native_writer_busy');
+  const user = { type: 'userMessage', id: 'u9', content: [{ type: 'text', text: 'work' }] };
+  const said = (id: string, text: string) => ({ type: 'agentMessage', id, text });
+  const ran = (id: string) => ({ type: 'commandExecution', id, command: 'sleep 6', cwd: project, status: 'completed', aggregatedOutput: '', exitCode: 0, durationMs: 6000, commandActions: [] });
+  let latest: any, items: any[], held: 'busy' | 'free' | 'unknown';
+  /** A conversation with history, a restarted Bridge that does not hold it, no Desktop broker, native 0.171. */
+  const open = async (options: { broker?: boolean; home?: string } = {}) => {
+    await start(); notify('turn/completed', { turn: { id: 'turn-1', status: 'completed' } });
+    await service.stop();
+    service = new CodexService({ project, directory: join(root, 'state'), ...(options.home ? { env: { ...process.env, CODEX_HOME: options.home } } : {}) });
+    updates = []; service.on('update', u => updates.push(u));
+    mock.instances.at(-1).nativeVersion = '0.171.0-alpha.13';
+    (service as any).records[0].native = true;
+    const desktop = (service as any).desktop;
+    if (!options.broker) {
+      desktop.ready = false;
+      desktop.connect = async () => { throw new DesktopIpcError('uncertain', 'Broker unavailable', 'broker-unavailable'); };
+      desktop.request = async () => { throw new DesktopIpcError('uncertain', 'Broker unavailable', 'broker-unavailable'); };
+    }
+    latest = { id: 'turn-9', status: 'interrupted', completedAt: null, startedAt: Math.floor(Date.now() / 1000) - 5 };
+    items = [user]; held = 'busy';
+    const original = mock.request.getMockImplementation()!;
+    mock.request.mockImplementation(async (method: string, params: any = {}) => {
+      if (method === 'thread/turns/list' && params.limit !== 3 && params.limit !== 1) return original(method, params);
+      if (method === 'thread/turns/list') return { data: [{ ...latest, items: [] }] };
+      if (method === 'thread/items/list' && params.turnId === 'turn-9') return { data: [...items].reverse().map(item => ({ turnId: 'turn-9', item })) };
+      if (method === 'thread/resume' && held === 'busy') throw busy();
+      if (method === 'thread/resume' && held === 'unknown') throw new CodexRpcError('Codex request timed out; its outcome is unknown. Do not resend automatically.', 'uncertain');
+      return original(method, params);
+    });
+    mock.request.mockClear();
+  };
+  const tick = () => vi.advanceTimersByTimeAsync(2_000);
+  const called = (method: string) => mock.request.mock.calls.filter(([name]) => name === method).length;
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] }); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('follows the turn a step at a time once a phone opens the conversation, without becoming its writer', async () => {
+    await open();
+    await request('chat.history', { sessionKey: key }); await tick();
+    expect(updates.filter(u => u.type === 'run_started').at(-1)).toMatchObject({ sessionKey: key, runId: 'desktop:turn-9' });
+    expect(called('thread/resume')).toBe(1);
+    items = [user, said('a1', 'Step one.')]; await tick();
+    expect(updates.some(u => u.type === 'agent_message_chunk' && u.text === 'Step one.')).toBe(true);
+    items = [user, said('a1', 'Step one.'), ran('c1')]; await tick();
+    expect(updates.some(u => u.type === 'tool_call')).toBe(true);
+    expect((await request('sessions.list')).find((row: any) => row.key === key)).toMatchObject({ hasActiveRun: true });
+    // It is the computer's task: nothing is sent, stopped or guided from here, and an update need not wait for it.
+    await expect(request('chat.send', { sessionKey: key, text: 'hello', idempotencyKey: 'while-external' })).rejects.toThrow('in use by Codex on your computer');
+    await expect(request('chat.abort', { sessionKey: key })).rejects.toThrow('Stop it there');
+    expect(called('turn/start') + called('turn/interrupt') + called('thread/start')).toBe(0);
+    expect(called('thread/resume')).toBe(1);
+    latest = { ...latest, status: 'completed', completedAt: latest.startedAt + 30 };
+    items = [...items, said('a2', 'DONE')]; await tick();
+    expect(updates.filter(u => u.type === 'run_finished').at(-1)).toMatchObject({ sessionKey: key, runId: 'desktop:turn-9', stopReason: 'end_turn' });
+    expect((await request('chat.history', { sessionKey: key })).hasActiveRun).toBe(false);
+  });
+
+  it('does not hold back a Bridge update for a task the computer is running', async () => {
+    await open();
+    await request('chat.history', { sessionKey: key }); await tick();
+    expect(updates.some(u => u.type === 'run_started')).toBe(true);
+    expect(service.prepareForUpdate()).toBe(true);
+  });
+
+  it('does not call an unfinished turn running when no process holds the conversation, and leaves it again', async () => {
+    await open(); held = 'free';
+    await request('chat.history', { sessionKey: key }); await tick(); await tick();
+    expect(updates.some(u => u.type === 'run_started')).toBe(false);
+    expect(mock.request).toHaveBeenCalledWith('thread/unsubscribe', { threadId });
+    expect(called('thread/resume')).toBe(1);
+  });
+
+  it('ends a followed turn as stopped when its process disappears', async () => {
+    await open();
+    await request('chat.history', { sessionKey: key }); await tick();
+    expect(updates.some(u => u.type === 'run_started')).toBe(true);
+    held = 'free';
+    await vi.advanceTimersByTimeAsync(64_000);
+    expect(updates.filter(u => u.type === 'run_finished').at(-1)).toMatchObject({ runId: 'desktop:turn-9', stopReason: 'cancelled' });
+  });
+
+  it('concludes nothing while it cannot tell whether the conversation is held', async () => {
+    await open(); held = 'unknown';
+    await request('chat.history', { sessionKey: key }); await tick(); await tick();
+    expect(updates.some(u => u.type === 'run_started' || u.type === 'run_finished')).toBe(false);
+    expect(called('thread/unsubscribe')).toBe(0);
+  });
+
+  it('stops reading once nobody has the conversation open and nothing is running', async () => {
+    await open(); latest = { id: 'turn-9', status: 'completed', completedAt: 1, startedAt: 1 };
+    await request('chat.history', { sessionKey: key }); await tick();
+    const before = called('thread/turns/list');
+    await vi.advanceTimersByTimeAsync(70_000);
+    const settled = called('thread/turns/list');
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(settled).toBeGreaterThan(before);
+    expect(called('thread/turns/list')).toBe(settled);
+    expect(called('thread/resume')).toBe(0);
+  });
+
+  it('leaves a conversation to the Desktop broker while one answers', async () => {
+    await open({ broker: true });
+    await request('chat.history', { sessionKey: key }); await tick(); await tick();
+    expect(called('thread/resume')).toBe(0);
+    expect(updates.some(u => u.type === 'run_started')).toBe(false);
+  });
+
+  it('marks a conversation running in the list from its native lock file and unfinished turn', async () => {
+    const home = join(root, 'codex-home'); mkdirSync(join(home, 'thread-writer-locks'), { recursive: true });
+    await open({ home });
+    expect((await request('sessions.list')).find((row: any) => row.key === key)).toMatchObject({ hasActiveRun: false });
+    writeFileSync(join(home, 'thread-writer-locks', `${threadId}.lock`), '');
+    writeFileSync(join(home, 'thread-writer-locks', 'not-a-thread.lock'), '');
+    expect((await request('sessions.list')).find((row: any) => row.key === key)).toMatchObject({ hasActiveRun: true });
+    latest = { ...latest, startedAt: Math.floor(Date.now() / 1000) - 13 * 3600 };
+    expect((await request('sessions.list')).find((row: any) => row.key === key)).toMatchObject({ hasActiveRun: false });
+    latest = { id: 'turn-9', status: 'completed', completedAt: 2, startedAt: 1 };
+    expect((await request('sessions.list')).find((row: any) => row.key === key)).toMatchObject({ hasActiveRun: false });
+    expect(called('thread/resume')).toBe(0);
+  });
+});
