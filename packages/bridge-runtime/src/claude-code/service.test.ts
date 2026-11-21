@@ -376,7 +376,7 @@ describe('Claude service durable send and ownership boundary', () => {
     expect(mocks.send).toHaveBeenCalledTimes(2);
   });
 
-  it('releases the imported native process after settlement and resumes on the next turn', async () => {
+  it('releases the imported native process after settlement when its transcript cannot be stamped, and resumes on the next turn', async () => {
     const { project, service } = fixture(); const nativeId = randomUUID();
     mocks.list.mockResolvedValue([{ sessionId: nativeId, cwd: project, summary: 'Native', lastModified: 10 }]);
     const [row] = await request(service, 'sessions.list') as Array<{ key: string }>;
@@ -386,6 +386,126 @@ describe('Claude service durable send and ownership boundary', () => {
     expect(mocks.close).toHaveBeenCalledTimes(1);
     expect(mocks.starts).toHaveBeenCalledTimes(2);
     expect(mocks.starts.mock.calls.at(-1)![0].resume).toBe(nativeId);
+  });
+
+  describe('imported conversation kept between turns', () => {
+    afterEach(() => { vi.useRealTimers(); });
+    async function settledTurn() {
+      const { project, service } = fixture(); const nativeId = randomUUID();
+      mocks.list.mockResolvedValue([{ sessionId: nativeId, cwd: project, summary: 'Native', lastModified: 10 }]);
+      mocks.info.mockResolvedValue({ sessionId: nativeId, lastModified: 20, fileSize: 400 });
+      const [row] = await request(service, 'sessions.list') as Array<{ key: string }>;
+      await request(service, 'chat.send', { sessionKey: row.key, text: 'one', idempotencyKey: 'one' });
+      const running = mocks.starts.mock.calls.at(-1)![1]; running.activeRun = undefined; running.emit('settled');
+      await new Promise(resolve => setImmediate(resolve)); // the transcript is stamped as the turn settles
+      // The kept process is what the native roster now lists for this conversation.
+      mocks.roster.mockResolvedValue({ known: true, owners: [{ sessionId: nativeId, status: 'idle', pid: 1 }] });
+      return { service, row, nativeId, running, next: () => request(service, 'chat.send', { sessionKey: row.key, text: 'two', idempotencyKey: 'two' }) };
+    }
+    it('reuses the process while nobody else holds the conversation and its transcript is unchanged', async () => {
+      const { next, running, service, row } = await settledTurn();
+      await next();
+      expect(mocks.close).not.toHaveBeenCalled();
+      expect(mocks.starts).toHaveBeenCalledTimes(1);
+      expect(mocks.send).toHaveBeenCalledTimes(2);
+      // The transcript now carries this process's second turn; a third turn reuses it again.
+      mocks.info.mockResolvedValue({ lastModified: 30, fileSize: 900 });
+      running.activeRun = undefined; running.emit('settled');
+      await request(service, 'chat.send', { sessionKey: row.key, text: 'three', idempotencyKey: 'three' });
+      expect(mocks.starts).toHaveBeenCalledTimes(1); expect(mocks.send).toHaveBeenCalledTimes(3);
+    });
+    it.each([['a later modification', { lastModified: 21, fileSize: 400 }], ['a different size', { lastModified: 20, fileSize: 512 }]])(
+      'starts over when the transcript shows %s', async (_label, info) => {
+        const { next, nativeId } = await settledTurn();
+        mocks.roster.mockResolvedValueOnce({ known: true, owners: [{ sessionId: nativeId, status: 'idle', pid: 1 }] }).mockResolvedValue({ known: true, owners: [] });
+        mocks.info.mockResolvedValue(info);
+        await next();
+        expect(mocks.close).toHaveBeenCalledTimes(1);
+        expect(mocks.starts).toHaveBeenCalledTimes(2);
+        expect(mocks.starts.mock.calls.at(-1)![0].resume).toBe(nativeId);
+        expect(mocks.send).toHaveBeenCalledTimes(2);
+      });
+    it('gives the conversation up when a second process holds it, and sends nothing', async () => {
+      const { next, nativeId, row, service } = await settledTurn();
+      const elsewhere = { known: true, owners: [{ sessionId: nativeId, status: 'idle', pid: 1 }, { sessionId: nativeId, status: 'idle', pid: 2 }] };
+      // After the kept process closes, the other one is still listed.
+      mocks.roster.mockResolvedValueOnce(elsewhere).mockResolvedValue({ known: true, owners: [{ sessionId: nativeId, status: 'idle', pid: 2 }] });
+      await expect(next()).rejects.toThrow('still open in Claude');
+      expect(mocks.close).toHaveBeenCalledTimes(1);
+      expect(mocks.starts).toHaveBeenCalledTimes(1);
+      expect(mocks.send).toHaveBeenCalledTimes(1);
+      expect((await request(service, 'sessions.list') as any[]).find(item => item.key === row.key)).toMatchObject({ canContinue: false, continuationBlockedReason: 'in_use' });
+    });
+    it('fails closed when ownership cannot be read', async () => {
+      const { next } = await settledTurn();
+      mocks.roster.mockResolvedValue({ known: false, owners: [] });
+      await expect(next()).rejects.toThrow('Could not verify');
+      expect(mocks.close).toHaveBeenCalledTimes(1);
+      expect(mocks.send).toHaveBeenCalledTimes(1);
+    });
+    it('reads the model list from the kept process without closing it', async () => {
+      const { service, row, next } = await settledTurn();
+      await request(service, 'models.list', { sessionKey: row.key });
+      expect(mocks.close).not.toHaveBeenCalled();
+      await next();
+      expect(mocks.starts).toHaveBeenCalledTimes(1); expect(mocks.send).toHaveBeenCalledTimes(2);
+    });
+    it('closes the process two idle minutes after its turn', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const { service, row, nativeId } = await settledTurn();
+      await vi.advanceTimersByTimeAsync(110_000);
+      expect(mocks.close).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(mocks.close).toHaveBeenCalledTimes(1);
+      mocks.roster.mockResolvedValue({ known: true, owners: [] });
+      await request(service, 'chat.send', { sessionKey: row.key, text: 'two', idempotencyKey: 'two' });
+      expect(mocks.starts).toHaveBeenCalledTimes(2);
+      expect(mocks.starts.mock.calls.at(-1)![0].resume).toBe(nativeId);
+    });
+  });
+
+  describe('conversations removed on the phone', () => {
+    it.each(['sessions.delete', 'sessions.reset'])('%s keeps the native transcript out of the list, also after restart', async method => {
+      const { project, service, open } = fixture();
+      const row = await request(service, 'sessions.create') as { key: string };
+      await request(service, 'chat.send', { sessionKey: row.key, text: 'made on the phone', idempotencyKey: 'made' });
+      const nativeId = mocks.starts.mock.calls.at(-1)![0].sessionId as string;
+      const running = mocks.starts.mock.calls.at(-1)![1]; running.activeRun = undefined; running.emit('settled');
+      await request(service, method, { sessionKey: row.key });
+      // The transcript is still on the computer, and another conversation beside it.
+      const other = randomUUID();
+      mocks.list.mockResolvedValue([{ sessionId: nativeId, cwd: project, summary: 'made on the phone', lastModified: 10 }, { sessionId: other, cwd: project, summary: 'From the computer', lastModified: 9 }]);
+      const titles = async (subject: ClaudeService) => (await request(subject, 'sessions.list') as any[]).filter(item => item.source === 'native').map(item => item.title);
+      expect(await titles(service)).toEqual(['From the computer']);
+      await service.stop();
+      expect(await titles(open())).toEqual(['From the computer']);
+    });
+    it('lets an imported conversation be removed once its transcript is gone, and only then', async () => {
+      const { project, service, open } = fixture(); const nativeId = randomUUID();
+      mocks.list.mockResolvedValue([{ sessionId: nativeId, cwd: project, summary: 'Native', lastModified: 10 }]);
+      const [row] = await request(service, 'sessions.list') as Array<{ key: string }>;
+      await request(service, 'chat.send', { sessionKey: row.key, text: 'continue', idempotencyKey: 'continue' });
+      const running = mocks.starts.mock.calls.at(-1)![1]; running.activeRun = undefined; running.emit('settled');
+      await expect(request(service, 'sessions.delete', { sessionKey: row.key })).rejects.toThrow('Native');
+      // The transcript is deleted on the computer.
+      mocks.list.mockResolvedValue([]); mocks.info.mockResolvedValue(undefined);
+      expect(await request(service, 'sessions.list')).toEqual([expect.objectContaining({ key: row.key, allowedActions: { rename: false, reset: false, delete: true, pin: true } })]);
+      await expect(request(service, 'sessions.reset', { sessionKey: row.key })).rejects.toThrow('Native');
+      await request(service, 'sessions.delete', { sessionKey: row.key });
+      expect(await request(service, 'sessions.list')).toEqual([]);
+      await service.stop();
+      expect(await request(open(), 'sessions.list')).toEqual([]);
+    });
+    it('does not offer removal when the transcript cannot be read', async () => {
+      const { project, service } = fixture(); const nativeId = randomUUID();
+      mocks.list.mockResolvedValue([{ sessionId: nativeId, cwd: project, summary: 'Native', lastModified: 10 }]);
+      const [row] = await request(service, 'sessions.list') as Array<{ key: string }>;
+      await request(service, 'chat.send', { sessionKey: row.key, text: 'continue', idempotencyKey: 'continue' });
+      const running = mocks.starts.mock.calls.at(-1)![1]; running.activeRun = undefined; running.emit('settled');
+      mocks.list.mockResolvedValue([]); mocks.info.mockRejectedValue(new Error('unreadable'));
+      expect((await request(service, 'sessions.list') as any[])[0].allowedActions.delete).toBe(false);
+      await expect(request(service, 'sessions.delete', { sessionKey: row.key })).rejects.toThrow('Native');
+    });
   });
 
   it('does not resume native conversations merely to display the model catalog', async () => {

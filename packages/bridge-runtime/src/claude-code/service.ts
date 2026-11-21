@@ -26,6 +26,16 @@ export interface ClaudeRequest { type: 'req'; id: string; method: string; params
 export interface ClaudeOptions { bridgeVersion?: string; remoteUpdate?: RemoteUpdateControl; project: string; directory: string; executable: string; device?: boolean; ownershipDirectory?: string }
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 const IDLE_SESSION_RELEASE_MS = 30 * 60_000;
+/**
+ * A continued conversation from the computer keeps its process for two idle
+ * minutes: restarting it for every message cost about ten seconds before the
+ * reply began (15–17 s against 4–5.5 s, owner's Mac, 2026-11-21). Claude Code
+ * has no cross-process guard, so the kept process is reused only while no
+ * other process holds the conversation and its transcript is exactly as this
+ * process left it; otherwise it is closed and the ordinary checks run again.
+ */
+const IMPORTED_KEEP_MS = 2 * 60_000;
+const transcriptStamp = (info: { lastModified: number; fileSize?: number }) => `${info.lastModified}:${info.fileSize ?? ''}`;
 function string(value: unknown, label: string, max = 300): string {
   if (typeof value !== 'string' || !value.trim() || value.length > max) throw new ClaudeFault(`Invalid ${label}`);
   return value;
@@ -40,6 +50,10 @@ export class ClaudeService extends EventEmitter {
   private readonly owners: ClaudeOwners;
   private sessions = new Map<string, ClaudeSession>();
   private idleReleases = new Map<string, ReturnType<typeof setTimeout>>();
+  /** Transcript stamp of a kept imported conversation, taken when its last turn settled. */
+  private keptStamps = new Map<string, string>();
+  /** Imported records whose native transcript no longer exists; they may be removed from the phone's list. */
+  private goneNative = new Set<string>();
   private locks = new Map<string, ClaudeOwnerLock>();
   private probes = new Set<ClaudeSession>();
   private previews = new Map<string, { preview: string; lastActivityAt: number }>();
@@ -94,7 +108,7 @@ export class ClaudeService extends EventEmitter {
       model: this.sessions.get(record.key)?.currentModel ?? (record.imported && record.nativeId ? this.catalog.cachedModel(record.nativeId) : undefined) ?? record.observedModel ?? record.model,
       project, source: record.imported ? 'native' : 'bridge', ...continuation,
       hasActiveRun: !!this.sessions.get(record.key)?.activeRun || !!(record.imported && snapshot?.known && snapshot.owners.some(owner => owner.sessionId === record.nativeId && owner.status === 'busy')), attention: this.attention.get(record.key),
-      allowedActions: { rename: !record.imported, reset: !record.imported, delete: !record.imported, pin: true } };
+      allowedActions: { rename: !record.imported, reset: !record.imported, delete: !record.imported || !project.available || this.goneNative.has(record.nativeId!), pin: true } };
   }
 
   private readonly catalogSync = new SessionCatalogSync(() => this.listSessions(true));
@@ -105,6 +119,14 @@ export class ClaudeService extends EventEmitter {
       .sort((a, b) => (b.lastActivityAt ?? 0) - (a.lastActivityAt ?? 0)).slice(0, 8);
     for (let index = 0; index < recentOwned.length; index += 2) await Promise.all(recentOwned.slice(index, index + 2).map(record =>
       this.catalog.loadPreview(record.nativeId!, record.cwd, record.lastActivityAt ?? record.createdAt)));
+    // Imported conversations the last complete scan no longer lists are asked for one by one, a few per list.
+    let asked = 0;
+    for (const record of this.store.records) {
+      if (!record.imported || !record.nativeId) continue;
+      if (this.catalog.hasNativeEntry(record.nativeId)) { this.goneNative.delete(record.nativeId); continue; }
+      if (asked++ >= 8) break;
+      if (await this.nativeGone(record)) this.goneNative.add(record.nativeId); else this.goneNative.delete(record.nativeId);
+    }
     const owned = [];
     for (const record of this.store.records) owned.push(await this.descriptor(record, roster));
     return [...owned, ...native];
@@ -194,18 +216,23 @@ export class ClaudeService extends EventEmitter {
       });
       case 'sessions.reset': case 'sessions.delete': return this.serial(async () => {
         const record = this.record(p.sessionKey);
-        if (record.imported) throw new ClaudeFault('Native conversations cannot be reset or deleted here');
+        if (record.imported) {
+          // A conversation whose transcript or folder is gone from the computer can only be taken off the phone's list.
+          if (frame.method !== 'sessions.delete' || !(await this.nativeGone(record))) throw new ClaudeFault('Native conversations cannot be reset or deleted here');
+        }
         if (this.sessions.get(record.key)?.activeRun) throw new ClaudeFault('Stop the Claude task before changing this conversation');
         const live = this.sessions.get(record.key);
         if (live) await this.releaseSession(record.key, live);
-        const before = JSON.stringify(this.store.records);
+        const before = JSON.stringify(this.store.records), hiddenBefore = [...this.store.hidden];
+        // The transcript stays on the computer; the phone's list must not offer it again as a computer conversation.
+        if (record.nativeId && !this.store.hidden.includes(record.nativeId)) this.store.hidden.push(record.nativeId);
         if (frame.method === 'sessions.delete') this.store.records = this.store.records.filter(row => row !== record);
         else {
           // Native transcripts are retained. Retried accepted sends cannot repopulate a reset conversation.
           delete record.nativeId; delete record.materialized; delete record.lastActivityAt;
         }
-        try { this.store.save(); } catch (error) { this.store.records = JSON.parse(before); throw error; }
-        this.previews.delete(record.key);
+        try { this.store.save(); } catch (error) { this.store.records = JSON.parse(before); this.store.hidden = hiddenBefore; throw error; }
+        this.previews.delete(record.key); if (record.nativeId) this.goneNative.delete(record.nativeId);
         return { ok: true };
       });
       case 'clawket.artifacts.open': return this.artifacts.resolve(p.sessionKey, p.artifactId, cursor => this.history(String(p.sessionKey), cursor));
@@ -276,10 +303,22 @@ export class ClaudeService extends EventEmitter {
           const selection: ModelSelectionState = { currentModel: claudeModelValue(catalog, current, record.model), currentProvider: 'anthropic', currentBaseUrl: '',
             models: claudeModels(catalog) };
           return frame.method === 'models.select' ? { ...selection, ok: true, scope: 'session' } : selection;
-        } finally { if (record.imported && !session.activeRun) await this.releaseSession(record.key, session); }
+        } finally {
+          if (record.imported && !session.activeRun) {
+            // A process started only to read models is closed at once. One kept after a turn stays, with the transcript as it now is.
+            if (this.keptStamps.has(record.key) && this.sessions.get(record.key) === session) await this.keepImported(record, session);
+            else await this.releaseSession(record.key, session);
+          }
+        }
       });
       default: throw new ClaudeFault('Unsupported Claude method');
     }
+  }
+
+  /** The folder is gone, or the SDK no longer finds the transcript. An unreadable answer is not proof. */
+  private async nativeGone(record: ClaudeRecord): Promise<boolean> {
+    if (!(await this.catalog.addProject(record.cwd)).available) return true;
+    try { return (await getSessionInfo(record.nativeId!, { dir: record.cwd })) === undefined; } catch { return false; }
   }
 
   private continuation(nativeId: string, available: boolean, roster: ClaudeOwnerSnapshot, key: string): Pick<SessionDescriptor, 'canContinue' | 'continuationBlockedReason'> {
@@ -316,17 +355,17 @@ export class ClaudeService extends EventEmitter {
    * one of the two process slots. Half an hour after its last turn it is closed;
    * the next send resumes the same conversation in a fresh process.
    */
-  private armIdleRelease(key: string, session: ClaudeSession): void {
+  private armIdleRelease(key: string, session: ClaudeSession, delayMs = IDLE_SESSION_RELEASE_MS): void {
     const pending = this.idleReleases.get(key); if (pending) clearTimeout(pending);
     if (this.stopped) return;
     const timer = setTimeout(() => {
       this.idleReleases.delete(key);
       void this.serial(async () => {
         if (this.sessions.get(key) !== session) return;
-        if (session.activeRun) { this.armIdleRelease(key, session); return; }
+        if (session.activeRun) { this.armIdleRelease(key, session, delayMs); return; }
         await this.releaseSession(key, session);
       }).catch(() => {});
-    }, IDLE_SESSION_RELEASE_MS);
+    }, delayMs);
     timer.unref?.();
     this.idleReleases.set(key, timer);
   }
@@ -334,6 +373,7 @@ export class ClaudeService extends EventEmitter {
   private async releaseSession(key: string, session: ClaudeSession): Promise<void> {
     if (this.sessions.get(key) !== session) return;
     const idle = this.idleReleases.get(key); if (idle) { clearTimeout(idle); this.idleReleases.delete(key); }
+    this.keptStamps.delete(key);
     await session.close();
     this.sessions.delete(key);
     this.locks.get(key)?.close(); this.locks.delete(key);
@@ -344,7 +384,7 @@ export class ClaudeService extends EventEmitter {
       const result = await this.catalog.discover();
       if (strict && !result.complete) throw new ClaudeFault('Claude conversation catalog could not be refreshed completely');
       if (result.truncated) this.update({ type: 'error', code: 'unsupported', message: 'Claude history discovery reached its safety limit. Some older conversations are not shown.' });
-      const ownedKeys = new Set(this.store.records.flatMap(record => record.nativeId ? [`native:${hash(record.nativeId).slice(0, 32)}`] : []));
+      const ownedKeys = new Set([...this.store.records.flatMap(record => record.nativeId ? [record.nativeId] : []), ...this.store.hidden].map(id => `native:${hash(id).slice(0, 32)}`));
       const snapshot = roster ?? await this.owners.snapshot();
       return result.sessions.filter(session => !ownedKeys.has(session.key)).map(session => ({ ...session,
         ...this.continuation(this.catalog.native(session.key).sessionId, session.project?.available === true, snapshot, session.key),
@@ -359,9 +399,37 @@ export class ClaudeService extends EventEmitter {
     }
   }
 
+  /** Remember the transcript as this process left it, and keep the process for a short while. */
+  private async keepImported(record: ClaudeRecord, session: ClaudeSession): Promise<void> {
+    if (this.sessions.get(record.key) !== session || session.activeRun) return;
+    let info: Awaited<ReturnType<typeof getSessionInfo>>;
+    try { info = await getSessionInfo(record.nativeId!, { dir: record.cwd }); } catch { info = undefined; }
+    if (this.sessions.get(record.key) !== session || session.activeRun) return;
+    if (!info || !Number.isFinite(info.lastModified)) { await this.releaseSession(record.key, session); return; }
+    this.keptStamps.set(record.key, transcriptStamp(info));
+    this.armIdleRelease(record.key, session, IMPORTED_KEEP_MS);
+  }
+  /** Nobody else holds the conversation and nothing was written to it since this process's last turn. */
+  private async keptUnchanged(record: ClaudeRecord): Promise<boolean> {
+    const stamp = this.keptStamps.get(record.key);
+    if (!stamp) return false;
+    try {
+      const roster = await this.owners.snapshot();
+      // The kept process is itself listed as the conversation's one owner.
+      if (!roster.known || roster.owners.filter(owner => owner.sessionId === record.nativeId).length > 1) return false;
+      const info = await getSessionInfo(record.nativeId!, { dir: record.cwd });
+      return !!info && transcriptStamp(info) === stamp;
+    } catch { return false; }
+  }
+
   private async session(record: ClaudeRecord): Promise<ClaudeSession> {
     const existing = this.sessions.get(record.key);
-    if (existing) return existing;
+    if (existing) {
+      if (!record.imported || existing.activeRun) return existing;
+      if (await this.keptUnchanged(record)) return existing;
+      // Touched or held elsewhere, or never kept after a turn: start over through the ordinary checks.
+      await this.releaseSession(record.key, existing);
+    }
     if (this.sessions.size >= 2) {
       const idle = [...this.sessions].find(([, session]) => !session.activeRun);
       if (!idle) throw new ClaudeFault('Two Claude tasks are already running. Wait for one to finish.');
@@ -419,8 +487,8 @@ export class ClaudeService extends EventEmitter {
         try { this.store.save(); }
         catch { this.update({ type: 'error', sessionKey: record.key, code: 'server', message: 'Claude session metadata could not be saved. Check local storage.' }); }
         void this.descriptor(record).then(descriptor => this.update({ type: 'session_info_update', session: descriptor })).catch(() => {});
-        // Imported conversations relinquish the native writer between turns so the computer can resume later.
-        if (record.imported) void this.serial(() => this.releaseSession(record.key, session)).catch(() => {});
+        // An imported conversation gives the native writer back two idle minutes after its turn, so the computer can resume it.
+        if (record.imported) void this.serial(() => this.keepImported(record, session)).catch(() => {});
         else this.armIdleRelease(record.key, session);
       });
       this.sessions.set(record.key, session);

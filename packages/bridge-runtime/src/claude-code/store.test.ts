@@ -47,6 +47,20 @@ describe('Claude durable metadata ownership', () => {
     writeFileSync(join(dir, 'sessions.json'), JSON.stringify({ version: 1, ...scope, device: true, sessions: [] }));
     expect(() => open()).toThrow('scope');
   });
+  it('remembers conversations removed on the phone, reads an index written before that existed, and rejects malformed entries', () => {
+    const { dir, open } = fixture(); const store = open(); const nativeId = randomUUID();
+    store.save();
+    expect(JSON.parse(readFileSync(join(dir, 'sessions.json'), 'utf8')).hidden).toBeUndefined();
+    store.close(); const earlier = open(); expect(earlier.hidden).toEqual([]);
+    earlier.hidden.push(nativeId); earlier.save(); earlier.close();
+    const restored = open(); expect(restored.hidden).toEqual([nativeId]);
+    restored.hidden.push('not-a-native-id'); expect(() => restored.save()).toThrow('Invalid Claude index');
+    restored.hidden = [nativeId, nativeId]; expect(() => restored.save()).toThrow('Invalid Claude index');
+    // The oldest entries give way; the index stays bounded.
+    restored.hidden = Array.from({ length: 2_001 }, () => randomUUID()); const newest = restored.hidden.at(-1), oldest = restored.hidden[0];
+    restored.save(); restored.close();
+    const bounded = open(); expect(bounded.hidden).toHaveLength(2_000); expect(bounded.hidden.at(-1)).toBe(newest); expect(bounded.hidden).not.toContain(oldest);
+  });
   it('persists a continued native identity and rejects a mismatched public mapping', () => {
     const { dir, open } = fixture(); const store = open(); const nativeId = randomUUID();
     const key = `native:${createHash('sha256').update(nativeId).digest('hex').slice(0, 32)}`;
