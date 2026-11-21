@@ -1,7 +1,7 @@
 import { ClaudeFault } from './errors.js';
 import { EventEmitter } from 'node:events';
 import { homedir } from 'node:os';
-import { join, sep } from 'node:path';
+import { posix } from 'node:path';
 import { query, type Options, type Query, type SDKMessage, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { PromptInput, SessionUpdate } from '@clawket/agent-protocol';
 import { ClaudeInteractions } from './interactions.js';
@@ -13,7 +13,8 @@ import { claudeModelId } from './models.js';
  */
 export function macProtectedFolder(cwd: string, home = homedir(), platform: string = process.platform): boolean {
   if (platform !== 'darwin') return false;
-  return ['Documents', 'Desktop', 'Downloads'].some(name => cwd === join(home, name) || cwd.startsWith(join(home, name) + sep));
+  // macOS paths are POSIX whatever host evaluates this.
+  return ['Documents', 'Desktop', 'Downloads'].some(name => cwd === posix.join(home, name) || cwd.startsWith(posix.join(home, name) + '/'));
 }
 
 type SessionOptions = {
