@@ -21,6 +21,12 @@ export type ClaudeRecord = {
 };
 const UUID = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i;
 const MAX_BYTES = 4 * 1024 * 1024;
+const MAX_HIDDEN = 2_000;
+
+function validateHidden(hidden: unknown): asserts hidden is string[] {
+  if (!Array.isArray(hidden) || hidden.length > MAX_HIDDEN || hidden.some(id => typeof id !== 'string' || !UUID.test(id))
+    || new Set(hidden).size !== hidden.length) throw new ClaudeFault('Invalid Claude index');
+}
 
 function validate(records: unknown): asserts records is ClaudeRecord[] {
   if (!Array.isArray(records) || records.length > 500) throw new ClaudeFault('Invalid Claude index');
@@ -56,6 +62,11 @@ function validate(records: unknown): asserts records is ClaudeRecord[] {
 /** Private metadata only. Never stores credentials, image bodies or native transcripts. */
 export class ClaudeStore {
   records: ClaudeRecord[] = [];
+  /**
+   * Native IDs of conversations the phone deleted or reset away. Their
+   * transcripts stay on the computer, untouched; the phone's list leaves them out.
+   */
+  hidden: string[] = [];
   private readonly indexPath: string;
   private readonly lock: ClaudeOwnerLock;
   private closed = false;
@@ -74,13 +85,17 @@ export class ClaudeStore {
       validate(saved.sessions);
       if (!scope.device && saved.sessions.some((row: ClaudeRecord) => row.cwd !== scope.project)) throw new ClaudeFault('Claude project scope mismatch');
       this.records = saved.sessions;
+      // Additive since 2026-11-21: an index written by an earlier Bridge has none.
+      if (saved.hidden !== undefined) { validateHidden(saved.hidden); this.hidden = saved.hidden; }
     } catch (error) { this.close(); throw error; }
   }
 
   save(): void {
     if (this.closed) throw new ClaudeFault('Claude store is closed');
     validate(this.records);
-    const json = JSON.stringify({ version: 1, ...this.scope, sessions: this.records });
+    if (this.hidden.length > MAX_HIDDEN) this.hidden = this.hidden.slice(-MAX_HIDDEN);
+    validateHidden(this.hidden);
+    const json = JSON.stringify({ version: 1, ...this.scope, sessions: this.records, ...(this.hidden.length ? { hidden: this.hidden } : {}) });
     if (Buffer.byteLength(json) > MAX_BYTES) throw new ClaudeFault('Claude metadata storage limit reached');
     const temporary = join(this.directory, `sessions-${randomUUID()}.pending`);
     try {
