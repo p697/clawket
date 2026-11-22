@@ -63,18 +63,31 @@ export function hasBackendEcho(history: readonly UiMessage[], message: UiMessage
 
 export function useUncertainSends(scope: string | null, history: readonly UiMessage[] = empty): readonly UiMessage[] {
   const messages = useSyncExternalStore(subscribe, () => scope ? scopes.get(scope) ?? empty : empty);
-  const recoverable = useMemo(() => {
+  const cached = useMemo(() => {
     if (!scope) return empty;
     const remembered = new Set(messages.flatMap(message => message.idempotencyKey ? [message.idempotencyKey] : []));
     // The existing chat cache already retains uncertainty and original send IDs.
     // Use those loaded rows as bounded query candidates, without copying their
     // text into another persistent store or inventing a new request identity.
-    const cached = history.filter(message => message.role === 'user' && message.sendUncertain
+    // Bound the newest 20 before excluding held rows, so holding them never admits older ones.
+    return history.filter(message => message.role === 'user' && message.sendUncertain
       && typeof message.idempotencyKey === 'string' && message.idempotencyKey.length > 0
-      && message.idempotencyKey.length <= 200 && !remembered.has(message.idempotencyKey))
-      .slice(-20).filter(message => !hasBackendEcho(history, message));
-    return cached.length ? [...messages, ...cached] : messages;
+      && message.idempotencyKey.length <= 200)
+      .slice(-20).filter(message => !remembered.has(message.idempotencyKey!) && !hasBackendEcho(history, message));
   }, [scope, history, messages]);
+  const recoverable = useMemo(() => (cached.length ? [...messages, ...cached] : messages), [cached, messages]);
+  useEffect(() => {
+    // The first history read after a cold start replaces every restored cache
+    // row. Hold the unconfirmed ones here, as for a failure in this run, so they
+    // stay visible (and cached) until the computer echoes their exact identity.
+    if (!scope || !cached.length) return;
+    const previous = scopes.get(scope) ?? empty;
+    const known = new Set(previous.flatMap(message => message.idempotencyKey ? [message.idempotencyKey] : []));
+    const additions = cached.filter(message => message.idempotencyKey && !known.has(message.idempotencyKey));
+    if (!additions.length) return;
+    scopes.set(scope, [...previous, ...additions.map(message => ({ ...message, sendUncertain: true as const }))]);
+    listeners.forEach((listener) => listener());
+  }, [scope, cached]);
   useEffect(() => {
     if (!scope || !messages.length) return;
     const remaining = messages.filter((message) => !hasBackendEcho(history, message));

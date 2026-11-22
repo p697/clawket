@@ -718,11 +718,17 @@ export function useChatController({
   const uncertainSends = useUncertainSends(messageQueue.scopeKey, history.messages);
   const [receiptRecoveryEpoch, setReceiptRecoveryEpoch] = useState(0);
   const receiptNoticeRef = useRef<{ scope: string; identity: string } | null>(null);
+  // Look up receipts when the set of identities still lacking one changes, not on every new array:
+  // a re-render would otherwise cancel a lookup in flight and repeat it.
+  const receiptCandidates = useMemo(() => uncertainSends
+    .flatMap(message => message.idempotencyKey && !message.bridgeRecordedRunId ? [message.idempotencyKey] : []).join('\u0000'), [uncertainSends]);
+  const uncertainSendsRef = useRef(uncertainSends);
+  uncertainSendsRef.current = uncertainSends;
   useEffect(() => {
     if (!adapter || connectionState !== 'ready' || !messageQueue.scopeKey || !history.sessionKey
-      || !uncertainSends.length || AppState.currentState === 'background' || AppState.currentState === 'inactive') return;
+      || !receiptCandidates || AppState.currentState === 'background' || AppState.currentState === 'inactive') return;
     let current = true;
-    void reconcilePromptReceipts(adapter, messageQueue.scopeKey, history.sessionKey, uncertainSends, () => current).then(receipts => {
+    void reconcilePromptReceipts(adapter, messageQueue.scopeKey, history.sessionKey, uncertainSendsRef.current, () => current).then(receipts => {
       if (!current || !receipts.size) return;
       history.setMessages(previous => {
         let changed = false;
@@ -736,7 +742,7 @@ export function useChatController({
       });
     });
     return () => { current = false; };
-  }, [adapter, connectionState, messageQueue.scopeKey, history.sessionKey, history.setMessages, uncertainSends, receiptRecoveryEpoch]);
+  }, [adapter, connectionState, messageQueue.scopeKey, history.sessionKey, history.setMessages, receiptCandidates, receiptRecoveryEpoch]);
   useEffect(() => {
     const failure = uncertainFailureRef.current;
     const recovered = failure ? undefined : uncertainSends.findLast(message => message.bridgeRecordedRunId && message.idempotencyKey);
@@ -766,6 +772,13 @@ export function useChatController({
     () => recoverUncertainSends(history.messages, uncertainSends),
     [history.messages, uncertainSends],
   );
+  // A message whose send has not been answered yet is saved as uncertain: if
+  // the app is closed now, the next start shows it as unconfirmed (and drops it
+  // once the computer echoes it) instead of losing it to the first history read.
+  const cacheMessages = useMemo(() => (unconfirmedMessageIds.size
+    ? recoverableMessages.map(message => message.role === 'user' && !message.sendUncertain && message.idempotencyKey
+      && unconfirmedMessageIds.has(message.id) ? { ...message, sendUncertain: true } : message)
+    : recoverableMessages), [recoverableMessages, unconfirmedMessageIds]);
   useChatAutoCache({
     adapter,
     gatewayConfigId,
@@ -775,7 +788,7 @@ export function useChatController({
     sessionKey: history.sessionKey,
     sessionId: currentSessionInfo?.sessionId,
     sessionLabel: cacheSessionLabel,
-    messages: recoverableMessages,
+    messages: cacheMessages,
     historyLoaded: history.historyLoaded,
   });
 

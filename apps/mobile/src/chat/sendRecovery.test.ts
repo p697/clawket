@@ -18,9 +18,28 @@ it('hydrates bounded unknown candidates from existing cold-start history and ret
   view.rerender({ history });
   expect(view.result.current.at(-1)).toMatchObject({ text: 'Keep me', sendUncertain: true, bridgeRecordedRunId: 'receipt' });
   view.unmount();
-  const empty = renderHook(() => useUncertainSends('cold-cache-only'));
-  expect(empty.result.current).toEqual([]); // No separate transcript store was created.
-  empty.unmount();
+  // Held in memory for this run only, like a failure in this run; nothing new is persisted.
+  const reopened = renderHook(() => useUncertainSends('cold-cache-only'));
+  expect(reopened.result.current).toHaveLength(20);
+  expect(reopened.result.current.at(-1)).toMatchObject({ bridgeRecordedRunId: 'receipt' });
+  reopened.unmount();
+});
+
+it('keeps a cold-start unconfirmed message when the first history read replaces the cache, until its exact echo arrives', () => {
+  const cached = { ...message, id: 'usr_cold_unsent', idempotencyKey: 'cold-unsent', sendUncertain: true, timestampMs: 20 };
+  const reply = { id: 'assistant-earlier', role: 'assistant' as const, text: 'Earlier reply', timestampMs: 5 };
+  const view = renderHook<readonly UiMessage[], { history: readonly UiMessage[] }>(({ history }) => useUncertainSends('cold-replaced', history), { initialProps: { history: [reply, cached] } });
+  // The computer's history has never seen it.
+  view.rerender({ history: [reply] });
+  expect(recoverUncertainSends([reply], view.result.current)).toEqual([reply, expect.objectContaining({ id: 'usr_cold_unsent', text: 'Keep me', sendUncertain: true })]);
+  // A different message with the same text is not its echo.
+  view.rerender({ history: [reply, { ...message, id: 'native-other', idempotencyKey: 'other', timestampMs: 30 }] });
+  expect(view.result.current.map(row => row.id)).toEqual(['usr_cold_unsent']);
+  const echo = { ...message, id: 'native-echo', idempotencyKey: 'cold-unsent', timestampMs: 21 };
+  view.rerender({ history: [reply, echo] });
+  expect(view.result.current).toEqual([]);
+  expect(recoverUncertainSends([reply, echo], view.result.current)).toEqual([reply, echo]);
+  view.unmount();
 });
 
 it('skips cold-start receipt reads when an exact native echo already exists and removes the uncertain copy', () => {
