@@ -1160,6 +1160,23 @@ describe('useChatController message queue', () => {
     expect(adapter.prompt).not.toHaveBeenCalled();
   });
 
+  it('saves a message whose send is still unanswered as unconfirmed, and as sent once the computer accepts it', async () => {
+    const { useChatAutoCache } = jest.requireMock('../hooks/useChatAutoCache') as { useChatAutoCache: jest.Mock };
+    const accepted = deferred<{ runId: string }>();
+    const { result, adapter } = renderController();
+    adapter.prompt.mockReturnValueOnce(accepted.promise);
+    await typeAndSend(result, 'still in flight');
+    const saved = () => (useChatAutoCache.mock.calls.at(-1)![0].messages as Array<{ text?: string; sendUncertain?: boolean; idempotencyKey?: string }>)
+      .find(message => message.text === 'still in flight');
+    expect(saved()).toMatchObject({ sendUncertain: true });
+    expect(saved()?.idempotencyKey).toBeTruthy();
+    // On screen it is an ordinary sending bubble, not an unconfirmed one.
+    expect(result.current.listData.find((message: { text?: string }) => message.text === 'still in flight')?.sendUncertain).toBeFalsy();
+    await act(async () => { accepted.resolve({ runId: 'accepted-run' }); });
+    await flush();
+    expect(saved()?.sendUncertain).toBeFalsy();
+  });
+
   it('holds the pending message if recovery discovers an existing remote run', async () => {
     const health = deferred<boolean>();
     const { result, adapter, handlers } = renderController();
